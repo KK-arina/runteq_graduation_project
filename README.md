@@ -469,4 +469,12 @@ end
 
 <br>
 
----
+## 画面遷移図
+
+<br>
+
+https://www.figma.com/design/ayV08jHHGE18BHlp7CEEvc/Habitflow--%E6%8F%90%E5%87%BA%E7%94%A8-?node-id=0-1&p=f&t=K8IAsjx90tS8AeDN-0
+
+<br>
+
+```
