@@ -477,4 +477,11 @@ https://www.figma.com/design/ayV08jHHGE18BHlp7CEEvc/Habitflow--%E6%8F%90%E5%87%B
 
 <br>
 
+## ER図
+
+<br>
+
+https://i.gyazo.com/a0a80cbcee46978574524f530ff011f2.png
+
+<br>
 ```
