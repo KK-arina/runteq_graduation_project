@@ -481,7 +481,7 @@ https://www.figma.com/design/ayV08jHHGE18BHlp7CEEvc/Habitflow--%E6%8F%90%E5%87%B
 
 <br>
 
-https://i.gyazo.com/a0a80cbcee46978574524f530ff011f2.png
+https://i.gyazo.com/bd25eec5ecc56490a272f788b2fd2fbd.png
 
 <br>
 ```
