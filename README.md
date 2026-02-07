@@ -484,4 +484,12 @@ https://www.figma.com/design/ayV08jHHGE18BHlp7CEEvc/Habitflow--%E6%8F%90%E5%87%B
 https://i.gyazo.com/bd25eec5ecc56490a272f788b2fd2fbd.png
 
 <br>
+
+## issue
+
+<br>
+
+https://github.com/users/KK-arina/projects/1/views/1
+
+<br>
 ```
