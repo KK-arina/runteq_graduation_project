@@ -1,13 +1,33 @@
-#!/bin/bash -e
+#!/bin/bash
+set -e
+
+# コンテナ再起動時に「A server is already running」を防ぐ
+rm -f /rails/tmp/pids/server.pid
 
 # Enable jemalloc for reduced memory usage and latency.
 if [ -z "${LD_PRELOAD+x}" ] && [ -f /usr/lib/*/libjemalloc.so.2 ]; then
   export LD_PRELOAD="$(echo /usr/lib/*/libjemalloc.so.2)"
 fi
 
-# If running the rails server then create or migrate existing database
-if [ "${1}" == "./bin/rails" ] && [ "${2}" == "server" ]; then
+# PostgreSQLが起動するまで待機
+echo "Waiting for PostgreSQL to start..."
+until pg_isready -h db -U postgres; do
+  echo "PostgreSQL is unavailable - sleeping"
+  sleep 1
+done
+echo "PostgreSQL is up - continuing"
+
+# データベースのセットアップ（初回のみ）
+if [ ! -f /rails/tmp/.db_setup_done ]; then
+  echo "Setting up database for the first time..."
+  ./bin/rails db:create
+  ./bin/rails db:migrate
+  touch /rails/tmp/.db_setup_done
+  echo "Database setup completed!"
+else
+  echo "Database already exists, running migrations if needed..."
   ./bin/rails db:prepare
 fi
 
-exec "${@}"
+# CMD / command で渡された処理を実行
+exec "$@"
