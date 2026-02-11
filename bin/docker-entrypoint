@@ -21,9 +21,19 @@ fi
 # ==================== 本番環境のみ: データベース準備 ====================
 # RAILS_ENV=productionの場合のみ実行
 if [ "$RAILS_ENV" = "production" ]; then
+  echo "Production environment detected"
+  echo "DATABASE_URL is set: ${DATABASE_URL:+yes}"
+  
+  # DATABASE_URL が設定されているか確認
+  if [ -z "$DATABASE_URL" ]; then
+    echo "ERROR: DATABASE_URL is not set!"
+    exit 1
+  fi
+  
   echo "Running database migrations..."
   # db:prepare: データベースが存在しない場合は作成し、マイグレーションを実行
-  ./bin/rails db:prepare
+  # DISABLE_DATABASE_ENVIRONMENT_CHECK=1: 本番環境でのdb:prepareを許可
+  DISABLE_DATABASE_ENVIRONMENT_CHECK=1 ./bin/rails db:prepare
 fi
 
 # ==================== コマンド実行 ====================
