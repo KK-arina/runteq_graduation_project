@@ -1,33 +1,33 @@
 #!/bin/bash
+# ==================== エントリーポイントスクリプト ====================
+# このスクリプトはDockerコンテナ起動時に最初に実行されます
+# データベースの準備やサーバーPIDファイルの削除などを行います
+
+# set -e: エラーが発生したらスクリプトを即座に終了
 set -e
 
-# コンテナ再起動時に「A server is already running」を防ぐ
+# ==================== サーバーPIDファイルの削除 ====================
+# Railsサーバーの再起動時に「A server is already running」エラーを防ぐ
+# tmp/pids/server.pid: 前回のプロセスIDが残っている場合に削除
 rm -f /rails/tmp/pids/server.pid
 
-# Enable jemalloc for reduced memory usage and latency.
+# ==================== jemalloc の有効化 ====================
+# jemalloc: メモリ使用量を削減し、レイテンシを改善するメモリアロケータ
+# LD_PRELOAD: 共有ライブラリを優先的に読み込む環境変数
 if [ -z "${LD_PRELOAD+x}" ] && [ -f /usr/lib/*/libjemalloc.so.2 ]; then
   export LD_PRELOAD="$(echo /usr/lib/*/libjemalloc.so.2)"
 fi
 
-# PostgreSQLが起動するまで待機
-echo "Waiting for PostgreSQL to start..."
-until pg_isready -h db -U postgres; do
-  echo "PostgreSQL is unavailable - sleeping"
-  sleep 1
-done
-echo "PostgreSQL is up - continuing"
-
-# データベースのセットアップ（初回のみ）
-if [ ! -f /rails/tmp/.db_setup_done ]; then
-  echo "Setting up database for the first time..."
-  ./bin/rails db:create
-  ./bin/rails db:migrate
-  touch /rails/tmp/.db_setup_done
-  echo "Database setup completed!"
-else
-  echo "Database already exists, running migrations if needed..."
+# ==================== 本番環境のみ: データベース準備 ====================
+# RAILS_ENV=productionの場合のみ実行
+if [ "$RAILS_ENV" = "production" ]; then
+  echo "Running database migrations..."
+  # db:prepare: データベースが存在しない場合は作成し、マイグレーションを実行
   ./bin/rails db:prepare
 fi
 
-# CMD / command で渡された処理を実行
+# ==================== コマンド実行 ====================
+# exec: このスクリプトのプロセスを指定されたコマンドに置き換える
+# "$@": Dockerfileの CMD で指定されたコマンドを実行
+# 例: CMD ["./bin/rails", "server"] → ./bin/rails server が実行される
 exec "$@"
