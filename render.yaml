@@ -1,0 +1,62 @@
+# Render.com デプロイ設定ファイル
+# このファイルはRenderがアプリケーションをどのようにデプロイするかを定義します
+# 参考: https://render.com/docs/infrastructure-as-code
+
+# データベースの定義
+databases:
+  # PostgreSQLデータベースの設定
+  - name: habitflow-db
+    # databaseVersion: データベースのバージョン（16を指定）
+    databaseVersion: "16"
+    # plan: 料金プラン（freeは無料プラン、90日間の制限あり）
+    plan: free
+    # region: データベースのリージョン（oregonはアメリカ西海岸）
+    region: oregon
+
+# Webサービスの定義
+services:
+  # Railsアプリケーションの設定
+  - type: web
+    # name: Render上でのサービス名
+    name: habitflow-web
+    # runtime: 実行環境（dockerを指定するとDockerfileを使用）
+    runtime: docker
+    # region: サービスのリージョン（データベースと同じリージョンを推奨）
+    region: oregon
+    # plan: 料金プラン（freeは無料プラン）
+    plan: free
+    # branch: デプロイ対象のGitブランチ
+    branch: main
+    # dockerfilePath: Dockerfileのパス（本番用のDockerfileを指定）
+    dockerfilePath: ./Dockerfile
+    # dockerContext: Dockerビルドのコンテキスト（プロジェクトルート）
+    dockerContext: .
+    # ↓ 追加: サーバー起動前にマイグレーションを実行する（Render推奨）
+    preDeployCommand: "./bin/rails db:prepare"
+    
+    # 環境変数の設定
+    envVars:
+      # RAILS_ENV: Railsの実行環境（productionは本番環境）
+      - key: RAILS_ENV
+        value: production
+      
+      # RAILS_MASTER_KEY: 暗号化キー（GitHubのシークレットから取得）
+      # sync: falseにすることで、手動で設定する
+      - key: RAILS_MASTER_KEY
+        sync: false
+      
+      # DATABASE_URL: データベース接続URL（上で定義したhabitflow-dbから自動取得）
+      # fromDatabase: データベースの接続情報を自動的に取得
+      - key: DATABASE_URL
+        fromDatabase:
+          name: habitflow-db
+          property: connectionString
+      
+      # RAILS_LOG_TO_STDOUT: ログを標準出力に出力（Renderのログ機能で確認できる）
+      - key: RAILS_LOG_TO_STDOUT
+        value: "true"
+      
+      # RAILS_SERVE_STATIC_FILES: 静的ファイル（CSS/JS/画像）の配信を有効化
+      # 本番環境ではNginxなどを使うのが一般的だが、無料プランでは直接配信
+      - key: RAILS_SERVE_STATIC_FILES
+        value: "true"

@@ -1,14 +1,15 @@
+# ルーティング設定
+# URLとコントローラー・アクションの対応を定義するファイル
 Rails.application.routes.draw do
-  # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
-
-  # Reveal health status on /up that returns 200 if the app boots with no exceptions, otherwise 500.
-  # Can be used by load balancers and uptime monitors to verify that the app is live.
+  # ルートパス（http://localhost:3000/）の設定
+  # root: アプリケーションのトップページ（/）を指定
+  # 'pages#index': PagesControllerのindexアクションを実行
+  # つまり、ユーザーが http://localhost:3000/ にアクセスすると、
+  # PagesController#index が実行され、app/views/pages/index.html.erb が表示される
+  root 'pages#index'
+  
+  # ヘルスチェック用エンドポイント（Railsデフォルト）
+  # Renderなどのホスティングサービスがアプリの稼働状況を確認するために使用
+  # 削除しないこと
   get "up" => "rails/health#show", as: :rails_health_check
-
-  # Render dynamic PWA files from app/views/pwa/*
-  get "service-worker" => "rails/pwa#service_worker", as: :pwa_service_worker
-  get "manifest" => "rails/pwa#manifest", as: :pwa_manifest
-
-  # Defines the root path route ("/")
-  # root "posts#index"
 end

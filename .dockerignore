@@ -1,48 +1,72 @@
 # See https://docs.docker.com/engine/reference/builder/#dockerignore-file for more about ignoring files.
 
-# Ignore git directory.
+# ==================== Git関連 ====================
+# Gitリポジトリの履歴は本番環境では不要
 /.git/
 /.gitignore
 
-# Ignore bundler config.
+# ==================== Bundler設定 ====================
+# ローカルのbundler設定は本番環境では使わない
 /.bundle
 
-# Ignore all environment files (except templates).
+# ==================== 環境変数ファイル ====================
+# すべての環境変数ファイルを除外（セキュリティ）
+# .env.erbファイルのみ例外（テンプレートファイル）
 /.env*
 !/.env*.erb
 
-# Ignore all default key files.
+# ==================== 秘密鍵ファイル ====================
+# 暗号化キーやクレデンシャルは本番環境で別途設定
 /config/master.key
 /config/credentials/*.key
 
-# Ignore all logfiles and tempfiles.
+# ==================== ログファイル ====================
+# ローカルのログファイルは本番環境では不要
 /log/*
 /tmp/*
 !/log/.keep
 !/tmp/.keep
 
-# Ignore pidfiles, but keep the directory.
+# ==================== PIDファイル ====================
+# プロセスIDファイルは実行時に生成される
 /tmp/pids/*
 !/tmp/pids/.keep
 
-# Ignore storage (uploaded files in development and any SQLite databases).
+# ==================== ストレージ ====================
+# アップロードファイルやSQLiteデータベースは除外
 /storage/*
 !/storage/.keep
 /tmp/storage/*
 !/tmp/storage/.keep
 
-# Ignore assets.
+# ==================== アセット ====================
+# node_modules: npmパッケージ（Dockerイメージ内で再インストール）
+# app/assets/builds: ビルド時に生成されるため除外
+# public/assets: プリコンパイル時に生成されるため除外
 /node_modules/
 /app/assets/builds/*
 !/app/assets/builds/.keep
 /public/assets
 
-# Ignore CI service files.
+# ==================== CI/CD ====================
+# GitHub Actionsの設定ファイルは本番環境では不要
 /.github
 
-# Ignore development files
+# ==================== 開発環境専用 ====================
+# VS Codeの設定ファイル
 /.devcontainer
 
-# Ignore Docker-related files
+# Docker関連ファイル（イメージビルド時に使うため除外）
 /.dockerignore
 /Dockerfile*
+/docker-compose*.yml
+
+# テストカバレッジレポート
+/coverage/
+
+# 開発用データベース
+/db/*.sqlite3
+/db/*.sqlite3-*
+
+# Yarn関連
+/yarn-error.log

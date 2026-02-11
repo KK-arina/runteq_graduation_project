@@ -1,13 +1,33 @@
-#!/bin/bash -e
+#!/bin/bash
+# ==================== エントリーポイントスクリプト ====================
+# このスクリプトはDockerコンテナ起動時に最初に実行されます
+# データベースの準備やサーバーPIDファイルの削除などを行います
 
-# Enable jemalloc for reduced memory usage and latency.
+# set -e: エラーが発生したらスクリプトを即座に終了
+set -e
+
+# ==================== サーバーPIDファイルの削除 ====================
+# Railsサーバーの再起動時に「A server is already running」エラーを防ぐ
+# tmp/pids/server.pid: 前回のプロセスIDが残っている場合に削除
+rm -f /rails/tmp/pids/server.pid
+
+# ==================== jemalloc の有効化 ====================
+# jemalloc: メモリ使用量を削減し、レイテンシを改善するメモリアロケータ
+# LD_PRELOAD: 共有ライブラリを優先的に読み込む環境変数
 if [ -z "${LD_PRELOAD+x}" ] && [ -f /usr/lib/*/libjemalloc.so.2 ]; then
   export LD_PRELOAD="$(echo /usr/lib/*/libjemalloc.so.2)"
 fi
 
-# If running the rails server then create or migrate existing database
-if [ "${1}" == "./bin/rails" ] && [ "${2}" == "server" ]; then
+# ==================== 本番環境のみ: データベース準備 ====================
+# RAILS_ENV=productionの場合のみ実行
+if [ "$RAILS_ENV" = "production" ]; then
+  echo "Running database migrations..."
+  # db:prepare: データベースが存在しない場合は作成し、マイグレーションを実行
   ./bin/rails db:prepare
 fi
 
-exec "${@}"
+# ==================== コマンド実行 ====================
+# exec: このスクリプトのプロセスを指定されたコマンドに置き換える
+# "$@": Dockerfileの CMD で指定されたコマンドを実行
+# 例: CMD ["./bin/rails", "server"] → ./bin/rails server が実行される
+exec "$@"

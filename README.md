@@ -233,14 +233,26 @@
 
 **前提条件：**
 
-Rails初心者（Runteqカリキュラム学習中）、週15〜20時間の開発時間確保、2026年3月までに完成
+- Rails初心者（Runteqカリキュラム学習中）
+- 週15〜20時間の開発時間確保
+- 2026年3月までに完成
+- **Docker環境での開発**（ローカル環境の差異を排除）
 
 <br>
 
 #### Phase 1（2週間）：基礎学習と環境構築、認証機能
 
-- **Week 1：** Rails復習、環境構築、Hotwire/Stimulus学習（2〜3日で基礎と動作確認）
-- **Week 2：** ユーザー認証実装
+- **Week 1：** 
+  - **Docker環境構築**（1-2日）
+    - Dockerfile, docker-compose.yml作成
+    - Rails + PostgreSQL + Tailwind CSS環境の立ち上げ
+    - `docker compose up`でアプリ起動確認
+  - **Rails基礎の復習**（1日）
+  - **Hotwire/Stimulus学習**（2〜3日で基礎と動作確認）
+    - Turbo Framesの基本
+    - Turbo Streamsの基本
+    - Stimulusコントローラーの基本
+- **Week 2：** ユーザー認証実装（bcrypt使用）
 
 <br>
 
@@ -304,16 +316,21 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
+### 開発環境
+- **Docker**: 24.0以上
+- **Docker Compose**: 2.20以上
+
+<br>
+
 ### バックエンド
 
-#### Ruby 3.4.7
-- 2025年10月リリース、2028年12月までサポート
-- [Ruby公式サイト](https://www.ruby-lang.org/)で確認済み
+#### Ruby 3.4.x
+- 本プロジェクトで使用
+- Dockerイメージでバージョン固定
 
-#### Rails 7.2.3
-- 2025年10月リリース、2027年8月までサポート
-- [Rails公式サイト](https://rubyonrails.org/)で確認済み
-- 実績が豊富で安定（Rails 8系は実際にエラーが出た経験があるため避けました）
+#### Rails 7.2.x
+- 安定版として採用
+- Rails 7系の推奨構成（Hotwire / Importmap + tailwindcss-rails）
 
 <br>
 
@@ -325,9 +342,9 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 <br>
 
 ### フロントエンド
-
 - **Hotwire（Turbo + Stimulus）** - Railsネイティブ、SPAのような操作感
-- **Tailwind CSS** - ユーティリティファーストのCSSフレームワーク
+- **Tailwind CSS（tailwindcss-rails）** 
+- **Node.js** - 不要（tailwindcss-rails を使用）
 
 > **注意：** HotwireとTailwind CSSはRunteqカリキュラムで明示的に扱われているか確認できていませんが、Rails 7にデフォルトで含まれており、学習コストが低い（2〜3日）ため採用。Week 1で学習期間を確保。
 
@@ -335,10 +352,9 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 ### データベース
 
-#### PostgreSQL 16.11
-- 2025年11月リリース、2028年11月までサポート
-- [PostgreSQL公式サイト](https://www.postgresql.org/)で確認済み
-- 実績が豊富、JSON型のサポート
+#### PostgreSQL 16.x
+- Docker公式イメージを使用
+- JSON型や集計機能を活用予定
 
 <br>
 
@@ -350,14 +366,15 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 ### 認証
 
-- **bcrypt** - Railsの標準的な認証方法
+- **bcrypt** - Railsの標準的な認証方法（スクラッチ実装）
 
 <br>
 
 ### デプロイ・インフラ
 
-#### 開発環境：ローカル環境
-- 自分のPC上で動作
+#### 開発環境：Docker + Docker Compose
+- ローカル開発環境の統一
+- チーム開発時の環境差異を解消
 - 完全無料
 
 <br>
@@ -366,7 +383,8 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - **Webサービス：** 無料
 - **PostgreSQL：** 無料データベース
 - **制限事項：**
-  - 無料データベースは作成後90日で期限切れ
+  - 無料データベースには利用期限や制限がある場合あり
+  - MVP動作確認用途として使用予定
   - Webサービスは15分間アクティビティがないとスリープ
 - **MVPリリースレビュー時にデプロイして動作確認**
 
@@ -379,6 +397,217 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 <br>
 
 > **注意：** Phase 4（Week 12）でRenderへのデプロイ作業を実施し、MVPリリースレビュー前に動作確認を行います。
+
+<br>
+
+---
+
+<br>
+
+## 開発環境セットアップ
+
+<br>
+
+### 前提条件
+- Docker Desktop（24.0以上）がインストールされていること
+- Docker Composeがインストールされていること（Docker Desktopに含まれる）
+- Gitがインストールされていること
+
+<br>
+
+### セットアップ手順
+
+<br>
+
+1. **リポジトリのクローン**
+```bash
+git clone https://github.com/yourusername/HabitFlow.git
+cd HabitFlow
+```
+
+<br>
+
+2. **環境変数ファイルの作成（必要な場合のみ）**
+```bash
+cp .env.development.sample .env.development
+```
+
+<br>
+
+> **注意：** .env.development.sample は将来的に環境変数を追加した場合のサンプル用です。現状のMVP段階では未使用のため、存在しなくても問題ありません。
+
+<br>
+
+3. **Dockerコンテナの起動**
+```bash
+docker compose up
+```
+
+<br>
+
+初回起動時は以下の処理が自動で実行されます：
+- Rubyイメージのダウンロード
+- PostgreSQLイメージのダウンロード
+- Gemのインストール
+- データベースの作成
+- Tailwind CSS のビルド
+
+<br>
+
+4. **動作確認**
+
+ブラウザで http://localhost:3000 にアクセス
+
+Railsのウェルカムページが表示されればOK
+
+<br>
+
+5. **コンテナの停止**
+```bash
+# Ctrl+C で停止（フォアグラウンド実行の場合）
+# または
+docker compose down
+```
+
+<br>
+
+#### Rails未作成時の初回セットアップ（初回のみ）
+```bash
+docker compose down
+docker compose run --rm web rails new . \
+  --force \
+  --database=postgresql \
+  --css=tailwind
+docker compose build
+docker compose up
+```
+
+<br>
+
+> **注意：** 通常の開発では不要です。
+
+<br>
+
+### トラブルシューティング
+
+<br>
+
+#### ポート3000が既に使用されている
+```bash
+# 使用中のプロセスを確認
+lsof -i :3000
+# プロセスを終了させるか、docker-compose.ymlでポートを変更
+```
+
+<br>
+
+#### データベース接続エラー
+```bash
+# コンテナを完全に削除して再起動
+docker compose down -v
+docker compose up
+```
+
+<br>
+
+#### Tailwind CSSが反映されない
+Tailwind CSS は以下の構成で読み込まれています。
+- build成果物：app/assets/builds/tailwind.css
+- 読み込み指定：<%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
+- マニフェスト：app/assets/config/manifest.js (//= link tailwind.css)
+
+<br>
+
+以下を確認してください。
+```bash
+# build成果物が存在するか
+docker compose exec web ls app/assets/builds/
+
+# Tailwindを再ビルド
+docker compose exec web bin/rails tailwindcss:build
+```
+
+<br>
+
+> **注意：** application.tailwind.css は使用していません。
+
+<br>
+
+#### 権限エラー（Permission denied）
+```bash
+# entrypoint.shに実行権限を付与
+chmod +x entrypoint.sh
+```
+
+<br>
+
+---
+
+<br>
+
+## 開発時の基本ルール（重要）
+
+<br>
+
+### コンテナの起動・停止
+```bash
+# 起動
+docker compose up
+
+# 停止
+docker compose down
+```
+
+<br>
+
+### Railsコマンドの実行方法
+```bash
+# 推奨：起動中コンテナで実行
+docker compose exec web bin/rails xxx
+
+# 非推奨：一時コンテナが作られる
+docker compose run web bin/rails xxx
+```
+
+<br>
+
+> **注意：** docker compose run は一時コンテナを作成するため、assets や build 結果が意図せず失われる場合があります。 通常の開発では exec を使用してください。
+
+<br>
+
+---
+
+<br>
+
+## 開発コマンド
+
+<br>
+
+### Railsコンソール
+```bash
+docker compose exec web bin/rails console
+```
+
+<br>
+
+### データベースマイグレーション
+```bash
+docker compose exec web bin/rails db:migrate
+```
+
+<br>
+
+### テスト実行
+```bash
+docker compose exec web bin/rails test
+```
+
+<br>
+
+### ログ確認
+```bash
+docker compose logs -f web
+```
 
 <br>
 
@@ -482,6 +711,14 @@ https://www.figma.com/design/ayV08jHHGE18BHlp7CEEvc/Habitflow--%E6%8F%90%E5%87%B
 <br>
 
 https://i.gyazo.com/bd25eec5ecc56490a272f788b2fd2fbd.png
+
+<br>
+
+## issue
+
+<br>
+
+https://github.com/users/KK-arina/projects/1/views/1
 
 <br>
 ```

@@ -1,0 +1,28 @@
+services:
+  db:
+    image: postgres:16.11
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_PASSWORD: postgres
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev # ここでファイルを指定！
+    # --- 起動時に古いPIDファイルを消してから bin/dev を実行する ---
+    command: ./bin/dev
+    # ---------------------------------------------
+    volumes:
+      - .:/rails
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/habitflow_development
+    depends_on:
+      - db
+    stdin_open: true
+    tty: true
+
+volumes:
+  postgres_data:
