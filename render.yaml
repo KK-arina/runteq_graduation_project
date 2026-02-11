@@ -6,12 +6,12 @@
 databases:
   # PostgreSQLデータベースの設定
   - name: habitflow-db
-    # databaseVersion: データベースのバージョン（16を指定）
-    databaseVersion: "16"
     # plan: 料金プラン（freeは無料プラン、90日間の制限あり）
     plan: free
     # region: データベースのリージョン（oregonはアメリカ西海岸）
     region: oregon
+    # 注意: PostgreSQLのバージョンはRenderが自動的に最新の安定版を選択
+    # 無料プランでは明示的なバージョン指定は不可
 
 # Webサービスの定義
 services:
@@ -31,8 +31,6 @@ services:
     dockerfilePath: ./Dockerfile
     # dockerContext: Dockerビルドのコンテキスト（プロジェクトルート）
     dockerContext: .
-    # ↓ 追加: サーバー起動前にマイグレーションを実行する（Render推奨）
-    preDeployCommand: "./bin/rails db:prepare"
     
     # 環境変数の設定
     envVars:
@@ -40,8 +38,8 @@ services:
       - key: RAILS_ENV
         value: production
       
-      # RAILS_MASTER_KEY: 暗号化キー（GitHubのシークレットから取得）
-      # sync: falseにすることで、手動で設定する
+      # RAILS_MASTER_KEY: 暗号化キー（手動で設定する必要あり）
+      # sync: falseにすることで、Render Dashboardから手動で設定
       - key: RAILS_MASTER_KEY
         sync: false
       
