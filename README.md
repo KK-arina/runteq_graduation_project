@@ -427,10 +427,14 @@ cd HabitFlow
 
 <br>
 
-2. **環境変数ファイルの作成**
+2. **環境変数ファイルの作成（必要な場合のみ）**
 ```bash
 cp .env.development.sample .env.development
 ```
+
+<br>
+
+> **注意：** .env.development.sample は将来的に環境変数を追加した場合のサンプル用です。現状のMVP段階では未使用のため、存在しなくても問題ありません。
 
 <br>
 
@@ -467,6 +471,23 @@ docker compose down
 
 <br>
 
+#### Rails未作成時の初回セットアップ（初回のみ）
+```bash
+docker compose down
+docker compose run --rm web rails new . \
+  --force \
+  --database=postgresql \
+  --css=tailwind
+docker compose build
+docker compose up
+```
+
+<br>
+
+> **注意：** 通常の開発では不要です。
+
+<br>
+
 ### トラブルシューティング
 
 <br>
@@ -490,10 +511,25 @@ docker compose up
 <br>
 
 #### Tailwind CSSが反映されない
+Tailwind CSS は以下の構成で読み込まれています。
+- build成果物：app/assets/builds/tailwind.css
+- 読み込み指定：<%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
+- マニフェスト：app/assets/config/manifest.js (//= link tailwind.css)
+
+<br>
+
+以下を確認してください。
 ```bash
-# コンテナ内でTailwindを再ビルド
+# build成果物が存在するか
+docker compose exec web ls app/assets/builds/
+
+# Tailwindを再ビルド
 docker compose exec web bin/rails tailwindcss:build
 ```
+
+<br>
+
+> **注意：** application.tailwind.css は使用していません。
 
 <br>
 
@@ -502,6 +538,40 @@ docker compose exec web bin/rails tailwindcss:build
 # entrypoint.shに実行権限を付与
 chmod +x entrypoint.sh
 ```
+
+<br>
+
+---
+
+<br>
+
+## 開発時の基本ルール（重要）
+
+<br>
+
+### コンテナの起動・停止
+```bash
+# 起動
+docker compose up
+
+# 停止
+docker compose down
+```
+
+<br>
+
+### Railsコマンドの実行方法
+```bash
+# 推奨：起動中コンテナで実行
+docker compose exec web bin/rails xxx
+
+# 非推奨：一時コンテナが作られる
+docker compose run web bin/rails xxx
+```
+
+<br>
+
+> **注意：** docker compose run は一時コンテナを作成するため、assets や build 結果が意図せず失われる場合があります。 通常の開発では exec を使用してください。
 
 <br>
 

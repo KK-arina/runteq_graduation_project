@@ -1,26 +1,36 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title><%= content_for(:title) || "Runteq Graduation Project" %></title>
+    <%# ページタイトル（ブラウザのタブに表示される） %>
+    <title>Habitflow</title>
+    
+    <%# レスポンシブデザイン用のメタタグ（スマホ対応） %>
+    <%# width=device-width: 画面幅をデバイスの幅に合わせる %>
+    <%# initial-scale=1: 初期ズームを100%に設定 %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    
+    <%# CSRF（クロスサイトリクエストフォージェリ）攻撃対策のメタタグ %>
+    <%# フォーム送信時に自動的にトークンを検証してセキュリティを確保 %>
     <%= csrf_meta_tags %>
+    
+    <%# CSP（Content Security Policy）メタタグ %>
+    <%# XSS攻撃などを防ぐためのセキュリティ強化 %>
     <%= csp_meta_tag %>
 
-    <%= yield :head %>
-
-    <link rel="manifest" href="/manifest.json">
-    <link rel="icon" href="/icon.png" type="image/png">
-    <link rel="icon" href="/icon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/icon.png">
+    <%# CSSファイルの読み込み %>
+    <%# Tailwind CSS を読み込む %>
+    <%# app/assets/builds/tailwind.css（cssbundling-rails により生成） %>
+    <%# "data-turbo-track": "reload": ファイルが変更されたら自動リロード %>
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
-    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    
+    <%# JavaScriptファイルの読み込み（Importmap使用） %>
     <%= javascript_importmap_tags %>
   </head>
 
   <body>
-    <main class="container mx-auto mt-28 px-5 flex">
-      <%= yield %>
-    </main>
+    <%# yield: 各ページのビューファイル（例: app/views/pages/index.html.erb）の内容がここに挿入される %>
+    <%# つまり、このレイアウトファイルは「全ページ共通の枠組み」で、
+        ページごとの内容は yield の部分に表示される %>
+    <%= yield %>
   </body>
 </html>
