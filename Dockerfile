@@ -28,12 +28,15 @@ FROM base AS build
 # git: Gitリポジトリから直接Gemをインストールする場合に必要
 # libpq-dev: PostgreSQL開発ライブラリ（pg gem用）
 # pkg-config: パッケージの設定情報を取得
-# 追加: libvips (画像処理用) をビルド時にも念のため追加
+# curl: ファイルのダウンロード用
+# libyaml-dev: YAML解析ライブラリ（psych gem用）← ★追加★
+# libvips: 画像処理ライブラリ（Active Storage用）
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y \
     build-essential \
     git \
     libpq-dev \
+    libyaml-dev \
     pkg-config \
     curl \
     libvips && \
@@ -68,11 +71,14 @@ FROM base
 # 実行時に必要な最小限のパッケージをインストール
 # postgresql-client: PostgreSQLクライアント（psqlコマンド）
 # libjemalloc2: メモリ管理の最適化
-# 追加: libvips (画像処理), tzdata (タイムゾーン)
+# libyaml-0-2: YAML解析ライブラリ（実行時に必要）← ★追加★
+# libvips: 画像処理ライブラリ（実行時に必要）
+# tzdata: タイムゾーンデータ
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y \
     postgresql-client \
     libjemalloc2 \
+    libyaml-0-2 \
     libvips \
     tzdata && \
     rm -rf /var/lib/apt/lists /var/cache/apt/archives
