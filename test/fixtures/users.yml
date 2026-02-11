@@ -1,0 +1,19 @@
+# ==================== Userフィクスチャ ====================
+# フィクスチャ: テストで使用するサンプルデータ
+# 
+# 今回は test/models/user_test.rb で setup メソッドを使って
+# 各テストごとにデータを作成しているため、フィクスチャは不要
+# 
+# フィクスチャを使う場合は、以下のように一意のメールアドレスを設定する必要がある:
+#
+# valid_user:
+#   name: "テストユーザー"
+#   email: "test@example.com"
+#   password_digest: "<%= BCrypt::Password.create('password123') %>"
+#
+# another_user:
+#   name: "別のユーザー"
+#   email: "another@example.com"
+#   password_digest: "<%= BCrypt::Password.create('password456') %>"
+
+# 今回はフィクスチャを使用しないため、空のままにする
