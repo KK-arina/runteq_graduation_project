@@ -6,6 +6,8 @@
 databases:
   # PostgreSQLデータベースの設定
   - name: habitflow-db
+    # databaseVersion: データベースのバージョン（16を指定）
+    databaseVersion: "16"
     # plan: 料金プラン（freeは無料プラン、90日間の制限あり）
     plan: free
     # region: データベースのリージョン（oregonはアメリカ西海岸）
