@@ -71,7 +71,23 @@
         習慣 × PDCA で目標達成を加速
       </p>
       
-      <%= link_to "今すぐ始める", "#", class: "inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg text-lg transition duration-200" %>
+      <%# link_to: Railsのリンクヘルパー（HTMLのaタグを生成） %>
+      <%# "今すぐ始める": リンクのテキスト %>
+      <%# new_user_path: /users/new へのパス（新規登録フォーム） %>
+      <%#   - config/routes.rb の resources :users で自動生成されたヘルパーメソッド %>
+      <%#   - GET /users/new → UsersController#new %>
+      <%= link_to "今すぐ始める", new_user_path, class: "inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg text-lg transition duration-200" %>
+      <%# inline-block: インラインブロック要素（ボタンのように表示） %>
+      <%# bg-blue-600: 背景色を青（#2563eb）に %>
+      <%# hover:bg-blue-700: ホバー時に濃い青（#1d4ed8）に %>
+      <%# text-white: 文字色を白に %>
+      <%# font-bold: フォントの太さ 700 %>
+      <%# py-4: 上下padding 1rem（16px） %>
+      <%# px-8: 左右padding 2rem（32px） %>
+      <%# rounded-lg: 角丸 0.5rem（8px）- 大きめの角丸でボタンらしく %>
+      <%# text-lg: 文字サイズ 1.125rem（18px） %>
+      <%# transition: トランジション効果を有効化 %>
+      <%# duration-200: トランジションの時間 200ms（0.2秒）- ホバー時のアニメーション %>
       <%# inline-block: インラインブロック要素（ボタンのように表示） %>
       <%# bg-blue-600: 背景色を青（#2563eb）に %>
       <%# hover:bg-blue-700: ホバー時に濃い青（#1d4ed8）に %>

@@ -20,7 +20,8 @@
 **デプロイ状況**:
 - ✅ TOPページ（ランディングページ）公開中
 - ✅ Tailwind CSS適用済み
-- 🚧 ユーザー登録機能（開発中）
+- ✅ ユーザー登録機能実装済み
+- 🚧 ログイン・ログアウト機能（開発中）
 
 <br>
 
@@ -357,10 +358,11 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #3 | TOPページ（ランディングページ）作成 | ✅ 完了 | 2/11 | 2 |
 | #4 | Renderへの初回デプロイ | ✅ 完了 | 2/11 | 3 |
 | #5 | Userモデルの作成 | ✅ 完了 | 2/11 | 2 |
+| #6 | ユーザー登録機能 | ✅ 完了 | 2/12 | 3 |
 
 <br>
 
-**Week 1 進捗**: 11SP / 20SP（55%） 🎯
+**Week 1 進捗**: 14SP / 20SP（70%） 🎯
 
 <br>
 
@@ -414,13 +416,114 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
+#### ✅ Issue #6: ユーザー登録機能
+- UsersController作成（new, create）
+- 新規登録フォーム作成（Tailwind CSSデザイン）
+- バリデーションエラー表示機能
+  - エラー件数表示
+  - エラーメッセージ一覧表示（赤色のエラーボックス）
+- 登録成功時の自動ログイン（session管理）
+- フラッシュメッセージ表示
+  - 成功メッセージ（緑色、notice）
+  - エラーメッセージ（赤色、alert）
+- ApplicationControllerにヘルパーメソッド追加
+  - current_user（現在ログインしているユーザーを取得）
+  - logged_in?（ログイン状態をチェック）
+- 統合テスト作成（正常系・異常系）
+- 全テスト成功確認（15 runs, 26 assertions）
+- TOPページに登録リンク追加（「今すぐ始める」→ `/users/new`）
+
+<br>
+
 ### 次週の予定
 
 <br>
 
-- Issue #6: ユーザー登録機能（3SP）
 - Issue #7: ログイン・ログアウト機能（3SP）
 - Issue #8: Habitモデルの作成（2SP）
+- Issue #9: 習慣のCRUD機能（3SP）
+```
+
+<br>
+
+---
+
+<br>
+
+## 修正箇所5: プロジェクト構成セクション（ファイル追加）
+
+<br>
+
+**位置**: 「### 主要ディレクトリ」内のコードブロック
+
+<br>
+
+**修正前**:
+```
+habitflow/
+├── app/
+│   ├── controllers/
+│   │   └── pages_controller.rb          # ランディングページ
+│   ├── models/
+│   │   └── user.rb                       # Userモデル（認証機能）
+│   └── views/
+│       ├── layouts/
+│       │   └── application.html.erb      # 全ページ共通レイアウト
+│       └── pages/
+│           └── index.html.erb            # TOPページ
+```
+
+<br>
+
+**修正後**:
+```
+habitflow/
+├── app/
+│   ├── controllers/
+│   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?）
+│   │   ├── pages_controller.rb          # ランディングページ
+│   │   └── users_controller.rb          # ユーザー登録（new, create）
+│   ├── models/
+│   │   └── user.rb                       # Userモデル（認証機能）
+│   └── views/
+│       ├── layouts/
+│       │   └── application.html.erb      # 全ページ共通レイアウト（フラッシュメッセージ）
+│       ├── pages/
+│       │   └── index.html.erb            # TOPページ
+│       └── users/
+│           └── new.html.erb              # 新規登録フォーム
+```
+
+<br>
+
+---
+
+<br>
+
+## 修正箇所6: プロジェクト構成セクション（testディレクトリ）
+
+<br>
+
+**位置**: 「### 主要ディレクトリ」内の `test/` 部分
+
+<br>
+
+**修正前**:
+```
+├── test/
+│   └── models/
+│       └── user_test.rb                  # Userモデルテスト（13テストケース）
+```
+
+<br>
+
+**修正後**:
+```
+├── test/
+│   ├── models/
+│   │   └── user_test.rb                  # Userモデルテスト（13テストケース）
+│   └── integration/
+│       └── user_registration_test.rb     # ユーザー登録統合テスト（2テストケース）
 
 <br>
 
@@ -1031,6 +1134,100 @@ user.authenticate("wrongpassword") # => false （失敗）
 - before_save callback で email を小文字に統一
 - ログに機密情報を出力しない（filter_parameter_logging）
 - uniqueness検証で `LOWER(email)` による重複チェック
+
+<br>
+
+#### ユーザー登録機能（Issue #6）
+
+<br>
+
+**実装機能**:
+
+<br>
+
+**UsersController**:
+```ruby
+# app/controllers/users_controller.rb
+
+class UsersController < ApplicationController
+  # GET /users/new - 新規登録フォーム表示
+  def new
+    @user = User.new
+  end
+
+  # POST /users - ユーザー作成処理
+  def create
+    @user = User.new(user_params)
+    if @user.save
+      session[:user_id] = @user.id  # 自動ログイン
+      flash[:notice] = "ユーザー登録が完了しました"
+      redirect_to root_path
+    else
+      flash.now[:alert] = "ユーザー登録に失敗しました"
+      render :new, status: :unprocessable_entity
+    end
+  end
+
+  private
+
+  def user_params
+    params.require(:user).permit(:name, :email, :password, :password_confirmation)
+  end
+end
+```
+
+<br>
+
+**ApplicationController（ヘルパーメソッド）**:
+```ruby
+# app/controllers/application_controller.rb
+
+class ApplicationController < ActionController::Base
+  helper_method :current_user, :logged_in?
+
+  private
+
+  # 現在ログインしているユーザーを取得
+  def current_user
+    @current_user ||= User.find_by(id: session[:user_id]) if session[:user_id]
+  end
+
+  # ログイン状態をチェック
+  def logged_in?
+    current_user.present?
+  end
+end
+```
+
+<br>
+
+**フラッシュメッセージ**:
+- 成功時: 緑色のメッセージ（`flash[:notice]`）
+- エラー時: 赤色のメッセージ（`flash.now[:alert]`）
+- 画面右上に固定表示
+- アイコン付き（SVG）
+
+<br>
+
+**バリデーションエラー表示**:
+- エラー件数表示（`@user.errors.count`）
+- エラーメッセージ一覧表示（`@user.errors.full_messages`）
+- 赤色のエラーボックス（Tailwind CSS）
+
+<br>
+
+**セキュリティ対策**:
+- Strong Parameters（`user_params`）
+- CSRF対策（Rails標準）
+- パスワード暗号化（bcrypt）
+- セッション管理（暗号化されたCookie）
+
+<br>
+
+**テスト**:
+- 正常系テスト: ユーザー登録成功、自動ログイン確認
+- 異常系テスト: バリデーションエラー、エラーメッセージ表示確認
+- 全テスト成功: 15 runs, 26 assertions, 0 failures
 
 <br>
 ```

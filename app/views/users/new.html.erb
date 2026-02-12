@@ -1,0 +1,185 @@
+<%# ==================== 新規ユーザー登録フォーム ==================== %>
+<%# このファイルは、新規ユーザー登録フォームを表示します %>
+<%# ファイルパス: app/views/users/new.html.erb %>
+<%# URL: GET /users/new %>
+<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4 sm:px-6 lg:px-8">
+  <%# min-h-screen: 最小高さを画面の高さに設定 %>
+  <%# flex items-center justify-center: 縦横中央揃え %>
+  <%# bg-gradient-to-br from-blue-50 to-indigo-100: 背景グラデーション（左上から右下へ） %>
+  <%# py-12 px-4 sm:px-6 lg:px-8: レスポンシブな余白設定 %>
+  <div class="max-w-md w-full space-y-8">
+    <%# max-w-md: 最大幅を中サイズに制限 %>
+    <%# w-full: 幅を100%に設定 %>
+    <%# space-y-8: 子要素間の縦方向の間隔を8単位に設定 %>
+<div>
+  <%# ==================== タイトル ==================== %>
+  <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+    <%# mt-6: 上方向の余白を6単位 %>
+    <%# text-center: 中央揃え %>
+    <%# text-3xl: 文字サイズを3XLに設定 %>
+    <%# font-extrabold: フォントを極太に設定 %>
+    <%# text-gray-900: 文字色をダークグレーに設定 %>
+    新規ユーザー登録
+  </h2>
+  <p class="mt-2 text-center text-sm text-gray-600">
+    <%# mt-2: 上方向の余白を2単位 %>
+    <%# text-sm: 文字サイズを小に設定 %>
+    <%# text-gray-600: 文字色をミディアムグレーに設定 %>
+    習慣管理を始めましょう
+  </p>
+</div>
+
+<%# ==================== エラーメッセージ表示 ==================== %>
+<%# @user.errors.any?: バリデーションエラーがあるかチェック %>
+<%# コントローラーでsaveに失敗した場合、@user.errorsにエラー情報が格納される %>
+<% if @user.errors.any? %>
+  <div class="rounded-md bg-red-50 p-4">
+    <%# rounded-md: 角を中程度に丸める %>
+    <%# bg-red-50: 背景色を淡い赤に設定 %>
+    <%# p-4: 内側の余白を4単位 %>
+    
+    <div class="flex">
+      <%# flex: フレックスボックスレイアウト %>
+      
+      <div class="flex-shrink-0">
+        <%# flex-shrink-0: 縮小を許可しない %>
+        
+        <%# エラーアイコン（SVG） %>
+        <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+          <%# h-5 w-5: 高さと幅を5単位に設定 %>
+          <%# text-red-400: アイコンの色を赤に設定 %>
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+        </svg>
+      </div>
+      
+      <div class="ml-3">
+        <%# ml-3: 左方向の余白を3単位 %>
+        
+        <h3 class="text-sm font-medium text-red-800">
+          <%# text-sm: 文字サイズを小に設定 %>
+          <%# font-medium: フォントを中太に設定 %>
+          <%# text-red-800: 文字色を濃い赤に設定 %>
+          
+          <%# @user.errors.count: エラーの数を取得 %>
+          <%= @user.errors.count %>件のエラーがあります
+        </h3>
+        
+        <div class="mt-2 text-sm text-red-700">
+          <%# mt-2: 上方向の余白を2単位 %>
+          <%# text-red-700: 文字色を赤に設定 %>
+          
+          <ul class="list-disc list-inside space-y-1">
+            <%# list-disc: リストマーカーを黒丸に設定 %>
+            <%# list-inside: リストマーカーを内側に配置 %>
+            <%# space-y-1: リスト項目間の縦方向の間隔を1単位に設定 %>
+            
+            <%# @user.errors.full_messages.each: 各エラーメッセージをループ処理 %>
+            <%# full_messages: 属性名を含む完全なエラーメッセージ %>
+            <%# 例: "Name can't be blank", "Email is invalid" %>
+            <% @user.errors.full_messages.each do |message| %>
+              <li><%= message %></li>
+            <% end %>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+<% end %>
+
+<%# ==================== 登録フォーム ==================== %>
+<%# form_with: Railsのフォームヘルパー %>
+<%# model: @user: @userオブジェクトに紐づくフォームを作成 %>
+<%#   - 新規作成の場合: POST /users %>
+<%#   - 更新の場合: PATCH /users/:id %>
+<%# local: true: Ajaxを使わずに通常の送信（Turboを無効化） %>
+<%# class: "mt-8 space-y-6": フォーム全体のスタイル %>
+<%= form_with model: @user, local: true, class: "mt-8 space-y-6" do |form| %>
+  <%# form: フォームビルダーオブジェクト %>
+  <%# このオブジェクトを使って、各入力フィールドを作成 %>
+  
+  <div class="rounded-md shadow-sm space-y-4">
+    <%# rounded-md: 角を中程度に丸める %>
+    <%# shadow-sm: 小さな影を追加 %>
+    <%# space-y-4: 子要素間の縦方向の間隔を4単位に設定 %>
+    
+    <%# ==================== 名前入力フィールド ==================== %>
+    <div>
+      <%= form.label :name, "名前", class: "block text-sm font-medium text-gray-700" %>
+      <%# form.label: ラベルタグを生成 %>
+      <%# :name: @user.name に対応 %>
+      <%# "名前": 表示するテキスト %>
+      <%# class: ラベルのスタイル %>
+      
+      <%= form.text_field :name, 
+                          placeholder: "山田太郎", 
+                          class: "mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" %>
+      <%# form.text_field: テキスト入力フィールドを生成 %>
+      <%# :name: @user.name に対応 %>
+      <%# placeholder: 入力例を表示 %>
+      <%# class: 入力フィールドのスタイル %>
+      <%#   - appearance-none: ブラウザのデフォルトスタイルを無効化 %>
+      <%#   - w-full: 幅を100%に設定 %>
+      <%#   - px-3 py-2: 内側の余白（横3単位、縦2単位） %>
+      <%#   - border border-gray-300: ボーダー（グレー） %>
+      <%#   - focus:ring-indigo-500: フォーカス時にインディゴのリングを表示 %>
+      <%#   - focus:border-indigo-500: フォーカス時にボーダーをインディゴに変更 %>
+    </div>
+
+    <%# ==================== メールアドレス入力フィールド ==================== %>
+    <div>
+      <%= form.label :email, "メールアドレス", class: "block text-sm font-medium text-gray-700" %>
+      <%= form.email_field :email, 
+                           placeholder: "example@example.com", 
+                           class: "mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" %>
+      <%# form.email_field: メールアドレス入力フィールドを生成 %>
+      <%# HTML5のバリデーションが自動的に適用される（@が含まれているかなど） %>
+    </div>
+
+    <%# ==================== パスワード入力フィールド ==================== %>
+    <div>
+      <%= form.label :password, "パスワード（8文字以上）", class: "block text-sm font-medium text-gray-700" %>
+      <%= form.password_field :password, 
+                              placeholder: "••••••••", 
+                              class: "mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" %>
+      <%# form.password_field: パスワード入力フィールドを生成 %>
+      <%# 入力内容が●●●で表示される（セキュリティ対策） %>
+    </div>
+
+    <%# ==================== パスワード確認入力フィールド ==================== %>
+    <div>
+      <%= form.label :password_confirmation, "パスワード（確認）", class: "block text-sm font-medium text-gray-700" %>
+      <%= form.password_field :password_confirmation, 
+                              placeholder: "••••••••", 
+                              class: "mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" %>
+      <%# :password_confirmation: has_secure_passwordが自動的にチェック %>
+      <%# passwordと一致しない場合、バリデーションエラーになる %>
+    </div>
+  </div>
+
+  <%# ==================== 登録ボタン ==================== %>
+  <div>
+    <%= form.submit "登録する", 
+                    class: "group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out" %>
+    <%# form.submit: 送信ボタンを生成 %>
+    <%# "登録する": ボタンに表示するテキスト %>
+    <%# class: ボタンのスタイル %>
+    <%#   - w-full: 幅を100%に設定 %>
+    <%#   - bg-indigo-600: 背景色をインディゴに設定 %>
+    <%#   - hover:bg-indigo-700: ホバー時に背景色を濃いインディゴに変更 %>
+    <%#   - transition duration-150 ease-in-out: スムーズなアニメーション %>
+  </div>
+<% end %>
+
+<%# ==================== ログインリンク ==================== %>
+<div class="text-center">
+  <p class="text-sm text-gray-600">
+    すでにアカウントをお持ちの方は
+    <%# link_to: リンクを生成 %>
+    <%# "ログイン": 表示するテキスト %>
+    <%# root_path: リンク先（後でログインページに変更） %>
+    <%# class: リンクのスタイル %>
+    <%= link_to "ログイン", root_path, class: "font-medium text-indigo-600 hover:text-indigo-500" %>
+  </p>
+</div>
+  </div>
+</div>
