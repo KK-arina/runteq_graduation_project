@@ -28,9 +28,106 @@
   </head>
 
   <body>
-    <%# yield: 各ページのビューファイル（例: app/views/pages/index.html.erb）の内容がここに挿入される %>
-    <%# つまり、このレイアウトファイルは「全ページ共通の枠組み」で、
-        ページごとの内容は yield の部分に表示される %>
+    <%# ==================== フラッシュメッセージ表示 ==================== %>
+    <%# flash: 一度だけ表示されるメッセージ（次のページで自動的に消える） %>
+    <%# コントローラーで設定: flash[:notice] = "成功しました" %>
+    <%# 種類: notice（成功）, alert（エラー）, warning（警告）など %>
+    
+    <% if flash.any? %>
+      <%# flash.any?: flashメッセージが存在するかチェック %>
+      
+      <div class="fixed top-4 right-4 z-50 space-y-2">
+        <%# fixed: 固定位置（スクロールしても動かない） %>
+        <%# top-4 right-4: 画面の右上に配置（4単位の余白） %>
+        <%# z-50: 重ね順を最前面に設定 %>
+        <%# space-y-2: 複数のメッセージ間の縦方向の間隔を2単位に設定 %>
+        
+        <% flash.each do |type, message| %>
+          <%# flash.each: 各フラッシュメッセージをループ処理 %>
+          <%# type: メッセージの種類（notice, alert, warningなど） %>
+          <%# message: 表示するメッセージ本文 %>
+          
+          <%# case type: typeの値によって処理を分岐 %>
+          <%# when "notice": 成功メッセージの場合 %>
+          <%# when "alert": エラーメッセージの場合 %>
+          <%# else: その他の場合 %>
+          <% case type %>
+          <% when "notice" %>
+            <%# 成功メッセージ（緑色） %>
+            <div class="bg-green-50 border-l-4 border-green-400 p-4 rounded-md shadow-lg max-w-md">
+              <%# bg-green-50: 背景色を淡い緑に設定 %>
+              <%# border-l-4: 左側に太いボーダーを追加 %>
+              <%# border-green-400: ボーダーの色を緑に設定 %>
+              <%# p-4: 内側の余白を4単位 %>
+              <%# rounded-md: 角を中程度に丸める %>
+              <%# shadow-lg: 大きな影を追加 %>
+              <%# max-w-md: 最大幅を中サイズに制限 %>
+              
+              <div class="flex">
+                <div class="flex-shrink-0">
+                  <%# チェックマークアイコン（SVG） %>
+                  <svg class="h-5 w-5 text-green-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="ml-3">
+                  <p class="text-sm font-medium text-green-800">
+                    <%= message %>
+                    <%# message: フラッシュメッセージの本文を表示 %>
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+          <% when "alert" %>
+            <%# エラーメッセージ（赤色） %>
+            <div class="bg-red-50 border-l-4 border-red-400 p-4 rounded-md shadow-lg max-w-md">
+              <%# bg-red-50: 背景色を淡い赤に設定 %>
+              <%# border-red-400: ボーダーの色を赤に設定 %>
+              
+              <div class="flex">
+                <div class="flex-shrink-0">
+                  <%# エラーアイコン（SVG） %>
+                  <svg class="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="ml-3">
+                  <p class="text-sm font-medium text-red-800">
+                    <%= message %>
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+          <% else %>
+            <%# その他のメッセージ（青色） %>
+            <div class="bg-blue-50 border-l-4 border-blue-400 p-4 rounded-md shadow-lg max-w-md">
+              <%# bg-blue-50: 背景色を淡い青に設定 %>
+              <%# border-blue-400: ボーダーの色を青に設定 %>
+              
+              <div class="flex">
+                <div class="flex-shrink-0">
+                  <%# 情報アイコン（SVG） %>
+                  <svg class="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="ml-3">
+                  <p class="text-sm font-medium text-blue-800">
+                    <%= message %>
+                  </p>
+                </div>
+              </div>
+            </div>
+          <% end %>
+        <% end %>
+      </div>
+    <% end %>
+    
+    <%# ==================== メインコンテンツ ==================== %>
+    <%# yield: 各ビューのコンテンツがここに埋め込まれる %>
+    <%# 例: app/views/users/new.html.erb の内容がここに表示される %>
     <%= yield %>
   </body>
 </html>
