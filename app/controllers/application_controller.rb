@@ -3,18 +3,13 @@
 # ここに定義したメソッドは、全てのコントローラーで使用できます
 
 class ApplicationController < ActionController::Base
-# ==================== ブラウザ制限 ====================
-  # Rails 7.2の標準機能：古いブラウザ（IEなど）をブロックします
-  # versions: :modern と指定することで、最新のブラウザのみ許可します
-  allow_browser versions: :modern
-  
   # ==================== ヘルパーメソッド ====================
   # helper_method: コントローラーのメソッドをビュー（HTMLテンプレート）でも使えるようにする
   # 例: app/views/layouts/application.html.erb で current_user を使用可能
   helper_method :current_user, :logged_in?
-  
+
   private
-  
+
   # ==================== 現在ログインしているユーザーを取得 ====================
   # current_user: 現在ログインしているユーザーを返す
   # 
@@ -37,7 +32,7 @@ class ApplicationController < ActionController::Base
     #   - 見つかった場合: Userオブジェクトを返す
     #   - 見つからない場合: nil を返す
   end
-  
+
   # ==================== ログイン状態をチェック ====================
   # logged_in?: ログインしているかどうかを真偽値で返す
   # 
@@ -50,5 +45,30 @@ class ApplicationController < ActionController::Base
     #   - nil または 空文字列 → false
     #   - それ以外 → true
     current_user.present?
+  end
+
+  # ==================== ログイン必須のチェック ====================
+  # require_login: ログインしていない場合、ログインページにリダイレクト
+  # 
+  # 使用例:
+  # class HabitsController < ApplicationController
+  #   before_action :require_login  # 全アクションでログイン必須
+  # end
+  # 
+  # または
+  # 
+  # class HabitsController < ApplicationController
+  #   before_action :require_login, only: [:new, :create, :edit, :update, :destroy]
+  # end
+  def require_login
+    # unless logged_in?: ログインしていない場合
+    # unless: if の逆（条件が false の場合に実行）
+    unless logged_in?
+      # flash[:alert]: フラッシュメッセージ（エラーメッセージ）
+      flash[:alert] = "ログインしてください"
+      
+      # redirect_to login_path: ログインページにリダイレクト
+      redirect_to login_path
+    end
   end
 end

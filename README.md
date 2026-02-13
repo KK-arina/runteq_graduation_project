@@ -21,7 +21,8 @@
 - ✅ TOPページ（ランディングページ）公開中
 - ✅ Tailwind CSS適用済み
 - ✅ ユーザー登録機能実装済み
-- 🚧 ログイン・ログアウト機能（開発中）
+- ✅ ログイン・ログアウト機能実装済み
+- 🚧 Habitモデル作成（開発中）
 
 <br>
 
@@ -359,10 +360,11 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #4 | Renderへの初回デプロイ | ✅ 完了 | 2/11 | 3 |
 | #5 | Userモデルの作成 | ✅ 完了 | 2/11 | 2 |
 | #6 | ユーザー登録機能 | ✅ 完了 | 2/12 | 3 |
+| #7 | ログイン・ログアウト機能 | ✅ 完了 | 2/13 | 3 |
 
 <br>
 
-**Week 1 進捗**: 14SP / 20SP（70%） 🎯
+**Week 1 進捗**: 17SP / 20SP（85%） 🎯
 
 <br>
 
@@ -412,7 +414,6 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
   - email: presence, uniqueness(case_insensitive), format(URI::MailTo::EMAIL_REGEXP)
   - password: allow_nil, length(min: 8)
 - before_save callback（email小文字変換）
-- モデルテスト作成（13テストケース、21 assertions、全成功）
 
 <br>
 
@@ -430,8 +431,30 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
   - current_user（現在ログインしているユーザーを取得）
   - logged_in?（ログイン状態をチェック）
 - 統合テスト作成（正常系・異常系）
-- 全テスト成功確認（15 runs, 26 assertions）
 - TOPページに登録リンク追加（「今すぐ始める」→ `/users/new`）
+
+<br>
+
+#### ✅ Issue #7: ログイン・ログアウト機能
+- SessionsController作成（new, create, destroy）
+- ログインフォーム作成（Tailwind CSSデザイン）
+- ログイン処理実装
+  - メールアドレス＋パスワード認証
+  - `reset_session` によるセッション固定攻撃対策
+  - ログイン成功時にセッション保存
+  - ログイン失敗時にエラーメッセージ表示
+- ログアウト処理実装
+  - `reset_session` でセッション破棄
+  - `status: :see_other` でリダイレクト（Rails 7 / Turbo対応）
+- ヘッダーにログイン状態表示
+  - ログイン中: 「◯◯ さん」「ログアウト」ボタン
+  - 未ログイン時: 「ログイン」「新規登録」リンク
+- ApplicationControllerに認証チェック追加
+  - `require_login`（ログイン必須チェック）
+- TOPページレイアウト修正
+  - ログイン状態によるボタン切り替え
+- 統合テスト作成（正常系・異常系、ログアウト）
+- 全テスト成功確認（19 runs, 57 assertions）
 
 <br>
 
@@ -439,9 +462,9 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-- Issue #7: ログイン・ログアウト機能（3SP）
 - Issue #8: Habitモデルの作成（2SP）
 - Issue #9: 習慣のCRUD機能（3SP）
+- Issue #10: 日次記録機能（3SP）
 ```
 
 <br>
@@ -450,7 +473,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-## 修正箇所5: プロジェクト構成セクション（ファイル追加）
+## 修正箇所5: プロジェクト構成セクション（controllersディレクトリ）
 
 <br>
 
@@ -464,8 +487,37 @@ habitflow/
 ├── app/
 │   ├── controllers/
 │   │   └── pages_controller.rb          # ランディングページ
-│   ├── models/
-│   │   └── user.rb                       # Userモデル（認証機能）
+```
+
+<br>
+
+**修正後**:
+```
+habitflow/
+├── app/
+│   ├── controllers/
+│   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
+│   │   ├── pages_controller.rb          # ランディングページ
+│   │   ├── sessions_controller.rb       # ログイン・ログアウト（new, create, destroy）
+│   │   └── users_controller.rb          # ユーザー登録（new, create）
+```
+
+<br>
+
+---
+
+<br>
+
+## 修正箇所6: プロジェクト構成セクション（viewsディレクトリ）
+
+<br>
+
+**位置**: 「### 主要ディレクトリ」内のコードブロック
+
+<br>
+
+**修正前**:
+```
 │   └── views/
 │       ├── layouts/
 │       │   └── application.html.erb      # 全ページ共通レイアウト
@@ -477,19 +529,13 @@ habitflow/
 
 **修正後**:
 ```
-habitflow/
-├── app/
-│   ├── controllers/
-│   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?）
-│   │   ├── pages_controller.rb          # ランディングページ
-│   │   └── users_controller.rb          # ユーザー登録（new, create）
-│   ├── models/
-│   │   └── user.rb                       # Userモデル（認証機能）
 │   └── views/
 │       ├── layouts/
 │       │   └── application.html.erb      # 全ページ共通レイアウト（フラッシュメッセージ）
 │       ├── pages/
-│       │   └── index.html.erb            # TOPページ
+│       │   └── index.html.erb            # TOPページ（ログイン状態表示）
+│       ├── sessions/
+│       │   └── new.html.erb              # ログインフォーム
 │       └── users/
 │           └── new.html.erb              # 新規登録フォーム
 ```
@@ -500,7 +546,7 @@ habitflow/
 
 <br>
 
-## 修正箇所6: プロジェクト構成セクション（testディレクトリ）
+## 修正箇所7: プロジェクト構成セクション（testディレクトリ）
 
 <br>
 
@@ -523,7 +569,8 @@ habitflow/
 │   ├── models/
 │   │   └── user_test.rb                  # Userモデルテスト（13テストケース）
 │   └── integration/
-│       └── user_registration_test.rb     # ユーザー登録統合テスト（2テストケース）
+│       ├── user_registration_test.rb     # ユーザー登録統合テスト（2テストケース）
+│       └── user_login_test.rb            # ログイン・ログアウト統合テスト（4テストケース）
 
 <br>
 
@@ -1092,6 +1139,296 @@ https://github.com/users/KK-arina/projects/1/views/1
 
 <br>
 
+## Docker環境構築（Issue #1）
+
+<br>
+
+### 開発環境
+
+- Docker 24.0以上  
+- Docker Compose 2.20以上  
+- Ruby 3.4.7  
+- Rails 7.2.3  
+- PostgreSQL 16.11  
+- Tailwind CSS 4.1.18  
+
+<br>
+
+### Dockerfile.dev（開発環境用）
+
+```dockerfile
+FROM ruby:3.4.7
+
+WORKDIR /rails
+
+RUN apt-get update -qq && \
+    apt-get install -y build-essential libpq-dev nodejs yarn
+
+COPY Gemfile Gemfile.lock ./
+RUN bundle install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["bin/dev"]
+```
+
+<br>
+
+### docker-compose.yml
+
+```yaml
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16.11
+    environment:
+      POSTGRES_PASSWORD: password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: bin/dev
+    volumes:
+      - .:/rails
+      - bundle:/usr/local/bundle
+    ports:
+      - "3000:3000"
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://postgres:password@db:5432
+      RAILS_ENV: development
+
+volumes:
+  postgres_data:
+  bundle:
+```
+
+<br>
+
+### Tailwind CSS導入
+
+- `tailwindcss-rails` gem 使用
+- `bin/dev` で Rails サーバーと Tailwind の監視を同時起動
+- `app/assets/builds/tailwind.css` に自動ビルド
+
+<br>
+
+### 設計意図
+
+- Dockerによりローカルと本番の環境差異を排除
+- PostgreSQLをコンテナ化し環境構築を簡略化
+- フロントエンドビルドをRailsと統合管理
+
+---
+
+## データベース設計（Issue #2）
+
+<br>
+
+### MVP範囲のER設計
+
+- 5テーブル構成
+  - users
+  - habits
+  - habit_records
+  - weekly_reflections
+  - weekly_reflection_habit_summaries
+
+- Mermaid形式でER図作成  
+  → `docs/er-diagram-mvp.md`
+
+- リレーションの明確化（1:N、依存関係整理）
+
+<br>
+
+### テーブル定義書
+
+- 全カラムの詳細定義  
+  → `docs/database-schema-mvp.md`
+
+- データ型、NULL制約、デフォルト値を明記
+- インデックス設計（検索性能最適化）
+- ユニーク制約によるデータ整合性担保
+
+<br>
+
+### 設計の特徴
+
+- PostgreSQLのJSON型活用
+  - `goals.excluded_dates`：実行不可日の配列
+  - `weekly_reflections.improvement_tasks`：AI提案タスク
+
+- 日付基準をAM4:00で設計（習慣アプリ特性を考慮）
+- `weekly_reflection_habit_summaries` により週次データを不変保存
+
+<br>
+
+### 設計思想
+
+- 将来的なAI分析拡張を前提
+- 変更可能データと履歴データを明確分離
+- MVPながらスケールを想定した構造
+
+---
+
+## TOPページ作成（Issue #3）
+
+<br>
+
+### ランディングページ構成
+
+```erb
+<!-- ヘッダー -->
+<header class="bg-white shadow-sm">
+  <!-- ロゴ、ナビゲーション -->
+</header>
+
+<!-- ヒーローセクション -->
+<main class="bg-gradient-to-b from-blue-50 to-white">
+  <h1>甘えを可視化する</h1>
+  <p>習慣 × PDCA で目標達成を加速</p>
+  <%= link_to "今すぐ始める", new_user_path %>
+</main>
+
+<!-- 価値説明 -->
+<section class="bg-white py-16">
+</section>
+
+<!-- 利用フロー -->
+<section class="bg-gray-50 py-16">
+</section>
+
+<!-- フッター -->
+<footer class="bg-gray-900 text-white py-8">
+</footer>
+```
+
+<br>
+
+### UI設計（Tailwind CSS）
+
+- グラデーション背景（`bg-gradient-to-b`）
+- レスポンシブ設計（`md:grid-cols-3`）
+- ホバーエフェクト（`hover:bg-blue-700`）
+- トランジション（`transition duration-200`）
+
+<br>
+
+### ルーティング
+
+```ruby
+# config/routes.rb
+
+Rails.application.routes.draw do
+  root "pages#index"
+end
+```
+
+<br>
+
+### 設計意図
+
+- 未ログインユーザー向け導線最適化
+- 「習慣 × PDCA × AI」という価値を明確化
+- コンバージョン（新規登録）への導線設計
+
+---
+
+## Renderへの初回デプロイ（Issue #4）
+
+<br>
+
+### 本番環境構成
+
+- Render Web Service（無料プラン）
+- Render PostgreSQL（無料プラン）
+- GitHub連携による自動デプロイ
+
+<br>
+
+### render.yaml（Infrastructure as Code）
+
+```yaml
+services:
+  - type: web
+    name: habitflow-web
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: habitflow-db
+          property: connectionString
+      - key: RAILS_MASTER_KEY
+        sync: false
+
+databases:
+  - name: habitflow-db
+    databaseName: habitflow
+    plan: free
+```
+
+<br>
+
+### Dockerfile（本番用・マルチステージビルド）
+
+```dockerfile
+# ビルドステージ
+FROM ruby:3.4.7 AS build
+WORKDIR /rails
+RUN apt-get update -qq && \
+    apt-get install -y build-essential libpq-dev nodejs yarn
+COPY Gemfile Gemfile.lock ./
+RUN bundle install
+COPY . .
+RUN bin/rails assets:precompile
+
+# 本番ステージ
+FROM ruby:3.4.7
+WORKDIR /rails
+RUN apt-get update -qq && \
+    apt-get install -y libpq-dev
+COPY --from=build /usr/local/bundle /usr/local/bundle
+COPY --from=build /rails /rails
+EXPOSE 3000
+CMD ["bin/rails", "server", "-b", "0.0.0.0"]
+```
+
+<br>
+
+### 環境変数
+
+- `RAILS_MASTER_KEY`：暗号化キー（credentials用）
+- `DATABASE_URL`：PostgreSQL接続文字列（Render自動設定）
+
+<br>
+
+### デプロイフロー
+
+1. GitHubへプッシュ  
+2. Renderが自動検知  
+3. Dockerイメージビルド  
+4. データベースマイグレーション  
+5. アプリケーション起動  
+
+<br>
+
+### 本番URL
+
+https://habitflow-web.onrender.com
+
+<br>
+
 #### Userモデル（Issue #5）
 
 <br>
@@ -1227,7 +1564,122 @@ end
 **テスト**:
 - 正常系テスト: ユーザー登録成功、自動ログイン確認
 - 異常系テスト: バリデーションエラー、エラーメッセージ表示確認
-- 全テスト成功: 15 runs, 26 assertions, 0 failures
+
+<br>
+
+#### ログイン・ログアウト機能（Issue #7）
+
+<br>
+
+**実装機能**:
+
+<br>
+
+**SessionsController**:
+```ruby
+# app/controllers/sessions_controller.rb
+
+class SessionsController < ApplicationController
+  # GET /login - ログインフォーム表示
+  def new
+  end
+
+  # POST /login - ログイン処理
+  def create
+    user = User.find_by(email: params[:session][:email].downcase)
+    if user && user.authenticate(params[:session][:password])
+      reset_session  # セッション固定攻撃対策
+      session[:user_id] = user.id
+      flash[:notice] = "ログインしました"
+      redirect_to root_path
+    else
+      flash.now[:alert] = "メールアドレスまたはパスワードが正しくありません"
+      render :new, status: :unprocessable_entity
+    end
+  end
+
+  # DELETE /logout - ログアウト処理
+  def destroy
+    reset_session  # セッション全体をリセット
+    @current_user = nil
+    flash[:notice] = "ログアウトしました"
+    redirect_to root_path, status: :see_other  # Rails 7推奨
+  end
+end
+```
+
+<br>
+
+**ApplicationController（認証チェック）**:
+```ruby
+# app/controllers/application_controller.rb
+
+class ApplicationController < ActionController::Base
+  allow_browser versions: :modern
+  
+  helper_method :current_user, :logged_in?
+  
+  private
+  
+  def current_user
+    @current_user ||= User.find_by(id: session[:user_id]) if session[:user_id]
+  end
+  
+  def logged_in?
+    current_user.present?
+  end
+  
+  # ログイン必須チェック
+  def require_login
+    unless logged_in?
+      flash[:alert] = "ログインしてください"
+      redirect_to login_path
+    end
+  end
+end
+```
+
+<br>
+
+**ルーティング**:
+```ruby
+# config/routes.rb
+
+Rails.application.routes.draw do
+  root "pages#index"
+  
+  # ユーザー登録
+  resources :users, only: [:new, :create]
+  
+  # ログイン・ログアウト
+  get "login", to: "sessions#new", as: :login
+  post "login", to: "sessions#create"
+  delete "logout", to: "sessions#destroy", as: :logout
+end
+```
+
+<br>
+
+**セキュリティ対策**:
+- `reset_session`: セッション固定攻撃対策（ログイン・ログアウト時）
+- `status: :see_other`: ブラウザの戻るボタン対策（Rails 7 / Turbo）
+- Strong Parameters: 許可されたパラメータのみ受け取る
+- CSRF対策: Rails標準機能
+
+<br>
+
+**ログイン状態表示**:
+- ヘッダーに「◯◯ さん」と表示
+- ログアウトボタン（確認ダイアログ付き）
+- 未ログイン時は「ログイン」「新規登録」リンク表示
+
+<br>
+
+**テスト**:
+- 正常系テスト: ログイン成功、セッション保存確認
+- 異常系テスト: 無効なメール・パスワードでログイン失敗
+- ログアウトテスト: セッション破棄確認
+- 全テスト成功: 19 runs, 57 assertions, 0 failures
 
 <br>
 ```
