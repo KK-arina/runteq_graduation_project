@@ -1,59 +1,21 @@
-<%# ========================================================== %>
-<%# ヘッダー %>
-<%# ========================================================== %>
+<!-- ========================================================= -->
+<!-- ヒーローセクション -->
+<!-- ========================================================= -->
+<section class="bg-white py-20 text-center">
 
-<header class="bg-white shadow-sm">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-    <div class="flex justify-between items-center">
+  <div class="max-w-4xl mx-auto px-4">
 
-      <!-- ロゴ -->
-      <%= link_to "HabitFlow",
-                  root_path,
-                  class: "text-2xl font-bold text-blue-600" %>
-
-      <!-- ナビゲーション -->
-      <div class="flex items-center space-x-4">
-        <% if logged_in? %>
-          <span class="text-gray-700 text-sm">
-            <%= current_user.name %> さん
-          </span>
-
-          <%= button_to "ログアウト",
-                        logout_path,
-                        method: :delete,
-                        data: { turbo_confirm: "ログアウトしますか？" },
-                        class: "text-gray-700 hover:text-gray-900 px-4 py-2 rounded-md text-sm font-medium bg-gray-100 hover:bg-gray-200 transition" %>
-        <% else %>
-          <%= link_to "ログイン",
-                      login_path,
-                      class: "text-gray-700 hover:text-gray-900 px-4 py-2 rounded-md text-sm font-medium" %>
-
-          <%= link_to "新規登録",
-                      new_user_path,
-                      class: "text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-md text-sm font-medium transition" %>
-        <% end %>
-      </div>
-
-    </div>
-  </div>
-</header>
-
-
-<%# ========================================================== %>
-<%# ヒーローセクション %>
-<%# ========================================================== %>
-
-<main class="bg-gradient-to-b from-blue-50 to-white">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
-
+    <!-- キャッチコピー -->
     <h1 class="text-5xl font-extrabold text-gray-900 mb-6">
       甘えを可視化する
     </h1>
 
-    <p class="text-xl text-gray-600 mb-12">
+    <!-- サブコピー -->
+    <p class="text-xl text-gray-600 mb-10">
       習慣 × PDCA で目標達成を加速
     </p>
 
+    <!-- CTAボタン -->
     <% if logged_in? %>
       <%= link_to "ダッシュボードへ",
                   root_path,
@@ -65,49 +27,52 @@
     <% end %>
 
   </div>
-</main>
+</section>
 
 
-<%# ========================================================== %>
-<%# 価値説明セクション %>
-<%# ========================================================== %>
+<!-- ========================================================= -->
+<!-- 価値説明セクション（3つの特徴） -->
+<!-- ========================================================= -->
+<section class="bg-gray-50 py-16">
 
-<section class="bg-white py-16">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+  <div class="max-w-6xl mx-auto px-4">
 
-    <h2 class="text-3xl font-bold text-center text-gray-900 mb-12">
+    <h2 class="text-3xl font-bold text-center mb-12">
       価値説明（3つの特徴）
     </h2>
 
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
 
-      <div class="bg-gray-50 p-6 rounded-lg">
-        <h3 class="text-xl font-bold mb-4 text-gray-900">
+      <!-- カード1 -->
+      <div class="bg-white p-6 rounded-lg shadow-md">
+        <h3 class="text-xl font-bold mb-3">
           1. 続かない理由が分かる
         </h3>
-        <p class="text-gray-600 leading-relaxed">
-          週次振り返りで「できなかった理由」を記録。<br>
-          AIが本質的な原因を分析します。
+        <p class="text-gray-600 text-sm leading-relaxed">
+          週次振り返りで「できなかった理由」を記録<br>
+          AIが本質的な原因を分析
         </p>
       </div>
 
-      <div class="bg-gray-50 p-6 rounded-lg">
-        <h3 class="text-xl font-bold mb-4 text-gray-900">
+      <!-- カード2 -->
+      <div class="bg-white p-6 rounded-lg shadow-md">
+        <h3 class="text-xl font-bold mb-3">
           2. 計画倒れを防ぐ
         </h3>
-        <p class="text-gray-600 leading-relaxed">
-          毎週必ず振り返りを強制。<br>
-          甘えを許さないロック機能。
+        <p class="text-gray-600 text-sm leading-relaxed">
+          毎週必ず振り返りを強制<br>
+          甘えを許さないロック機能
         </p>
       </div>
 
-      <div class="bg-gray-50 p-6 rounded-lg">
-        <h3 class="text-xl font-bold mb-4 text-gray-900">
+      <!-- カード3 -->
+      <div class="bg-white p-6 rounded-lg shadow-md">
+        <h3 class="text-xl font-bold mb-3">
           3. 自動で最適化される
         </h3>
-        <p class="text-gray-600 leading-relaxed">
-          AI分析に基づく改善提案。<br>
-          ワンクリックで計画を更新。
+        <p class="text-gray-600 text-sm leading-relaxed">
+          AI分析に基づく改善提案<br>
+          ワンクリックで計画を更新
         </p>
       </div>
 
@@ -116,58 +81,45 @@
 </section>
 
 
-<%# ========================================================== %>
-<%# 利用フローセクション %>
-<%# ========================================================== %>
+<!-- ========================================================= -->
+<!-- 利用フロー -->
+<!-- ========================================================= -->
+<section class="bg-white py-16">
 
-<section class="bg-gray-50 py-16">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+  <div class="max-w-6xl mx-auto px-4">
 
-    <h2 class="text-3xl font-bold text-center text-gray-900 mb-12">
+    <h2 class="text-3xl font-bold text-center mb-12">
       利用フロー
     </h2>
 
-    <div class="flex flex-col md:flex-row justify-between items-center gap-4 text-center">
+    <div class="flex flex-col md:flex-row items-center justify-between gap-6 bg-gray-50 border rounded-lg p-6">
 
-      <div class="flex-1">
-        <div class="text-lg font-bold mb-2">平日</div>
-        <div class="text-gray-600">習慣チェック・タスク管理</div>
+      <div class="flex-1 text-center">
+        <div class="font-bold mb-2">平日</div>
+        <div class="text-sm text-gray-600">習慣チェック・タスク管理</div>
       </div>
 
-      <div class="text-2xl text-gray-400 hidden md:block">→</div>
+      <div class="text-gray-400 text-2xl">→</div>
 
-      <div class="flex-1">
-        <div class="text-lg font-bold mb-2">週末</div>
-        <div class="text-gray-600">振り返り入力</div>
+      <div class="flex-1 text-center">
+        <div class="font-bold mb-2">週末</div>
+        <div class="text-sm text-gray-600">振り返り入力</div>
       </div>
 
-      <div class="text-2xl text-gray-400 hidden md:block">→</div>
+      <div class="text-gray-400 text-2xl">→</div>
 
-      <div class="flex-1">
-        <div class="text-lg font-bold mb-2">AI分析</div>
-        <div class="text-gray-600">真の原因を究明</div>
+      <div class="flex-1 text-center">
+        <div class="font-bold mb-2">AI分析</div>
+        <div class="text-sm text-gray-600">真の原因を究明</div>
       </div>
 
-      <div class="text-2xl text-gray-400 hidden md:block">→</div>
+      <div class="text-gray-400 text-2xl">→</div>
 
-      <div class="flex-1">
-        <div class="text-lg font-bold mb-2">計画更新</div>
-        <div class="text-gray-600">改善提案を自動反映</div>
+      <div class="flex-1 text-center">
+        <div class="font-bold mb-2">計画更新</div>
+        <div class="text-sm text-gray-600">改善提案を自動反映</div>
       </div>
 
     </div>
   </div>
 </section>
-
-
-<%# ========================================================== %>
-<%# フッター %>
-<%# ========================================================== %>
-
-<footer class="bg-gray-900 text-white py-8">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-    <p class="text-gray-400">
-      © <%= Time.current.year %> HabitFlow. All rights reserved.
-    </p>
-  </div>
-</footer>

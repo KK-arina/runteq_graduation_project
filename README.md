@@ -20,8 +20,10 @@
 **デプロイ状況**:
 - ✅ TOPページ（ランディングページ）公開中
 - ✅ Tailwind CSS適用済み
+- ✅ 共通ヘッダー・フッター実装済み（全ページ統一）
 - ✅ ユーザー登録機能実装済み
 - ✅ ログイン・ログアウト機能実装済み
+- ✅ 本番環境での認証機能動作確認完了
 - 🚧 Habitモデル作成（開発中）
 
 <br>
@@ -361,10 +363,13 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #5 | Userモデルの作成 | ✅ 完了 | 2/11 | 2 |
 | #6 | ユーザー登録機能 | ✅ 完了 | 2/12 | 3 |
 | #7 | ログイン・ログアウト機能 | ✅ 完了 | 2/13 | 3 |
+| #8 | 認証機能の本番確認 | ✅ 完了 | 2/14 | 1 |
+| #9 | 認証機能のテスト | ✅ 完了 | 2/14 | 2 |
+| #10 | 共通ヘッダー・フッター実装 | ✅ 完了 | 2/14 | 2 |
 
 <br>
 
-**Week 1 進捗**: 17SP / 20SP（85%） 🎯
+**Week 1 進捗**: 22SP / 20SP（110%） 🎉
 
 <br>
 
@@ -458,13 +463,83 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-### 次週の予定
+#### ✅ Issue #8: 認証機能の本番確認
+- 本番環境（Render）での動作確認実施
+- 本番環境URL: https://habitflow-web.onrender.com
+- 確認項目:
+  - ユーザー登録機能: 正常動作
+  - ログイン機能: 正常動作（正常系・異常系）
+  - ログアウト機能: 正常動作
+  - フラッシュメッセージ表示: 正常動作
+  - ヘッダーログイン状態表示: 正常動作
+- 確認結果レポート作成: `docs/production-check-issue-7.md`
+- 全機能が本番環境で正常に動作することを確認
+- 備考:
+  - Renderの無料プランのため、初回アクセス時に約30秒の起動時間が必要
+  - それ以降は正常に動作
 
 <br>
 
-- Issue #8: Habitモデルの作成（2SP）
-- Issue #9: 習慣のCRUD機能（3SP）
-- Issue #10: 日次記録機能（3SP）
+#### ✅ Issue #9: 認証機能のテスト
+- 全テスト実行確認
+- テスト結果: 19 runs, 57 assertions, 0 failures, 0 errors, 0 skips
+- テストカバレッジ:
+  - Userモデルテスト（13テストケース）
+  - ユーザー登録統合テスト（2テストケース）
+  - ログイン・ログアウト統合テスト（4テストケース）
+- テストファイル:
+  - `test/models/user_test.rb`
+  - `test/integration/user_registration_test.rb`
+  - `test/integration/user_login_test.rb`
+- Week 1の全Issue完了
+
+<br>
+
+#### ✅ Issue #10: 共通ヘッダー・フッター実装
+- 共通ヘッダー作成（`app/views/shared/_header.html.erb`）
+  - 背景色: 薄い灰色（bg-gray-50）
+  - ロゴ: 「HabitFlow」（全ページでクリック可能）
+  - ナビゲーション: ログイン状態で表示切り替え
+    - ログイン中: 「◯◯ さん」「ログアウト」ボタン
+    - 未ログイン: 「ログイン」「新規登録」リンク
+- 共通フッター作成（`app/views/shared/_footer.html.erb`）
+  - 背景色: 濃い灰色（bg-gray-900）
+  - テキスト色: 白（text-white）
+  - 著作権表示
+  - 将来的なリンク（利用規約、プライバシーポリシー）
+- レイアウトファイル修正（`app/views/layouts/application.html.erb`）
+  - 全ページでヘッダー・フッター表示
+  - フラッシュメッセージ一元管理
+  - フレックスボックスレイアウト（フッターを最下部に固定）
+- TOPページシンプル化（`app/views/pages/index.html.erb`）
+  - ヒーローセクション: キャッチコピー、CTAボタン
+  - 価値説明セクション: 3つの特徴（3列グリッド）
+  - 利用フローセクション: 4ステップ（横並び）
+  - 重複コンテンツ削除（HabitFlowの特徴セクション削除）
+- 画面遷移図との完全一致
+- 全コードに詳細なコメント付き（初心者向け）
+- 全テスト実行確認（20 runs, 59 assertions, 0 failures）
+
+<br>
+
+### Week 2の予定（2/16〜2/22）: 習慣管理基盤
+
+<br>
+
+| Issue | タイトル | ステータス | SP |
+|-------|---------|-----------|-----|
+| #10 | Habitモデルの作成 | 🔜 予定 | 2 |
+| #11 | 習慣一覧ページの作成 | 🔜 予定 | 2 |
+| #12 | 習慣新規作成機能 | 🔜 予定 | 3 |
+| #13 | 習慣削除機能 | 🔜 予定 | 2 |
+| #14 | HabitRecordモデルの作成 | 🔜 予定 | 2 |
+| #15 | 習慣の日次記録機能（即時保存） | 🔜 予定 | 5 |
+| #16 | 進捗率の自動計算ロジック | 🔜 予定 | 2 |
+| #17 | 習慣管理機能のテスト | 🔜 予定 | 2 |
+
+<br>
+
+**Week 2 目標**: 20SP
 ```
 
 <br>
@@ -473,11 +548,11 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-## 修正箇所5: プロジェクト構成セクション（controllersディレクトリ）
+## 修正箇所5: プロジェクト構成（controllersディレクトリ）
 
 <br>
 
-**位置**: 「### 主要ディレクトリ」内のコードブロック
+**場所**: 「### 主要ディレクトリ」セクション内
 
 <br>
 
@@ -508,11 +583,11 @@ habitflow/
 
 <br>
 
-## 修正箇所6: プロジェクト構成セクション（viewsディレクトリ）
+## 修正箇所6: プロジェクト構成（viewsディレクトリ）
 
 <br>
 
-**位置**: 「### 主要ディレクトリ」内のコードブロック
+**場所**: 「### 主要ディレクトリ」セクション内
 
 <br>
 
@@ -531,9 +606,12 @@ habitflow/
 ```
 │   └── views/
 │       ├── layouts/
-│       │   └── application.html.erb      # 全ページ共通レイアウト（フラッシュメッセージ）
+│       │   └── application.html.erb      # 全ページ共通レイアウト（ヘッダー・フッター・フラッシュ）
+│       ├── shared/
+│       │   ├── _header.html.erb          # 共通ヘッダー（全ページ）
+│       │   └── _footer.html.erb          # 共通フッター（全ページ）
 │       ├── pages/
-│       │   └── index.html.erb            # TOPページ（ログイン状態表示）
+│       │   └── index.html.erb            # TOPページ（シンプル化済み）
 │       ├── sessions/
 │       │   └── new.html.erb              # ログインフォーム
 │       └── users/
@@ -546,11 +624,11 @@ habitflow/
 
 <br>
 
-## 修正箇所7: プロジェクト構成セクション（testディレクトリ）
+## 修正箇所7: プロジェクト構成（testディレクトリ）
 
 <br>
 
-**位置**: 「### 主要ディレクトリ」内の `test/` 部分
+**場所**: 「### 主要ディレクトリ」セクション内
 
 <br>
 
@@ -571,6 +649,37 @@ habitflow/
 │   └── integration/
 │       ├── user_registration_test.rb     # ユーザー登録統合テスト（2テストケース）
 │       └── user_login_test.rb            # ログイン・ログアウト統合テスト（4テストケース）
+```
+
+<br>
+
+---
+
+<br>
+
+## 修正箇所8: プロジェクト構成（docsディレクトリ）
+
+<br>
+
+**場所**: 「### 主要ディレクトリ」セクション内
+
+<br>
+
+**修正前**:
+```
+├── docs/
+│   ├── er-diagram-mvp.md                 # ER図（Mermaid形式）
+│   └── database-schema-mvp.md            # テーブル定義書
+```
+
+<br>
+
+**修正後**:
+```
+├── docs/
+│   ├── er-diagram-mvp.md                 # ER図（Mermaid形式）
+│   ├── database-schema-mvp.md            # テーブル定義書
+│   └── production-check-issue-7.md       # Issue #7 本番環境確認レポート
 
 <br>
 
@@ -992,6 +1101,8 @@ habitflow/
 | `bin/docker-entrypoint` | コンテナ起動時の初期化スクリプト |
 | `docs/er-diagram-mvp.md` | ER図（Mermaid）とMVP範囲説明 |
 | `docs/database-schema-mvp.md` | 全テーブル詳細定義 |
+| `docs/production-check-issue-7.md` | Issue #7 本番環境確認レポート |
+| `test/integration/user_login_test.rb` | ログイン・ログアウト統合テスト |
 
 <br>
 
@@ -1680,6 +1791,237 @@ end
 - 異常系テスト: 無効なメール・パスワードでログイン失敗
 - ログアウトテスト: セッション破棄確認
 - 全テスト成功: 19 runs, 57 assertions, 0 failures
+
+<br>
+
+#### 認証機能の本番環境確認（Issue #8）
+
+<br>
+
+**確認環境**:
+- 本番URL: https://habitflow-web.onrender.com
+- ホスティング: Render（無料プラン）
+- データベース: PostgreSQL 16
+
+<br>
+
+**確認項目**:
+
+<br>
+
+**1. TOPページ表示**
+- ✅ ページが正しく表示される
+- ✅ Tailwind CSSが適用されている
+- ✅ ヘッダーに「ログイン」「新規登録」リンクがある
+
+<br>
+
+**2. ユーザー登録機能**
+- ✅ 新規登録フォームが表示される
+- ✅ 登録が成功する
+- ✅ 成功メッセージが表示される
+- ✅ ログイン状態になる
+- ✅ ヘッダーにユーザー名が表示される
+
+<br>
+
+**3. ログアウト機能**
+- ✅ ログアウトボタンが表示される
+- ✅ 確認ダイアログが表示される
+- ✅ ログアウトが成功する
+- ✅ 成功メッセージが表示される
+- ✅ 未ログイン状態になる
+
+<br>
+
+**4. ログイン機能（正常系）**
+- ✅ ログインフォームが表示される
+- ✅ ログインが成功する
+- ✅ 成功メッセージが表示される
+- ✅ ログイン状態になる
+
+<br>
+
+**5. ログイン機能（異常系）**
+- ✅ エラーメッセージが表示される
+- ✅ ログインフォームが再表示される
+- ✅ 未ログイン状態のまま
+
+<br>
+
+**確認結果**:
+
+<br>
+
+全機能が本番環境で正常に動作することを確認。<br>
+詳細は `docs/production-check-issue-7.md` を参照。
+
+<br>
+
+**注意事項**:
+- Renderの無料プランのため、初回アクセス時に約30秒の起動時間が必要
+- スリープ対策は Issue #10 以降で実装予定
+
+<br>
+
+#### 認証機能のテスト（Issue #9）
+
+<br>
+
+**テスト実施日**: 2024年2月14日
+
+<br>
+
+**テスト結果**:
+```
+20 runs, 59 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+**テストカバレッジ**:
+
+<br>
+
+**1. Userモデルテスト（13テストケース）**
+- バリデーション（name, email, password）
+- パスワード暗号化
+- email小文字変換
+- 重複チェック
+
+<br>
+
+**2. ユーザー登録統合テスト（2テストケース）**
+- 正常系: ユーザー登録成功、自動ログイン
+- 異常系: バリデーションエラー表示
+
+<br>
+
+**3. ログイン・ログアウト統合テスト（4テストケース）**
+- 正常系: ログイン成功、セッション保存
+- 異常系: 無効なメールアドレス、無効なパスワード
+- ログアウト: セッション破棄確認
+
+<br>
+
+**テストファイル**:
+- `test/models/user_test.rb`
+- `test/integration/user_registration_test.rb`
+- `test/integration/user_login_test.rb`
+
+<br>
+
+**テスト戦略**:
+- 正常系・異常系の両方をテスト
+- セッション管理の検証
+- HTTPステータスコードの確認（200, 303, 422）
+- フラッシュメッセージの検証
+
+<br>
+
+#### 共通ヘッダー・フッター実装（Issue #10）
+
+<br>
+
+実装機能:
+
+<br>
+
+共通ヘッダー（app/views/shared/_header.html.erb）:
+erb<header class="bg-gray-50 border-b border-gray-200">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+    <div class="flex justify-between items-center">
+      <!-- ロゴエリア -->
+      <div class="text-2xl font-bold text-blue-600">
+        <%= link_to "HabitFlow", root_path %>
+      </div>
+
+      <!-- ナビゲーションエリア -->
+      <div class="flex items-center space-x-4">
+        <% if logged_in? %>
+          <span><%= current_user.name %> さん</span>
+          <%= button_to "ログアウト", logout_path, method: :delete %>
+        <% else %>
+          <%= link_to "ログイン", login_path %>
+          <%= link_to "新規登録", new_user_path %>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</header>
+
+<br>
+
+共通フッター（app/views/shared/_footer.html.erb）:
+erb<footer class="bg-gray-900 text-white py-8 mt-auto">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="text-center text-sm">
+      <p>© 2024 HabitFlow. All rights reserved.</p>
+      <div class="mt-2 space-x-4 text-gray-400">
+        <span>利用規約</span>
+        <span>プライバシーポリシー</span>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<br>
+
+レイアウトファイル（app/views/layouts/application.html.erb）:
+erb<body class="min-h-screen flex flex-col bg-white text-gray-900">
+  <%= render "shared/header" %>
+
+  <main class="flex-1">
+    <!-- フラッシュメッセージ表示 -->
+    <% flash.each do |message_type, message| %>
+      <div class="<%= message_type == 'notice' ? 'bg-green-100 border-green-400 text-green-700' : 'bg-red-100 border-red-400 text-red-700' %> px-4 py-3 rounded border">
+        <%= message %>
+      </div>
+    <% end %>
+
+    <%= yield %>
+  </main>
+
+  <%= render "shared/footer" %>
+</body>
+
+<br>
+
+TOPページ構成:
+
+ヒーローセクション: キャッチコピー「甘えを可視化する」、CTAボタン
+価値説明セクション: 3つの特徴（3列グリッド、レスポンシブ対応）
+利用フローセクション: 4ステップ（横並び、レスポンシブ対応）
+
+<br>
+UI設計（Tailwind CSS）:
+
+レスポンシブデザイン（md:grid-cols-3, md:flex-row）
+フレックスボックスレイアウト（flex, justify-between）
+グリッドレイアウト（grid, grid-cols-1）
+フッターを最下部に固定（min-h-screen, flex-col, flex-1, mt-auto）
+
+<br>
+パーシャル（Partial）の活用:
+
+ヘッダー・フッターを app/views/shared/ に配置
+<%= render "shared/header" %> で読み込み
+DRY原則（Don't Repeat Yourself）に従う
+コードの重複を避ける
+
+<br>
+画面遷移図との整合性:
+
+完全に一致するレイアウト
+シンプルで落ち着いたデザイン
+全23画面に共通のヘッダー・フッター表示
+
+<br>
+テスト:
+
+全テスト実行: 20 runs, 59 assertions, 0 failures
+既存のテストに影響なし
+ビューの変更がテストに影響しないことを確認
 
 <br>
 ```
