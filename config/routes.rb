@@ -68,7 +68,7 @@ Rails.application.routes.draw do
   delete "logout", to: "sessions#destroy", as: :logout
 
   # 習慣管理
-  # resourcesを使うことで、RESTfulなルーティングが自動生成される
-  # 現時点ではindexアクションのみ使用
-  resources :habits, only: [:index]
+  # 変更前: resources :habits, only: [:index]
+  # 変更後: new（新規作成フォーム）とcreate（作成処理）を追加
+  resources :habits, only: [:index, :new, :create]
 end

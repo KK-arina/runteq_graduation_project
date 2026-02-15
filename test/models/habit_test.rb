@@ -1,227 +1,260 @@
 require "test_helper"
 
+# Habitモデルのテスト
 class HabitTest < ActiveSupport::TestCase
-  # ===================================================================
-  # セットアップ（各テスト実行前に毎回実行される）
-  # ===================================================================
-  
-  def setup
+  # setup: 各テスト実行前に毎回実行されるメソッド
+  setup do
     # テスト用ユーザーを作成
-    # fixtures（test/fixtures/users.yml）で定義されたユーザーを取得
+    # users(:one): test/fixtures/users.yml で定義されたテストデータ
     @user = users(:one)
     
-    # テスト用の有効な習慣を作成
-    @habit = Habit.new(
-      user: @user,
+    # 有効な習慣データを作成（テストの基準となるデータ）
+    # @user.habits.build: user_id が自動的に設定される
+    @habit = @user.habits.build(
       name: "読書",
       weekly_target: 7
     )
   end
 
-  # ===================================================================
-  # バリデーションテスト（正常系）
-  # ===================================================================
+  # ===== バリデーションテスト =====
   
-  test "有効な習慣は保存できること" do
-    # assert → 条件がtrueであることを確認
-    # @habit.valid? → バリデーションが通ればtrue
-    assert @habit.valid?, "有効な習慣が保存できませんでした"
+  test "有効な習慣データであること" do
+    # assert: 条件が真であることを確認
+    # @habit.valid?: バリデーションをチェック（true = 有効、false = 無効）
+    assert @habit.valid?
   end
 
-  # ===================================================================
-  # バリデーションテスト（異常系：name）
-  # ===================================================================
-  
-  test "習慣名が空の場合は無効であること" do
+  test "習慣名が空欄の場合は無効であること" do
     @habit.name = ""
-    # assert_not → 条件がfalseであることを確認
-    assert_not @habit.valid?, "空の習慣名で保存できてしまいました"
-    # errors[:name] → nameフィールドのエラーメッセージ配列
-    # include? → 配列に指定の要素が含まれているか確認
+    # assert_not: 条件が偽であることを確認
+    assert_not @habit.valid?
+    # assert_includes: 配列に特定の要素が含まれていることを確認
+    # @habit.errors[:name]: name 属性のエラーメッセージの配列
     assert_includes @habit.errors[:name], "can't be blank"
   end
-  
+
   test "習慣名がnilの場合は無効であること" do
     @habit.name = nil
     assert_not @habit.valid?
     assert_includes @habit.errors[:name], "can't be blank"
   end
-  
+
   test "習慣名が51文字の場合は無効であること" do
-    # "a" * 51 → "a"を51回繰り返した文字列
+    # "a" * 51: "a" を51個連結した文字列（51文字）
     @habit.name = "a" * 51
     assert_not @habit.valid?
+    # エラーメッセージ: "is too long (maximum is 50 characters)"
     assert_includes @habit.errors[:name], "is too long (maximum is 50 characters)"
   end
-  
+
   test "習慣名が50文字の場合は有効であること" do
     @habit.name = "a" * 50
-    assert @habit.valid?, "50文字の習慣名が無効になってしまいました"
+    # 50文字ちょうどは有効（上限値テスト）
+    assert @habit.valid?
   end
 
-  # ===================================================================
-  # バリデーションテスト（異常系：weekly_target）
-  # ===================================================================
-  
-  test "週次目標値が空の場合は無効であること" do
+  test "週次目標値が空欄の場合は無効であること" do
     @habit.weekly_target = nil
     assert_not @habit.valid?
     assert_includes @habit.errors[:weekly_target], "can't be blank"
   end
-  
+
   test "週次目標値が0の場合は無効であること" do
     @habit.weekly_target = 0
     assert_not @habit.valid?
-    assert_includes @habit.errors[:weekly_target], "must be greater than 0"
+    # 🔴 重要: エラーメッセージをバリデーションルールに合わせる
+    # 
+    # バリデーション:
+    #   validates :weekly_target, numericality: { greater_than_or_equal_to: 1 }
+    # 
+    # エラーメッセージ:
+    #   "must be greater than or equal to 1"
+    # 
+    # 修正前（NG）: "must be greater than 0"
+    # 修正後（OK）: "must be greater than or equal to 1"
+    assert_includes @habit.errors[:weekly_target], "must be greater than or equal to 1"
   end
-  
+
   test "週次目標値が負の数の場合は無効であること" do
     @habit.weekly_target = -1
     assert_not @habit.valid?
-    assert_includes @habit.errors[:weekly_target], "must be greater than 0"
+    # 🔴 重要: エラーメッセージを統一
+    assert_includes @habit.errors[:weekly_target], "must be greater than or equal to 1"
   end
-  
+
   test "週次目標値が8の場合は無効であること" do
     @habit.weekly_target = 8
     assert_not @habit.valid?
+    # エラーメッセージ: "must be less than or equal to 7"
     assert_includes @habit.errors[:weekly_target], "must be less than or equal to 7"
   end
-  
+
+  test "週次目標値が1の場合は有効であること" do
+    @habit.weekly_target = 1
+    # 下限値テスト
+    assert @habit.valid?
+  end
+
+  test "週次目標値が7の場合は有効であること" do
+    @habit.weekly_target = 7
+    # 上限値テスト
+    assert @habit.valid?
+  end
+
   test "週次目標値が小数の場合は無効であること" do
     @habit.weekly_target = 3.5
     assert_not @habit.valid?
+    # エラーメッセージ: "must be an integer"
     assert_includes @habit.errors[:weekly_target], "must be an integer"
   end
+
+  # ===== アソシエーションテスト =====
   
-  test "週次目標値が1の場合は有効であること" do
-    @habit.weekly_target = 1
-    assert @habit.valid?, "週次目標値1が無効になってしまいました"
-  end
-  
-  test "週次目標値が7の場合は有効であること" do
-    @habit.weekly_target = 7
-    assert @habit.valid?, "週次目標値7が無効になってしまいました"
+  test "ユーザーに紐づいていること" do
+    # @habit.user: belongs_to :user で定義されたアソシエーション
+    # @user: setup で作成したユーザー
+    assert_equal @user, @habit.user
   end
 
-  # ===================================================================
-  # アソシエーションテスト
-  # ===================================================================
-  
-  test "ユーザーとの関連付けが正しく動作すること" do
-    # @habit.user → 関連するUserオブジェクトを取得
-    assert_equal @user, @habit.user, "ユーザーとの関連付けが正しくありません"
-  end
-  
   test "ユーザーが削除されたら習慣も削除されること" do
-    # テスト用に新しいユーザーと習慣を作成
-    # fixtureのユーザーを使うと、既存の習慣（2件）も削除されて期待値がずれるため
-    test_user = User.create!(
-      name: "テストユーザー",
-      email: "test@example.com",
-      password: "password123",
-      password_confirmation: "password123"
-    )
-    test_habit = test_user.habits.create!(name: "テスト習慣", weekly_target: 5)
+    # 🔴 正しい修正: fixtures の影響を考慮する
+    # 
+    # 修正前の誤診:
+    #   「他のテストの影響」→ これは間違い（各テストはロールバックされる）
+    # 
+    # 本当の原因:
+    #   fixtures/habits.yml に users(:one) に紐づく習慣が複数ある
+    #   例: one, two, three が全て user: one だった場合
+    #   → users(:one).destroy で3件削除される
+    # 
+    # 正しい修正方法①: relation ベースで assert_difference
+    test_user = users(:one)
+    habit_count = test_user.habits.count  # fixtures で定義された習慣の数を取得
     
-    # assert_difference → ブロック実行前後で指定の値がどれだけ変化したか確認
-    # 'Habit.count', -1 → Habit.countが1減ることを期待
-    # dependent: :destroy が正しく動作しているかを確認
-    assert_difference 'Habit.count', -1 do
+    # テスト用の習慣を1件追加
+    test_user.habits.create!(name: "テスト習慣", weekly_target: 7)
+    
+    # ユーザーに紐づく習慣の総数を取得（fixtures + 追加した1件）
+    total_count = test_user.habits.count
+    
+    # assert_difference: 全体の Habit.count が total_count 減ることを期待
+    assert_difference("Habit.count", -total_count) do
       test_user.destroy
     end
   end
 
-  # ===================================================================
-  # スコープテスト
-  # ===================================================================
+  # ===== スコープテスト =====
   
-  test "activeスコープは有効な習慣のみを取得すること" do
-    # 有効な習慣を保存
-    active_habit = Habit.create!(user: @user, name: "筋トレ", weekly_target: 5)
+  test "activeスコープで有効な習慣のみ取得できること" do
+    # 有効な習慣を作成
+    active_habit = @user.habits.create!(name: "有効な習慣", weekly_target: 7)
     
-    # 論理削除された習慣を作成
-    deleted_habit = Habit.create!(user: @user, name: "ジョギング", weekly_target: 3)
+    # 削除済みの習慣を作成
+    deleted_habit = @user.habits.create!(name: "削除済み習慣", weekly_target: 7)
+    # soft_delete: deleted_at に現在時刻を設定（論理削除）
     deleted_habit.soft_delete
     
-    # Habit.active → 有効な習慣のみ取得
+    # Habit.active: deleted_at が NULL の習慣のみ取得
     active_habits = Habit.active
     
-    # include? → 配列に指定の要素が含まれているか確認
-    assert_includes active_habits, active_habit, "有効な習慣が含まれていません"
-    assert_not_includes active_habits, deleted_habit, "削除済み習慣が含まれています"
+    # assert_includes: 配列に特定の要素が含まれていることを確認
+    assert_includes active_habits, active_habit
+    # assert_not_includes: 配列に特定の要素が含まれていないことを確認
+    assert_not_includes active_habits, deleted_habit
   end
-  
-  test "deletedスコープは削除済みの習慣のみを取得すること" do
-    active_habit = Habit.create!(user: @user, name: "筋トレ", weekly_target: 5)
-    deleted_habit = Habit.create!(user: @user, name: "ジョギング", weekly_target: 3)
+
+  test "deletedスコープで削除済み習慣のみ取得できること" do
+    # 有効な習慣を作成
+    active_habit = @user.habits.create!(name: "有効な習慣", weekly_target: 7)
+    
+    # 削除済みの習慣を作成
+    deleted_habit = @user.habits.create!(name: "削除済み習慣", weekly_target: 7)
     deleted_habit.soft_delete
     
+    # Habit.deleted: deleted_at が NOT NULL の習慣のみ取得
     deleted_habits = Habit.deleted
     
     assert_includes deleted_habits, deleted_habit
     assert_not_includes deleted_habits, active_habit
   end
 
-  # ===================================================================
-  # インスタンスメソッドテスト
-  # ===================================================================
+  # ===== インスタンスメソッドテスト =====
   
-  test "soft_deleteメソッドでdeleted_atが設定されること" do
-    @habit.save
+  test "soft_deleteメソッドで論理削除されること" do
+    @habit.save!
     
-    # assert_nil → 値がnilであることを確認
-    assert_nil @habit.deleted_at, "保存直後のdeleted_atがnilではありません"
+    # assert_nil: 値が nil であることを確認
+    # @habit.deleted_at: 初期状態では nil（削除されていない）
+    assert_nil @habit.deleted_at
     
+    # soft_delete: 論理削除を実行
     @habit.soft_delete
     
-    # assert_not_nil → 値がnil以外であることを確認
-    assert_not_nil @habit.deleted_at, "soft_delete後もdeleted_atがnilのままです"
+    # assert_not_nil: 値が nil でないことを確認
+    # 論理削除後は deleted_at に現在時刻が設定される
+    assert_not_nil @habit.deleted_at
   end
+
+  test "active?メソッドで有効状態を判定できること" do
+    @habit.save!
+    
+    # 初期状態: 有効
+    assert @habit.active?
+    
+    # 論理削除後: 無効
+    @habit.soft_delete
+    assert_not @habit.active?
+  end
+
+  test "deleted?メソッドで削除状態を判定できること" do
+    @habit.save!
+    
+    # 初期状態: 削除されていない
+    assert_not @habit.deleted?
+    
+    # 論理削除後: 削除済み
+    @habit.soft_delete
+    assert @habit.deleted?
+  end
+
+  # ===== 論理削除の統合テスト =====
   
-  test "active?メソッドが正しく動作すること" do
-    @habit.save
+  test "論理削除後もデータベースにレコードが残ること" do
+    @habit.save!
+    habit_id = @habit.id
     
-    # 保存直後は有効
-    assert @habit.active?, "保存直後にactive?がfalseになっています"
-    
+    # 論理削除を実行
     @habit.soft_delete
     
-    # 論理削除後は無効
-    assert_not @habit.active?, "soft_delete後もactive?がtrueのままです"
+    # find_by: 指定した条件でレコードを検索
+    # Habit.find_by(id: habit_id): ID で習慣を検索
+    # assert_not_nil: レコードが存在することを確認（物理削除されていない）
+    assert_not_nil Habit.find_by(id: habit_id)
   end
-  
-  test "deleted?メソッドが正しく動作すること" do
-    @habit.save
+
+  test "論理削除後はactiveスコープで取得できないこと" do
+    @habit.save!
     
-    # 保存直後は削除されていない
-    assert_not @habit.deleted?, "保存直後にdeleted?がtrueになっています"
+    # 論理削除前: active スコープで取得できる
+    assert_includes Habit.active, @habit
     
+    # 論理削除を実行
     @habit.soft_delete
     
-    # 論理削除後は削除済み
-    assert @habit.deleted?, "soft_delete後もdeleted?がfalseのままです"
+    # 論理削除後: active スコープで取得できない
+    assert_not_includes Habit.active, @habit
   end
-  
-  # ===================================================================
-  # 論理削除の統合テスト
-  # ===================================================================
-  
-  test "soft_deleteを呼ぶと、Habit.activeからは取得できなくなること" do
-    @habit.save
+
+  test "論理削除後はdeletedスコープで取得できること" do
+    @habit.save!
     
-    # 論理削除前は active スコープで取得できる
-    assert_includes Habit.active, @habit, "保存直後の習慣がactiveに含まれていません"
+    # 論理削除前: deleted スコープで取得できない
+    assert_not_includes Habit.deleted, @habit
     
-    # assert_difference → ブロック実行前後で指定の値がどれだけ変化したか確認
-    # 'Habit.active.count', -1 → active な習慣が1つ減ることを期待
-    assert_difference 'Habit.active.count', -1 do
-      @habit.soft_delete
-    end
+    # 論理削除を実行
+    @habit.soft_delete
     
-    # 論理削除後は active スコープで取得できない
-    assert_not_includes Habit.active, @habit, "論理削除後もactiveに含まれています"
-    
-    # 論理削除後は deleted スコープで取得できる
-    assert_includes Habit.deleted, @habit, "論理削除後にdeletedに含まれていません"
+    # 論理削除後: deleted スコープで取得できる
+    assert_includes Habit.deleted, @habit
   end
 end

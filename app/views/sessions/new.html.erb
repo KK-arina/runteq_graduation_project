@@ -1,76 +1,163 @@
-<%# ========================================================== %>
-<%# ログインフォーム                                 %>
-<%# app/views/sessions/new.html.erb                   %>
-<%# URL: GET /login                                   %>
-<%# ========================================================== %>
+<%# ログインページ %>
+<%# このファイルは SessionsController の new アクション（GET /login）で表示される %>
 
-<div class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 py-12 px-4 sm:px-6 lg:px-8">
-  <%# 画面中央配置 + 背景グラデーション %>
+<%# メインコンテナ %>
+<%# max-w-md: 最大幅 448px %>
+<%#   - ログインフォームに適した幅（入力欄が広すぎず、狭すぎず） %>
+<%#   - md = medium サイズ（small, large などのサイズもある） %>
+<%# mx-auto: margin-left と margin-right を auto に設定 %>
+<%#   - 左右のマージンを自動計算して中央揃えにする %>
+<%#   - mx = margin-x（x軸、つまり水平方向） %>
+<%# px-4 sm:px-6 lg:px-8: 左右のパディング（レスポンシブ対応） %>
+<%#   - px-4: デフォルト（モバイル）は左右パディング 16px %>
+<%#   - sm:px-6: 画面幅 640px 以上（タブレット）は左右パディング 24px %>
+<%#   - lg:px-8: 画面幅 1024px 以上（PC）は左右パディング 32px %>
+<%#   - レスポンシブデザイン: 画面サイズに応じて自動調整される %>
+<%# py-8: 上下のパディング 32px %>
+<%#   - py = padding-y（y軸、つまり垂直方向） %>
+<%#   - コンテンツとヘッダー・フッターの間に適切な余白を作る %>
+<div class="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <%# ページタイトル %>
+  <%# text-2xl: フォントサイズ 24px %>
+  <%#   - 2xl = extra extra large %>
+  <%#   - Tailwind CSS のフォントサイズは xs, sm, base, lg, xl, 2xl, 3xl... と段階的に大きくなる %>
+  <%# font-bold: フォントウェイト 700（太字） %>
+  <%#   - normal(400), medium(500), semibold(600), bold(700), extrabold(800) などがある %>
+  <%# mb-6: 下マージン 24px %>
+  <%#   - mb = margin-bottom %>
+  <%#   - タイトルとフォームの間に余白を作る %>
+  <%# text-gray-900: テキスト色（濃いグレー、ほぼ黒） %>
+  <%#   - gray-50（最も薄い）から gray-900（最も濃い）まで段階がある %>
+  <%#   - 900 は最も濃いグレーで、見出しに適している %>
+  <%# text-center: テキストを中央揃え %>
+  <h2 class="text-2xl font-bold mb-6 text-gray-900 text-center">
+    ログイン
+  </h2>
 
-  <div class="max-w-md w-full space-y-8">
-    
-    <!-- ================= タイトル ================= -->
-    <div>
-      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
-        ログイン
-      </h2>
-      <p class="mt-2 text-center text-sm text-gray-600">
-        HabitFlowへようこそ
-      </p>
+  <%# form_with: Rails のフォームヘルパー %>
+  <%# url: login_path => フォームの送信先を指定 %>
+  <%#   - POST /login に送信される %>
+  <%#   - SessionsController の create アクションで処理される %>
+  <%# scope: :session => パラメータのスコープ（名前空間） %>
+  <%#   - フォームから送信されるパラメータが params[:session][:email] のようになる %>
+  <%#   - スコープがないと params[:email] になってしまい、管理しづらい %>
+  <%# local: true => 非同期送信を無効化 %>
+  <%#   - デフォルトでは Turbo（非同期通信）が有効 %>
+  <%#   - local: true にすると通常のHTMLフォーム送信になる %>
+  <%= form_with url: login_path, scope: :session, local: true do |f| %>
+    <%# メールアドレス入力エリア %>
+    <%# mb-4: 下マージン 16px %>
+    <%#   - 各入力フィールド間の余白 %>
+    <div class="mb-4">
+      <%# label タグ: 入力欄のラベル %>
+      <%# f.label :email: email フィールドのラベルを生成 %>
+      <%# "メールアドレス": ラベルのテキスト（日本語表示） %>
+      <%# class で Tailwind CSS を適用: %>
+      <%#   block: ブロック要素として表示（改行される） %>
+      <%#     - デフォルトの label はインライン要素（横並び） %>
+      <%#     - block にすることで、ラベルと入力欄が縦に並ぶ %>
+      <%#   text-sm: フォントサイズ 14px %>
+      <%#     - sm = small %>
+      <%#     - ラベルは本文より小さめにするのが一般的 %>
+      <%#   font-medium: フォントウェイト 500（中太） %>
+      <%#     - normal より少し太く、bold より少し細い %>
+      <%#   text-gray-700: テキスト色（グレー） %>
+      <%#     - 700 は濃いめのグレーで、ラベルに適している %>
+      <%#   mb-2: 下マージン 8px %>
+      <%#     - ラベルと入力欄の間の余白 %>
+      <%= f.label :email, "メールアドレス", class: "block text-sm font-medium text-gray-700 mb-2" %>
+      
+      <%# email_field: メールアドレス入力欄 %>
+      <%# f.email_field :email: email 属性の入力欄を生成 %>
+      <%#   - type="email" の input タグが生成される %>
+      <%#   - ブラウザがメールアドレス形式をチェックしてくれる %>
+      <%# placeholder: 入力例を表示（グレーの薄い文字） %>
+      <%#   - ユーザーが何を入力すべきかのヒント %>
+      <%#   - 入力を開始すると自動的に消える %>
+      <%# class で入力欄のスタイルを指定: %>
+      <%#   w-full: 幅 100% %>
+      <%#     - w = width %>
+      <%#     - 親要素の幅いっぱいに広がる %>
+      <%#   px-4: 左右パディング 16px %>
+      <%#     - 入力欄の内側の左右余白 %>
+      <%#     - テキストが枠線にくっつかないようにする %>
+      <%#   py-2: 上下パディング 8px %>
+      <%#     - 入力欄の内側の上下余白 %>
+      <%#     - 入力欄の高さを適切にする %>
+      <%#   border: ボーダー 1px %>
+      <%#     - 枠線を表示 %>
+      <%#   border-gray-300: ボーダー色（グレー） %>
+      <%#     - 300 は薄めのグレーで、枠線に適している %>
+      <%#   rounded-md: 角丸 6px %>
+      <%#     - md = medium %>
+      <%#     - 角を丸くすることで柔らかい印象になる %>
+      <%#   focus:ring-2: フォーカス時（クリック時）にリング（枠線）2px %>
+      <%#     - focus: はフォーカス時（クリック時、タブキーでの選択時）に適用 %>
+      <%#     - ring はボーダーの外側に表示される影のような線 %>
+      <%#   focus:ring-blue-500: リングの色（青） %>
+      <%#     - 500 は中間の明るさの青 %>
+      <%#   focus:border-blue-500: フォーカス時のボーダー色（青） %>
+      <%#     - 入力欄が選択されていることを視覚的に示す %>
+      <%= f.email_field :email, 
+          placeholder: "email@example.com",
+          class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
     </div>
 
-    <!-- ================= ログインフォーム ================= -->
-    <%= form_with url: login_path,
-                  scope: :session,
-                  local: true,
-                  class: "mt-8 space-y-6" do |form| %>
-
-      <div class="rounded-md shadow-sm space-y-4">
-
-        <!-- メールアドレス -->
-        <div>
-          <%= form.label :email,
-                         "メールアドレス",
-                         class: "block text-sm font-medium text-gray-700" %>
-
-          <%= form.email_field :email,
-                               autofocus: true,
-                               autocomplete: "email",
-                               placeholder: "example@example.com",
-                               class: "mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" %>
-        </div>
-
-        <!-- パスワード -->
-        <div>
-          <%= form.label :password,
-                         "パスワード",
-                         class: "block text-sm font-medium text-gray-700" %>
-
-          <%= form.password_field :password,
-                                  autocomplete: "current-password",
-                                  placeholder: "••••••••",
-                                  class: "mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" %>
-        </div>
-
-      </div>
-
-      <!-- ログインボタン -->
-      <div>
-        <%= form.submit "ログイン",
-                        class: "group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-150 ease-in-out" %>
-      </div>
-
-    <% end %>
-
-    <!-- ================= 新規登録リンク ================= -->
-    <div class="text-center">
-      <p class="text-sm text-gray-600">
-        アカウントをお持ちでない方は
-        <%= link_to "新規登録",
-                    new_user_path,
-                    class: "font-medium text-indigo-600 hover:text-indigo-500" %>
-      </p>
+    <%# パスワード入力エリア %>
+    <%# mb-6: 下マージン 24px %>
+    <%#   - 最後の入力欄とボタンの間は少し広めにする %>
+    <div class="mb-6">
+      <%= f.label :password, "パスワード", class: "block text-sm font-medium text-gray-700 mb-2" %>
+      
+      <%# password_field: パスワード入力欄 %>
+      <%# f.password_field :password: password 属性の入力欄を生成 %>
+      <%#   - type="password" の input タグが生成される %>
+      <%#   - 入力内容が「●●●」のように隠される（セキュリティ） %>
+      <%= f.password_field :password,
+          placeholder: "パスワードを入力",
+          class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
     </div>
 
+    <%# 送信ボタン %>
+    <%# f.submit: フォーム送信ボタン %>
+    <%# "ログイン": ボタンのラベル %>
+    <%# class で Tailwind CSS を適用: %>
+    <%#   w-full: 幅 100% %>
+    <%#     - ボタンを入力欄と同じ幅にする %>
+    <%#   px-4: 左右パディング 16px %>
+    <%#   py-2: 上下パディング 8px %>
+    <%#   bg-blue-600: 背景色（青） %>
+    <%#     - 600 は濃いめの青で、ボタンに適している %>
+    <%#   text-white: テキスト色（白） %>
+    <%#     - 青い背景に白文字で見やすく %>
+    <%#   rounded-md: 角丸 6px %>
+    <%#   hover:bg-blue-700: ホバー時に背景色を濃く %>
+    <%#     - hover: はマウスが乗った時に適用 %>
+    <%#     - 700 は 600 より濃い青 %>
+    <%#     - ボタンがインタラクティブであることを示す %>
+    <%#   transition: アニメーション効果（滑らかに変化） %>
+    <%#     - 色の変化が瞬間的ではなく、0.3秒かけて滑らかに変わる %>
+    <%= f.submit "ログイン", 
+        class: "w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition" %>
+  <% end %>
+
+  <%# 新規登録へのリンク %>
+  <%# mt-4: 上マージン 16px %>
+  <%#   - ボタンとリンクの間の余白 %>
+  <%# text-center: テキストを中央揃え %>
+  <%# text-sm: フォントサイズ 14px %>
+  <%# text-gray-600: テキスト色（グレー） %>
+  <%#   - 600 は中間のグレーで、補足テキストに適している %>
+  <div class="mt-4 text-center text-sm text-gray-600">
+    アカウントをお持ちでない方は
+    <%# link_to: リンクを生成する Rails ヘルパー %>
+    <%# "新規登録": リンクのテキスト %>
+    <%# new_user_path: /users/new への名前付きルート %>
+    <%# class で Tailwind CSS を適用: %>
+    <%#   text-blue-600: テキスト色（青） %>
+    <%#     - リンクであることを示す色 %>
+    <%#   hover:text-blue-700: ホバー時に濃い青 %>
+    <%#     - リンクがクリック可能であることを示す %>
+    <%= link_to "新規登録", new_user_path, class: "text-blue-600 hover:text-blue-700" %>
   </div>
 </div>

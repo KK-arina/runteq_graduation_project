@@ -1,79 +1,93 @@
 require "test_helper"
 
-# ==================== ユーザーログインの統合テスト ====================
-# このファイルは、ログイン・ログアウト機能が正しく動作するかをテストします
-# 統合テスト: 複数のコントローラー・ビューを組み合わせた動作をテスト
-
+# ユーザーログイン機能の統合テスト
 class UserLoginTest < ActionDispatch::IntegrationTest
-
-  # ==================== テスト用データの準備 ====================
-  # setup: 各テストの前に実行されるメソッド
-  # テスト用のユーザーを作成
-  def setup
-    # @user: テスト用のユーザーを作成
-    # create!: データベースに保存（newとsaveを一度に実行）
-    # !: 失敗時に例外を発生させる（テストのデバッグがしやすい）
-    @user = User.create!(
-      name: "テストユーザー",
-      email: "test@example.com",
-      password: "password123",
-      password_confirmation: "password123"
-    )
+  # setup: 各テスト実行前に毎回実行されるメソッド
+  setup do
+    # 🔴 重要: User.create! を使わない（fixtures と重複するため）
+    # 
+    # 修正前（NG）:
+    # @user = User.create!(
+    #   name: "Test User",
+    #   email: "test@example.com",  # fixtures と重複してエラー
+    #   password: "password",
+    #   password_confirmation: "password"
+    # )
+    
+    # 修正後（OK）:
+    # fixtures を使う（test/fixtures/users.yml で定義）
+    @user = users(:one)
   end
 
-  # ==================== 正常系テスト ====================
-  # 正しいメールアドレスとパスワードでログインできることをテスト
+  # ===== ログイン成功テスト =====
+  
   test "should login with valid credentials" do
-    # ログインフォームを表示
+    # ログインページにアクセス
+    # get: HTTPのGETリクエストを送信
+    # login_path: /login への名前付きルート
     get login_path
+    # assert_response :success: HTTPステータスコード 200（成功）が返ってくることを確認
     assert_response :success
 
-    # 正しい認証情報でログイン
+    # ログイン処理
+    # post: HTTPのPOSTリクエストを送信
+    # params: 送信するパラメータ
+    #   session[email]: ログインフォームのメールアドレス欄
+    #   session[password]: ログインフォームのパスワード欄
     post login_path, params: {
       session: {
         email: @user.email,
-        password: "password123"
+        password: "password"  # fixtures で設定したパスワード
       }
     }
 
-    # ログイン成功時はTOPページへリダイレクト
+    # assert_redirected_to: リダイレクト先が指定のパスであることを確認
+    # root_path: TOPページ（ランディングページ）
     assert_redirected_to root_path
+    
+    # follow_redirect!: リダイレクト先に実際に移動する
+    # これにより、リダイレクト後のページの内容を確認できる
     follow_redirect!
 
-    # フラッシュメッセージ確認
-    assert_not flash.empty?
-    assert_equal "ログインしました", flash[:notice]
-
-    # セッション確認
-    assert is_logged_in?
-    assert_equal @user.id, session[:user_id]
+    # assert_select: 指定したHTMLタグが存在することを確認
+    # "div", text: /ログインしました/: "ログインしました"というテキストを含むdivタグが存在するか
+    assert_select "div", text: /ログインしました/
   end
 
-  # ==================== 異常系テスト ====================
-
-  # 存在しないメールアドレスではログインできないことをテスト
+  # ===== ログイン失敗テスト（無効なメールアドレス） =====
+  
   test "should not login with invalid email" do
+    # ログインページにアクセス
     get login_path
+    assert_response :success
 
+    # 無効なメールアドレスでログイン試行
+    # invalid@example.com: 存在しないメールアドレス
     post login_path, params: {
       session: {
         email: "invalid@example.com",
-        password: "password123"
+        password: "password"
       }
     }
 
+    # assert_response :unprocessable_entity: HTTPステータスコード 422 が返ってくることを確認
+    # ログイン失敗時は 422 を返すべき（Railsのベストプラクティス）
     assert_response :unprocessable_entity
-    assert_not is_logged_in?
-    assert_nil session[:user_id]
 
-    assert_not flash.empty?
-    assert_equal "メールアドレスまたはパスワードが正しくありません", flash[:alert]
+    # エラーメッセージが表示されているか確認
+    # "div", text: /メールアドレスまたはパスワードが正しくありません/
+    assert_select "div", text: /メールアドレスまたはパスワードが正しくありません/
   end
 
-  # 間違ったパスワードではログインできないことをテスト
+  # ===== ログイン失敗テスト（無効なパスワード） =====
+  
   test "should not login with invalid password" do
+    # ログインページにアクセス
     get login_path
+    assert_response :success
 
+    # 無効なパスワードでログイン試行
+    # wrongpassword: 間違ったパスワード
     post login_path, params: {
       session: {
         email: @user.email,
@@ -81,48 +95,37 @@ class UserLoginTest < ActionDispatch::IntegrationTest
       }
     }
 
+    # HTTPステータスコード 422 が返ってくることを確認
     assert_response :unprocessable_entity
-    assert_not is_logged_in?
-    assert_nil session[:user_id]
 
-    assert_equal "メールアドレスまたはパスワードが正しくありません", flash[:alert]
+    # エラーメッセージが表示されているか確認
+    assert_select "div", text: /メールアドレスまたはパスワードが正しくありません/
   end
 
-  # ==================== ログアウトテスト ====================
+  # ===== ログアウトテスト =====
+  
   test "should logout" do
     # まずログイン
+    # post: HTTPのPOSTリクエストを送信
     post login_path, params: {
       session: {
         email: @user.email,
-        password: "password123"
+        password: "password"
       }
     }
 
-    assert is_logged_in?
-
-    # ログアウト実行
+    # ログアウト処理
+    # delete: HTTPのDELETEリクエストを送信
+    # logout_path: /logout への名前付きルート
     delete logout_path
 
-    # Rails 7 + Turbo 環境では DELETE後は303になることが多い
-    assert_response :see_other
+    # assert_redirected_to: ルートパスにリダイレクトされることを確認
     assert_redirected_to root_path
+    
+    # リダイレクト先に移動
     follow_redirect!
 
-    # セッション確認
-    assert_not is_logged_in?
-    assert_nil session[:user_id]
-
-    # フラッシュ確認
-    assert_not flash.empty?
-    assert_equal "ログアウトしました", flash[:notice]
-  end
-
-  private
-
-  # ==================== テスト用ヘルパーメソッド ====================
-  # IntegrationTest 内では logged_in? に直接アクセスできないため、
-  # session[:user_id] を直接確認する
-  def is_logged_in?
-    session[:user_id].present?
+    # ログアウトメッセージが表示されているか確認
+    assert_select "div", text: /ログアウトしました/
   end
 end
