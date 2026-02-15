@@ -1,0 +1,119 @@
+<%# app/views/habits/index.html.erb %>
+<%# 習慣一覧ページ %>
+<%# このページでは、ログインユーザーの有効な習慣をカード形式で一覧表示します %>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <%# ページタイトルと新規作成ボタンのエリア %>
+  <div class="flex justify-between items-center mb-8">
+    <%# ページタイトル %>
+    <%# tracking-tight: 文字間隔を詰めて読みやすくする %>
+    <h1 class="text-3xl font-bold text-gray-900 tracking-tight">習慣管理</h1>
+    
+    <%# 新しい習慣を追加ボタン %>
+    <%# link_to を使うことで、将来的にパスが変更されても自動的に追従 %>
+    <%# Issue #12で実装予定の新規作成ページへのリンク %>
+    <%= link_to "#", class: "inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-sm text-white hover:bg-blue-700 shadow-sm transition" do %>
+      <%# SVGアイコン（プラス記号） %>
+      <%# stroke を使った線のみのアイコンでシンプルに %>
+      <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+      </svg>
+      新しい習慣を追加
+    <% end %>
+  </div>
+
+  <%# 習慣カードのグリッドレイアウト %>
+  <%# 習慣が存在する場合と存在しない場合で表示を分岐 %>
+  <% if @habits.any? %>
+    <%# グリッドレイアウト: 画面サイズに応じて1〜3列で表示 %>
+    <%# grid-cols-1: モバイル（1列） %>
+    <%# md:grid-cols-2: タブレット（2列） %>
+    <%# lg:grid-cols-3: PC（3列） %>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <%# 各習慣をカード形式で表示 %>
+      <% @habits.each do |habit| %>
+        <%# カード全体 %>
+        <%# flex flex-col: 縦方向のフレックスボックスで、進捗エリアを下部に固定 %>
+        <%# rounded-xl: より丸みのある角（12px） %>
+        <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col hover:shadow-md transition">
+          <%# カードの上部エリア %>
+          <%# flex-1: 残りのスペースを全て使用（進捗エリアを下に押し出す効果） %>
+          <div class="p-6 flex-1">
+            <%# 習慣名 %>
+            <%# text-xl: より大きな文字サイズ（1.25rem = 20px） %>
+            <h3 class="text-xl font-bold text-gray-900 mb-4"><%= habit.name %></h3>
+            
+            <%# 習慣の詳細情報 %>
+            <%# space-x-4: 子要素間に横方向の間隔を追加 %>
+            <div class="flex items-center text-sm text-gray-500 space-x-4">
+              <%# 測定タイプの表示（アイコン付き） %>
+              <span class="flex items-center">
+                <%# チェックリストのアイコン（青色） %>
+                <svg class="h-4 w-4 mr-1 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
+                  <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
+                </svg>
+                チェック型
+              </span>
+              
+              <%# 週次目標値の表示（アイコン付き） %>
+              <span class="flex items-center">
+                <%# 時計のアイコン（緑色） %>
+                <svg class="h-4 w-4 mr-1 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                </svg>
+                目標: <%= habit.weekly_target %>回 / 週
+              </span>
+            </div>
+          </div>
+
+          <%# カードの下部エリア（進捗表示） %>
+          <%# Issue #15, #16で動的に変更予定 %>
+          <%# rounded-b-xl: 下部の角のみ丸くする %>
+          <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 rounded-b-xl">
+            <%# 進捗率のラベルとパーセンテージ %>
+            <div class="flex justify-between items-end mb-2">
+              <%# uppercase: 大文字表示 %>
+              <%# tracking-wider: 文字間隔を広げる %>
+              <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Weekly Progress</span>
+              <span class="text-sm font-bold text-blue-600">50%</span>
+            </div>
+            
+            <%# プログレスバー %>
+            <%# overflow-hidden: はみ出し部分を隠す %>
+            <div class="overflow-hidden h-2 text-xs flex rounded bg-gray-200">
+              <%# 進捗部分（青色のバー） %>
+              <%# style="width:50%": 仮データ（Issue #16で動的に変更予定） %>
+              <div style="width:50%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500"></div>
+            </div>
+            
+            <%# 実績表示 %>
+            <%# 将来的に動的データに置き換え（Issue #15, #16） %>
+            <p class="mt-2 text-xs text-gray-400">実績: 3 / <%= habit.weekly_target %> 日</p>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% else %>
+    <%# 習慣が登録されていない場合の表示（Empty State） %>
+    <%# border-dashed: 破線のボーダー %>
+    <%# より視覚的に魅力的なデザインに変更 %>
+    <div class="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center">
+      <%# アイコン（円形の背景付き） %>
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 text-blue-600 mb-4">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+        </svg>
+      </div>
+      
+      <%# メッセージ %>
+      <h2 class="text-xl font-bold text-gray-900 mb-2">まだ習慣が登録されていません</h2>
+      <p class="text-gray-500 mb-6">最初の習慣を登録して、素晴らしい変化を始めましょう！</p>
+      
+      <%# 新規作成ボタン %>
+      <%= link_to "#", class: "px-6 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition inline-block" do %>
+        習慣を登録する
+      <% end %>
+    </div>
+  <% end %>
+</div>

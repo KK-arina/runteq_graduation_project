@@ -4,14 +4,7 @@
 # 例: GET /users/new → UsersController#new
 # ==========================================================
 Rails.application.routes.draw do
-
-  # ==========================================================
-  # ヘルスチェック
-  # Renderなどのホスティングサービスが稼働確認に使用
-  # GET /up → 200 OK
-  # ==========================================================
-  get "up" => "rails/health#show", as: :rails_health_check
-
+  get "habits/index"
 
   # ==========================================================
   # PWA関連（現在は未使用）
@@ -74,4 +67,8 @@ Rails.application.routes.draw do
   # --------------------------
   delete "logout", to: "sessions#destroy", as: :logout
 
+  # 習慣管理
+  # resourcesを使うことで、RESTfulなルーティングが自動生成される
+  # 現時点ではindexアクションのみ使用
+  resources :habits, only: [:index]
 end
