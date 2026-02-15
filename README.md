@@ -25,7 +25,8 @@
 - ✅ ログイン・ログアウト機能実装済み
 - ✅ 本番環境での認証機能動作確認完了
 - ✅ Habitモデル作成完了
-- 🚧 習慣一覧ページ作成（開発中）
+- ✅ 習慣一覧ページ実装完了
+- 🚧 習慣新規作成機能（開発中）
 
 <br>
 
@@ -487,7 +488,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - フラッシュメッセージ一元管理
 - レスポンシブ対応確認
 - 全テスト実行確認
-- テスト結果: 20 runs, 5759 assertions, 0 failures, 0 errors, 0 skips
+- テスト結果: 20 runs, 59 assertions, 0 failures, 0 errors, 0 skips
 - テストカバレッジ:
   - Userモデルテスト（13テストケース）
   - ユーザー登録統合テスト（2テストケース）
@@ -507,7 +508,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | Issue | タイトル | ステータス | 完了日 | SP |
 |-------|---------|-----------|--------|-----|
 | #10 | Habitモデルの作成 | ✅ 完了 | 2/15 | 2 |
-| #11 | 習慣一覧ページの作成 | 🔜 予定 | - | 2 |
+| #11 | 習慣一覧ページの作成 | ✅ 完了 | 2/15 | 2 |
 | #12 | 習慣新規作成機能 | 🔜 予定 | - | 3 |
 | #13 | 習慣削除機能 | 🔜 予定 | - | 2 |
 | #14 | HabitRecordモデルの作成 | 🔜 予定 | - | 2 |
@@ -517,7 +518,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-**Week 2 進捗**: 2SP / 20SP（10%）
+**Week 2 進捗**: 4SP / 20SP（20%）
 
 <br>
 
@@ -588,6 +589,125 @@ CREATE TABLE habits (
 CREATE INDEX index_habits_on_deleted_at ON habits(deleted_at);
 CREATE INDEX index_habits_on_user_id_and_deleted_at ON habits(user_id, deleted_at);
 ```
+
+<br>
+
+#### ✅ Issue #11: 習慣一覧ページの作成
+
+- HabitsController実装（indexアクション）
+- 習慣一覧ビュー作成（カード形式レイアウト）
+- レスポンシブデザイン対応
+  - モバイル: 1列表示
+  - タブレット: 2列表示
+  - PC: 3列表示
+- 進捗率の表示（仮データ: 50%固定）
+- 論理削除された習慣の除外（activeスコープ使用）
+- 「新しい習慣を追加」ボタン実装（リンク先はダミー）
+- Empty State実装（習慣0件時の表示）
+- seeds.rbにサンプルデータ追加
+  - 2ユーザー作成（test@example.com、yamada@example.com）
+  - 各ユーザーに5件の習慣を作成
+  - 各ユーザーに1件の論理削除済み習慣を作成
+- 共通ヘッダーに「習慣一覧」リンク追加
+
+<br>
+
+**実装内容**:
+
+<br>
+
+**HabitsController**:
+```ruby
+class HabitsController < ApplicationController
+  before_action :require_login
+
+  def index
+    @habits = current_user.habits.active.order(created_at: :desc)
+  end
+end
+```
+
+<br>
+
+**習慣一覧ビュー（app/views/habits/index.html.erb）**:
+- カード形式のグリッドレイアウト
+- 習慣名、週次目標値、測定タイプ（チェック型固定）を表示
+- プログレスバーで進捗率を視覚化（仮データ: 50%）
+- 実績表示（仮データ: 3/X日）
+- Tailwind CSSによる洗練されたデザイン
+- ホバーエフェクト（shadow-md）
+- トランジション効果
+
+<br>
+
+**Empty State**:
+- 習慣が0件の場合の専用UI
+- 円形アイコン + 魅力的なメッセージ
+- 「習慣を登録する」ボタン
+- 破線ボーダー（border-dashed）
+
+<br>
+
+**ルーティング**:
+```ruby
+# config/routes.rb
+
+resources :habits, only: [:index]
+```
+
+<br>
+
+**seeds.rb**:
+- test@example.com ユーザー作成
+  - 5件の習慣（読書、筋トレ、瞑想、英語学習、ジョギング）
+  - 1件の論理削除済み習慣
+- yamada@example.com ユーザー作成（将来のため）
+  - 5件の習慣（朝のランニング、読書、ストレッチ、水分摂取、日記）
+  - 1件の論理削除済み習慣
+- HabitRecord.destroy_all はコメントアウト（モデル未作成のため）
+
+<br>
+
+**UI/UX設計**:
+- レスポンシブグリッド（grid-cols-1 md:grid-cols-2 lg:grid-cols-3）
+- カードデザイン（rounded-xl、shadow-sm）
+- アイコンの色分け
+  - チェック型: 青色（text-blue-500）
+  - 週次目標: 緑色（text-green-500）
+- プログレスバー
+  - 外側: グレー（bg-gray-200）
+  - 内側: 青色（bg-blue-500）
+  - 高さ: h-2（8px）
+
+<br>
+
+**動作確認**:
+- Railsコンソールでの論理削除テスト実施
+- 論理削除された習慣が一覧に表示されないことを確認
+- activeスコープの動作確認
+- deletedスコープの動作確認
+- レスポンシブデザインの動作確認（モバイル/タブレット/PC）
+
+<br>
+
+**テスト**:
+- 全テスト実行: 40 runs, 112 assertions, 0 failures
+- 既存のテストに影響なし
+
+<br>
+
+**今後の実装予定**:
+- Issue #12: 「新しい習慣を追加」ボタンの動作実装
+- Issue #15: 日次記録機能（チェックボックス）
+- Issue #16: 進捗率の動的計算（現在は50%固定）
+
+<br>
+
+**技術的特徴**:
+- link_to ヘルパーメソッド使用（将来のパス変更に強い）
+- Tailwind CSSのユーティリティクラスのみ使用（コンパイル不要）
+- Hotwire対応の準備（turbo_frameタグは将来実装）
+- コメント充実（各Tailwindクラスの意味を説明）
 
 <br>
 
@@ -967,6 +1087,7 @@ habitflow/
 ├── app/
 │   ├── controllers/
 │   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
+│   │   ├── habits_controller.rb         # 習慣管理（index）
 │   │   ├── pages_controller.rb          # ランディングページ
 │   │   ├── sessions_controller.rb       # ログイン・ログアウト（new, create, destroy）
 │   │   └── users_controller.rb          # ユーザー登録（new, create）
@@ -977,8 +1098,10 @@ habitflow/
 │       ├── layouts/
 │       │   └── application.html.erb      # 全ページ共通レイアウト（ヘッダー・フッター・フラッシュ）
 │       ├── shared/
-│       │   ├── _header.html.erb          # 共通ヘッダー（全ページ）
+│       │   ├── _header.html.erb          # 共通ヘッダー（全ページ、習慣一覧リンク追加）
 │       │   └── _footer.html.erb          # 共通フッター（全ページ）
+│       ├── habits/
+│       │   └── index.html.erb            # 習慣一覧ページ（カード形式、レスポンシブ対応）
 │       ├── pages/
 │       │   └── index.html.erb            # TOPページ（シンプル化済み）
 │       ├── sessions/
@@ -1006,7 +1129,7 @@ habitflow/
 │       └── habits.yml                    # テスト用習慣データ
 ├── config/
 │   ├── database.yml                      # DB接続設定
-│   └── routes.rb                         # ルーティング設定
+│   └── routes.rb                         # ルーティング設定（習慣管理追加）
 ├── Dockerfile                            # 本番環境用Dockerfile
 ├── Dockerfile.dev                        # 開発環境用Dockerfile
 ├── docker-compose.yml                    # Docker Compose設定
@@ -1031,6 +1154,9 @@ habitflow/
 | `test/integration/user_login_test.rb` | ログイン・ログアウト統合テスト |
 | `test/models/habit_test.rb` | Habitモデルテスト（20テストケース） |
 | `app/models/habit.rb` | Habitモデル（論理削除機能実装） |
+| `app/controllers/habits_controller.rb` | 習慣管理コントローラー（index実装） |
+| `app/views/habits/index.html.erb` | 習慣一覧ビュー（カード形式、レスポンシブ対応） |
+| `db/seeds.rb` | サンプルデータ（2ユーザー、計10件の習慣） |
 
 <br>
 

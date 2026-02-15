@@ -1,22 +1,44 @@
-<%# 共通ヘッダー：全ページ最上部に表示 %>
+<%# app/views/shared/_header.html.erb %>
+<%# 全ページ共通のヘッダー %>
+<%# ログイン状態に応じてナビゲーションを切り替えます %>
+
 <header class="bg-gray-50 border-b border-gray-200">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
     <div class="flex justify-between items-center">
-      <%# ロゴエリア：クリックでTOPページへ %>
+      <%# ロゴエリア %>
+      <%# ログイン状態によってリンク先を変更 %>
       <div class="text-2xl font-bold text-blue-600">
-        <%= link_to "HabitFlow", root_path, class: "text-2xl font-bold text-blue-600 hover:opacity-80 transition" %>
+        <% if logged_in? %>
+          <%# ログイン済み: ダッシュボードへのリンク（将来的に実装） %>
+          <%= link_to "HabitFlow", root_path, class: "hover:text-blue-700 transition-colors" %>
+        <% else %>
+          <%# 未ログイン: TOPページへのリンク %>
+          <%= link_to "HabitFlow", root_path, class: "hover:text-blue-700 transition-colors" %>
+        <% end %>
       </div>
 
-      <%# ナビゲーションエリア：ログイン状態で表示切り替え %>
-      <div class="flex items-center space-x-4">
+      <%# ナビゲーションエリア %>
+      <div class="flex items-center space-x-6">
         <% if logged_in? %>
-          <%# ログイン中：ユーザー名とログアウトボタン表示 %>
-          <span class="text-gray-700 text-sm font-medium"><%= current_user.name %> さん</span>
-          <%= button_to "ログアウト", logout_path, method: :delete, data: { turbo_confirm: "ログアウトしてもよろしいですか？" }, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium border border-gray-300 rounded-md transition" %>
+          <%# ログイン中の表示 %>
+          
+          <%# 習慣一覧へのリンク（NEW!） %>
+          <%= link_to "習慣一覧", habits_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
+          
+          <%# ユーザー名表示 %>
+          <span class="text-gray-700 text-sm font-medium">
+            <%= current_user.name %> さん
+          </span>
+          
+          <%# ログアウトボタン %>
+          <%= button_to "ログアウト", logout_path, 
+              method: :delete,
+              class: "px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors",
+              data: { turbo_confirm: "ログアウトしますか？" } %>
         <% else %>
-          <%# 未ログイン：ログイン・新規登録リンク表示 %>
-          <%= link_to "ログイン", login_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium" %>
-          <%= link_to "新規登録", new_user_path, class: "bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium transition" %>
+          <%# 未ログイン時の表示 %>
+          <%= link_to "ログイン", login_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
+          <%= link_to "新規登録", new_user_path, class: "px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors" %>
         <% end %>
       </div>
     </div>
