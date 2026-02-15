@@ -24,7 +24,8 @@
 - ✅ ユーザー登録機能実装済み
 - ✅ ログイン・ログアウト機能実装済み
 - ✅ 本番環境での認証機能動作確認完了
-- 🚧 Habitモデル作成（開発中）
+- ✅ Habitモデル作成完了
+- 🚧 習慣一覧ページ作成（開発中）
 
 <br>
 
@@ -364,12 +365,11 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #6 | ユーザー登録機能 | ✅ 完了 | 2/12 | 3 |
 | #7 | ログイン・ログアウト機能 | ✅ 完了 | 2/13 | 3 |
 | #8 | 認証機能の本番確認 | ✅ 完了 | 2/14 | 1 |
-| #9 | 認証機能のテスト | ✅ 完了 | 2/14 | 2 |
-| #10 | 共通ヘッダー・フッター実装 | ✅ 完了 | 2/14 | 2 |
+| #9 | 認証機能テスト + 共通レイアウト実装 | ✅ 完了 | 2/14 | 2 |
 
 <br>
 
-**Week 1 進捗**: 22SP / 20SP（110%） 🎉
+**Week 1 進捗**: 20SP / 20SP（100%） 🎉
 
 <br>
 
@@ -480,9 +480,14 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-#### ✅ Issue #9: 認証機能のテスト
+#### ✅ Issue #9: 認証機能テスト + 共通レイアウト実装
+- 共通ヘッダー実装（shared/_header.html.erb）
+- 共通フッター実装（shared/_footer.html.erb）
+- application.html.erb に組み込み
+- フラッシュメッセージ一元管理
+- レスポンシブ対応確認
 - 全テスト実行確認
-- テスト結果: 19 runs, 57 assertions, 0 failures, 0 errors, 0 skips
+- テスト結果: 20 runs, 5759 assertions, 0 failures, 0 errors, 0 skips
 - テストカバレッジ:
   - Userモデルテスト（13テストケース）
   - ユーザー登録統合テスト（2テストケース）
@@ -495,191 +500,94 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-#### ✅ Issue #10: 共通ヘッダー・フッター実装
-- 共通ヘッダー作成（`app/views/shared/_header.html.erb`）
-  - 背景色: 薄い灰色（bg-gray-50）
-  - ロゴ: 「HabitFlow」（全ページでクリック可能）
-  - ナビゲーション: ログイン状態で表示切り替え
-    - ログイン中: 「◯◯ さん」「ログアウト」ボタン
-    - 未ログイン: 「ログイン」「新規登録」リンク
-- 共通フッター作成（`app/views/shared/_footer.html.erb`）
-  - 背景色: 濃い灰色（bg-gray-900）
-  - テキスト色: 白（text-white）
-  - 著作権表示
-  - 将来的なリンク（利用規約、プライバシーポリシー）
-- レイアウトファイル修正（`app/views/layouts/application.html.erb`）
-  - 全ページでヘッダー・フッター表示
-  - フラッシュメッセージ一元管理
-  - フレックスボックスレイアウト（フッターを最下部に固定）
-- TOPページシンプル化（`app/views/pages/index.html.erb`）
-  - ヒーローセクション: キャッチコピー、CTAボタン
-  - 価値説明セクション: 3つの特徴（3列グリッド）
-  - 利用フローセクション: 4ステップ（横並び）
-  - 重複コンテンツ削除（HabitFlowの特徴セクション削除）
-- 画面遷移図との完全一致
-- 全コードに詳細なコメント付き（初心者向け）
-- 全テスト実行確認（20 runs, 59 assertions, 0 failures）
+### Week 2（2/16〜2/22）: 習慣管理基盤
 
 <br>
 
-### Week 2の予定（2/16〜2/22）: 習慣管理基盤
+| Issue | タイトル | ステータス | 完了日 | SP |
+|-------|---------|-----------|--------|-----|
+| #10 | Habitモデルの作成 | ✅ 完了 | 2/15 | 2 |
+| #11 | 習慣一覧ページの作成 | 🔜 予定 | - | 2 |
+| #12 | 習慣新規作成機能 | 🔜 予定 | - | 3 |
+| #13 | 習慣削除機能 | 🔜 予定 | - | 2 |
+| #14 | HabitRecordモデルの作成 | 🔜 予定 | - | 2 |
+| #15 | 習慣の日次記録機能（即時保存） | 🔜 予定 | - | 5 |
+| #16 | 進捗率の自動計算ロジック | 🔜 予定 | - | 2 |
+| #17 | 習慣管理機能のテスト | 🔜 予定 | - | 2 |
 
 <br>
 
-| Issue | タイトル | ステータス | SP |
-|-------|---------|-----------|-----|
-| #10 | Habitモデルの作成 | 🔜 予定 | 2 |
-| #11 | 習慣一覧ページの作成 | 🔜 予定 | 2 |
-| #12 | 習慣新規作成機能 | 🔜 予定 | 3 |
-| #13 | 習慣削除機能 | 🔜 予定 | 2 |
-| #14 | HabitRecordモデルの作成 | 🔜 予定 | 2 |
-| #15 | 習慣の日次記録機能（即時保存） | 🔜 予定 | 5 |
-| #16 | 進捗率の自動計算ロジック | 🔜 予定 | 2 |
-| #17 | 習慣管理機能のテスト | 🔜 予定 | 2 |
+**Week 2 進捗**: 2SP / 20SP（10%）
 
 <br>
 
 **Week 2 目標**: 20SP
+
+<br>
+
+### 完了したマイルストーン（Week 2）
+
+<br>
+
+#### ✅ Issue #10: Habitモデルの作成
+
+- Habitモデルの実装（習慣管理の基盤）
+- マイグレーション作成（name, weekly_target, deleted_at）
+- バリデーション実装
+  - name: presence, length(max: 50)
+  - weekly_target: presence, numericality(only_integer, 1-7)
+- 論理削除機能実装
+  - activeスコープ（deleted_at IS NULL）
+  - deletedスコープ（deleted_at IS NOT NULL）
+  - soft_deleteメソッド（touch(:deleted_at)使用）
+  - active?メソッド、deleted?メソッド
+- アソシエーション設定
+  - belongs_to :user（Habitモデル）
+  - has_many :habits, dependent: :destroy（Userモデル）
+- モデルテスト作成（20テストケース）
+  - バリデーションテスト（正常系・異常系）
+  - アソシエーションテスト（dependent: :destroy確認）
+  - スコープテスト（active, deleted）
+  - インスタンスメソッドテスト（soft_delete, active?, deleted?）
+  - 論理削除の統合テスト
+- 全テスト成功確認
+  - Habitモデルテスト: 20 runs, 53 assertions, 0 failures
+  - 全体テスト: 40 runs, 112 assertions, 0 failures
+- Railsコンソールでの動作確認完了
+
+<br>
+
+**技術的特徴**:
+- 論理削除設計（deleted_atカラム使用）
+  - 過去の振り返りデータとの整合性を保つため
+  - スナップショット設計との連携を考慮
+- touchメソッド使用（より明確で推奨される実装）
+- インデックス最適化
+  - user_id（t.referencesで自動作成）
+  - deleted_at（論理削除フィルタリング用）
+  - 複合インデックス（user_id, deleted_at）
+- テストカバレッジ
+  - 境界値テスト（0, 1, 7, 8, -1）
+  - 文字数制限テスト（50文字、51文字）
+  - 論理削除の動作確認（スコープ、メソッド）
+
+<br>
+
+**データベース設計**:
+```sql
+CREATE TABLE habits (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(50) NOT NULL,
+  weekly_target INTEGER NOT NULL DEFAULT 7,
+  deleted_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX index_habits_on_deleted_at ON habits(deleted_at);
+CREATE INDEX index_habits_on_user_id_and_deleted_at ON habits(user_id, deleted_at);
 ```
-
-<br>
-
----
-
-<br>
-
-## 修正箇所5: プロジェクト構成（controllersディレクトリ）
-
-<br>
-
-**場所**: 「### 主要ディレクトリ」セクション内
-
-<br>
-
-**修正前**:
-```
-habitflow/
-├── app/
-│   ├── controllers/
-│   │   └── pages_controller.rb          # ランディングページ
-```
-
-<br>
-
-**修正後**:
-```
-habitflow/
-├── app/
-│   ├── controllers/
-│   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
-│   │   ├── pages_controller.rb          # ランディングページ
-│   │   ├── sessions_controller.rb       # ログイン・ログアウト（new, create, destroy）
-│   │   └── users_controller.rb          # ユーザー登録（new, create）
-```
-
-<br>
-
----
-
-<br>
-
-## 修正箇所6: プロジェクト構成（viewsディレクトリ）
-
-<br>
-
-**場所**: 「### 主要ディレクトリ」セクション内
-
-<br>
-
-**修正前**:
-```
-│   └── views/
-│       ├── layouts/
-│       │   └── application.html.erb      # 全ページ共通レイアウト
-│       └── pages/
-│           └── index.html.erb            # TOPページ
-```
-
-<br>
-
-**修正後**:
-```
-│   └── views/
-│       ├── layouts/
-│       │   └── application.html.erb      # 全ページ共通レイアウト（ヘッダー・フッター・フラッシュ）
-│       ├── shared/
-│       │   ├── _header.html.erb          # 共通ヘッダー（全ページ）
-│       │   └── _footer.html.erb          # 共通フッター（全ページ）
-│       ├── pages/
-│       │   └── index.html.erb            # TOPページ（シンプル化済み）
-│       ├── sessions/
-│       │   └── new.html.erb              # ログインフォーム
-│       └── users/
-│           └── new.html.erb              # 新規登録フォーム
-```
-
-<br>
-
----
-
-<br>
-
-## 修正箇所7: プロジェクト構成（testディレクトリ）
-
-<br>
-
-**場所**: 「### 主要ディレクトリ」セクション内
-
-<br>
-
-**修正前**:
-```
-├── test/
-│   └── models/
-│       └── user_test.rb                  # Userモデルテスト（13テストケース）
-```
-
-<br>
-
-**修正後**:
-```
-├── test/
-│   ├── models/
-│   │   └── user_test.rb                  # Userモデルテスト（13テストケース）
-│   └── integration/
-│       ├── user_registration_test.rb     # ユーザー登録統合テスト（2テストケース）
-│       └── user_login_test.rb            # ログイン・ログアウト統合テスト（4テストケース）
-```
-
-<br>
-
----
-
-<br>
-
-## 修正箇所8: プロジェクト構成（docsディレクトリ）
-
-<br>
-
-**場所**: 「### 主要ディレクトリ」セクション内
-
-<br>
-
-**修正前**:
-```
-├── docs/
-│   ├── er-diagram-mvp.md                 # ER図（Mermaid形式）
-│   └── database-schema-mvp.md            # テーブル定義書
-```
-
-<br>
-
-**修正後**:
-```
-├── docs/
-│   ├── er-diagram-mvp.md                 # ER図（Mermaid形式）
-│   ├── database-schema-mvp.md            # テーブル定義書
-│   └── production-check-issue-7.md       # Issue #7 本番環境確認レポート
 
 <br>
 
@@ -1060,23 +968,44 @@ docker compose exec web bin/rails db:test:prepare
 habitflow/
 ├── app/
 │   ├── controllers/
-│   │   └── pages_controller.rb          # ランディングページ
+│   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
+│   │   ├── pages_controller.rb          # ランディングページ
+│   │   ├── sessions_controller.rb       # ログイン・ログアウト（new, create, destroy）
+│   │   └── users_controller.rb          # ユーザー登録（new, create）
 │   ├── models/
-│   │   └── user.rb                       # Userモデル（認証機能）
+│   │   ├── user.rb                       # Userモデル（認証機能、has_many :habits）
+│   │   └── habit.rb                      # Habitモデル（習慣管理、論理削除機能）
 │   └── views/
 │       ├── layouts/
-│       │   └── application.html.erb      # 全ページ共通レイアウト
-│       └── pages/
-│           └── index.html.erb            # TOPページ
+│       │   └── application.html.erb      # 全ページ共通レイアウト（ヘッダー・フッター・フラッシュ）
+│       ├── shared/
+│       │   ├── _header.html.erb          # 共通ヘッダー（全ページ）
+│       │   └── _footer.html.erb          # 共通フッター（全ページ）
+│       ├── pages/
+│       │   └── index.html.erb            # TOPページ（シンプル化済み）
+│       ├── sessions/
+│       │   └── new.html.erb              # ログインフォーム
+│       └── users/
+│           └── new.html.erb              # 新規登録フォーム
 ├── db/
-│   ├── migrate/                          # マイグレーションファイル
+│   ├── migrate/
+│   │   ├── YYYYMMDDHHMMSS_create_users.rb    # Usersテーブル作成
+│   │   └── YYYYMMDDHHMMSS_create_habits.rb   # Habitsテーブル作成
 │   └── schema.rb                         # データベーススキーマ
 ├── docs/
 │   ├── er-diagram-mvp.md                 # ER図（Mermaid形式）
-│   └── database-schema-mvp.md            # テーブル定義書
+│   ├── database-schema-mvp.md            # テーブル定義書
+│   └── production-check-issue-7.md       # Issue #7 本番環境確認レポート
 ├── test/
-│   └── models/
-│       └── user_test.rb                  # Userモデルテスト（13テストケース）
+│   ├── models/
+│   │   ├── user_test.rb                  # Userモデルテスト（13テストケース）
+│   │   └── habit_test.rb                 # Habitモデルテスト（20テストケース）
+│   ├── integration/
+│   │   ├── user_registration_test.rb     # ユーザー登録統合テスト（2テストケース）
+│   │   └── user_login_test.rb            # ログイン・ログアウト統合テスト（4テストケース）
+│   └── fixtures/
+│       ├── users.yml                     # テスト用ユーザーデータ
+│       └── habits.yml                    # テスト用習慣データ
 ├── config/
 │   ├── database.yml                      # DB接続設定
 │   └── routes.rb                         # ルーティング設定
@@ -1103,6 +1032,8 @@ habitflow/
 | `docs/database-schema-mvp.md` | 全テーブル詳細定義 |
 | `docs/production-check-issue-7.md` | Issue #7 本番環境確認レポート |
 | `test/integration/user_login_test.rb` | ログイン・ログアウト統合テスト |
+| `test/models/habit_test.rb` | Habitモデルテスト（20テストケース） |
+| `app/models/habit.rb` | Habitモデル（論理削除機能実装） |
 
 <br>
 
@@ -1919,16 +1850,24 @@ end
 
 <br>
 
-#### 共通ヘッダー・フッター実装（Issue #10）
+#### 共通ヘッダー・フッター実装（Issue #9に追加）
 
 <br>
 
-実装機能:
+**実装目的**:
+- 全23画面で共通レイアウトを統一
+- DRY原則に基づくパーシャル化
+- 認証状態に応じたナビゲーション制御
 
 <br>
 
-共通ヘッダー（app/views/shared/_header.html.erb）:
-erb<header class="bg-gray-50 border-b border-gray-200">
+**実装機能**:
+
+<br>
+
+**共通ヘッダー（app/views/shared/_header.html.erb）**:
+erb
+<header class="bg-gray-50 border-b border-gray-200">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
     <div class="flex justify-between items-center">
       <!-- ロゴエリア -->
@@ -1952,8 +1891,9 @@ erb<header class="bg-gray-50 border-b border-gray-200">
 
 <br>
 
-共通フッター（app/views/shared/_footer.html.erb）:
-erb<footer class="bg-gray-900 text-white py-8 mt-auto">
+**共通フッター（app/views/shared/_footer.html.erb）**:
+erb
+<footer class="bg-gray-900 text-white py-8 mt-auto">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="text-center text-sm">
       <p>© 2024 HabitFlow. All rights reserved.</p>
@@ -1967,8 +1907,9 @@ erb<footer class="bg-gray-900 text-white py-8 mt-auto">
 
 <br>
 
-レイアウトファイル（app/views/layouts/application.html.erb）:
-erb<body class="min-h-screen flex flex-col bg-white text-gray-900">
+**レイアウトファイル（app/views/layouts/application.html.erb）**:
+erb
+<body class="min-h-screen flex flex-col bg-white text-gray-900">
   <%= render "shared/header" %>
 
   <main class="flex-1">
@@ -1987,41 +1928,192 @@ erb<body class="min-h-screen flex flex-col bg-white text-gray-900">
 
 <br>
 
-TOPページ構成:
-
-ヒーローセクション: キャッチコピー「甘えを可視化する」、CTAボタン
-価値説明セクション: 3つの特徴（3列グリッド、レスポンシブ対応）
-利用フローセクション: 4ステップ（横並び、レスポンシブ対応）
-
-<br>
-UI設計（Tailwind CSS）:
-
-レスポンシブデザイン（md:grid-cols-3, md:flex-row）
-フレックスボックスレイアウト（flex, justify-between）
-グリッドレイアウト（grid, grid-cols-1）
-フッターを最下部に固定（min-h-screen, flex-col, flex-1, mt-auto）
+**TOPページ構成**:
+- ヒーローセクション: キャッチコピー「甘えを可視化する」、CTAボタン
+- 価値説明セクション: 3つの特徴（3列グリッド、レスポンシブ対応）
+- 利用フローセクション: 4ステップ（横並び、レスポンシブ対応）
 
 <br>
-パーシャル（Partial）の活用:
 
-ヘッダー・フッターを app/views/shared/ に配置
-<%= render "shared/header" %> で読み込み
-DRY原則（Don't Repeat Yourself）に従う
-コードの重複を避ける
-
-<br>
-画面遷移図との整合性:
-
-完全に一致するレイアウト
-シンプルで落ち着いたデザイン
-全23画面に共通のヘッダー・フッター表示
+**UI設計（Tailwind CSS）**:
+- レスポンシブデザイン（md:grid-cols-3, md:flex-row）
+- フレックスボックスレイアウト（flex, justify-between）
+- グリッドレイアウト（grid, grid-cols-1）
+- フッターを最下部に固定（min-h-screen, flex-col, flex-1, mt-auto）
 
 <br>
-テスト:
 
-全テスト実行: 20 runs, 59 assertions, 0 failures
-既存のテストに影響なし
-ビューの変更がテストに影響しないことを確認
+**パーシャル（Partial）の活用**:
+- ヘッダー・フッターを app/views/shared/ に配置
+- <%= render "shared/header" %> で読み込み
+- DRY原則（Don't Repeat Yourself）に従う
+- コードの重複を避ける
+
+<br>
+
+**画面遷移図との整合性**:
+- 完全に一致するレイアウト
+- シンプルで落ち着いたデザイン
+- 全23画面に共通のヘッダー・フッター表示
+
+<br>
+
+**テスト**:
+- 全テスト実行: 20 runs, 59 assertions, 0 failures
+- 既存のテストに影響なし
+- ビューの変更がテストに影響しないことを確認
+
+<br>
+
+#### Habitモデル（Issue #10）
+
+<br>
+
+**モデル設計**:
+- 習慣管理の基盤モデル（MVP範囲：チェック型のみ）
+- 論理削除設計（deleted_atカラム使用）
+- user_idへの外部キー制約（dependent: :destroy）
+
+<br>
+
+**テーブル定義**:
+```sql
+CREATE TABLE habits (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name VARCHAR(50) NOT NULL,
+  weekly_target INTEGER NOT NULL DEFAULT 7,
+  deleted_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+CREATE INDEX index_habits_on_user_id ON habits(user_id);
+CREATE INDEX index_habits_on_deleted_at ON habits(deleted_at);
+CREATE INDEX index_habits_on_user_id_and_deleted_at ON habits(user_id, deleted_at);
+```
+
+<br>
+
+**バリデーション**:
+- name: 必須、最大50文字
+- weekly_target: 必須、整数のみ、1〜7の範囲
+
+<br>
+
+**スコープ**:
+```ruby
+scope :active, -> { where(deleted_at: nil) }
+scope :deleted, -> { where.not(deleted_at: nil) }
+```
+
+<br>
+
+**インスタンスメソッド**:
+```ruby
+# 論理削除を実行
+def soft_delete
+  touch(:deleted_at)
+end
+
+# 有効な習慣かどうかを判定
+def active?
+  deleted_at.nil?
+end
+
+# 削除済みかどうかを判定
+def deleted?
+  !active?
+end
+```
+
+<br>
+
+**アソシエーション**:
+```ruby
+# Habitモデル
+belongs_to :user
+
+# Userモデル
+has_many :habits, dependent: :destroy
+```
+
+<br>
+
+**論理削除の設計思想**:
+- 過去の振り返りデータとの整合性を保つため物理削除は行わない
+- weekly_reflection_habit_summaries テーブルにスナップショットとして保存
+- 論理削除された習慣でも過去の振り返りで参照可能
+
+<br>
+
+**インデックス設計**:
+- user_id: ユーザーごとの習慣一覧取得を高速化
+- deleted_at: 論理削除フィルタリングを高速化
+- (user_id, deleted_at): 「特定ユーザーの有効な習慣のみ取得」という最頻出クエリを最適化
+
+<br>
+
+**テスト戦略**:
+- バリデーションテスト（正常系・異常系）
+  - name: 空文字、nil、51文字、50文字
+  - weekly_target: nil、0、負の数、8、小数、1、7
+- アソシエーションテスト
+  - ユーザーとの関連付け確認
+  - dependent: :destroy の動作確認
+- スコープテスト
+  - activeスコープの動作確認
+  - deletedスコープの動作確認
+- インスタンスメソッドテスト
+  - soft_deleteメソッドの動作確認
+  - active?メソッドの動作確認
+  - deleted?メソッドの動作確認
+- 論理削除の統合テスト
+  - soft_delete後にactiveスコープから除外されることを確認
+  - soft_delete後にdeletedスコープに含まれることを確認
+
+<br>
+
+**テスト結果**:
+- Habitモデルテスト: 20 runs, 53 assertions, 0 failures
+- 全体テスト: 40 runs, 112 assertions, 0 failures
+
+<br>
+
+**動作確認（Railsコンソール）**:
+```ruby
+# ユーザー取得
+user = User.first
+
+# 習慣作成
+habit = user.habits.create(name: "朝のランニング", weekly_target: 7)
+habit.persisted?  # => true
+habit.active?     # => true
+
+# 論理削除
+habit.soft_delete
+habit.deleted?    # => true
+habit.deleted_at  # => Sun, 15 Feb 2026 00:40:49 UTC
+
+# スコープ確認
+Habit.active.include?(habit)   # => false
+Habit.deleted.include?(habit)  # => true
+```
+
+<br>
+
+**セキュリティ対策**:
+- Strong Parameters（習慣作成・更新時）
+- 外部キー制約（user_id）
+- dependent: :destroy（ユーザー削除時に習慣も削除）
+
+<br>
+
+**MVP後の拡張予定**:
+- measurement_typeカラム追加（daily_check, count, duration）
+- unitカラム追加（冊、時間）
+- 数値型習慣への対応
+- 除外日設定（曜日指定）
 
 <br>
 ```

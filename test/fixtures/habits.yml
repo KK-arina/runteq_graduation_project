@@ -1,0 +1,13 @@
+# テスト用習慣データ（必要に応じて追加）
+
+one:
+  user: one
+  name: "朝のランニング"
+  weekly_target: 7
+  deleted_at: null
+
+two:
+  user: one
+  name: "読書（30分）"
+  weekly_target: 5
+  deleted_at: null
