@@ -70,5 +70,6 @@ Rails.application.routes.draw do
   # 習慣管理
   # 変更前: resources :habits, only: [:index]
   # 変更後: new（新規作成フォーム）とcreate（作成処理）を追加
-  resources :habits, only: [:index, :new, :create]
+  # 習慣管理（index, new, create, destroy を追加）
+  resources :habits, only: [:index, :new, :create, :destroy]
 end

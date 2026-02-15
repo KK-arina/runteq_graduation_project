@@ -27,7 +27,8 @@
 - ✅ Habitモデル作成完了
 - ✅ 習慣一覧ページ実装完了
 - ✅ 習慣新規作成機能実装完了
-- 🚧 習慣削除機能（開発中）
+- ✅ 習慣削除機能実装完了（論理削除対応）
+- 🚧 HabitRecordモデルの作成（開発予定）
 
 <br>
 
@@ -375,7 +376,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-### 完了したマイルストーン
+### 完了したマイルストーン（Week 1）
 
 <br>
 
@@ -511,7 +512,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #10 | Habitモデルの作成 | ✅ 完了 | 2/15 | 2 |
 | #11 | 習慣一覧ページの作成 | ✅ 完了 | 2/15 | 2 |
 | #12 | 習慣新規作成機能 | ✅ 完了 | 2/15 | 3 |
-| #13 | 習慣削除機能 | 🔜 予定 | - | 2 |
+| #13 | 習慣削除機能 | ✅ 完了 | 2/15 | 2 |
 | #14 | HabitRecordモデルの作成 | 🔜 予定 | - | 2 |
 | #15 | 習慣の日次記録機能（即時保存） | 🔜 予定 | - | 5 |
 | #16 | 進捗率の自動計算ロジック | 🔜 予定 | - | 2 |
@@ -519,7 +520,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-**Week 2 進捗**: 7SP / 20SP（35%）
+**Week 2 進捗**: 9SP / 20SP（45%）
 
 <br>
 
@@ -532,418 +533,53 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 <br>
 
 #### ✅ Issue #10: Habitモデルの作成
-
-- Habitモデルの実装（習慣管理の基盤）
-- マイグレーション作成（name, weekly_target, deleted_at）
-- バリデーション実装
-  - name: presence, length(max: 50)
-  - weekly_target: presence, numericality(only_integer, 1-7)
-- 論理削除機能実装
-  - activeスコープ（deleted_at IS NULL）
-  - deletedスコープ（deleted_at IS NOT NULL）
-  - soft_deleteメソッド（touch(:deleted_at)使用）
-  - active?メソッド、deleted?メソッド
-- アソシエーション設定
-  - belongs_to :user（Habitモデル）
-  - has_many :habits, dependent: :destroy（Userモデル）
+- Habitモデル実装（習慣管理の基盤）
+- バリデーション実装（name: 最大50文字、weekly_target: 1-7）
+- 論理削除機能実装（activeスコープ、deletedスコープ、soft_deleteメソッド）
+- アソシエーション設定（belongs_to :user、has_many :habits）
 - モデルテスト作成（20テストケース）
-  - バリデーションテスト（正常系・異常系）
-  - アソシエーションテスト（dependent: :destroy確認）
-  - スコープテスト（active, deleted）
-  - インスタンスメソッドテスト（soft_delete, active?, deleted?）
-  - 論理削除の統合テスト
-- 全テスト成功確認
-  - Habitモデルテスト: 20 runs, 53 assertions, 0 failures
-  - 全体テスト: 40 runs, 112 assertions, 0 failures
-- Railsコンソールでの動作確認完了
-
-<br>
-
-**技術的特徴**:
-- 論理削除設計（deleted_atカラム使用）
-  - 過去の振り返りデータとの整合性を保つため
-  - スナップショット設計との連携を考慮
-- touchメソッド使用（より明確で推奨される実装）
-- インデックス最適化
-  - user_id（t.referencesで自動作成）
-  - deleted_at（論理削除フィルタリング用）
-  - 複合インデックス（user_id, deleted_at）
-- テストカバレッジ
-  - 境界値テスト（0, 1, 7, 8, -1）
-  - 文字数制限テスト（50文字、51文字）
-  - 論理削除の動作確認（スコープ、メソッド）
-
-<br>
-
-**データベース設計**:
-```sql
-CREATE TABLE habits (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  name VARCHAR(50) NOT NULL,
-  weekly_target INTEGER NOT NULL DEFAULT 7,
-  deleted_at TIMESTAMP,
-  created_at TIMESTAMP NOT NULL,
-  updated_at TIMESTAMP NOT NULL
-);
-
-CREATE INDEX index_habits_on_deleted_at ON habits(deleted_at);
-CREATE INDEX index_habits_on_user_id_and_deleted_at ON habits(user_id, deleted_at);
-```
+- 全テスト成功: 40 runs, 112 assertions, 0 failures
+- インデックス最適化（user_id, deleted_at, 複合インデックス）
 
 <br>
 
 #### ✅ Issue #11: 習慣一覧ページの作成
-
 - HabitsController実装（indexアクション）
 - 習慣一覧ビュー作成（カード形式レイアウト）
-- レスポンシブデザイン対応
-  - モバイル: 1列表示
-  - タブレット: 2列表示
-  - PC: 3列表示
+- レスポンシブデザイン対応（モバイル: 1列、タブレット: 2列、PC: 3列）
 - 進捗率の表示（仮データ: 50%固定）
-- 論理削除された習慣の除外（activeスコープ使用）
-- 「新しい習慣を追加」ボタン実装（リンク先はダミー）
 - Empty State実装（習慣0件時の表示）
-- seeds.rbにサンプルデータ追加
-  - 2ユーザー作成（test@example.com、yamada@example.com）
-  - 各ユーザーに5件の習慣を作成
-  - 各ユーザーに1件の論理削除済み習慣を作成
-- 共通ヘッダーに「習慣一覧」リンク追加
-
-<br>
-
-**実装内容**:
-
-<br>
-
-**HabitsController**:
-```ruby
-class HabitsController < ApplicationController
-  before_action :require_login
-
-  def index
-    @habits = current_user.habits.active.order(created_at: :desc)
-  end
-end
-```
-
-<br>
-
-**習慣一覧ビュー（app/views/habits/index.html.erb）**:
-- カード形式のグリッドレイアウト
-- 習慣名、週次目標値、測定タイプ（チェック型固定）を表示
-- プログレスバーで進捗率を視覚化（仮データ: 50%）
-- 実績表示（仮データ: 3/X日）
-- Tailwind CSSによる洗練されたデザイン
-- ホバーエフェクト（shadow-md）
-- トランジション効果
-
-<br>
-
-**Empty State**:
-- 習慣が0件の場合の専用UI
-- 円形アイコン + 魅力的なメッセージ
-- 「習慣を登録する」ボタン
-- 破線ボーダー（border-dashed）
-
-<br>
-
-**ルーティング**:
-```ruby
-# config/routes.rb
-
-resources :habits, only: [:index]
-```
-
-<br>
-
-**seeds.rb**:
-- test@example.com ユーザー作成
-  - 5件の習慣（読書、筋トレ、瞑想、英語学習、ジョギング）
-  - 1件の論理削除済み習慣
-- yamada@example.com ユーザー作成（将来のため）
-  - 5件の習慣（朝のランニング、読書、ストレッチ、水分摂取、日記）
-  - 1件の論理削除済み習慣
-- HabitRecord.destroy_all はコメントアウト（モデル未作成のため）
-
-<br>
-
-**UI/UX設計**:
-- レスポンシブグリッド（grid-cols-1 md:grid-cols-2 lg:grid-cols-3）
-- カードデザイン（rounded-xl、shadow-sm）
-- アイコンの色分け
-  - チェック型: 青色（text-blue-500）
-  - 週次目標: 緑色（text-green-500）
-- プログレスバー
-  - 外側: グレー（bg-gray-200）
-  - 内側: 青色（bg-blue-500）
-  - 高さ: h-2（8px）
-
-<br>
-
-**動作確認**:
-- Railsコンソールでの論理削除テスト実施
-- 論理削除された習慣が一覧に表示されないことを確認
-- activeスコープの動作確認
-- deletedスコープの動作確認
-- レスポンシブデザインの動作確認（モバイル/タブレット/PC）
-
-<br>
-
-**テスト**:
-- 全テスト実行: 40 runs, 112 assertions, 0 failures
-- 既存のテストに影響なし
-
-<br>
-
-**今後の実装予定**:
-- Issue #12: 「新しい習慣を追加」ボタンの動作実装
-- Issue #15: 日次記録機能（チェックボックス）
-- Issue #16: 進捗率の動的計算（現在は50%固定）
-
-<br>
-
-**技術的特徴**:
-- link_to ヘルパーメソッド使用（将来のパス変更に強い）
-- Tailwind CSSのユーティリティクラスのみ使用（コンパイル不要）
-- Hotwire対応の準備（turbo_frameタグは将来実装）
-- コメント充実（各Tailwindクラスの意味を説明）
+- seeds.rbにサンプルデータ追加（2ユーザー、各5件の習慣）
+- 論理削除された習慣の除外（activeスコープ使用）
 
 <br>
 
 #### ✅ Issue #12: 習慣新規作成機能
-
 - HabitsController に new, create アクション実装
-- 習慣新規作成フォーム作成（app/views/habits/new.html.erb）
-- 習慣一覧ページに「新しい習慣を追加」ボタン追加
+- 習慣新規作成フォーム作成
 - バリデーションエラー表示機能
-  - エラー件数表示（`@habit.errors.count` 件のエラーがあります）
-  - エラーメッセージ一覧表示（赤色のエラーボックス）
-- Strong Parameters によるセキュリティ対策
-  - `:name`, `:weekly_target` のみ許可
-  - `user_id` は自動設定（`current_user.habits.build`）
-- フラッシュメッセージ表示
-  - 成功メッセージ（緑色、`flash[:notice]`）
-  - エラーメッセージ（赤色、`flash.now[:alert]`）
-- レイアウト改善
-  - すべてのページに共通ヘッダー・フッター追加
-  - ログイン状態に応じたヘッダー表示切り替え
-  - レスポンシブデザイン対応（max-w-md, max-w-2xl, max-w-7xl）
-  - 適切な間隔調整（mb-6で統一）
+- Strong Parameters によるセキュリティ対策（`:name`, `:weekly_target`のみ許可）
+- フラッシュメッセージ表示（成功: 緑、エラー: 赤）
+- レイアウト改善（共通ヘッダー・フッターを全ページに適用）
+- 統合テスト作成（7テストケース）
+- テスト結果: 49 runs, 140 assertions, 0 failures
 
 <br>
 
-**実装内容**:
-
-<br>
-
-**HabitsController**:
-```ruby
-# GET /habits/new - 新規作成フォーム表示
-def new
-  @habit = current_user.habits.build
-end
-
-# POST /habits - 習慣の作成処理
-def create
-  @habit = current_user.habits.build(habit_params)
-  
-  if @habit.save
-    flash[:notice] = "習慣を登録しました"
-    redirect_to habits_path
-  else
-    flash.now[:alert] = "習慣の登録に失敗しました"
-    render :new, status: :unprocessable_entity
-  end
-end
-
-private
-
-def habit_params
-  params.require(:habit).permit(:name, :weekly_target)
-end
-```
-
-<br>
-
-**習慣新規作成フォーム（app/views/habits/new.html.erb）**:
-- 習慣名入力欄（text_field、最大50文字）
-- 週次目標値入力欄（number_field、min: 1, max: 7、デフォルト値: 7）
-- エラーメッセージ表示（`@habit.errors.any?`）
-- キャンセルボタン（habits_path へのリンク）
-- 登録ボタン（フォーム送信）
-- Tailwind CSS による洗練されたデザイン
-- レスポンシブデザイン対応（max-w-2xl）
-
-<br>
-
-**バリデーションエラー表示**:
-```erb
-<% if @habit.errors.any? %>
-  
-    
-      <%= @habit.errors.count %> 件のエラーがあります
-    
-    
-      <% @habit.errors.full_messages.each do |message| %>
-        <%= message %>
-      <% end %>
-    
-  
-<% end %>
-```
-
-<br>
-
-**ルーティング**:
-```ruby
-# config/routes.rb
-
-resources :habits, only: [:index, :new, :create]
-```
-
-<br>
-
-**レイアウト改善**:
-
-<br>
-
-**共通レイアウト（app/views/layouts/application.html.erb）**:
-- すべてのページでヘッダー・フッターを表示
-- ログイン状態に応じたヘッダー表示
-  - ログイン済み: 習慣一覧リンク + ユーザー名 + ログアウトボタン
-  - 未ログイン: ログイン + 新規登録リンク
-- フラッシュメッセージ一元管理（成功: 緑、エラー: 赤）
-- `min-h-screen flex flex-col` でフッターを最下部に固定
-
-<br>
-
-**共通ヘッダー（app/views/shared/_header.html.erb）**:
-- ログイン状態に応じて自動的に表示を切り替え
-- ログイン済み: 習慣一覧リンク + ユーザー名 + ログアウトボタン
-- 未ログイン: ログイン + 新規登録（「今すぐ始める」）ボタン
-
-<br>
-
-**レスポンシブデザイン**:
-- 習慣一覧ページ: `max-w-7xl`（1280px）
-- 習慣新規作成ページ: `max-w-2xl`（672px）
-- ログイン・ユーザー登録ページ: `max-w-md`（448px）
-- 左右パディング: `px-4 sm:px-6 lg:px-8`（モバイル16px、タブレット24px、PC32px）
-
-<br>
-
-**統合テスト（test/integration/habit_creation_test.rb）**:
-- ログイン後に習慣を作成できること
-- 習慣名が空欄の場合はエラーメッセージが表示されること
-- 週次目標値が0の場合はエラーメッセージが表示されること
-- 週次目標値が8の場合はエラーメッセージが表示されること
-- 未ログイン時は新規作成フォームにアクセスできないこと
-- 未ログイン時は習慣を作成できないこと
-- 他ユーザーのuser_idを指定しても無視されること（セキュリティテスト）
-
-<br>
-
-**テスト結果**:
-```
-49 runs, 140 assertions, 0 failures, 0 errors, 0 skips
-```
-
-<br>
-
-**セキュリティ対策**:
-- Strong Parameters（`:name`, `:weekly_target` のみ許可）
-- `current_user.habits.build` で `user_id` を自動設定
-- 不正な `user_id` 送信を無視
-- セキュリティテストで動作確認済み
-
-<br>
-
-**UI/UX設計**:
-- エラーボックス（bg-red-50、border-l-4、border-red-500）
-- プレースホルダーで入力例を表示
-- ヘルプテキストで入力ルールを説明
-- `weekly_target` のデフォルト値を7に設定（`f.object.weekly_target || 7`）
-- キャンセルボタン（グレー）と登録ボタン（青）の色分け
-- ホバーエフェクト（`hover:bg-blue-700`）
-- トランジション効果（`transition`）
-
-<br>
-
-**技術的特徴**:
-- Turbo 対応（`render :new, status: :unprocessable_entity`）
-- バリデーションエラー後も入力値を保持
-- フォームヘルパー（`form_with model: @habit`）
-- Strong Parameters によるセキュリティ対策
-- Railsコンソールでの動作確認完了
-
-<br>
-
-**fixtures 修正**:
-- `test/fixtures/users.yml`:
-  - メールアドレスを `fixture_one@example.com`, `fixture_two@example.com` に変更
-  - テストコード内で使う `user_#{SecureRandom.hex(4)}@example.com` と衝突を回避
-- `test/fixtures/habits.yml`:
-  - `users(:one)` に紐づく習慣を1件のみに制限
-  - 論理削除済み習慣を追加（`deleted_one`）
-
-<br>
-
-**モデル修正**:
-- User モデルに `validates :password, length: { minimum: 8 }, allow_nil: true` を追加
-  - `has_secure_password` だけでは最低文字数をチェックしないため
-
-<br>
-
-**テスト修正**:
-- IntegrationTest では `session` に直接アクセス不可
-  - `logged_in?` メソッド削除、挙動ベーステスト（`get new_habit_path` → `assert_redirected_to login_path`）
-- バリデーションメッセージ統一
-  - `"must be greater than 0"` → `"must be greater than or equal to 1"`
-- Email重複エラー修正
-  - `User.create!` 削除、`users(:one)` 使用（fixtures併用時）
-  - `email: "user_#{SecureRandom.hex(4)}@example.com"` でユニーク化（create!使用時）
-
-<br>
-
-**学んだ本質的な教訓**:
-- fixtures と create! は併用しない
-- IntegrationTest では session に直接アクセス不可
-- エラーメッセージはバリデーションルールと一致させる
-- すべてのテストに assert を書く
-- テストが正しい前提で考えない（テスト自体が間違っていることもある）
-
-<br>
-
-**動作確認（Railsコンソール）**:
-```ruby
-# ユーザー取得
-user = User.first
-
-# 習慣作成
-habit = user.habits.build(name: "朝のランニング", weekly_target: 7)
-habit.save
-# => true
-
-# 習慣一覧取得
-user.habits.active
-# => [#]
-
-# バリデーションエラー確認
-habit = user.habits.build(name: "", weekly_target: 0)
-habit.save
-# => false
-habit.errors.full_messages
-# => ["Name can't be blank", "Weekly target must be greater than or equal to 1"]
-```
+#### ✅ Issue #13: 習慣削除機能
+- HabitsController に destroy アクション実装
+- 削除確認ダイアログ（Turbo Confirm）
+- 論理削除処理（deleted_atの更新）
+- セキュリティ対策（他のユーザーの習慣削除を防止）
+- 統合テスト作成（4テストケース）
+- テスト結果: 4 runs, 27 assertions, 0 failures
+- 全テスト成功: 53 runs, 167 assertions, 0 failures
 
 <br>
 
 **今後の実装予定**:
-- Issue #13: 習慣削除機能（論理削除）
-- Issue #14: HabitRecordモデルの作成
-- Issue #15: 日次記録機能（チェックボックス）
+- Issue #14: HabitRecordモデルの作成（習慣記録機能の基盤）
+- Issue #15: 習慣の日次記録機能（即時保存）
 - Issue #16: 進捗率の動的計算（現在は50%固定）
 
 <br>
@@ -1324,7 +960,7 @@ habitflow/
 ├── app/
 │   ├── controllers/
 │   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
-│   │   ├── habits_controller.rb         # 習慣管理（index, new, create）
+│   │   ├── habits_controller.rb         # 習慣管理（index, new, create, destroy）
 │   │   ├── pages_controller.rb          # ランディングページ
 │   │   ├── sessions_controller.rb       # ログイン・ログアウト（new, create, destroy）
 │   │   └── users_controller.rb          # ユーザー登録（new, create）
@@ -1362,7 +998,8 @@ habitflow/
 │   ├── integration/
 │   │   ├── user_registration_test.rb     # ユーザー登録統合テスト（2テストケース）
 │   │   ├── user_login_test.rb            # ログイン・ログアウト統合テスト（4テストケース）
-│   │   └── habit_creation_test.rb        # 習慣新規作成統合テスト（7テストケース）
+│   │   ├── habit_creation_test.rb        # 習慣新規作成統合テスト（7テストケース）
+│   │   └── habit_deletion_test.rb        # 習慣削除統合テスト（4テストケース）
 │   ├── controllers/
 │   │   └── habits_controller_test.rb     # HabitsControllerテスト（2テストケース）
 │   └── fixtures/
@@ -2514,10 +2151,38 @@ end
 
 <br>
 
-**ルーティング（config/routes.rb）**:
+### ルーティング
+
+<br>
+
+**config/routes.rb**:
 ```ruby
-# 習慣管理
-resources :habits, only: [:index]
+Rails.application.routes.draw do
+  root "pages#index"
+  
+  resources :users, only: [:new, :create]
+  
+  get "login", to: "sessions#new", as: :login
+  post "login", to: "sessions#create"
+  delete "logout", to: "sessions#destroy", as: :logout
+  
+  # 習慣管理（index のみ）
+  resources :habits, only: [:index]
+end
+```
+
+<br>
+
+**ルーティング一覧**:
+```
+      Prefix Verb   URI Pattern              Controller#Action
+        root GET    /                        pages#index
+       users POST   /users(.:format)         users#create
+    new_user GET    /users/new(.:format)     users#new
+       login GET    /login(.:format)         sessions#new
+             POST   /login(.:format)         sessions#create
+      logout DELETE /logout(.:format)        sessions#destroy
+      habits GET    /habits(.:format)        habits#index
 ```
 
 <br>
@@ -3274,6 +2939,497 @@ end
 
 **5. テストが正しい前提で考えない**:
 - テスト自体が間違っていることもある
+
+<br>
+
+## 習慣削除機能（Issue #13）
+
+<br>
+
+### コントローラー実装
+
+<br>
+
+**HabitsController（destroy アクション）**:
+```ruby
+# app/controllers/habits_controller.rb
+
+class HabitsController < ApplicationController
+  # ログインしていないユーザーはアクセスできないようにする
+  before_action :require_login
+  
+  # destroy アクション実行前に @habit を取得
+  # set_habit メソッドで current_user の習慣のみを取得するため、
+  # 他のユーザーの習慣を削除しようとしても NotFound エラーになる
+  before_action :set_habit, only: [:destroy]
+
+  # GET /habits
+  def index
+    @habits = current_user.habits.active.order(created_at: :desc)
+  end
+
+  # GET /habits/new
+  def new
+    @habit = current_user.habits.build
+  end
+
+  # POST /habits
+  def create
+    @habit = current_user.habits.build(habit_params)
+    
+    if @habit.save
+      flash[:notice] = "習慣を登録しました"
+      redirect_to habits_path
+    else
+      flash.now[:alert] = "習慣の登録に失敗しました"
+      render :new, status: :unprocessable_entity
+    end
+  end
+  
+  # DELETE /habits/:id
+  def destroy
+    # @habit は before_action :set_habit で取得済み
+    
+    # 論理削除を実行（deleted_at に現在時刻を設定）
+    # soft_delete メソッドは Habit モデルで定義済み
+    if @habit.soft_delete
+      # 削除成功時: 成功メッセージを設定して一覧ページへリダイレクト
+      flash[:notice] = "習慣を削除しました"
+      redirect_to habits_path, status: :see_other
+    else
+      # 削除失敗時: エラーメッセージを設定して一覧ページへリダイレクト
+      # 通常、soft_delete は失敗しないが、万が一のためのエラーハンドリング
+      flash[:alert] = "習慣の削除に失敗しました"
+      redirect_to habits_path, status: :see_other
+    end
+  end
+
+  private
+
+  def habit_params
+    params.require(:habit).permit(:name, :weekly_target)
+  end
+  
+  # @habit を取得するメソッド
+  # current_user.habits.active で現在のユーザーの有効な習慣のみを検索
+  # find(params[:id]) で指定された id の習慣を取得
+  # 他のユーザーの習慣や論理削除済みの習慣は取得できない
+  def set_habit
+    @habit = current_user.habits.active.find(params[:id])
+  rescue ActiveRecord::RecordNotFound
+    # 習慣が見つからない場合（他のユーザーの習慣 or 削除済み）
+    flash[:alert] = "習慣が見つかりませんでした"
+    redirect_to habits_path
+  end
+end
+```
+
+<br>
+
+**実装の特徴**:
+- `before_action :set_habit`: destroy アクション実行前に @habit を取得
+- `@habit.soft_delete`: Habit モデルで定義済みの論理削除メソッド
+- `status: :see_other`: Rails 7 / Turbo 対応のリダイレクト（HTTP 303）
+- `rescue ActiveRecord::RecordNotFound`: 習慣が見つからない場合のエラーハンドリング
+
+<br>
+
+### 削除ボタンの実装
+
+<br>
+
+**習慣一覧ページ（app/views/habits/index.html.erb）**:
+```erb
+
+
+  
+  
+    
+      <%= habit.name %>
+    
+  
+
+  
+  
+  <!-- method: :delete で DELETE /habits/:id にリクエスト -->
+  
+  
+  <%= button_to habit_path(habit), 
+      method: :delete,
+      data: { turbo_confirm: "本当に削除しますか？\n「#{habit.name}」を削除すると、過去の記録も表示されなくなります。" },
+      class: "px-3 py-1 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors" do %>
+    削除
+  <% end %>
+
+```
+
+<br>
+
+**実装の特徴**:
+- `button_to` を使用（DELETEリクエストはフォーム送信が必要）
+- `method: :delete`: DELETE リクエストを送信
+- `data: { turbo_confirm: "..." }`: Turbo Confirm で削除前に確認ダイアログを表示
+- `\n` で改行して、削除される習慣名を表示
+- 赤色のボタン（`bg-red-600`）で視覚的に警告
+
+<br>
+
+### 論理削除の実装
+
+<br>
+
+**Habitモデル（app/models/habit.rb）**:
+```ruby
+# 論理削除を実行するメソッド
+# deleted_at カラムに現在時刻を設定することで「削除済み」とマークする
+# 物理削除（destroy）ではなく論理削除を使う理由:
+#   - 過去の振り返りデータとの整合性を保つため
+#   - weekly_reflection_habit_summaries でスナップショットとして参照されるため
+def soft_delete
+  # touch: 指定したカラムに現在時刻を設定するメソッド
+  # touch(:deleted_at) => deleted_at = Time.current
+  # updated_at も自動的に更新される
+  touch(:deleted_at)
+end
+```
+
+<br>
+
+**論理削除の設計思想**:
+- `deleted_at` に現在時刻を設定することで「削除済み」とマークする
+- データベースから物理的に削除しない
+- 過去の振り返りデータ（weekly_reflection_habit_summaries）との整合性を保つ
+- スナップショット設計との連携
+
+<br>
+
+### セキュリティ対策
+
+<br>
+
+**1. before_action :set_habit**:
+```ruby
+before_action :set_habit, only: [:destroy]
+
+def set_habit
+  @habit = current_user.habits.active.find(params[:id])
+rescue ActiveRecord::RecordNotFound
+  flash[:alert] = "習慣が見つかりませんでした"
+  redirect_to habits_path
+end
+```
+
+<br>
+
+**特徴**:
+- `current_user.habits.active`: 現在のユーザーの有効な習慣のみを検索
+- 他のユーザーの習慣は取得できない
+- 論理削除済みの習慣は取得できない（`active` スコープで除外）
+- `rescue ActiveRecord::RecordNotFound`: 習慣が見つからない場合のエラーハンドリング
+
+<br>
+
+**2. status: :see_other**:
+```ruby
+redirect_to habits_path, status: :see_other
+```
+
+<br>
+
+**特徴**:
+- Rails 7 / Turbo 対応のリダイレクト
+- HTTP 303 ステータスコードを返す
+- ブラウザの「戻る」ボタンを押しても、削除リクエストが再送信されない
+
+<br>
+
+### 統合テスト
+
+<br>
+
+**テストファイル（test/integration/habit_deletion_test.rb）**:
+```ruby
+require "test_helper"
+
+class HabitDeletionTest < ActionDispatch::IntegrationTest
+  setup do
+    @user = users(:one)
+    @other_user = users(:two)
+    @habit = habits(:one)
+    @other_habit = habits(:two)
+    
+    # test ユーザーでログイン
+    post login_path, params: {
+      session: {
+        email: @user.email,
+        password: "password"
+      }
+    }
+  end
+  
+  test "ログイン後に習慣を論理削除できること" do
+    # 削除前の習慣数を確認（有効な習慣のみ）
+    assert_equal 1, @user.habits.active.count
+    
+    # 削除リクエストを送信
+    assert_difference("Habit.active.count", -1) do
+      delete habit_path(@habit)
+    end
+    
+    # 削除後の習慣数を確認（有効な習慣のみ）
+    assert_equal 0, @user.habits.active.count
+    
+    # 論理削除されていることを確認（deleted_at が設定されている）
+    @habit.reload
+    assert_not_nil @habit.deleted_at
+    
+    # 物理削除されていないことを確認
+    assert Habit.exists?(@habit.id)
+    
+    # リダイレクト先の確認
+    assert_redirected_to habits_path
+    follow_redirect!
+    
+    # 成功メッセージが表示されることを確認
+    assert_select "div", text: /習慣を削除しました/
+  end
+  
+  test "他のユーザーの習慣は削除できないこと（セキュリティテスト）" do
+    # 削除前の習慣数を確認
+    assert_equal 1, @other_user.habits.active.count
+    
+    # 他のユーザーの習慣を削除しようとする
+    assert_no_difference("Habit.active.count") do
+      delete habit_path(@other_habit)
+    end
+    
+    # 他のユーザーの習慣数は変わらないことを確認
+    assert_equal 1, @other_user.habits.active.count
+    
+    # 習慣一覧ページにリダイレクトされることを確認
+    assert_redirected_to habits_path
+    follow_redirect!
+    
+    # エラーメッセージが表示されることを確認
+    assert_select "div", text: /習慣が見つかりませんでした/
+  end
+  
+  test "論理削除済みの習慣は再度削除できないこと" do
+    # 習慣を論理削除
+    @habit.soft_delete
+    
+    # 削除前の習慣数を確認（有効な習慣のみ）
+    assert_equal 0, @user.habits.active.count
+    
+    # 論理削除済みの習慣を削除しようとする
+    assert_no_difference("Habit.count") do
+      delete habit_path(@habit)
+    end
+    
+    # 習慣一覧ページにリダイレクトされることを確認
+    assert_redirected_to habits_path
+    follow_redirect!
+    
+    # エラーメッセージが表示されることを確認
+    assert_select "div", text: /習慣が見つかりませんでした/
+  end
+  
+  test "未ログイン時は習慣を削除できないこと" do
+    # ログアウト
+    delete logout_path
+    
+    # 削除前の習慣数を確認
+    assert_equal 1, @user.habits.active.count
+    
+    # 習慣を削除しようとする
+    assert_no_difference("Habit.active.count") do
+      delete habit_path(@habit)
+    end
+    
+    # ログインページにリダイレクトされることを確認
+    assert_redirected_to login_path
+  end
+end
+```
+
+<br>
+
+**テストカバレッジ**:
+- 正常系テスト: ログイン後に習慣を論理削除できること
+- セキュリティテスト: 他のユーザーの習慣は削除できないこと
+- 異常系テスト: 論理削除済みの習慣は再度削除できないこと
+- 認証テスト: 未ログイン時は習慣を削除できないこと
+
+<br>
+
+**テスト結果**:
+```
+4 runs, 27 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+### ルーティング
+
+<br>
+
+**config/routes.rb**:
+```ruby
+Rails.application.routes.draw do
+  root "pages#index"
+  
+  resources :users, only: [:new, :create]
+  
+  get "login", to: "sessions#new", as: :login
+  post "login", to: "sessions#create"
+  delete "logout", to: "sessions#destroy", as: :logout
+  
+  # 習慣管理（index, new, create, destroy）
+  resources :habits, only: [:index, :new, :create, :destroy]
+end
+```
+
+<br>
+
+**ルーティング一覧**:
+```
+      Prefix Verb   URI Pattern              Controller#Action
+        root GET    /                        pages#index
+       users POST   /users(.:format)         users#create
+    new_user GET    /users/new(.:format)     users#new
+       login GET    /login(.:format)         sessions#new
+             POST   /login(.:format)         sessions#create
+      logout DELETE /logout(.:format)        sessions#destroy
+      habits GET    /habits(.:format)        habits#index
+             POST   /habits(.:format)        habits#create
+   new_habit GET    /habits/new(.:format)    habits#new
+       habit DELETE /habits/:id(.:format)    habits#destroy
+```
+
+<br>
+
+### 動作確認（Railsコンソール）
+
+<br>
+```ruby
+# ユーザーと習慣を取得
+user = User.first
+habit = user.habits.active.first
+
+# 論理削除前の状態確認
+habit.active?     # => true
+habit.deleted?    # => false
+habit.deleted_at  # => nil
+
+# 論理削除を実行
+habit.soft_delete
+
+# 論理削除後の状態確認
+habit.reload
+habit.active?     # => false
+habit.deleted?    # => true
+habit.deleted_at  # => Sun, 15 Feb 2026 10:16:57.790426000 UTC +00:00
+
+# データベースにレコードが残っていることを確認（物理削除されていない）
+Habit.exists?(habit.id)  # => true
+
+# active スコープで取得できないことを確認
+user.habits.active.count   # => 削除された分、カウントが減る
+
+# deleted スコープで取得できることを確認
+user.habits.deleted.count  # => 削除された分、カウントが増える
+
+# 実際の削除確認例
+user = User.first
+habit = user.habits.create(name: "テスト習慣", weekly_target: 7)
+
+# 削除前
+user.habits.active.count  # => 2
+
+# 論理削除
+habit.soft_delete
+
+# 削除後
+user.habits.active.count   # => 1（一覧に表示されない）
+user.habits.count          # => 2（データベースには残っている）
+user.habits.deleted.count  # => 1（削除済みスコープでは取得できる）
+```
+
+<br>
+
+### UI/UX設計のポイント
+
+<br>
+
+**1. 削除ボタンの配置**:
+- 習慣カードのヘッダー右上に配置
+- 習慣名と削除ボタンを `flex justify-between` で左右に配置
+- 削除ボタンは固定幅、習慣名は可変幅（`flex-1`）
+
+<br>
+
+**2. 視覚的な警告**:
+- 赤色のボタン（`bg-red-600`）で「削除」という危険な操作を強調
+- ホバー時に濃くなる（`hover:bg-red-700`）
+- 小さめのボタン（`px-3 py-1 text-sm`）で誤クリックを防ぐ
+
+<br>
+
+**3. 削除確認ダイアログ**:
+- Turbo Confirm で削除前に確認を求める
+- 習慣名を表示して、削除対象を明確にする
+- 「過去の記録も表示されなくなります」と警告
+- `\n` で改行して、読みやすくする
+
+<br>
+
+**4. フラッシュメッセージ**:
+- 削除成功時: 緑色のメッセージ（`flash[:notice]`）
+- 削除失敗時: 赤色のメッセージ（`flash[:alert]`）
+- 習慣が見つからない場合: 赤色のメッセージ
+
+<br>
+
+### 技術的な学び
+
+<br>
+
+**1. button_to の使用理由**:
+- `link_to` ではなく `button_to` を使用
+- DELETEリクエストはフォーム送信で行う必要がある
+- セキュリティ上、リンク（GET）で削除操作を行うべきではない
+
+<br>
+
+**2. Turbo Confirm の活用**:
+- `data: { turbo_confirm: "..." }` で確認ダイアログを表示
+- JavaScriptを書かずに実装できる
+- Turbo（Hotwire）の標準機能
+
+<br>
+
+**3. 論理削除 vs 物理削除**:
+- 論理削除: `deleted_at` に日時を設定、データは残る
+- 物理削除: レコード自体を削除、データは失われる
+- 論理削除を採用した理由:
+  - 過去の振り返りデータとの整合性を保つ
+  - weekly_reflection_habit_summaries でスナップショットとして参照
+  - データの復元が可能（将来的に実装予定）
+
+<br>
+
+**4. セキュリティ対策の徹底**:
+- `current_user.habits.active` で現在のユーザーの有効な習慣のみを検索
+- 他のユーザーの習慣は取得できない
+- 論理削除済みの習慣は取得できない
+- `rescue ActiveRecord::RecordNotFound` でエラーハンドリング
+
+<br>
+
+**5. Rails 7 / Turbo 対応**:
+- `status: :see_other` で HTTP 303 リダイレクト
+- ブラウザの「戻る」ボタン対策
+- Turbo の非同期通信との互換性
 
 <br>
 ```
