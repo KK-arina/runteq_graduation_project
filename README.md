@@ -962,8 +962,6 @@ docker compose exec web bin/rails db:test:prepare
 <br>
 
 ### 主要ディレクトリ
-
-<br>
 ```
 habitflow/
 ├── app/
@@ -1015,7 +1013,6 @@ habitflow/
 ├── render.yaml                           # Renderデプロイ設定
 └── Gemfile                               # Gem依存関係
 ```
-
 <br>
 
 ### 重要ファイルの説明
