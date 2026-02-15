@@ -1,119 +1,318 @@
-<%# app/views/habits/index.html.erb %>
 <%# 習慣一覧ページ %>
-<%# このページでは、ログインユーザーの有効な習慣をカード形式で一覧表示します %>
 
+<%# メインコンテナ %>
+<%# max-w-7xl: 最大幅 1280px %>
+<%#   - 7xl = extra extra extra extra extra extra extra large %>
+<%#   - 一覧ページとして広めの幅を確保 %>
+<%# mx-auto: margin-left と margin-right を auto に設定 %>
+<%#   - 左右のマージンを自動計算して中央揃えにする %>
+<%#   - mx = margin-x（x軸、つまり水平方向） %>
+<%# px-4 sm:px-6 lg:px-8: 左右のパディング（レスポンシブ対応） %>
+<%#   - px-4: デフォルト（モバイル）は左右パディング 16px %>
+<%#   - sm:px-6: 画面幅 640px 以上（タブレット）は左右パディング 24px %>
+<%#   - lg:px-8: 画面幅 1024px 以上（PC）は左右パディング 32px %>
+<%#   - レスポンシブデザイン: 画面サイズに応じて自動調整される %>
+<%# py-8: 上下のパディング 32px %>
+<%#   - py = padding-y（y軸、つまり垂直方向） %>
+<%#   - ヘッダーとフッターの間にコンテンツが窮屈にならないように余白を作る %>
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-  <%# ページタイトルと新規作成ボタンのエリア %>
-  <div class="flex justify-between items-center mb-8">
+  <%# ヘッダーエリア（タイトルとボタンを横並び） %>
+  <%# flex: フレックスボックス（横並び） %>
+  <%#   - デフォルトでは縦並び（ブロック要素）だが、flex にすることで横並びになる %>
+  <%# justify-between: 両端揃え（左にタイトル、右にボタン） %>
+  <%#   - タイトルとボタンの間のスペースを最大化 %>
+  <%# items-center: 垂直方向の中央揃え %>
+  <%#   - タイトルとボタンの高さが異なる場合でも、垂直方向の中央で揃える %>
+  <%# mb-6: 下マージン 24px %>
+  <%#   - 修正前: mb-8（32px）だったが、カード間の間隔（gap-6 = 24px）と統一 %>
+  <%#   - 修正後: mb-6（24px）にすることで、ヘッダーとカードの間隔が統一される %>
+  <%#   - この統一感により、デザインのリズムが整い、見やすくなる %>
+  <div class="flex justify-between items-center mb-6">
     <%# ページタイトル %>
-    <%# tracking-tight: 文字間隔を詰めて読みやすくする %>
-    <h1 class="text-3xl font-bold text-gray-900 tracking-tight">習慣管理</h1>
+    <%# text-2xl: フォントサイズ 24px %>
+    <%#   - 2xl = extra extra large %>
+    <%# font-bold: フォントウェイト 700（太字） %>
+    <%#   - タイトルは太字にすることで階層構造を明確にする %>
+    <%# text-gray-900: テキスト色（濃いグレー、ほぼ黒） %>
+    <%#   - gray-900 は最も濃いグレーで、タイトルに適している %>
+    <h2 class="text-2xl font-bold text-gray-900">
+      習慣管理
+    </h2>
     
-    <%# 新しい習慣を追加ボタン %>
-    <%# link_to を使うことで、将来的にパスが変更されても自動的に追従 %>
-    <%# Issue #12で実装予定の新規作成ページへのリンク %>
-    <%= link_to "#", class: "inline-flex items-center px-4 py-2 bg-blue-600 border border-transparent rounded-md font-semibold text-sm text-white hover:bg-blue-700 shadow-sm transition" do %>
-      <%# SVGアイコン（プラス記号） %>
-      <%# stroke を使った線のみのアイコンでシンプルに %>
-      <svg class="-ml-1 mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+    <%# 新規作成ボタン %>
+    <%# link_to: リンクを生成する Rails ヘルパー %>
+    <%# new_habit_path: /habits/new への名前付きルート（HabitsController の new アクション） %>
+    <%# class で Tailwind CSS を適用: %>
+    <%#   inline-flex: インラインフレックスボックス（アイコンとテキストを横並び） %>
+    <%#     - inline-flex にすることで、ボタンのサイズが内容に合わせて自動調整される %>
+    <%#     - flex だとブロック要素になり、幅が100%になってしまう %>
+    <%#   items-center: 垂直方向の中央揃え %>
+    <%#     - アイコンとテキストを垂直方向の中央で揃える %>
+    <%#   px-4 py-2: パディング %>
+    <%#     - px-4: 左右パディング 16px %>
+    <%#     - py-2: 上下パディング 8px %>
+    <%#   bg-blue-600: 背景色（青） %>
+    <%#     - 600 は濃いめの青で、ボタンに適している %>
+    <%#   text-white: テキスト色（白） %>
+    <%#     - 青い背景に白文字で見やすく %>
+    <%#   rounded-md: 角丸 6px %>
+    <%#     - md = medium %>
+    <%#     - 角を丸くすることで柔らかい印象になる %>
+    <%#   hover:bg-blue-700: ホバー時に背景色を濃く %>
+    <%#     - hover: はマウスが乗った時に適用 %>
+    <%#     - 700 は 600 より濃い青 %>
+    <%#     - ボタンがインタラクティブであることを示す %>
+    <%#   transition: アニメーション効果（滑らかに変化） %>
+    <%#     - 色の変化が瞬間的ではなく、0.3秒かけて滑らかに変わる %>
+    <%#   shadow-sm: 影（小） %>
+    <%#     - sm = small %>
+    <%#     - 微妙な影で立体感を出す %>
+    <%= link_to new_habit_path, 
+        class: "inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition shadow-sm" do %>
+      <%# プラスアイコン（SVG） %>
+      <%# w-5 h-5: アイコンサイズ 20px %>
+      <%#   - w = width（幅） %>
+      <%#   - h = height（高さ） %>
+      <%#   - 5 は 20px（Tailwind CSS では 1単位 = 4px なので、5 × 4 = 20px） %>
+      <%# mr-2: 右マージン 8px %>
+      <%#   - mr = margin-right %>
+      <%#   - アイコンとテキストの間に余白を作る %>
+      <%# fill="none": 塗りつぶしなし %>
+      <%#   - SVG の内側を塗りつぶさない %>
+      <%# stroke="currentColor": 線の色を親要素のテキスト色（白）に設定 %>
+      <%#   - currentColor は CSS の特殊な値で、親要素の color プロパティを継承 %>
+      <%#   - text-white なので、アイコンも白になる %>
+      <%# viewBox="0 0 24 24": SVG の座標系を定義 %>
+      <%#   - 0,0 から 24,24 の範囲でアイコンを描画 %>
+      <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <%# path: SVG のパス（形状）を定義 %>
+        <%# stroke-linecap="round": 線の端を丸くする %>
+        <%# stroke-linejoin="round": 線の接合部を丸くする %>
+        <%# stroke-width="2": 線の太さ 2px %>
+        <%# d: パスの描画命令 %>
+        <%#   M12 4: 座標(12,4)に移動（Move） %>
+        <%#   v16: 垂直方向に16px移動（縦線を描く） %>
+        <%#   M4 12: 座標(4,12)に移動 %>
+        <%#   h16: 水平方向に16px移動（横線を描く） %>
+        <%#   結果: 縦線と横線が交差してプラス記号（+）になる %>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
       </svg>
       新しい習慣を追加
     <% end %>
   </div>
 
-  <%# 習慣カードのグリッドレイアウト %>
-  <%# 習慣が存在する場合と存在しない場合で表示を分岐 %>
-  <% if @habits.any? %>
-    <%# グリッドレイアウト: 画面サイズに応じて1〜3列で表示 %>
-    <%# grid-cols-1: モバイル（1列） %>
-    <%# md:grid-cols-2: タブレット（2列） %>
-    <%# lg:grid-cols-3: PC（3列） %>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <%# 各習慣をカード形式で表示 %>
+  <%# 習慣カード一覧エリア %>
+  <%# grid: グリッドレイアウト %>
+  <%#   - フレックスボックスではなく、グリッドレイアウトを使用 %>
+  <%#   - グリッドは2次元レイアウト（行と列）に適している %>
+  <%# grid-cols-1: モバイルは1列 %>
+  <%#   - デフォルトは1列（縦並び） %>
+  <%# md:grid-cols-2: タブレット（768px以上）は2列 %>
+  <%#   - md = medium（Tailwind CSS のブレークポイント） %>
+  <%#   - 画面幅が 768px 以上になると2列になる %>
+  <%# lg:grid-cols-3: PC（1024px以上）は3列 %>
+  <%#   - lg = large %>
+  <%#   - 画面幅が 1024px 以上になると3列になる %>
+  <%# gap-6: カード間の隙間 24px %>
+  <%#   - gap は grid レイアウトで使える便利なプロパティ %>
+  <%#   - 行と列の両方に 24px の隙間が入る %>
+  <%#   - 6 は 24px（Tailwind CSS では 1単位 = 4px なので、6 × 4 = 24px） %>
+  <%#   - ヘッダーの mb-6 と統一することで、デザインのリズムが整う %>
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <%# 習慣が0件の場合 %>
+    <% if @habits.empty? %>
+      <%# Empty State（空状態の表示） %>
+      <%# col-span-full: すべての列をまたぐ（1列表示でも3列表示でも中央に表示） %>
+      <%#   - col-span-full は grid-cols の列数に関係なく、すべての列を使う %>
+      <%#   - これにより、Empty State が常に中央に表示される %>
+      <div class="col-span-full text-center py-12">
+        <%# アイコンエリア %>
+        <%# mx-auto: 水平方向の中央揃え %>
+        <%#   - margin-left と margin-right を auto にして中央に配置 %>
+        <%# w-16 h-16: アイコンサイズ 64px %>
+        <%#   - 16 は 64px（16 × 4 = 64px） %>
+        <%# bg-gray-100: 背景色（薄いグレー） %>
+        <%#   - 100 は最も薄いグレー %>
+        <%# rounded-full: 完全な円形 %>
+        <%#   - rounded は角丸だが、rounded-full は完全な円になる %>
+        <%# flex items-center justify-center: アイコンを中央配置 %>
+        <%#   - flex: フレックスボックス %>
+        <%#   - items-center: 垂直方向の中央揃え %>
+        <%#   - justify-center: 水平方向の中央揃え %>
+        <%# mb-4: 下マージン 16px %>
+        <%#   - アイコンとメッセージの間に余白 %>
+        <div class="mx-auto w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+          <%# チェックマークアイコン（SVG） %>
+          <%# w-8 h-8: アイコンサイズ 32px %>
+          <%# text-gray-400: アイコンの色（グレー） %>
+          <%#   - 400 は中間のグレーで、薄すぎず濃すぎず %>
+          <svg class="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <%# チェックマークの形を描く %>
+            <%# M9 12l2 2 4-4: チェックマークの形 %>
+            <%# m6 2a9 9 0 11-18 0 9 9 0 0118 0z: 円の形 %>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        
+        <%# メッセージエリア %>
+        <%# text-lg: フォントサイズ 18px %>
+        <%#   - lg = large %>
+        <%# font-medium: フォントウェイト 500（中太） %>
+        <%# text-gray-900: テキスト色（濃いグレー） %>
+        <%# mb-2: 下マージン 8px %>
+        <%#   - 見出しと説明文の間に余白 %>
+        <h3 class="text-lg font-medium text-gray-900 mb-2">
+          習慣が登録されていません
+        </h3>
+        <%# text-gray-500: テキスト色（グレー） %>
+        <%#   - 500 は中間のグレーで、説明文に適している %>
+        <%# mb-4: 下マージン 16px %>
+        <%#   - 説明文とボタンの間に余白 %>
+        <p class="text-gray-500 mb-4">
+          新しい習慣を登録して、目標達成を始めましょう
+        </p>
+        
+        <%# 習慣登録ボタン（Empty State 専用） %>
+        <%= link_to "習慣を登録する", new_habit_path, 
+            class: "inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition shadow-sm" %>
+      </div>
+    <% else %>
+      <%# 習慣が1件以上ある場合、各習慣をカードとして表示 %>
+      <%# @habits.each: @habits の各要素に対してループ処理 %>
+      <%#   - @habits: コントローラーで定義されたインスタンス変数（習慣の配列） %>
+      <%#   - each: 配列の各要素に対してループ処理 %>
+      <%# do |habit|: 各要素を habit 変数として受け取る %>
       <% @habits.each do |habit| %>
-        <%# カード全体 %>
-        <%# flex flex-col: 縦方向のフレックスボックスで、進捗エリアを下部に固定 %>
-        <%# rounded-xl: より丸みのある角（12px） %>
-        <div class="bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col hover:shadow-md transition">
-          <%# カードの上部エリア %>
-          <%# flex-1: 残りのスペースを全て使用（進捗エリアを下に押し出す効果） %>
-          <div class="p-6 flex-1">
-            <%# 習慣名 %>
-            <%# text-xl: より大きな文字サイズ（1.25rem = 20px） %>
-            <h3 class="text-xl font-bold text-gray-900 mb-4"><%= habit.name %></h3>
-            
-            <%# 習慣の詳細情報 %>
-            <%# space-x-4: 子要素間に横方向の間隔を追加 %>
-            <div class="flex items-center text-sm text-gray-500 space-x-4">
-              <%# 測定タイプの表示（アイコン付き） %>
-              <span class="flex items-center">
-                <%# チェックリストのアイコン（青色） %>
-                <svg class="h-4 w-4 mr-1 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/>
-                  <path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h3a1 1 0 100-2h-3zm-3 4a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h3a1 1 0 100-2h-3z" clip-rule="evenodd"/>
-                </svg>
-                チェック型
-              </span>
+        <%# 習慣カード %>
+        <%# bg-white: 背景色（白） %>
+        <%#   - カードは白背景にすることで、グレー背景のページから浮き上がらせる %>
+        <%# rounded-xl: 角丸 12px %>
+        <%#   - xl = extra large %>
+        <%#   - 大きめの角丸で柔らかい印象 %>
+        <%# shadow-sm: 影（小） %>
+        <%#   - sm = small %>
+        <%#   - 微妙な影で立体感を出す %>
+        <%# p-6: 全方向のパディング 24px %>
+        <%#   - p = padding（上下左右すべて） %>
+        <%#   - カードの内側に余白を作る %>
+        <%# border border-gray-200: ボーダー 1px（グレー） %>
+        <%#   - border: ボーダー 1px %>
+        <%#   - border-gray-200: ボーダー色（薄いグレー） %>
+        <%#   - カードの境界を明確にする %>
+        <%# hover:shadow-md: ホバー時に影を大きく %>
+        <%#   - md = medium %>
+        <%#   - カードがインタラクティブであることを示す %>
+        <%# transition: アニメーション効果 %>
+        <%#   - 影の変化が滑らかになる %>
+        <div class="bg-white rounded-xl shadow-sm p-6 border border-gray-200 hover:shadow-md transition">
+          <%# カードヘッダー %>
+          <div class="flex items-start justify-between mb-4">
+            <div class="flex-1">
+              <%# 習慣名 %>
+              <%# text-lg: フォントサイズ 18px %>
+              <%# font-bold: フォントウェイト 700（太字） %>
+              <%# text-gray-900: テキスト色（濃いグレー） %>
+              <%# mb-2: 下マージン 8px %>
+              <h3 class="text-lg font-bold text-gray-900 mb-2">
+                <%# habit.name: データベースから取得した習慣名 %>
+                <%= habit.name %>
+              </h3>
               
-              <%# 週次目標値の表示（アイコン付き） %>
-              <span class="flex items-center">
-                <%# 時計のアイコン（緑色） %>
-                <svg class="h-4 w-4 mr-1 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-                </svg>
-                目標: <%= habit.weekly_target %>回 / 週
-              </span>
+              <%# 習慣の詳細情報 %>
+              <%# text-sm: フォントサイズ 14px %>
+              <%# text-gray-600: テキスト色（グレー） %>
+              <p class="text-sm text-gray-600">
+                <%# アイコン（チェックマーク） %>
+                <%# inline-flex: インラインフレックスボックス %>
+                <%#   - アイコンとテキストを横並び %>
+                <%# items-center: 垂直方向の中央揃え %>
+                <span class="inline-flex items-center">
+                  <%# w-4 h-4: アイコンサイズ 16px %>
+                  <%# mr-1: 右マージン 4px %>
+                  <%# text-blue-500: アイコンの色（青） %>
+                  <svg class="w-4 h-4 mr-1 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  チェック型
+                </span>
+                <%# 区切り線 %>
+                <%# mx-2: 左右マージン 8px %>
+                <span class="mx-2">|</span>
+                <%# アイコン（ターゲット） %>
+                <span class="inline-flex items-center">
+                  <%# text-green-500: アイコンの色（緑） %>
+                  <svg class="w-4 h-4 mr-1 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <%# 稲妻のようなアイコン（目標を示す） %>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <%# 目標: 週7回実施 %>
+                  <%# habit.weekly_target: データベースから取得した週次目標値 %>
+                  目標: <%= habit.weekly_target %>回/週
+                </span>
+              </p>
             </div>
           </div>
-
-          <%# カードの下部エリア（進捗表示） %>
-          <%# Issue #15, #16で動的に変更予定 %>
-          <%# rounded-b-xl: 下部の角のみ丸くする %>
-          <div class="px-6 py-4 bg-gray-50 border-t border-gray-100 rounded-b-xl">
-            <%# 進捗率のラベルとパーセンテージ %>
-            <div class="flex justify-between items-end mb-2">
-              <%# uppercase: 大文字表示 %>
-              <%# tracking-wider: 文字間隔を広げる %>
-              <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Weekly Progress</span>
-              <span class="text-sm font-bold text-blue-600">50%</span>
+          
+          <%# プログレスバー（進捗率表示）- 仮データ50%固定 %>
+          <%# mt-4: 上マージン 16px %>
+          <%#   - カードヘッダーとプログレスバーの間に余白 %>
+          <div class="mt-4">
+            <%# プログレスバーのラベル %>
+            <%# flex justify-between: 左右両端揃え %>
+            <%#   - 「今週の進捗」を左、「50%」を右に配置 %>
+            <%# text-sm: フォントサイズ 14px %>
+            <%# text-gray-600: テキスト色（グレー） %>
+            <%# mb-2: 下マージン 8px %>
+            <%#   - ラベルとプログレスバーの間に余白 %>
+            <div class="flex justify-between text-sm text-gray-600 mb-2">
+              <span>今週の進捗</span>
+              <%# 仮データ: 50% 固定 %>
+              <%# TODO: Issue #16 で動的計算に変更予定 %>
+              <%# font-semibold: フォントウェイト 600（やや太） %>
+              <span class="font-semibold">50%</span>
             </div>
             
-            <%# プログレスバー %>
-            <%# overflow-hidden: はみ出し部分を隠す %>
-            <div class="overflow-hidden h-2 text-xs flex rounded bg-gray-200">
-              <%# 進捗部分（青色のバー） %>
-              <%# style="width:50%": 仮データ（Issue #16で動的に変更予定） %>
-              <div style="width:50%" class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500"></div>
+            <%# プログレスバー本体 %>
+            <%# w-full: 幅 100% %>
+            <%# bg-gray-200: 背景色（グレー）- 未達成部分 %>
+            <%#   - 200 は薄いグレー %>
+            <%# rounded-full: 完全な角丸 %>
+            <%#   - プログレスバーを丸くすることで柔らかい印象 %>
+            <%# h-2: 高さ 8px %>
+            <%#   - 2 は 8px（2 × 4 = 8px） %>
+            <%# overflow-hidden: はみ出した部分を隠す %>
+            <%#   - プログレスバーの色付き部分が外に出ないようにする %>
+            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <%# 進捗バー（色付き部分） %>
+              <%# bg-blue-500: 背景色（青） %>
+              <%#   - 達成部分は青で表示 %>
+              <%# h-2: 高さ 8px %>
+              <%#   - 親要素と同じ高さ %>
+              <%# rounded-full: 完全な角丸 %>
+              <%# transition-all: すべてのプロパティにアニメーション効果 %>
+              <%#   - 幅が変わる時に滑らかにアニメーション %>
+              <%# duration-300: アニメーション時間 300ms %>
+              <%#   - 0.3秒かけて変化 %>
+              <%# style="width: 50%": インラインスタイルで幅を指定 %>
+              <%#   - 将来は動的に計算された値に変更予定 %>
+              <div class="bg-blue-500 h-2 rounded-full transition-all duration-300" style="width: 50%"></div>
             </div>
             
             <%# 実績表示 %>
-            <%# 将来的に動的データに置き換え（Issue #15, #16） %>
-            <p class="mt-2 text-xs text-gray-400">実績: 3 / <%= habit.weekly_target %> 日</p>
+            <%# text-xs: フォントサイズ 12px %>
+            <%#   - xs = extra small %>
+            <%#   - 補足情報として小さめに表示 %>
+            <%# text-gray-500: テキスト色（薄いグレー） %>
+            <%# mt-1: 上マージン 4px %>
+            <%#   - プログレスバーと実績の間に小さな余白 %>
+            <p class="text-xs text-gray-500 mt-1">
+              <%# 仮データ: 3/7日 %>
+              <%# TODO: Issue #16 で動的計算に変更予定 %>
+              実績: 3/<%= habit.weekly_target %>日
+            </p>
           </div>
         </div>
       <% end %>
-    </div>
-  <% else %>
-    <%# 習慣が登録されていない場合の表示（Empty State） %>
-    <%# border-dashed: 破線のボーダー %>
-    <%# より視覚的に魅力的なデザインに変更 %>
-    <div class="bg-white rounded-2xl border-2 border-dashed border-gray-300 p-12 text-center">
-      <%# アイコン（円形の背景付き） %>
-      <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-100 text-blue-600 mb-4">
-        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-        </svg>
-      </div>
-      
-      <%# メッセージ %>
-      <h2 class="text-xl font-bold text-gray-900 mb-2">まだ習慣が登録されていません</h2>
-      <p class="text-gray-500 mb-6">最初の習慣を登録して、素晴らしい変化を始めましょう！</p>
-      
-      <%# 新規作成ボタン %>
-      <%= link_to "#", class: "px-6 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition inline-block" do %>
-        習慣を登録する
-      <% end %>
-    </div>
-  <% end %>
+    <% end %>
+  </div>
 </div>

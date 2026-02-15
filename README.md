@@ -26,7 +26,8 @@
 - ✅ 本番環境での認証機能動作確認完了
 - ✅ Habitモデル作成完了
 - ✅ 習慣一覧ページ実装完了
-- 🚧 習慣新規作成機能（開発中）
+- ✅ 習慣新規作成機能実装完了
+- 🚧 習慣削除機能（開発中）
 
 <br>
 
@@ -509,7 +510,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 |-------|---------|-----------|--------|-----|
 | #10 | Habitモデルの作成 | ✅ 完了 | 2/15 | 2 |
 | #11 | 習慣一覧ページの作成 | ✅ 完了 | 2/15 | 2 |
-| #12 | 習慣新規作成機能 | 🔜 予定 | - | 3 |
+| #12 | 習慣新規作成機能 | ✅ 完了 | 2/15 | 3 |
 | #13 | 習慣削除機能 | 🔜 予定 | - | 2 |
 | #14 | HabitRecordモデルの作成 | 🔜 予定 | - | 2 |
 | #15 | 習慣の日次記録機能（即時保存） | 🔜 予定 | - | 5 |
@@ -518,7 +519,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-**Week 2 進捗**: 4SP / 20SP（20%）
+**Week 2 進捗**: 7SP / 20SP（35%）
 
 <br>
 
@@ -708,6 +709,242 @@ resources :habits, only: [:index]
 - Tailwind CSSのユーティリティクラスのみ使用（コンパイル不要）
 - Hotwire対応の準備（turbo_frameタグは将来実装）
 - コメント充実（各Tailwindクラスの意味を説明）
+
+<br>
+
+#### ✅ Issue #12: 習慣新規作成機能
+
+- HabitsController に new, create アクション実装
+- 習慣新規作成フォーム作成（app/views/habits/new.html.erb）
+- 習慣一覧ページに「新しい習慣を追加」ボタン追加
+- バリデーションエラー表示機能
+  - エラー件数表示（`@habit.errors.count` 件のエラーがあります）
+  - エラーメッセージ一覧表示（赤色のエラーボックス）
+- Strong Parameters によるセキュリティ対策
+  - `:name`, `:weekly_target` のみ許可
+  - `user_id` は自動設定（`current_user.habits.build`）
+- フラッシュメッセージ表示
+  - 成功メッセージ（緑色、`flash[:notice]`）
+  - エラーメッセージ（赤色、`flash.now[:alert]`）
+- レイアウト改善
+  - すべてのページに共通ヘッダー・フッター追加
+  - ログイン状態に応じたヘッダー表示切り替え
+  - レスポンシブデザイン対応（max-w-md, max-w-2xl, max-w-7xl）
+  - 適切な間隔調整（mb-6で統一）
+
+<br>
+
+**実装内容**:
+
+<br>
+
+**HabitsController**:
+```ruby
+# GET /habits/new - 新規作成フォーム表示
+def new
+  @habit = current_user.habits.build
+end
+
+# POST /habits - 習慣の作成処理
+def create
+  @habit = current_user.habits.build(habit_params)
+  
+  if @habit.save
+    flash[:notice] = "習慣を登録しました"
+    redirect_to habits_path
+  else
+    flash.now[:alert] = "習慣の登録に失敗しました"
+    render :new, status: :unprocessable_entity
+  end
+end
+
+private
+
+def habit_params
+  params.require(:habit).permit(:name, :weekly_target)
+end
+```
+
+<br>
+
+**習慣新規作成フォーム（app/views/habits/new.html.erb）**:
+- 習慣名入力欄（text_field、最大50文字）
+- 週次目標値入力欄（number_field、min: 1, max: 7、デフォルト値: 7）
+- エラーメッセージ表示（`@habit.errors.any?`）
+- キャンセルボタン（habits_path へのリンク）
+- 登録ボタン（フォーム送信）
+- Tailwind CSS による洗練されたデザイン
+- レスポンシブデザイン対応（max-w-2xl）
+
+<br>
+
+**バリデーションエラー表示**:
+```erb
+<% if @habit.errors.any? %>
+  
+    
+      <%= @habit.errors.count %> 件のエラーがあります
+    
+    
+      <% @habit.errors.full_messages.each do |message| %>
+        <%= message %>
+      <% end %>
+    
+  
+<% end %>
+```
+
+<br>
+
+**ルーティング**:
+```ruby
+# config/routes.rb
+
+resources :habits, only: [:index, :new, :create]
+```
+
+<br>
+
+**レイアウト改善**:
+
+<br>
+
+**共通レイアウト（app/views/layouts/application.html.erb）**:
+- すべてのページでヘッダー・フッターを表示
+- ログイン状態に応じたヘッダー表示
+  - ログイン済み: 習慣一覧リンク + ユーザー名 + ログアウトボタン
+  - 未ログイン: ログイン + 新規登録リンク
+- フラッシュメッセージ一元管理（成功: 緑、エラー: 赤）
+- `min-h-screen flex flex-col` でフッターを最下部に固定
+
+<br>
+
+**共通ヘッダー（app/views/shared/_header.html.erb）**:
+- ログイン状態に応じて自動的に表示を切り替え
+- ログイン済み: 習慣一覧リンク + ユーザー名 + ログアウトボタン
+- 未ログイン: ログイン + 新規登録（「今すぐ始める」）ボタン
+
+<br>
+
+**レスポンシブデザイン**:
+- 習慣一覧ページ: `max-w-7xl`（1280px）
+- 習慣新規作成ページ: `max-w-2xl`（672px）
+- ログイン・ユーザー登録ページ: `max-w-md`（448px）
+- 左右パディング: `px-4 sm:px-6 lg:px-8`（モバイル16px、タブレット24px、PC32px）
+
+<br>
+
+**統合テスト（test/integration/habit_creation_test.rb）**:
+- ログイン後に習慣を作成できること
+- 習慣名が空欄の場合はエラーメッセージが表示されること
+- 週次目標値が0の場合はエラーメッセージが表示されること
+- 週次目標値が8の場合はエラーメッセージが表示されること
+- 未ログイン時は新規作成フォームにアクセスできないこと
+- 未ログイン時は習慣を作成できないこと
+- 他ユーザーのuser_idを指定しても無視されること（セキュリティテスト）
+
+<br>
+
+**テスト結果**:
+```
+49 runs, 140 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+**セキュリティ対策**:
+- Strong Parameters（`:name`, `:weekly_target` のみ許可）
+- `current_user.habits.build` で `user_id` を自動設定
+- 不正な `user_id` 送信を無視
+- セキュリティテストで動作確認済み
+
+<br>
+
+**UI/UX設計**:
+- エラーボックス（bg-red-50、border-l-4、border-red-500）
+- プレースホルダーで入力例を表示
+- ヘルプテキストで入力ルールを説明
+- `weekly_target` のデフォルト値を7に設定（`f.object.weekly_target || 7`）
+- キャンセルボタン（グレー）と登録ボタン（青）の色分け
+- ホバーエフェクト（`hover:bg-blue-700`）
+- トランジション効果（`transition`）
+
+<br>
+
+**技術的特徴**:
+- Turbo 対応（`render :new, status: :unprocessable_entity`）
+- バリデーションエラー後も入力値を保持
+- フォームヘルパー（`form_with model: @habit`）
+- Strong Parameters によるセキュリティ対策
+- Railsコンソールでの動作確認完了
+
+<br>
+
+**fixtures 修正**:
+- `test/fixtures/users.yml`:
+  - メールアドレスを `fixture_one@example.com`, `fixture_two@example.com` に変更
+  - テストコード内で使う `user_#{SecureRandom.hex(4)}@example.com` と衝突を回避
+- `test/fixtures/habits.yml`:
+  - `users(:one)` に紐づく習慣を1件のみに制限
+  - 論理削除済み習慣を追加（`deleted_one`）
+
+<br>
+
+**モデル修正**:
+- User モデルに `validates :password, length: { minimum: 8 }, allow_nil: true` を追加
+  - `has_secure_password` だけでは最低文字数をチェックしないため
+
+<br>
+
+**テスト修正**:
+- IntegrationTest では `session` に直接アクセス不可
+  - `logged_in?` メソッド削除、挙動ベーステスト（`get new_habit_path` → `assert_redirected_to login_path`）
+- バリデーションメッセージ統一
+  - `"must be greater than 0"` → `"must be greater than or equal to 1"`
+- Email重複エラー修正
+  - `User.create!` 削除、`users(:one)` 使用（fixtures併用時）
+  - `email: "user_#{SecureRandom.hex(4)}@example.com"` でユニーク化（create!使用時）
+
+<br>
+
+**学んだ本質的な教訓**:
+- fixtures と create! は併用しない
+- IntegrationTest では session に直接アクセス不可
+- エラーメッセージはバリデーションルールと一致させる
+- すべてのテストに assert を書く
+- テストが正しい前提で考えない（テスト自体が間違っていることもある）
+
+<br>
+
+**動作確認（Railsコンソール）**:
+```ruby
+# ユーザー取得
+user = User.first
+
+# 習慣作成
+habit = user.habits.build(name: "朝のランニング", weekly_target: 7)
+habit.save
+# => true
+
+# 習慣一覧取得
+user.habits.active
+# => [#]
+
+# バリデーションエラー確認
+habit = user.habits.build(name: "", weekly_target: 0)
+habit.save
+# => false
+habit.errors.full_messages
+# => ["Name can't be blank", "Weekly target must be greater than or equal to 1"]
+```
+
+<br>
+
+**今後の実装予定**:
+- Issue #13: 習慣削除機能（論理削除）
+- Issue #14: HabitRecordモデルの作成
+- Issue #15: 日次記録機能（チェックボックス）
+- Issue #16: 進捗率の動的計算（現在は50%固定）
 
 <br>
 
@@ -1087,7 +1324,7 @@ habitflow/
 ├── app/
 │   ├── controllers/
 │   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
-│   │   ├── habits_controller.rb         # 習慣管理（index）
+│   │   ├── habits_controller.rb         # 習慣管理（index, new, create）
 │   │   ├── pages_controller.rb          # ランディングページ
 │   │   ├── sessions_controller.rb       # ログイン・ログアウト（new, create, destroy）
 │   │   └── users_controller.rb          # ユーザー登録（new, create）
@@ -1098,10 +1335,11 @@ habitflow/
 │       ├── layouts/
 │       │   └── application.html.erb      # 全ページ共通レイアウト（ヘッダー・フッター・フラッシュ）
 │       ├── shared/
-│       │   ├── _header.html.erb          # 共通ヘッダー（全ページ、習慣一覧リンク追加）
+│       │   ├── _header.html.erb          # 共通ヘッダー（ログイン状態で表示切替）
 │       │   └── _footer.html.erb          # 共通フッター（全ページ）
 │       ├── habits/
-│       │   └── index.html.erb            # 習慣一覧ページ（カード形式、レスポンシブ対応）
+│       │   ├── index.html.erb            # 習慣一覧ページ（カード形式、レスポンシブ対応）
+│       │   └── new.html.erb              # 習慣新規作成フォーム
 │       ├── pages/
 │       │   └── index.html.erb            # TOPページ（シンプル化済み）
 │       ├── sessions/
@@ -1123,7 +1361,10 @@ habitflow/
 │   │   └── habit_test.rb                 # Habitモデルテスト（20テストケース）
 │   ├── integration/
 │   │   ├── user_registration_test.rb     # ユーザー登録統合テスト（2テストケース）
-│   │   └── user_login_test.rb            # ログイン・ログアウト統合テスト（4テストケース）
+│   │   ├── user_login_test.rb            # ログイン・ログアウト統合テスト（4テストケース）
+│   │   └── habit_creation_test.rb        # 習慣新規作成統合テスト（7テストケース）
+│   ├── controllers/
+│   │   └── habits_controller_test.rb     # HabitsControllerテスト（2テストケース）
 │   └── fixtures/
 │       ├── users.yml                     # テスト用ユーザーデータ
 │       └── habits.yml                    # テスト用習慣データ
@@ -1152,10 +1393,13 @@ habitflow/
 | `docs/database-schema-mvp.md` | 全テーブル詳細定義 |
 | `docs/production-check-issue-7.md` | Issue #7 本番環境確認レポート |
 | `test/integration/user_login_test.rb` | ログイン・ログアウト統合テスト |
+| `test/integration/habit_creation_test.rb` | 習慣新規作成統合テスト（7テストケース） |
 | `test/models/habit_test.rb` | Habitモデルテスト（20テストケース） |
 | `app/models/habit.rb` | Habitモデル（論理削除機能実装） |
-| `app/controllers/habits_controller.rb` | 習慣管理コントローラー（index実装） |
+| `app/controllers/habits_controller.rb` | 習慣管理コントローラー（index, new, create実装） |
 | `app/views/habits/index.html.erb` | 習慣一覧ビュー（カード形式、レスポンシブ対応） |
+| `app/views/habits/new.html.erb` | 習慣新規作成フォーム（バリデーションエラー表示） |
+| `app/views/shared/_header.html.erb` | 共通ヘッダー（ログイン状態で表示切替） |
 | `db/seeds.rb` | サンプルデータ（2ユーザー、計10件の習慣） |
 
 <br>
@@ -2237,6 +2481,799 @@ Habit.deleted.include?(habit)  # => true
 - unitカラム追加（冊、時間）
 - 数値型習慣への対応
 - 除外日設定（曜日指定）
+
+<br>
+
+#### 習慣一覧ページ（Issue #11）
+
+<br>
+
+**実装日**: 2026年2月15日
+
+<br>
+
+**実装機能**:
+
+<br>
+
+**HabitsController（app/controllers/habits_controller.rb）**:
+```ruby
+class HabitsController < ApplicationController
+  # ログインしていないユーザーはアクセスできないようにする
+  before_action :require_login
+
+  # GET /habits
+  def index
+    # 現在ログインしているユーザーの習慣を取得
+    # activeスコープで論理削除されていない習慣のみを取得
+    # created_at: :descで新しい順に並び替え
+    @habits = current_user.habits.active.order(created_at: :desc)
+  end
+end
+```
+
+<br>
+
+**ルーティング（config/routes.rb）**:
+```ruby
+# 習慣管理
+resources :habits, only: [:index]
+```
+
+<br>
+
+**習慣一覧ビュー（app/views/habits/index.html.erb）**:
+
+<br>
+
+**レイアウト構造**:
+- コンテナ: max-w-7xl mx-auto（最大幅制限、中央揃え）
+- パディング: px-4 sm:px-6 lg:px-8（レスポンシブな左右パディング）
+- グリッド: grid-cols-1 md:grid-cols-2 lg:grid-cols-3（レスポンシブなカラム数）
+- ギャップ: gap-6（カード間の隙間 = 1.5rem = 24px）
+
+<br>
+
+**カードデザイン**:
+- 角丸: rounded-xl（12px）
+- 影: shadow-sm（軽い影）
+- ホバー時: hover:shadow-md（影を濃くする）
+- トランジション: transition（0.2秒でスムーズにアニメーション）
+- ボーダー: border border-gray-200
+
+<br>
+
+**進捗率表示（仮データ）**:
+- プログレスバー外側: bg-gray-200 h-2 rounded-full
+- プログレスバー内側: bg-blue-500 h-2 rounded-full（width: 50%固定）
+- パーセンテージ: text-sm font-bold text-blue-600（50%固定）
+- 実績表示: text-xs text-gray-400（3/X日固定）
+
+<br>
+
+**Empty State（習慣0件時）**:
+- 破線ボーダー: border-2 border-dashed border-gray-300
+- 円形アイコン: w-16 h-16 rounded-full bg-blue-100（青色の円形背景）
+- メッセージ: 「まだ習慣が登録されていません」
+- CTAボタン: 「習慣を登録する」（青色、px-6 py-3）
+
+<br>
+
+**共通ヘッダーへの追加**:
+```erb
+<% if logged_in? %>
+  <%= link_to "習慣一覧", habits_path, 
+      class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
+  
+    <%= current_user.name %> さん
+  
+  ...
+<% end %>
+```
+
+<br>
+
+**seeds.rb（サンプルデータ）**:
+```ruby
+# ユーザー1: test@example.com
+user1 = User.create!(
+  name: "山田太郎",
+  email: "test@example.com",
+  password: "password123",
+  password_confirmation: "password123"
+)
+
+# 5件の習慣を作成
+user1.habits.create!(name: "読書（15分以上）", weekly_target: 7)
+user1.habits.create!(name: "筋トレ", weekly_target: 5)
+user1.habits.create!(name: "瞑想（10分）", weekly_target: 7)
+user1.habits.create!(name: "英語学習", weekly_target: 5)
+user1.habits.create!(name: "ジョギング", weekly_target: 3)
+
+# 論理削除された習慣（テスト用）
+deleted_habit = user1.habits.create!(
+  name: "削除された習慣（表示されないはず）",
+  weekly_target: 7
+)
+deleted_habit.soft_delete
+```
+
+<br>
+
+**UI/UX設計のポイント**:
+
+<br>
+
+**1. レスポンシブデザイン**:
+- モバイル（〜767px）: 1列表示
+- タブレット（768px〜1023px）: 2列表示
+- PC（1024px〜）: 3列表示
+
+<br>
+
+**2. カードの視覚階層**:
+- 上部エリア（flex-1）: 習慣名、詳細情報
+- 下部エリア（固定）: 進捗率、プログレスバー
+- 縦方向のフレックスボックス（flex flex-col）で進捗エリアを下部に固定
+
+<br>
+
+**3. アイコンの色分け**:
+- チェック型: text-blue-500（青色）
+- 週次目標: text-green-500（緑色）
+- 視覚的に情報を区別しやすくする
+
+<br>
+
+**4. アニメーション効果**:
+- ホバー時に影が濃くなる（hover:shadow-md）
+- トランジション効果（transition）で滑らかに変化
+- ユーザーの操作に対する視覚的フィードバック
+
+<br>
+
+**技術的な工夫**:
+
+<br>
+
+**1. link_to ヘルパーメソッド使用**:
+```erb
+<%= link_to "#", class: "..." do %>
+  新しい習慣を追加
+<% end %>
+```
+- `<a href="#">` よりも推奨される書き方
+- 将来的にパスが変更されても自動的に追従
+- Railsのルーティングと連携
+
+<br>
+
+**2. Tailwind CSSのユーティリティクラス**:
+- カスタムCSS不要
+- コンパイル不要（tailwindcss-railsのコアクラスのみ使用）
+- メンテナンス性が高い
+
+<br>
+
+**3. コメントの充実**:
+```erb
+<%# tracking-tight: 文字間隔を詰めて読みやすくする %>
+習慣管理
+```
+- 各Tailwindクラスの意味を説明
+- 初心者でも理解しやすい
+- 将来のメンテナンスが容易
+
+<br>
+
+**セキュリティ対策**:
+- `before_action :require_login` でログイン必須
+- `current_user.habits` でログインユーザーの習慣のみ取得
+- 他のユーザーの習慣にはアクセス不可
+
+<br>
+
+**論理削除の動作確認**:
+```ruby
+# Railsコンソールでの確認
+user = User.find_by(email: "test@example.com")
+
+# 有効な習慣のみ取得
+user.habits.active.count  # => 5
+
+# 論理削除を実行
+habit = user.habits.first
+habit.soft_delete
+
+# 削除後の確認
+user.habits.active.count   # => 4
+user.habits.deleted.count  # => 1
+
+# 復元
+habit.update(deleted_at: nil)
+user.habits.active.count   # => 5
+```
+
+<br>
+
+## 習慣新規作成機能（Issue #12）
+
+<br>
+
+### コントローラー実装
+
+<br>
+
+**HabitsController**:
+```ruby
+# app/controllers/habits_controller.rb
+
+class HabitsController < ApplicationController
+  before_action :require_login
+
+  # GET /habits - 習慣一覧ページ
+  def index
+    @habits = current_user.habits.active.order(created_at: :desc)
+  end
+
+  # GET /habits/new - 新規作成フォーム
+  def new
+    @habit = current_user.habits.build
+  end
+
+  # POST /habits - 習慣の作成処理
+  def create
+    @habit = current_user.habits.build(habit_params)
+    
+    if @habit.save
+      flash[:notice] = "習慣を登録しました"
+      redirect_to habits_path
+    else
+      flash.now[:alert] = "習慣の登録に失敗しました"
+      render :new, status: :unprocessable_entity
+    end
+  end
+
+  private
+
+  def habit_params
+    params.require(:habit).permit(:name, :weekly_target)
+  end
+end
+```
+
+<br>
+
+**実装の特徴**:
+- `current_user.habits.build`: user_id を自動設定（セキュリティ対策）
+- Strong Parameters: `:name`, `:weekly_target` のみ許可
+- 保存成功時: `redirect_to habits_path` で一覧ページへリダイレクト
+- 保存失敗時: `render :new, status: :unprocessable_entity` で422エラーを返す（Turbo対応）
+
+<br>
+
+### フォーム実装
+
+<br>
+
+**習慣新規作成フォーム（app/views/habits/new.html.erb）**:
+```erb
+
+  
+    新しい習慣を追加
+  
+
+  <%= form_with model: @habit, local: true do |f| %>
+    
+    <% if @habit.errors.any? %>
+      
+        
+          <%= @habit.errors.count %> 件のエラーがあります
+        
+        
+          <% @habit.errors.full_messages.each do |message| %>
+            <%= message %>
+          <% end %>
+        
+      
+    <% end %>
+
+    
+    
+      <%= f.label :name, "習慣名", class: "block text-sm font-medium text-gray-700 mb-2" %>
+      <%= f.text_field :name,
+          placeholder: "例: 読書、筋トレ、英語学習",
+          class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
+      
+        習慣名は50文字以内で入力してください
+      
+    
+
+    
+    
+      <%= f.label :weekly_target, "週次目標値", class: "block text-sm font-medium text-gray-700 mb-2" %>
+      <%= f.number_field :weekly_target,
+          min: 1,
+          max: 7,
+          value: f.object.weekly_target || 7,
+          placeholder: "例: 7（週7回実施）",
+          class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
+      
+        週あたりの実施回数を設定します（1〜7回）
+      
+    
+
+    
+    
+      <%= link_to "キャンセル", habits_path,
+          class: "flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition text-center" %>
+      <%= f.submit "登録する",
+          class: "flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition" %>
+    
+  <% end %>
+
+```
+
+<br>
+
+**フォーム設計のポイント**:
+- `form_with model: @habit`: RESTfulなフォーム生成
+- `value: f.object.weekly_target || 7`: デフォルト値7、エラー後も入力値を保持
+- `local: true`: Turboの非同期送信を無効化（通常のHTMLフォーム送信）
+- レスポンシブデザイン: `max-w-2xl`（672px）でフォームに適した幅
+
+<br>
+
+### バリデーションエラー表示
+
+<br>
+
+**エラーボックスの実装**:
+```erb
+<% if @habit.errors.any? %>
+  
+    
+      <%= @habit.errors.count %> 件のエラーがあります
+    
+    
+      <% @habit.errors.full_messages.each do |message| %>
+        <%= message %>
+      <% end %>
+    
+  
+<% end %>
+```
+
+<br>
+
+**エラー表示の特徴**:
+- `@habit.errors.any?`: バリデーションエラーの有無を判定
+- `@habit.errors.count`: エラー件数を表示
+- `@habit.errors.full_messages`: すべてのエラーメッセージを配列で取得
+- 赤色のエラーボックス（`bg-red-50`, `border-l-4`, `border-red-500`）
+- 日本語対応（`pluralize` は使用しない）
+
+<br>
+
+### レイアウト改善
+
+<br>
+
+**共通レイアウト（app/views/layouts/application.html.erb）**:
+```erb
+
+
+  
+    HabitFlow
+    
+    <%= csrf_meta_tags %>
+    <%= csp_meta_tag %>
+    <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
+    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%= javascript_importmap_tags %>
+  
+
+  
+    
+    <% flash.each do |message_type, message| %>
+      
+        
+          <%= message %>
+        
+      
+    <% end %>
+
+    
+    <%= render 'shared/header' %>
+
+    
+    
+      <%= yield %>
+    
+
+    
+    <%= render 'shared/footer' %>
+  
+
+```
+
+<br>
+
+**レイアウトの特徴**:
+- `min-h-screen flex flex-col`: フッターを最下部に固定
+- `flex-1`: メインコンテンツが残りスペースを全て使う
+- フラッシュメッセージの条件分岐表示（成功: 緑、エラー: 赤）
+
+<br>
+
+**共通ヘッダー（app/views/shared/_header.html.erb）**:
+```erb
+
+  
+    
+      
+      
+        <%= link_to "HabitFlow", root_path, class: "hover:text-blue-700 transition-colors" %>
+      
+
+      
+      
+        <% if logged_in? %>
+          
+          <%= link_to "習慣一覧", habits_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
+          
+            <%= current_user.name %> さん
+          
+          <%= button_to "ログアウト", logout_path,
+              method: :delete,
+              class: "px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors",
+              data: { turbo_confirm: "ログアウトしますか？" } %>
+        <% else %>
+          
+          <%= link_to "ログイン", login_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
+          <%= link_to "新規登録", new_user_path, class: "px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors" %>
+        <% end %>
+      
+    
+  
+
+```
+
+<br>
+
+**ヘッダーの特徴**:
+- ログイン状態に応じて自動的に表示を切り替え
+- ログイン済み: 習慣一覧リンク + ユーザー名 + ログアウトボタン
+- 未ログイン: ログイン + 新規登録リンク
+
+<br>
+
+### レスポンシブデザイン
+
+<br>
+
+**ページごとの最大幅設定**:
+- 習慣一覧ページ: `max-w-7xl`（1280px）- 広いコンテンツ
+- 習慣新規作成ページ: `max-w-2xl`（672px）- フォームに適した幅
+- ログイン・ユーザー登録ページ: `max-w-md`（448px）- 狭いフォーム
+
+<br>
+
+**左右パディング（レスポンシブ対応）**:
+```erb
+class="px-4 sm:px-6 lg:px-8"
+```
+- モバイル（デフォルト）: 16px（`px-4`）
+- タブレット（640px以上）: 24px（`sm:px-6`）
+- PC（1024px以上）: 32px（`lg:px-8`）
+
+<br>
+
+**間隔の統一**:
+- ヘッダーとカードの間隔: 24px（`mb-6`）
+- カード間の間隔: 24px（`gap-6`）
+- デザインのリズムを統一することで見やすさ向上
+
+<br>
+
+### セキュリティ対策
+
+<br>
+
+**Strong Parameters**:
+```ruby
+def habit_params
+  params.require(:habit).permit(:name, :weekly_target)
+end
+```
+- `:name`, `:weekly_target` のみ許可
+- `:user_id` は permit に含めない（自動設定）
+- 不正なパラメータを無視
+
+<br>
+
+**user_id の自動設定**:
+```ruby
+@habit = current_user.habits.build(habit_params)
+```
+- `current_user.habits.build` で user_id を自動設定
+- ユーザーが他人の習慣を作成できないようにする
+
+<br>
+
+**セキュリティテスト**:
+```ruby
+test "他ユーザーのuser_idを指定しても無視されること（セキュリティテスト）" do
+  post habits_path, params: {
+    habit: {
+      name: "ハッキング試み",
+      weekly_target: 7,
+      user_id: @other_user.id  # 不正なuser_id
+    }
+  }
+  
+  assert_equal @user.id, Habit.last.user_id  # 現在のユーザーIDで作成される
+  assert_not_equal @other_user.id, Habit.last.user_id  # 他ユーザーIDは無視される
+end
+```
+
+<br>
+
+### 統合テスト
+
+<br>
+
+**テストファイル（test/integration/habit_creation_test.rb）**:
+```ruby
+require "test_helper"
+
+class HabitCreationTest < ActionDispatch::IntegrationTest
+  setup do
+    @user = users(:one)
+    @other_user = users(:two)
+  end
+
+  test "ログイン後に習慣を作成できること" do
+    # ログイン
+    post login_path, params: {
+      session: {
+        email: @user.email,
+        password: "password"
+      }
+    }
+    
+    # 新規作成フォームにアクセス
+    get new_habit_path
+    assert_response :success
+    
+    # 習慣を作成
+    assert_difference("Habit.count", 1) do
+      post habits_path, params: {
+        habit: {
+          name: "朝のランニング",
+          weekly_target: 7
+        }
+      }
+    end
+    
+    # 一覧ページにリダイレクト
+    assert_redirected_to habits_path
+    follow_redirect!
+    
+    # フラッシュメッセージ確認
+    assert_select "div", text: /習慣を登録しました/
+    
+    # user_id が正しく設定されているか確認
+    assert_equal @user.id, Habit.last.user_id
+  end
+
+  test "習慣名が空欄の場合はエラーメッセージが表示されること" do
+    post login_path, params: { session: { email: @user.email, password: "password" } }
+    
+    # 習慣作成（習慣名が空欄）
+    assert_no_difference("Habit.count") do
+      post habits_path, params: {
+        habit: {
+          name: "",
+          weekly_target: 7
+        }
+      }
+    end
+    
+    # 422エラー
+    assert_response :unprocessable_entity
+    
+    # エラーメッセージ表示
+    assert_select "div.bg-red-50"
+    assert_select "li", text: /Name can't be blank/
+  end
+
+  test "他ユーザーのuser_idを指定しても無視されること（セキュリティテスト）" do
+    post login_path, params: { session: { email: @user.email, password: "password" } }
+    
+    post habits_path, params: {
+      habit: {
+        name: "ハッキング試み",
+        weekly_target: 7,
+        user_id: @other_user.id  # 不正なuser_id
+      }
+    }
+    
+    # 現在のユーザーIDで作成される
+    assert_equal @user.id, Habit.last.user_id
+    # 他ユーザーIDは無視される
+    assert_not_equal @other_user.id, Habit.last.user_id
+  end
+end
+```
+
+<br>
+
+**テストカバレッジ**:
+- 正常系テスト: 習慣作成成功、一覧ページへリダイレクト
+- 異常系テスト: 習慣名空欄、週次目標値0、週次目標値8
+- セキュリティテスト: 不正なuser_id送信を無視
+- 未ログインテスト: フォームアクセス拒否、習慣作成拒否
+
+<br>
+
+**テスト結果**:
+```
+49 runs, 140 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+### fixtures 修正
+
+<br>
+
+**ユーザーfixtures（test/fixtures/users.yml）**:
+```yaml
+one:
+  name: Test User
+  email: fixture_one@example.com
+  password_digest: <%= BCrypt::Password.create("password") %>
+
+two:
+  name: Other User
+  email: fixture_two@example.com
+  password_digest: <%= BCrypt::Password.create("password") %>
+```
+
+<br>
+
+**習慣fixtures（test/fixtures/habits.yml）**:
+```yaml
+one:
+  user: one
+  name: 読書
+  weekly_target: 7
+  deleted_at: null
+
+two:
+  user: two
+  name: 筋トレ
+  weekly_target: 5
+  deleted_at: null
+
+deleted_one:
+  user: one
+  name: 削除済み習慣
+  weekly_target: 3
+  deleted_at: <%= 1.day.ago %>
+```
+
+<br>
+
+**fixtures 修正の理由**:
+- メールアドレスの衝突回避
+  - fixtures: `fixture_one@example.com`, `fixture_two@example.com`
+  - テストコード: `user_#{SecureRandom.hex(4)}@example.com`
+- 習慣件数の制限
+  - `users(:one)` に紐づく習慣を制限（削除テストの正確性向上）
+
+<br>
+
+### モデル修正
+
+<br>
+
+**User モデル（app/models/user.rb）**:
+```ruby
+class User < ApplicationRecord
+  has_many :habits, dependent: :destroy
+  
+  before_save { self.email = email.downcase }
+  
+  validates :name, presence: true, length: { maximum: 50 }
+  validates :email,
+            presence: true,
+            uniqueness: { case_sensitive: false },
+            format: { with: /\A[\w+\-.]+@[a-z\d\-.]+\.[a-z]+\z/i }
+  
+  has_secure_password
+  
+  # 🔴 追加: password の最低文字数バリデーション
+  # has_secure_password だけでは最低文字数をチェックしないため
+  validates :password, length: { minimum: 8 }, allow_nil: true
+end
+```
+
+<br>
+
+**モデル修正の理由**:
+- `has_secure_password` は最低文字数をチェックしない
+- 明示的に `validates :password, length: { minimum: 8 }` を追加
+
+<br>
+
+### ルーティング
+
+<br>
+
+**config/routes.rb**:
+```ruby
+Rails.application.routes.draw do
+  root "pages#index"
+  
+  resources :users, only: [:new, :create]
+  
+  get "login", to: "sessions#new", as: :login
+  post "login", to: "sessions#create"
+  delete "logout", to: "sessions#destroy", as: :logout
+  
+  # 習慣管理（index, new, create）
+  resources :habits, only: [:index, :new, :create]
+end
+```
+
+<br>
+
+**ルーティング一覧**:
+```
+      Prefix Verb   URI Pattern              Controller#Action
+        root GET    /                        pages#index
+       users POST   /users(.:format)         users#create
+    new_user GET    /users/new(.:format)     users#new
+       login GET    /login(.:format)         sessions#new
+             POST   /login(.:format)         sessions#create
+      logout DELETE /logout(.:format)        sessions#destroy
+      habits GET    /habits(.:format)        habits#index
+             POST   /habits(.:format)        habits#create
+   new_habit GET    /habits/new(.:format)    habits#new
+```
+
+<br>
+
+### 技術的な学び
+
+<br>
+
+**1. fixtures と create! は併用しない**:
+- fixtures 使用時: `users(:one)` を使う
+- create! 使用時: `SecureRandom.hex` でユニーク化
+
+<br>
+
+**2. IntegrationTest では session に直接アクセス不可**:
+- `logged_in?` メソッドは使えない
+- 挙動ベースでテスト（`get new_habit_path` → `assert_redirected_to login_path`）
+
+<br>
+
+**3. エラーメッセージはバリデーションルールと一致させる**:
+- `greater_than_or_equal_to: 1` → `"must be greater than or equal to 1"`
+
+<br>
+
+**4. すべてのテストに assert を書く**:
+- `missing assertions` 警告を防ぐ
+
+<br>
+
+**5. テストが正しい前提で考えない**:
+- テスト自体が間違っていることもある
 
 <br>
 ```

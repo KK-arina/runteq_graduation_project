@@ -1,13 +1,32 @@
-# テスト用習慣データ（必要に応じて追加）
+# test/fixtures/habits.yml
+# テスト用の習慣データを定義
 
+# 🔴 重要: users(:one) に紐づく習慣は1件のみにする
+# 複数定義すると、ユーザー削除時に複数削除されてテストが失敗する
+
+# ユーザー1の習慣（1件のみ）
 one:
   user: one
-  name: "朝のランニング"
+  name: 読書
   weekly_target: 7
   deleted_at: null
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
 
+# ユーザー2の習慣（1件のみ）
 two:
-  user: one
-  name: "読書（30分）"
+  user: two
+  name: 筋トレ
   weekly_target: 5
   deleted_at: null
+  created_at: <%= Time.current %>
+  updated_at: <%= Time.current %>
+
+# 削除済み習慣のテスト用（ユーザー1に紐づく）
+deleted_one:
+  user: one
+  name: 削除済み習慣
+  weekly_target: 3
+  deleted_at: <%= 1.day.ago %>
+  created_at: <%= 2.days.ago %>
+  updated_at: <%= 1.day.ago %>

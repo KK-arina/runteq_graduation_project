@@ -1,12 +1,21 @@
-# テスト用ユーザーデータ
-# fixtureはテスト実行時に自動的にDBに投入される
+# test/fixtures/users.yml
+# テスト用のユーザーデータを定義
 
+# ユーザー1（メインテスト用）
 one:
-  name: "山田太郎"
-  email: "yamada@example.com"
-  password_digest: <%= BCrypt::Password.create('password123', cost: 4) %>
+  name: Test User
+  # 🔴 重要: メールアドレスを他のテストと衝突しないものにする
+  # 修正前: email: test@example.com
+  # 修正後: fixtures専用のドメインを使う
+  email: fixture_one@example.com
+  # password_digest: bcrypt でハッシュ化されたパスワード
+  # 元のパスワード: "password"
+  # 以下のコマンドで生成: BCrypt::Password.create("password")
+  password_digest: <%= BCrypt::Password.create("password") %>
 
+# ユーザー2（セキュリティテスト用）
 two:
-  name: "佐藤花子"
-  email: "sato@example.com"
-  password_digest: <%= BCrypt::Password.create('password123', cost: 4) %>
+  name: Other User
+  # 🔴 重要: こちらも衝突しないメールアドレス
+  email: fixture_two@example.com
+  password_digest: <%= BCrypt::Password.create("password") %>
