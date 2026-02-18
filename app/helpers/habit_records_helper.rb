@@ -1,0 +1,2 @@
+module HabitRecordsHelper
+end

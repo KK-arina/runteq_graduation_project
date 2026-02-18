@@ -69,13 +69,32 @@ class HabitRecordTest < ActiveSupport::TestCase
   # 1-3. 異常系: completed が nil の場合は無効
   # ----------------------------------------------------------------------------
   test "completed が nil の場合は無効" do
-    @habit_record.completed = nil
-    
-    # バリデーションが通らないことを確認
-    assert_not @habit_record.valid?, "completed が nil でもバリデーションが通ってしまいました"
-    
-    # エラーメッセージに "Completed" が含まれることを確認
-    assert_includes @habit_record.errors[:completed], "is not included in the list"
+    # completed に nil を明示的に設定
+    habit_record = HabitRecord.new(
+      user: @user,
+      habit: @habit,
+      record_date: Date.current,
+      completed: nil
+    )
+
+    # バリデーションが失敗すること（valid? が false を返すこと）
+    assert_not habit_record.valid?, "completed が nil でもバリデーションが通ってしまいました"
+
+    # 🔧 修正: エラーメッセージの期待値を統一されたメッセージに合わせる
+    #
+    # inclusion バリデーションが1つだけ動作する:
+    #   nil は [true, false] に含まれないためエラーになる
+    #   エラーメッセージ: "は true か false である必要があります"
+    #
+    # ※ カスタムバリデーション（completed_not_nil）は削除済みのため
+    #   エラーメッセージは1つのみ
+    assert_includes habit_record.errors[:completed],
+                    "is not included in the list",
+                    "nil の場合は inclusion バリデーションのエラーメッセージが出ること"
+
+    # エラーが1つだけであることも確認（冗長なエラーがないこと）
+    assert_equal 1, habit_record.errors[:completed].count,
+                "completed のエラーメッセージは1つだけであること"
   end
 
   # ============================================================================

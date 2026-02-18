@@ -29,7 +29,7 @@
 - ✅ 習慣新規作成機能実装完了
 - ✅ 習慣削除機能実装完了（論理削除対応）
 - ✅ HabitRecordモデル作成完了（AM4:00基準、UNIQUE制約、CASCADE）
-- 🚧 習慣の日次記録機能（開発予定）
+- ✅ 習慣の日次記録機能実装完了（Turbo Streams即時保存、楽観的UI）
 
 <br>
 
@@ -515,13 +515,13 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #12 | 習慣新規作成機能 | ✅ 完了 | 2/15 | 3 |
 | #13 | 習慣削除機能 | ✅ 完了 | 2/15 | 2 |
 | #14 | HabitRecordモデルの作成 | ✅ 完了 | 2/16 | 2 |
-| #15 | 習慣の日次記録機能（即時保存） | 🔜 予定 | - | 5 |
+| #15 | 習慣の日次記録機能（即時保存） | ✅ 完了 | 2/19 | 5 |
 | #16 | 進捗率の自動計算ロジック | 🔜 予定 | - | 2 |
 | #17 | 習慣管理機能のテスト | 🔜 予定 | - | 2 |
 
 <br>
 
-**Week 2 進捗**: 11SP / 20SP（55%）
+**Week 2 進捗**: 16SP / 20SP（80%）
 
 <br>
 
@@ -593,8 +593,30 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
+#### ✅ Issue #15: 習慣の日次記録機能（即時保存）
+- HabitRecordsController 作成（create / update アクション、ネストされたルーティング）
+- Stimulus コントローラー実装（`app/javascript/controllers/habit_record_controller.js`）
+  - チェックボックス変更を検知して即時 HTTP リクエスト
+  - 保存中のローディングアイコン表示（楽観的UI）
+  - タイムアウト処理（10秒）
+  - エラー時の自動ロールバック
+- Turbo Streams でページリロードなしに即時反映
+  - `turbo_stream.replace("habit_record_#{@habit.id}", ...)` で該当カードのみ差し替え
+- モデルメソッドに責務を集約（疎結合設計）
+  - `HabitRecord.find_or_create_for(user, habit)`: 今日のレコードを取得または作成
+  - `HabitRecord#update_completed!(value)`: 完了状態の更新ロジックをモデルに隠蔽
+- セキュリティ対策
+  - `current_user.habits.active.find` で他ユーザーの習慣へのアクセスを遮断
+  - `current_user.habit_records.find` で他ユーザーのレコード操作を遮断
+- N+1問題の解消（`today_records_hash` で今日分を一括取得）
+- テスト追加（計 88 runs, 262 assertions, 0 failures, 0 errors）
+  - 同日に2回 POST しても HabitRecord が1件だけ作成されること
+  - 他ユーザーのレコード操作が不可であること
+  - AM 4:00 境界値（3:59 / 4:00 / 4:01）の動作確認（`travel_to` 使用）
+
+<br>
+
 **今後の実装予定**:
-- Issue #15: 習慣の日次記録機能（即時保存、Hotwire使用）
 - Issue #16: 進捗率の動的計算（現在は50%固定）
 - Issue #17: 習慣管理機能の統合テスト
 
@@ -976,6 +998,7 @@ habitflow/
 ├── app/
 │   ├── controllers/
 │   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
+│   │   ├── habit_records_controller.rb  # 習慣記録（create, update）ネストされたルーティング
 │   │   ├── habits_controller.rb         # 習慣管理（index, new, create, destroy）
 │   │   ├── pages_controller.rb          # ランディングページ
 │   │   ├── sessions_controller.rb       # ログイン・ログアウト（new, create, destroy）
@@ -984,7 +1007,13 @@ habitflow/
 │   │   ├── user.rb                       # Userモデル（認証機能、has_many :habits, :habit_records）
 │   │   ├── habit.rb                      # Habitモデル（習慣管理、論理削除機能、has_many :habit_records）
 │   │   └── habit_record.rb               # HabitRecordモデル（日次記録、AM4:00基準、UNIQUE制約）
+│   ├── javascript/
+│   │   └── controllers/
+│   │       └── habit_record_controller.js  # Stimulusコントローラー（即時保存・楽観的UI）
 │   └── views/
+│       ├── habit_records/
+│       │   ├── _habit_record.html.erb        # チェックボックス付き習慣記録カード（Turbo Streamターゲット）
+│       │   └── _habit_record_error.html.erb  # エラー時の差し替えパーシャル
 │       ├── layouts/
 │       │   └── application.html.erb      # 全ページ共通レイアウト（ヘッダー・フッター・フラッシュ）
 │       ├── shared/
@@ -1018,9 +1047,11 @@ habitflow/
 │   │   ├── user_registration_test.rb     # ユーザー登録統合テスト（2テストケース）
 │   │   ├── user_login_test.rb            # ログイン・ログアウト統合テスト（4テストケース）
 │   │   ├── habit_creation_test.rb        # 習慣新規作成統合テスト（7テストケース）
-│   │   └── habit_deletion_test.rb        # 習慣削除統合テスト（4テストケース）
+│   │   ├── habit_deletion_test.rb        # 習慣削除統合テスト（4テストケース）
+│   │   └── habit_record_instant_save_test.rb  # 習慣記録即時保存統合テスト（5テストケース）
 │   ├── controllers/
-│   │   └── habits_controller_test.rb     # HabitsControllerテスト（2テストケース）
+│   │   ├── habits_controller_test.rb     # HabitsControllerテスト（2テストケース）
+│   │   └── habit_records_controller_test.rb  # HabitRecordsControllerテスト（AM4:00境界値・セキュリティ）
 │   └── fixtures/
 │       ├── users.yml                     # テスト用ユーザーデータ
 │       ├── habits.yml                    # テスト用習慣データ
@@ -3698,6 +3729,236 @@ user.destroy
 - 数値型習慣への対応（value カラム追加）
 - completed を「value が目標値を超えたかどうか」のキャッシュとして機能させる
 - または completed を廃止して value.present? で判定する形に変更
+
+<br>
+
+#### 習慣の日次記録機能（Issue #15）
+
+<br>
+
+**実装日**: 2026年2月19日
+
+<br>
+
+**実装機能**:
+
+<br>
+
+**ルーティング（ネスト構造）**:
+```ruby
+# config/routes.rb
+resources :habits, only: [:index, :new, :create, :destroy] do
+  resources :habit_records, only: [:create, :update]
+end
+```
+
+<br>
+
+**生成されるルーティング**:
+```
+habit_habit_records POST  /habits/:habit_id/habit_records(.:format)      habit_records#create
+ habit_habit_record PATCH /habits/:habit_id/habit_records/:id(.:format)  habit_records#update
+```
+
+<br>
+
+**HabitRecordsController**:
+```ruby
+# app/controllers/habit_records_controller.rb
+
+class HabitRecordsController < ApplicationController
+  before_action :require_login
+  before_action :set_habit
+
+  # POST /habits/:habit_id/habit_records
+  def create
+    @habit_record = HabitRecord.find_or_create_for(current_user, @habit)
+    @habit_record.update_completed!(params[:completed] == "1")
+
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: turbo_stream.replace(
+          "habit_record_#{@habit.id}",
+          partial: "habit_records/habit_record",
+          locals:  { habit: @habit, habit_record: @habit_record }
+        )
+      end
+      format.html { redirect_to habits_path, notice: "記録を保存しました" }
+    end
+  end
+
+  # PATCH /habits/:habit_id/habit_records/:id
+  def update
+    @habit_record = current_user.habit_records.find(params[:id])
+    @habit_record.update_completed!(params[:completed] == "1")
+
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: turbo_stream.replace(
+          "habit_record_#{@habit.id}",
+          partial: "habit_records/habit_record",
+          locals:  { habit: @habit, habit_record: @habit_record }
+        )
+      end
+      format.html { redirect_to habits_path, notice: "記録を更新しました" }
+    end
+  end
+
+  private
+
+  def set_habit
+    @habit = current_user.habits.active.find(params[:habit_id])
+  rescue ActiveRecord::RecordNotFound
+    head :not_found and return
+  end
+end
+```
+
+<br>
+
+**実装の特徴**:
+- `HabitRecord.find_or_create_for`: 今日のレコードを取得または新規作成（モデルに責務を集約）
+- `@habit_record.update_completed!`: 完了状態の更新ロジックをモデルに隠蔽（疎結合設計）
+- `current_user.habit_records.find`: セキュリティ対策（他ユーザーのレコード操作を遮断）
+- `set_habit` で `head :not_found and return`: 外部パーシャルに依存しないシンプルな404応答
+
+<br>
+
+**HabitRecordモデルへの追加メソッド**:
+```ruby
+# app/models/habit_record.rb
+
+# 完了状態を更新するメソッド
+# Controller が completed カラムを直接知らなくて済む設計（疎結合）
+def update_completed!(value)
+  update!(completed: value)
+end
+
+# 今日のレコードを取得または作成するクラスメソッド
+# Controller が record_date や user_id の設定方法を知らなくて済む設計
+def self.find_or_create_for(user, habit, date = today_for_record)
+  find_or_create_by!(user: user, habit: habit, record_date: date)
+end
+```
+
+<br>
+
+**Stimulus コントローラー（habit_record_controller.js）**:
+```javascript
+// app/javascript/controllers/habit_record_controller.js
+
+import { Controller } from "@hotwired/stimulus"
+
+export default class extends Controller {
+  static targets = ["checkbox", "loading"]
+  static values  = { createUrl: String, updateUrl: String, recordId: Number }
+
+  async toggle() {
+    const checkbox  = this.checkboxTarget
+    const completed = checkbox.checked
+
+    this._setLoadingState(true)
+
+    try {
+      const url    = this.recordIdValue === 0 ? this.createUrlValue : this.updateUrlValue
+      const method = this.recordIdValue === 0 ? "POST" : "PATCH"
+
+      const response = await Promise.race([
+        fetch(url, {
+          method,
+          headers: {
+            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').content,
+            "Accept":       "text/vnd.turbo-stream.html",
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: `completed=${completed ? "1" : "0"}`
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 10000)
+        )
+      ])
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      const responseText = await response.text()
+      window.Turbo.renderStreamMessage(responseText)
+    } catch (error) {
+      // エラー時はチェックボックスを元の状態に戻す（楽観的UIのロールバック）
+      checkbox.checked = !completed
+      console.error("保存エラー:", error)
+    } finally {
+      this._setLoadingState(false)
+    }
+  }
+
+  _setLoadingState(isLoading) {
+    this.checkboxTarget.disabled = isLoading
+    if (isLoading) {
+      this.loadingTarget.removeAttribute("hidden")
+    } else {
+      this.loadingTarget.setAttribute("hidden", "")
+    }
+  }
+}
+```
+
+<br>
+
+**パーシャル（_habit_record.html.erb）**:
+```erb
+<%# app/views/habit_records/_habit_record.html.erb %>
+<%# Turbo Stream の置換ターゲット: id="habit_record_" %>
+
+<%
+  record     = habit_record || HabitRecord.new(completed: false)
+  create_url = habit_habit_records_path(habit)
+  update_url = record.persisted? ? habit_habit_record_path(habit, record) : ""
+  record_id  = record.persisted? ? record.id : 0
+%>
+
+
+  <%# チェックボックス + ローディングアイコン + 習慣名 + 完了バッジ %>
+
+```
+
+<br>
+
+**N+1問題の解消（習慣一覧ページ）**:
+```ruby
+# app/controllers/habits_controller.rb（indexアクション）
+
+def index
+  @habits = current_user.habits.active.order(created_at: :desc)
+
+  # today_records_hash: 今日分の HabitRecord を1回のクエリで一括取得
+  # { habit_id => habit_record } のハッシュ形式で返す
+  today = HabitRecord.today_for_record
+  @today_records_hash = HabitRecord
+    .where(user: current_user, habit: @habits, record_date: today)
+    .index_by(&:habit_id)
+end
+```
+```erb
+<%# app/views/habits/index.html.erb %>
+<%# N+1を防ぐために @today_records_hash からO(1)で取得 %>
+<%= render "habit_records/habit_record",
+    habit:        habit,
+    habit_record: @today_records_hash[habit.id] %>
+```
+
+<br>
+
+**セキュリティ設計**:
+- `set_habit`: `current_user.habits.active.find` で他ユーザーの習慣へのアクセスを遮断
+- `update` アクション: `current_user.habit_records.find` で他ユーザーのレコード操作を遮断
+- いずれも `RecordNotFound` で 404 を返し、存在の有無を漏洩しない
+
+<br>
+
+**テスト**:
+- HabitRecordsControllerTest（AM 4:00 境界値テスト・セキュリティテスト含む）
+- HabitRecordInstantSaveTest（Turbo Stream レスポンス・他ユーザー遮断テスト）
+- 全テスト結果: 88 runs, 262 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 ```
