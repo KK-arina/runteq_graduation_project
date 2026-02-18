@@ -1,0 +1,32 @@
+<%#
+  チェックボックス部分テンプレート
+  Turbo Frame内で使用される
+%>
+<div id="<%= dom_id(habit_record, :checkbox) %>"
+     class="flex items-center gap-3"
+     data-controller="habit-checkbox">
+
+  <%= form_with model: habit_record,
+                url: toggle_completed_habit_record_path(habit_record),
+                method: :patch,
+                data: {
+                  habit_checkbox_target: "form"
+                } do |f| %>
+
+    <%= f.check_box :completed,
+                    {
+                      checked: habit_record.completed,
+                      data: { action: "change->habit-checkbox#submit" },
+                      class: "w-5 h-5 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+                    } %>
+
+    <span class="text-sm font-medium text-gray-700">
+      <%= habit_record.habit.name %>
+    </span>
+
+    <span data-habit-checkbox-target="loading"
+          class="text-xs text-gray-500 hidden">
+      保存中...
+    </span>
+  <% end %>
+</div>

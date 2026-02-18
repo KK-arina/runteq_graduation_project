@@ -1,0 +1,14 @@
+<%#
+  Turbo Frame対応のレスポンス
+  
+  Turbo Frameは:
+  1. フォーム送信後のレスポンスHTMLから
+  2. 送信元と同じIDのturbo_frame_tagを探して
+  3. その部分だけを抽出して置き換える
+  
+  そのため、レスポンスにturbo_frame_tagを含める必要がある
+%>
+<%= turbo_frame_tag dom_id(@habit_record, :frame) do %>
+  <%= render partial: "habit_records/checkbox",
+             locals: { habit_record: @habit_record } %>
+<% end %>

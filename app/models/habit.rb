@@ -1,77 +1,88 @@
-# 習慣を管理するモデル
-# ユーザーの習慣（チェック型のみ、MVP範囲）を表現する
+# ==============================================================================
+# app/models/habit.rb（追記分）
+# ==============================================================================
+# 【追加内容】
+#   weekly_achievement_rate: 今週の達成率（0〜100 の整数）を返すメソッド。
+#   ビューから呼び出して、プログレスバーに使用する。
+# ==============================================================================
 class Habit < ApplicationRecord
-  # ===== アソシエーション =====
-  # belongs_to: この習慣は1人のユーザーに所属する（N:1の関係）
-  # user: User モデルとの関連付け
-  # 必須の関連付けなので、user_id が nil の場合は保存できない
   belongs_to :user
-
-  # ============================================================================
-  # 【追加】1対多: 1つの習慣は複数の記録を持つ
-  # ============================================================================
-  # - dependent: :destroy → 習慣が削除されたら、その習慣の記録も全て削除
-  # - HabitRecord モデルとの関連付け
-  # ============================================================================
   has_many :habit_records, dependent: :destroy
 
-  # ===== バリデーション =====
-  # name: 習慣名のバリデーション
-  # presence: true => 必須項目（空欄不可）
-  # length: { maximum: 50 } => 最大50文字まで
-  # エラーメッセージ例: "Name can't be blank", "Name is too long (maximum is 50 characters)"
-  validates :name, presence: true, length: { maximum: 50 }
-
-  # weekly_target: 週次目標値のバリデーション
-  # presence: true => 必須項目（空欄不可）
-  # numericality: 数値のバリデーション
-  #   only_integer: true => 整数のみ許可（小数点不可）
-  #   greater_than_or_equal_to: 1 => 1以上
-  #   less_than_or_equal_to: 7 => 7以下（週7日なので上限7）
-  # エラーメッセージ例: "Weekly target must be greater than or equal to 1"
+  # ---------------------------------------------------------------------------
+  # バリデーション（既存）
+  # ---------------------------------------------------------------------------
+  validates :name,          presence: true, length: { maximum: 50 }
   validates :weekly_target, presence: true,
                             numericality: {
-                              only_integer: true,
+                              only_integer:             true,
                               greater_than_or_equal_to: 1,
-                              less_than_or_equal_to: 7
+                              less_than_or_equal_to:    7
                             }
 
-  # ===== スコープ =====
-  # scope: よく使う検索条件を名前付きで定義する機能
-  # active: 有効な習慣のみを取得するスコープ
-  # deleted_at が NULL のレコードのみを返す（論理削除されていない習慣）
-  # 使用例: Habit.active => 有効な習慣のみ取得
-  scope :active, -> { where(deleted_at: nil) }
-
-  # deleted: 削除済みの習慣のみを取得するスコープ
-  # deleted_at が NOT NULL のレコードのみを返す（論理削除された習慣）
-  # 使用例: Habit.deleted => 削除済み習慣のみ取得
+  # ---------------------------------------------------------------------------
+  # スコープ（既存）
+  # ---------------------------------------------------------------------------
+  scope :active,  -> { where(deleted_at: nil) }
   scope :deleted, -> { where.not(deleted_at: nil) }
 
-  # ===== インスタンスメソッド =====
-  # 論理削除を実行するメソッド
-  # deleted_at カラムに現在時刻を設定することで「削除済み」とマークする
-  # 物理削除（destroy）ではなく論理削除を使う理由:
-  #   - 過去の振り返りデータとの整合性を保つため
-  #   - weekly_reflection_habit_summaries でスナップショットとして参照されるため
+  # ---------------------------------------------------------------------------
+  # インスタンスメソッド（既存）
+  # ---------------------------------------------------------------------------
   def soft_delete
-    # touch: 指定したカラムに現在時刻を設定するメソッド
-    # touch(:deleted_at) => deleted_at = Time.current
-    # updated_at も自動的に更新される
     touch(:deleted_at)
   end
 
-  # 有効な習慣かどうかを判定するメソッド
-  # 戻り値: deleted_at が nil なら true、それ以外は false
-  # 使用例: habit.active? => true（有効） / false（削除済み）
   def active?
     deleted_at.nil?
   end
 
-  # 削除済みかどうかを判定するメソッド
-  # 戻り値: active? の逆（削除済みなら true、有効なら false）
-  # 使用例: habit.deleted? => true（削除済み） / false（有効）
   def deleted?
     !active?
+  end
+
+  # ===========================================================================
+  # weekly_achievement_rate（新規追加）
+  # ===========================================================================
+  # 【役割】
+  #   今週（月曜日〜今日）の達成率を整数（0〜100）で返す。
+  #
+  # 【週の計算について】
+  #   Rails の beginning_of_week はデフォルトで月曜日を週の始まりとする。
+  #   config/application.rb で config.beginning_of_week = :monday を設定済みの想定。
+  #   設定されていない場合は :monday を明示的に指定する。
+  #
+  # 【AM 4:00 基準の today について】
+  #   HabitRecord.today_for_record で AM 4:00 基準の「今日」を取得する。
+  #   これにより深夜の活動も正しく集計される。
+  #
+  # 【戻り値】
+  #   Integer (0〜100)
+  #   例: 今週3日実施、目標7日 → (3 / 7.0 * 100).round = 43
+  # ===========================================================================
+  def weekly_achievement_rate
+    # AM 4:00 基準の今日
+    today = HabitRecord.today_for_record
+
+    # 今週の開始日（月曜日）
+    # beginning_of_week(:monday) で月曜日の 00:00:00 を返す
+    week_start = today.beginning_of_week(:monday)
+
+    # 今週の完了日数を数える
+    # .count は SQL の COUNT を使うので、Ruby の配列に展開しない（効率的）
+    completed_count = habit_records
+                        .where(record_date: week_start..today)
+                        .where(completed: true)
+                        .count
+
+    # 達成率を計算する
+    # weekly_target が 0 だと ZeroDivisionError になるため guard を入れる
+    return 0 if weekly_target.zero?
+
+    # (completed_count / weekly_target.to_f * 100).round で整数%を返す
+    # to_f で Float に変換しないと整数除算になる（例: 3/7 → 0）
+    # [rate, 100].min で 100% を超えないようにキャップする
+    rate = (completed_count.to_f / weekly_target * 100).round
+    [rate, 100].min
   end
 end

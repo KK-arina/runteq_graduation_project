@@ -1,58 +1,82 @@
+# ==============================================================================
+# HabitsController（更新版）
+# ==============================================================================
+# 【変更点】
+#   index アクションで今日の HabitRecord をまとめて取得するロジックを追加。
+#   N+1 問題を防ぐため、SQL を 1 回だけ発行してハッシュに変換する。
+# ==============================================================================
 class HabitsController < ApplicationController
-  # ログインしていないユーザーはアクセスできないようにする
+  # ログイン必須
   before_action :require_login
-  
-  # destroy アクション実行前に @habit を取得
-  # set_habit メソッドで current_user の習慣のみを取得するため、
-  # 他のユーザーの習慣を削除しようとしても NotFound エラーになる
+
+  # destroy アクション実行前に @habit をセットする
   before_action :set_habit, only: [:destroy]
-  
+
+  # ===========================================================================
   # GET /habits
+  # index アクション
+  # ===========================================================================
+  # 【N+1 問題の解消】
+  #   NG パターン:
+  #     @habits.each { |h| h.habit_records.for_date(today) }
+  #     → 習慣の数だけ SQL が発行される（習慣 100 件 → 101 クエリ）
+  #
+  #   OK パターン（今回の実装）:
+  #     1. 今日の全レコードを 1 クエリで取得
+  #     2. habit_id をキーにしたハッシュに変換（O(1) アクセス）
+  #     3. ビューではハッシュから取得（SQL 発行なし）
+  #     → SQL は 2 クエリで完結（習慣一覧 + 今日の記録一覧）
+  # ===========================================================================
   def index
-    # 現在ログインしているユーザーの習慣を取得
-    # activeスコープで論理削除されていない習慣のみを取得
-    # created_at: :descで新しい順に並び替え
+    # 有効な習慣を作成日時の降順で取得
     @habits = current_user.habits.active.order(created_at: :desc)
+
+    # AM 4:00 基準の今日の日付を取得
+    today = HabitRecord.today_for_record
+
+    # 今日の記録を全習慣分まとめて取得し、habit_id → record のハッシュに変換する。
+    # index_by(key) は配列をハッシュに変換する Active Support メソッド。
+    # 例: [#<HabitRecord habit_id: 1, ...>, #<HabitRecord habit_id: 2, ...>]
+    #   → { 1 => #<HabitRecord ...>, 2 => #<HabitRecord ...> }
+    #
+    # where(habit_id: @habits.ids) で「今表示する習慣の記録のみ」に絞る（最適化）
+    @today_records_hash = current_user.habit_records
+                                      .for_date(today)
+                                      .where(habit_id: @habits.ids)
+                                      .index_by(&:habit_id)
   end
 
+  # ===========================================================================
   # GET /habits/new
+  # ===========================================================================
   def new
-    # 新規習慣オブジェクトを作成（フォーム表示用）
     @habit = current_user.habits.build
   end
 
+  # ===========================================================================
   # POST /habits
+  # ===========================================================================
   def create
-    # current_user.habits.build で user_id を自動設定
-    # Strong Parameters で :name, :weekly_target のみ許可
     @habit = current_user.habits.build(habit_params)
-    
+
     if @habit.save
-      # 保存成功時: フラッシュメッセージを設定して一覧ページへリダイレクト
       flash[:notice] = "習慣を登録しました"
       redirect_to habits_path
     else
-      # 保存失敗時: エラーメッセージを設定してフォームを再表示
-      # status: :unprocessable_entity は Rails 7 / Turbo 対応
-      # 422エラーを返すことで、Turboが適切にエラーを処理できる
       flash.now[:alert] = "習慣の登録に失敗しました"
       render :new, status: :unprocessable_entity
     end
   end
-  
+
+  # ===========================================================================
   # DELETE /habits/:id
+  # ===========================================================================
   def destroy
-    # @habit は before_action :set_habit で取得済み
-    
-    # 論理削除を実行（deleted_at に現在時刻を設定）
-    # soft_delete メソッドは Habit モデルで定義済み
+    # @habit は before_action :set_habit でセット済み
     if @habit.soft_delete
-      # 削除成功時: 成功メッセージを表定して一覧ページへリダイレクト
       flash[:notice] = "習慣を削除しました"
       redirect_to habits_path, status: :see_other
     else
-      # 削除失敗時: エラーメッセージを設定して一覧ページへリダイレクト
-      # 通常、soft_delete は失敗しないが、万が一のためのエラーハンドリング
       flash[:alert] = "習慣の削除に失敗しました"
       redirect_to habits_path, status: :see_other
     end
@@ -60,21 +84,23 @@ class HabitsController < ApplicationController
 
   private
 
-  # Strong Parameters
-  # params から :habit キーを必須とし、:name, :weekly_target のみ許可
-  # これにより、不正なパラメータ（例: user_id の上書き）を防ぐ
+  # ---------------------------------------------------------------------------
+  # habit_params
+  # ---------------------------------------------------------------------------
+  # Strong Parameters: name と weekly_target のみ受け付ける。
+  # user_id を params に含めていても無視される（セキュリティ）。
   def habit_params
     params.require(:habit).permit(:name, :weekly_target)
   end
-  
-  # @habit を取得するメソッド
-  # current_user.habits.active で現在のユーザーの有効な習慣のみを検索
-  # find(params[:id]) で指定された id の習慣を取得
-  # 他のユーザーの習慣や論理削除済みの習慣は取得できない
+
+  # ---------------------------------------------------------------------------
+  # set_habit
+  # ---------------------------------------------------------------------------
+  # current_user.habits.active で「ログインユーザーの有効な習慣」のみ検索。
+  # 他ユーザーの habit_id を URL に入れても RecordNotFound になる（セキュリティ）。
   def set_habit
     @habit = current_user.habits.active.find(params[:id])
   rescue ActiveRecord::RecordNotFound
-    # 習慣が見つからない場合（他のユーザーの習慣 or 削除済み）
     flash[:alert] = "習慣が見つかりませんでした"
     redirect_to habits_path
   end

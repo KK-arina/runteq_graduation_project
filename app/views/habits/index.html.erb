@@ -1,165 +1,163 @@
-<!-- app/views/habits/index.html.erb -->
+<%#
+  ==============================================================================
+  app/views/habits/index.html.erb
+  ==============================================================================
+  【役割】
+    習慣一覧を表示するページ。
+    各習慣カードに「今日のチェックボックス」を組み込み、
+    Turbo Stream による即時保存機能を提供する。
 
-<!-- ページタイトル -->
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-  <!-- flex: フレックスボックスレイアウト -->
-  <!-- justify-between: 左右に要素を配置 -->
-  <!-- items-center: 垂直方向に中央揃え -->
-  <!-- mb-6: 下マージン24px -->
-  <div class="flex justify-between items-center mb-6">
-    <!-- text-3xl: フォントサイズ30px -->
-    <!-- font-bold: 太字 -->
-    <!-- text-gray-900: ダークグレー -->
-    <h1 class="text-3xl font-bold text-gray-900">
+  【N+1 問題の解消について】
+    ビューで @habits を繰り返すとき、each ループ内で habit.habit_records を
+    呼ぶと習慣の数だけ SQL が発行される（N+1 問題）。
+    コントローラーで today_records_hash を作成し、O(1) アクセスで解決する。
+
+  【today_records_hash について】
+    コントローラーから渡されるハッシュ。
+    キー: habit.id、値: HabitRecord（またはnil）
+    habit_id => record のマッピングにより、ループ内で SQL を発行せずに済む。
+  ==============================================================================
+%>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <%# ==================== ページヘッダー ==================== %>
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-bold tracking-tight text-gray-900">
       習慣管理
     </h1>
 
-    <!-- 新しい習慣を追加ボタン -->
-    <%= link_to new_habit_path, 
-        class: "px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors" do %>
-      + 新しい習慣を追加
+    <%# 「新しい習慣を追加」ボタン %>
+    <%= link_to new_habit_path,
+        class: "inline-flex items-center gap-2
+                px-4 py-2 text-sm font-medium
+                text-white bg-blue-600 rounded-lg
+                hover:bg-blue-700 transition-colors
+                focus:outline-none focus:ring-2 focus:ring-blue-500" do %>
+      <%# ＋アイコン %>
+      <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg"
+           fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round"
+              stroke-width="2" d="M12 4v16m8-8H4" />
+      </svg>
+      新しい習慣を追加
     <% end %>
   </div>
 
-  <!-- 習慣が存在する場合 -->
-  <% if @habits.any? %>
-    <!-- grid: グリッドレイアウト -->
-    <!-- grid-cols-1: モバイルは1列 -->
-    <!-- md:grid-cols-2: タブレット（768px以上）は2列 -->
-    <!-- lg:grid-cols-3: PC（1024px以上）は3列 -->
-    <!-- gap-6: グリッド間隔24px -->
+  <%# ==================== 習慣なし（Empty State） ==================== %>
+  <% if @habits.empty? %>
+    <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
+      <%# イラストアイコン %>
+      <div class="mx-auto w-16 h-16 rounded-full bg-blue-100
+                  flex items-center justify-center mb-4">
+        <svg class="w-8 h-8 text-blue-500" xmlns="http://www.w3.org/2000/svg"
+             fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                stroke-width="2"
+                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+      </div>
+      <p class="text-gray-500 text-sm mb-4">
+        まだ習慣が登録されていません
+      </p>
+      <%= link_to "習慣を登録する", new_habit_path,
+          class: "inline-flex items-center px-6 py-3
+                  text-sm font-medium text-white
+                  bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors" %>
+    </div>
+
+  <%# ==================== 習慣カード一覧 ==================== %>
+  <% else %>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
       <% @habits.each do |habit| %>
-        <!-- bg-white: 白背景 -->
-        <!-- rounded-xl: 角丸12px -->
-        <!-- shadow-sm: 軽い影 -->
-        <!-- hover:shadow-md: ホバー時に影を濃く -->
-        <!-- transition: トランジション効果 -->
-        <!-- p-6: 内側余白24px -->
-        <!-- border: 1pxボーダー -->
-        <!-- border-gray-200: ライトグレーのボーダー -->
-        <div class="bg-white rounded-xl shadow-sm hover:shadow-md transition p-6 border border-gray-200">
-          <!-- カードヘッダー（習慣名と削除ボタン） -->
-          <div class="flex justify-between items-start mb-4">
-            <!-- 習慣名エリア -->
-            <div class="flex-1">
-              <!-- text-xl: フォントサイズ20px -->
-              <!-- font-bold: 太字 -->
-              <!-- text-gray-900: ダークグレー -->
-              <!-- mb-2: 下マージン8px -->
-              <h2 class="text-xl font-bold text-gray-900 mb-2">
+        <%#
+          今日のレコードを O(1) で取得する。
+          @today_records_hash は コントローラーで準備したハッシュ。
+          キーは habit.id、値は HabitRecord または nil。
+          ハッシュなのでループ内でも SQL が発行されない（N+1 問題の解消）。
+        %>
+        <% today_record = @today_records_hash[habit.id] %>
+
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm
+                    hover:shadow-md transition-shadow">
+
+          <%# ---------- カードヘッダー ---------- %>
+          <div class="flex items-start justify-between p-4 pb-3">
+            <div class="flex-1 min-w-0">
+              <%# 習慣名 %>
+              <h3 class="text-base font-semibold text-gray-900 truncate">
                 <%= habit.name %>
-              </h2>
+              </h3>
+              <%# 週次目標 %>
+              <p class="text-xs text-gray-500 mt-1">
+                週<%= habit.weekly_target %>回目標
+              </p>
             </div>
 
-            <!-- 削除ボタン -->
-            <!-- button_to: フォーム送信ボタン（DELETEリクエスト） -->
-            <!-- method: :delete で DELETE /habits/:id にリクエスト -->
-            <!-- data: { turbo_confirm: "..." } で削除前に確認ダイアログを表示 -->
-            <!-- class: スタイリング（赤色、ホバー時に濃く） -->
-            <%= button_to habit_path(habit), 
+            <%# 削除ボタン %>
+            <%= button_to habit_path(habit),
                 method: :delete,
-                data: { turbo_confirm: "本当に削除しますか？\n「#{habit.name}」を削除すると、過去の記録も表示されなくなります。" },
-                class: "px-3 py-1 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors" do %>
-              削除
+                data:   {
+                  turbo_confirm: "本当に削除しますか？\n「#{habit.name}」を削除すると、過去の記録も表示されなくなります。"
+                },
+                class:  "flex-shrink-0 ml-2 p-1.5 text-gray-400
+                         hover:text-red-500 hover:bg-red-50
+                         rounded-lg transition-colors",
+                aria:   { label: "#{habit.name}を削除" } do %>
+              <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg"
+                   fill="none" viewBox="0 0 24 24" stroke="currentColor"
+                   aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
             <% end %>
           </div>
 
-          <!-- カード本体（習慣の詳細情報） -->
-          <div class="space-y-3">
-            <!-- チェック型アイコン -->
-            <div class="flex items-center text-sm text-blue-500">
-              <!-- SVG: チェックマークアイコン -->
-              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-              チェック型
+          <%# ---------- 今日のチェックボックス（Turbo Streams 対象） ---------- %>
+          <div class="px-4 pb-3">
+            <%#
+              render partial: で _habit_record.html.erb を呼び出す。
+              locals: でローカル変数を渡す。
+              habit_record: today_record は nil の場合もある（その場合パーシャル内で処理）。
+            %>
+            <%= render partial: "habit_records/habit_record",
+                       locals: { habit: habit, habit_record: today_record } %>
+          </div>
+
+          <%# ---------- 今週の進捗バー ---------- %>
+          <div class="px-4 pb-4">
+            <%#
+              今週の達成率を計算する。
+              habit.weekly_achievement_rate は Habit モデルのメソッド（後述）。
+            %>
+            <% rate = habit.weekly_achievement_rate %>
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-xs text-gray-500">今週の進捗</span>
+              <span class="text-xs font-semibold
+                           <%= rate >= 80 ? 'text-green-600' :
+                               rate >= 50 ? 'text-yellow-600' : 'text-red-600' %>">
+                <%= rate %>%
+              </span>
             </div>
-
-            <!-- 週次目標値 -->
-            <div class="flex items-center text-sm text-green-500">
-              <!-- SVG: ターゲットアイコン -->
-              <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-              週 <%= habit.weekly_target %> 回
-            </div>
-
-            <!-- 今週の進捗（仮データ: 50%固定） -->
-            <div class="mt-4">
-              <!-- プログレスバーのラベル -->
-              <div class="flex justify-between text-sm mb-2">
-                <span class="text-gray-600">今週の進捗</span>
-                <!-- font-bold: 太字 -->
-                <!-- text-blue-600: 青色 -->
-                <span class="font-bold text-blue-600">50%</span>
-              </div>
-
-              <!-- プログレスバー -->
-              <!-- w-full: 幅100% -->
-              <!-- bg-gray-200: 背景色ライトグレー -->
-              <!-- rounded-full: 完全な角丸 -->
-              <!-- h-2: 高さ8px -->
-              <!-- overflow-hidden: はみ出しを隠す -->
-              <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                <!-- bg-blue-500: 青色 -->
-                <!-- h-full: 高さ100% -->
-                <!-- rounded-full: 完全な角丸 -->
-                <!-- transition-all: すべてのプロパティにトランジション -->
-                <!-- duration-300: アニメーション時間300ms -->
-                <div class="bg-blue-500 h-full rounded-full transition-all duration-300" style="width: 50%"></div>
-              </div>
-
-              <!-- 実績表示（仮データ） -->
-              <div class="text-xs text-gray-400 mt-1">
-                3 / <%= habit.weekly_target %> 日
+            <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div class="h-2 rounded-full transition-all duration-300
+                          <%= rate >= 80 ? 'bg-green-500' :
+                              rate >= 50 ? 'bg-yellow-500' : 'bg-red-500' %>"
+                   style="width: <%= rate %>%"
+                   role="progressbar"
+                   aria-valuenow="<%= rate %>"
+                   aria-valuemin="0"
+                   aria-valuemax="100">
               </div>
             </div>
           </div>
+
         </div>
       <% end %>
-    </div>
 
-  <!-- 習慣が存在しない場合（Empty State） -->
-  <% else %>
-    <!-- text-center: テキスト中央揃え -->
-    <!-- py-12: 上下パディング48px -->
-    <div class="text-center py-12">
-      <!-- bg-gray-50: 薄いグレー背景 -->
-      <!-- border-2: 2pxボーダー -->
-      <!-- border-dashed: 破線ボーダー -->
-      <!-- border-gray-300: グレーのボーダー -->
-      <!-- rounded-lg: 角丸8px -->
-      <!-- p-12: 内側余白48px -->
-      <div class="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-12">
-        <!-- 円形アイコン -->
-        <!-- w-16: 幅64px -->
-        <!-- h-16: 高さ64px -->
-        <!-- mx-auto: 左右マージン自動（中央揃え） -->
-        <!-- mb-4: 下マージン16px -->
-        <!-- bg-blue-100: 薄い青背景 -->
-        <!-- rounded-full: 完全な円形 -->
-        <!-- flex: フレックスボックス -->
-        <!-- items-center: 垂直方向中央揃え -->
-        <!-- justify-center: 水平方向中央揃え -->
-        <div class="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
-          <!-- SVG: プラスアイコン -->
-          <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-          </svg>
-        </div>
-
-        <!-- メッセージ -->
-        <p class="text-gray-600 mb-6">
-          まだ習慣が登録されていません
-        </p>
-
-        <!-- 習慣登録ボタン -->
-        <%= link_to new_habit_path, 
-            class: "inline-block px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors" do %>
-          習慣を登録する
-        <% end %>
-      </div>
     </div>
   <% end %>
+
 </div>
