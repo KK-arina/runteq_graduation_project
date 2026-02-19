@@ -30,6 +30,7 @@
 - ✅ 習慣削除機能実装完了（論理削除対応）
 - ✅ HabitRecordモデル作成完了（AM4:00基準、UNIQUE制約、CASCADE）
 - ✅ 習慣の日次記録機能実装完了（Turbo Streams即時保存、楽観的UI）
+- ✅ 習慣の週次進捗統計自動計算実装完了（N+1問題対策済み）
 
 <br>
 
@@ -516,12 +517,12 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #13 | 習慣削除機能 | ✅ 完了 | 2/15 | 2 |
 | #14 | HabitRecordモデルの作成 | ✅ 完了 | 2/16 | 2 |
 | #15 | 習慣の日次記録機能（即時保存） | ✅ 完了 | 2/19 | 5 |
-| #16 | 進捗率の自動計算ロジック | 🔜 予定 | - | 2 |
+| #16 | 進捗率の自動計算ロジック | ✅ 完了 | 2/19 | 2 |
 | #17 | 習慣管理機能のテスト | 🔜 予定 | - | 2 |
 
 <br>
 
-**Week 2 進捗**: 16SP / 20SP（80%）
+**Week 2 進捗**: 18SP / 20SP（90%）
 
 <br>
 
@@ -616,8 +617,17 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
+#### ✅ Issue #16: 進捗率の自動計算ロジック
+- `Habit#weekly_progress_stats(user)` メソッドを追加（進捗率・完了日数を1回のDBアクセスで返す）
+- `HabitsController#index` に `@habit_stats` ハッシュを追加（N+1問題を完全解消）
+- `views/habits/index.html.erb` を更新（50%固定 → 動的表示、N+1問題対策、レイアウト崩れ修正）
+- `habit_records/_habit_record.html.erb` を更新（習慣名の重複表示を削除、チェックボックス＋完了バッジのみに整理）
+- テスト追加（モデル9件 + コントローラー4件）
+- 全テスト成功: 89 runs, 236 assertions, 0 failures, 0 errors
+
+<br>
+
 **今後の実装予定**:
-- Issue #16: 進捗率の動的計算（現在は50%固定）
 - Issue #17: 習慣管理機能の統合テスト
 
 <br>
@@ -1092,6 +1102,7 @@ habitflow/
 | `app/models/habit_record.rb` | HabitRecordモデル（AM4:00基準の日付計算、toggle_completed!、スコープ） |
 | `test/models/habit_record_test.rb` | HabitRecordモデルテスト（18テストケース、42 assertions） |
 | `test/fixtures/habit_records.yml` | テスト用習慣記録データ（過去日付で重複回避） |
+| `app/models/habit.rb` | Habitモデル（論理削除機能、`weekly_progress_stats` で週次進捗統計を計算） |
 
 <br>
 
@@ -3959,6 +3970,124 @@ end
 - HabitRecordsControllerTest（AM 4:00 境界値テスト・セキュリティテスト含む）
 - HabitRecordInstantSaveTest（Turbo Stream レスポンス・他ユーザー遮断テスト）
 - 全テスト結果: 88 runs, 262 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### 習慣の週次進捗統計自動計算（Issue #16）
+
+<br>
+
+**実装日**: 2026年2月19日
+
+<br>
+
+**設計方針**:
+- 進捗率（%）と完了日数の両方をビューで使用するため、1回のDBアクセスで両方返す `weekly_progress_stats` メソッドを設計
+- 計算ロジックはモデルに集約（Fat Model）し、コントローラー・ビューから切り離す
+- コントローラーで全習慣分を事前計算してハッシュ化することでN+1問題を完全解消
+
+<br>
+
+**Habitモデルへの追加メソッド**:
+```ruby
+# app/models/habit.rb
+
+# 今週の進捗率と完了日数を1回のDBアクセスで返す
+# 戻り値: { rate: Integer(0〜100), completed_count: Integer }
+def weekly_progress_stats(user)
+  range = current_week_range  # AM4:00基準の今週月曜〜今日
+
+  completed_count = habit_records
+                      .where(user: user)
+                      .where(record_date: range)
+                      .where(completed: true)
+                      .count
+
+  return { rate: 0, completed_count: completed_count } if weekly_target.zero?
+
+  rate = ((completed_count.to_f / weekly_target) * 100).clamp(0, 100).floor
+  { rate: rate, completed_count: completed_count }
+end
+
+private
+
+# AM4:00基準で「今週の月曜日〜今日」の Date の Range を返す
+def current_week_range
+  today = HabitRecord.today_for_record
+  today.beginning_of_week(:monday)..today
+end
+```
+
+<br>
+
+**コントローラーでの一括計算（N+1問題対策）**:
+```ruby
+# app/controllers/habits_controller.rb（indexアクション）
+
+# ビューのループ内でDBクエリが発生するN+1問題を防ぐため
+# 全習慣分の進捗統計をコントローラーで事前計算してハッシュに格納する
+# 格納形式: { habit_id => { rate: 14, completed_count: 1 } }
+@habit_stats = @habits.each_with_object({}) do |habit, hash|
+  hash[habit.id] = habit.weekly_progress_stats(current_user)
+end
+```
+
+<br>
+
+**ビューでの参照（DBアクセスなし）**:
+```erb
+<%# @habit_stats から O(1) で取得（DBアクセスなし） %>
+<% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
+<% progress = stats[:rate] %>
+<% completed_count = stats[:completed_count] %>
+
+<%# プログレスバー（進捗率に応じて色が変化） %>
+
+  
+  
+
+
+
+  <%= completed_count %> / <%= habit.weekly_target %> 日達成
+
+```
+
+<br>
+
+**削除ボタンのレイアウト崩れ修正**:
+- `button_to`（`<form>` タグを生成 → block要素によるflex崩れ）から `link_to + data-turbo-method: :delete` に変更
+```erb
+<%# 修正後: タグが生成されないため flexレイアウトを崩さない %>
+<%= link_to "削除",
+    habit_path(habit),
+    data: { turbo_method: :delete, turbo_confirm: "「#{habit.name}」を削除しますか？" },
+    class: "px-2 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200 transition flex-shrink-0" %>
+```
+
+<br>
+
+**テスト戦略**:
+- 記録0件のとき `rate: 0, completed_count: 0` であること
+- 未完了の記録（`completed: false`）は集計に含まれないこと
+- 他ユーザーの記録は集計に含まれないこと
+- AM4:00境界値（3:59 → 前日、4:00 → 当日）の動作確認
+
+<br>
+
+**テスト結果**:
+```
+89 runs, 236 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+**動作確認（Railsコンソール）**:
+```ruby
+user = User.find_by(email: "yamada@example.com")
+habit = user.habits.active.first
+habit.weekly_progress_stats(user)
+# => { rate: 14, completed_count: 1 }
+```
 
 <br>
 ```

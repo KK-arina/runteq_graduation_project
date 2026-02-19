@@ -1,12 +1,28 @@
 <%# パーシャル: app/views/habit_records/_habit_record.html.erb %>
-<%# 受け取る変数: habit（Habitインスタンス）、habit_record（HabitRecordまたはnil） %>
-<%# このdivのid="habit_record_<habit.id>"がTurbo Streamの置換ターゲット %>
-<%# data-controller="habit-record"でhabit_record_controller.jsを紐づける %>
+<%#
+  【このファイルの役割】
+  習慣カード内の「今日の記録チェックボックス」パーシャル。
+  habits/index.html.erb からレンダリングされる。
+
+  受け取る変数:
+    habit        - Habit オブジェクト（習慣情報）
+    habit_record - HabitRecord オブジェクト または nil（今日の記録）
+
+  【表示内容をチェックボックス＋完了バッジのみにした理由】
+  カードヘッダー側（index.html.erb）で以下を既に表示している:
+    - 習慣名（h2タグ）
+    - 週◯回目標
+    - チェック型
+  そのためこのパーシャルに「今日の記録」などのテキストを追加すると
+  情報が過剰になりUIが野暮ったくなる。
+  チェックボックスの意味はカード全体の文脈から自明なので、
+  テキストラベルなしでも UX として自然に成立する。
+%>
 
 <%
-  # habit_recordがnilの場合（今日まだ記録がない）はダミーオブジェクトで代替する
-  # HabitRecord.new(completed: false)はDBに保存されていないオブジェクトなので
-  # persisted?がfalseになり、update_urlとrecord_idが未作成扱いになる
+  # habit_record が nil の場合（今日まだ記録がない）はダミーオブジェクトで代替する。
+  # HabitRecord.new(completed: false) はDBに保存されていないオブジェクトなので
+  # persisted? が false になり、update_url と record_id が「未作成」扱いになる。
   record = habit_record || HabitRecord.new(completed: false)
 
   # POST URL: 新規作成（今日初めてチェックする場合）
@@ -14,66 +30,110 @@
   create_url = habit_habit_records_path(habit)
 
   # PATCH URL: 更新（今日すでにレコードがある場合）
-  # persisted?がtrueなら既存レコードのURLを作成、falseなら空文字（JSでcreate_urlを使う）
+  # persisted? が true なら既存レコードのURLを生成、false なら空文字（JS側で create_url を使う）
   update_url = record.persisted? ? habit_habit_record_path(habit, record) : ""
 
-  # record_id: StimulusのJS側でcreate/updateどちらを使うか判断する値
-  # persisted?がtrueなら実際のid、falseなら0（新規作成の目印）
+  # record_id: Stimulus の JS 側で create/update どちらを使うか判断するための値
+  # persisted? が true なら実際の id、false なら 0（新規作成の目印）
   record_id = record.persisted? ? record.id : 0
 %>
 
+<%#
+  【div の id について】
+  id="habit_record_<habit.id>" は Turbo Stream の置換ターゲット。
+  チェックボックスを操作して保存が完了したとき、
+  サーバーから返ってくる Turbo Stream がこの id を指定して
+  このパーシャル全体を差し替える（即時保存・楽観的UI）。
+
+  class="flex items-center gap-2":
+    flex          → チェックボックスと完了バッジを横並びにする
+    items-center  → 縦方向の中央揃え
+    gap-2         → 要素間に適度な余白（gap-3より少し詰めてスッキリさせる）
+%>
 <div id="habit_record_<%= habit.id %>"
-     class="flex items-center gap-3 py-3 border-b border-gray-100 last:border-b-0"
+     class="flex items-center gap-2"
      data-controller="habit-record"
      data-habit-record-create-url-value="<%= create_url %>"
      data-habit-record-update-url-value="<%= update_url %>"
      data-habit-record-record-id-value="<%= record_id %>">
 
   <%# チェックボックス + ローディングアイコンのラッパー %>
+  <%#
+    relative: ローディングアイコンをチェックボックスに重ねて表示するための基準点。
+    absolute inset-0（ローディング側）と組み合わせることで、
+    保存中にチェックボックスの上にスピナーをオーバーレイできる。
+  %>
   <div class="relative flex items-center">
-    <%# チェックボックス %>
-    <%# data-habit-record-target="checkbox": Stimulusからdisabled/enabledを制御するため %>
-    <%# data-action="change->habit-record#toggle": チェック変化時にtoggle()メソッドを呼ぶ %>
-    <%# checked属性: record.completedがtrueなら"checked"を出力してチェック済み状態にする %>
+
+    <%#
+      【チェックボックス本体】
+      type="checkbox": HTML標準のチェックボックス入力要素。
+
+      data-habit-record-target="checkbox":
+        Stimulus コントローラーからこの要素を参照するためのターゲット指定。
+        保存中に disabled にしたり、チェック状態を操作するために使う。
+
+      data-action="change->habit-record#toggle":
+        チェックボックスの状態が変化（change イベント）したとき、
+        habit_record_controller.js の toggle() メソッドを呼び出す。
+
+      checked属性:
+        record.completed が true なら "checked" を出力してチェック済み状態にする。
+        false なら何も出力しない（空文字）。
+
+      accent-green-500 / accent-blue-500:
+        チェックボックスの色を Tailwind で指定。
+        完了済みは緑、未完了は青で区別する。
+
+      aria-label:
+        スクリーンリーダー（視覚障害者向け読み上げツール）のためのラベル。
+        「読書の今日の記録」のように読み上げられる。
+    %>
     <input
       type="checkbox"
       data-habit-record-target="checkbox"
       data-action="change->habit-record#toggle"
       <%= record.completed ? "checked" : "" %>
       class="w-5 h-5 rounded cursor-pointer <%= record.completed ? 'accent-green-500' : 'accent-blue-500' %> disabled:opacity-50 disabled:cursor-not-allowed"
-      aria-label="<%= habit.name %>の記録をチェック">
+      aria-label="<%= habit.name %>の今日の記録">
 
-    <%# ローディングアイコン（保存中のみ表示） %>
-    <%# hidden属性: 初期状態は非表示。StimulusのsetLoadingState(true)で表示される %>
-    <%# animate-spin: Tailwindの回転アニメーション（くるくる回るスピナー） %>
+    <%#
+      【ローディングスピナー】
+      hidden 属性: 初期状態は非表示。
+      Stimulus の setLoadingState(true) が呼ばれたとき表示される。
+
+      absolute inset-0:
+        親要素（relative な div）を基準に全面を覆うように配置。
+        チェックボックスの上にオーバーレイされ、
+        「今保存中です」という視覚的フィードバックになる。
+
+      animate-spin: Tailwind の回転アニメーションクラス。くるくる回るスピナー。
+    %>
     <span data-habit-record-target="loading" hidden
           class="absolute inset-0 flex items-center justify-center">
       <svg class="animate-spin w-4 h-4 text-blue-500"
            xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+        <circle class="opacity-25" cx="12" cy="12" r="10"
+                stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
       </svg>
     </span>
   </div>
 
-  <%# 習慣名 + 週次目標 %>
-  <div class="flex-1 min-w-0">
-    <%# 習慣名: 完了時はline-through（取り消し線）+グレー、未完了時は通常の黒 %>
-    <p class="text-sm font-medium truncate <%= record.completed ? 'line-through text-gray-400' : 'text-gray-900' %>">
-      <%= habit.name %>
-    </p>
-    <p class="text-xs text-gray-500 mt-0.5">週<%= habit.weekly_target %>回目標</p>
-  </div>
+  <%#
+    【完了バッジ】
+    record.completed が true のときだけ表示する。
+    チェックを入れると緑の「完了」バッジが現れ、達成感を視覚的に演出する。
+    テキストラベルを廃止した代わりに、完了状態のみこのバッジで示す。
 
-  <%# 完了バッジ: completedがtrueの時だけ表示する %>
+    チェックボックスが未完了のときはバッジを表示しない。
+    「何もない = まだ今日の記録をしていない」と自然に読み取れる。
+  %>
   <% if record.completed %>
-    <span class="flex-shrink-0 inline-flex items-center gap-1 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-      <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-        <path fill-rule="evenodd"
-              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-              clip-rule="evenodd" />
-      </svg>
+    <span class="text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
       完了
     </span>
   <% end %>
+
 </div>
