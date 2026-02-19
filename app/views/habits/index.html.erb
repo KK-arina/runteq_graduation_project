@@ -1,162 +1,150 @@
+<%# app/views/habits/index.html.erb %>
 <%#
-  ==============================================================================
-  app/views/habits/index.html.erb
-  ==============================================================================
-  【役割】
-    習慣一覧を表示するページ。
-    各習慣カードに「今日のチェックボックス」を組み込み、
-    Turbo Stream による即時保存機能を提供する。
-
-  【N+1 問題の解消について】
-    ビューで @habits を繰り返すとき、each ループ内で habit.habit_records を
-    呼ぶと習慣の数だけ SQL が発行される（N+1 問題）。
-    コントローラーで today_records_hash を作成し、O(1) アクセスで解決する。
-
-  【today_records_hash について】
-    コントローラーから渡されるハッシュ。
-    キー: habit.id、値: HabitRecord（またはnil）
-    habit_id => record のマッピングにより、ループ内で SQL を発行せずに済む。
-  ==============================================================================
+  【このファイルの役割】
+  習慣一覧ページのビュー。
+  コントローラーから渡された @habits, @today_records_hash, @habit_stats を使って
+  習慣カードを一覧表示する。
+  ★ ビュー内でDBアクセスは一切行わない（すべてコントローラーで事前計算済み）。
 %>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-  <%# ==================== ページヘッダー ==================== %>
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-bold tracking-tight text-gray-900">
-      習慣管理
-    </h1>
-
-    <%# 「新しい習慣を追加」ボタン %>
-    <%= link_to new_habit_path,
-        class: "inline-flex items-center gap-2
-                px-4 py-2 text-sm font-medium
-                text-white bg-blue-600 rounded-lg
-                hover:bg-blue-700 transition-colors
-                focus:outline-none focus:ring-2 focus:ring-blue-500" do %>
-      <%# ＋アイコン %>
-      <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg"
-           fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-        <path stroke-linecap="round" stroke-linejoin="round"
-              stroke-width="2" d="M12 4v16m8-8H4" />
-      </svg>
-      新しい習慣を追加
-    <% end %>
+  <%# ===== ページヘッダー ===== %>
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold tracking-tight text-gray-900">習慣管理</h1>
+    <%= link_to "＋ 新しい習慣を追加", new_habit_path,
+        class: "px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-md hover:bg-blue-700 transition duration-200" %>
   </div>
 
-  <%# ==================== 習慣なし（Empty State） ==================== %>
+  <%# ===== 習慣が0件のとき（Empty State）===== %>
   <% if @habits.empty? %>
-    <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
-      <%# イラストアイコン %>
-      <div class="mx-auto w-16 h-16 rounded-full bg-blue-100
-                  flex items-center justify-center mb-4">
-        <svg class="w-8 h-8 text-blue-500" xmlns="http://www.w3.org/2000/svg"
-             fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round"
-                stroke-width="2"
-                d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+    <div class="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center">
+      <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+        <svg class="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
         </svg>
       </div>
-      <p class="text-gray-500 text-sm mb-4">
-        まだ習慣が登録されていません
-      </p>
+      <p class="text-gray-500 mb-4">まだ習慣が登録されていません</p>
       <%= link_to "習慣を登録する", new_habit_path,
-          class: "inline-flex items-center px-6 py-3
-                  text-sm font-medium text-white
-                  bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors" %>
+          class: "px-6 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition" %>
     </div>
 
-  <%# ==================== 習慣カード一覧 ==================== %>
+  <%# ===== 習慣カードグリッド ===== %>
   <% else %>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 
       <% @habits.each do |habit| %>
-        <%#
-          今日のレコードを O(1) で取得する。
-          @today_records_hash は コントローラーで準備したハッシュ。
-          キーは habit.id、値は HabitRecord または nil。
-          ハッシュなのでループ内でも SQL が発行されない（N+1 問題の解消）。
-        %>
-        <% today_record = @today_records_hash[habit.id] %>
 
-        <div class="bg-white border border-gray-200 rounded-xl shadow-sm
-                    hover:shadow-md transition-shadow">
+        <div id="habit_card_<%= habit.id %>"
+             class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition p-5 flex flex-col">
 
-          <%# ---------- カードヘッダー ---------- %>
-          <div class="flex items-start justify-between p-4 pb-3">
-            <div class="flex-1 min-w-0">
-              <%# 習慣名 %>
-              <h3 class="text-base font-semibold text-gray-900 truncate">
-                <%= habit.name %>
-              </h3>
-              <%# 週次目標 %>
-              <p class="text-xs text-gray-500 mt-1">
-                週<%= habit.weekly_target %>回目標
-              </p>
-            </div>
+          <%# ===== カードヘッダー（習慣名 + 削除ボタン）===== %>
+          <div class="flex justify-between items-start mb-3">
+            <h2 class="text-base font-bold text-gray-900 flex-1 mr-2 leading-snug">
+              <%= habit.name %>
+            </h2>
 
-            <%# 削除ボタン %>
-            <%= button_to habit_path(habit),
-                method: :delete,
-                data:   {
-                  turbo_confirm: "本当に削除しますか？\n「#{habit.name}」を削除すると、過去の記録も表示されなくなります。"
+            <%#
+              【削除ボタンの実装方針】
+              ❌ button_to を使わない理由：
+                button_to は内部で <form> タグを生成する。
+                <form> は block要素 なので、flex コンテナ内で意図しない
+                余白やレイアウト崩れの原因になる。
+
+              ✅ link_to + data-turbo-method を使う理由：
+                link_to は <a> タグを生成するだけなので form タグが一切出ない。
+                inline要素のため flex レイアウトを壊さない。
+                data: { turbo_method: :delete } により Turbo が DELETE リクエストに変換する。
+                data: { turbo_confirm: "..." } で削除前の確認ダイアログも使える。
+                Rails 7 + Hotwire 環境ではこの書き方が最も安定する。
+            %>
+            <%= link_to "削除",
+                habit_path(habit),
+                data: {
+                  turbo_method: :delete,
+                  turbo_confirm: "「#{habit.name}」を削除しますか？"
                 },
-                class:  "flex-shrink-0 ml-2 p-1.5 text-gray-400
-                         hover:text-red-500 hover:bg-red-50
-                         rounded-lg transition-colors",
-                aria:   { label: "#{habit.name}を削除" } do %>
-              <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg"
-                   fill="none" viewBox="0 0 24 24" stroke="currentColor"
-                   aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round"
-                      stroke-width="2"
-                      d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            <% end %>
+                class: "px-2 py-1 text-xs bg-red-100 text-red-600 rounded hover:bg-red-200 transition flex-shrink-0" %>
           </div>
 
-          <%# ---------- 今日のチェックボックス（Turbo Streams 対象） ---------- %>
-          <div class="px-4 pb-3">
-            <%#
-              render partial: で _habit_record.html.erb を呼び出す。
-              locals: でローカル変数を渡す。
-              habit_record: today_record は nil の場合もある（その場合パーシャル内で処理）。
-            %>
-            <%= render partial: "habit_records/habit_record",
-                       locals: { habit: habit, habit_record: today_record } %>
+          <%# ===== 習慣の詳細情報 ===== %>
+          <div class="text-xs text-gray-500 mb-4 space-y-1">
+            <div class="flex items-center gap-1">
+              <span class="text-green-500">●</span>
+              <span>週<%= habit.weekly_target %>回目標</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <span class="text-blue-500">●</span>
+              <span>チェック型</span>
+            </div>
           </div>
 
-          <%# ---------- 今週の進捗バー ---------- %>
-          <div class="px-4 pb-4">
-            <%#
-              今週の達成率を計算する。
-              habit.weekly_achievement_rate は Habit モデルのメソッド（後述）。
-            %>
-            <% rate = habit.weekly_achievement_rate %>
-            <div class="flex items-center justify-between mb-1">
+          <%# ===== 今日の記録チェックボックス ===== %>
+          <%#
+            @today_records_hash[habit.id] で今日の記録をO(1)で取得する。
+            コントローラーで事前にハッシュ化済みのため、DBアクセスは発生しない。
+          %>
+          <%# 修正後: mb-4 → mb-2 に変更してチェックボックスと進捗エリアの間を詰める %>
+          <div class="mb-2">
+            <%= render "habit_records/habit_record",
+                habit: habit,
+                habit_record: @today_records_hash[habit.id] %>
+          </div>
+
+          <%# ===== 進捗率表示エリア ===== %>
+          <%#
+            @habit_stats はコントローラーで事前計算したハッシュ。
+            { habit.id => { rate: 50, completed_count: 3 } } の形。
+            ビュー内でDBアクセスは発生しない。
+            || { rate: 0, completed_count: 0 } は万が一 nil だった場合の安全策。
+          %>
+          <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
+          <% progress = stats[:rate] %>
+          <% completed_count = stats[:completed_count] %>
+
+          <div class="mt-auto">
+
+            <%# 進捗率のラベルと数値 %>
+            <div class="flex justify-between items-center mb-1">
               <span class="text-xs text-gray-500">今週の進捗</span>
-              <span class="text-xs font-semibold
-                           <%= rate >= 80 ? 'text-green-600' :
-                               rate >= 50 ? 'text-yellow-600' : 'text-red-600' %>">
-                <%= rate %>%
+              <%#
+                進捗率に応じてテキストの色を変える。
+                100% = 緑（達成）、50%以上 = 青（順調）、50%未満 = 赤（要注意）
+              %>
+              <span class="text-sm font-bold <%= progress >= 100 ? 'text-green-600' : (progress >= 50 ? 'text-blue-600' : 'text-red-500') %>">
+                <%= progress %>%
               </span>
             </div>
-            <div class="h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div class="h-2 rounded-full transition-all duration-300
-                          <%= rate >= 80 ? 'bg-green-500' :
-                              rate >= 50 ? 'bg-yellow-500' : 'bg-red-500' %>"
-                   style="width: <%= rate %>%"
-                   role="progressbar"
-                   aria-valuenow="<%= rate %>"
-                   aria-valuemin="0"
-                   aria-valuemax="100">
+
+            <%#
+              【プログレスバー構造】
+              外側のdiv：背景となるグレーのバー全体（幅100%固定）
+              内側のdiv：進捗を示す色付きバー（幅を動的に変える）
+
+              なぜ Tailwind の w-[X%] を使わないのか：
+              Tailwind CSS はビルド時にクラス名を静的スキャンするため、
+              動的に生成されたクラス名（例: w-[14%]）は認識されない。
+              そのため inline style で動的な幅を指定するのが正しい方法。
+
+              relative を追加する理由：
+              子要素の位置計算の基準点を明確にし、
+              overflow-hidden と組み合わせてはみ出しを確実に防ぐ。
+            %>
+            <div class="relative w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div class="h-2 rounded-full transition-all duration-500 <%= progress >= 100 ? 'bg-green-500' : (progress >= 50 ? 'bg-blue-500' : 'bg-red-400') %>"
+                   style="width: <%= progress %>%;">
               </div>
             </div>
+
+            <%# 完了日数 / 週次目標の補足テキスト %>
+            <p class="text-xs text-gray-400 mt-1 text-right">
+              <%= completed_count %> / <%= habit.weekly_target %> 日達成
+            </p>
+
           </div>
+        </div><%# /habit card %>
 
-        </div>
       <% end %>
-
     </div>
   <% end %>
 
