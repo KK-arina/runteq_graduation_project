@@ -1,32 +1,34 @@
 # test/fixtures/habits.yml
-# テスト用の習慣データを定義
+# ============================================================
+# 習慣のテスト用固定データ（フィクスチャ）
+#
+# 【user: one とは？】
+# users.yml の "one" に定義したユーザーを外部キーとして参照します。
+# Railsが自動的に user_id を解決してくれます。
+#
+# 【deleted_at: （空白）とは？】
+# 論理削除フラグ。値なし = null = 有効な習慣（削除されていない）
+# ============================================================
 
-# 🔴 重要: users(:one) に紐づく習慣は1件のみにする
-# 複数定義すると、ユーザー削除時に複数削除されてテストが失敗する
-
-# ユーザー1の習慣（1件のみ）
-one:
+# ユーザー1の有効な習慣（テスト主体として使用）
+# キー名を habit_one にすることで「どのユーザーの何番目の習慣か」が一目でわかります
+habit_one:
   user: one
   name: 読書
   weekly_target: 7
-  deleted_at: null
-  created_at: <%= Time.current %>
-  updated_at: <%= Time.current %>
+  deleted_at:   # null = 有効な習慣
 
-# ユーザー2の習慣（1件のみ）
-two:
+# ユーザー2の有効な習慣（セキュリティテストで「他ユーザーの習慣」として使用）
+habit_two:
   user: two
   name: 筋トレ
   weekly_target: 5
-  deleted_at: null
-  created_at: <%= Time.current %>
-  updated_at: <%= Time.current %>
+  deleted_at:   # null = 有効な習慣
 
-# 削除済み習慣のテスト用（ユーザー1に紐づく）
-deleted_one:
+# ユーザー1の論理削除済み習慣（削除機能テスト用）
+# deleted_at に値が入っている = 削除済みとして扱われる
+habit_deleted:
   user: one
   name: 削除済み習慣
   weekly_target: 3
   deleted_at: <%= 1.day.ago %>
-  created_at: <%= 2.days.ago %>
-  updated_at: <%= 1.day.ago %>

@@ -11,10 +11,10 @@ class HabitDeletionTest < ActionDispatch::IntegrationTest
     @other_user = users(:two)
     
     # test ユーザーの習慣を取得
-    @habit = habits(:one)
+    @habit = habits(:habit_one)
     
     # other ユーザーの習慣を取得
-    @other_habit = habits(:two)
+    @other_habit = habits(:habit_two)
     
     # test ユーザーでログイン
     # セッションに user_id を保存することでログイン状態を作成

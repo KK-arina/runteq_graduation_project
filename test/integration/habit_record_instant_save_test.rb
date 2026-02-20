@@ -20,8 +20,8 @@ class HabitRecordInstantSaveTest < ActionDispatch::IntegrationTest
   setup do
     @user        = users(:one)
     @other_user  = users(:two)
-    @habit       = habits(:one)
-    @other_habit = habits(:two)
+    @habit       = habits(:habit_one)
+    @other_habit = habits(:habit_two)
 
     # ログイン
     post login_path, params: {

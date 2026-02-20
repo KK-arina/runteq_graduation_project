@@ -20,7 +20,7 @@ class HabitRecordTest < ActiveSupport::TestCase
     @user = users(:one)
     
     # テスト用の習慣を取得（fixtures から）
-    @habit = habits(:one)
+    @habit = habits(:habit_one)
     
     # ========================================================================
     # 【重要】テスト用の習慣記録を作成（保存しない）
@@ -282,7 +282,7 @@ class HabitRecordTest < ActiveSupport::TestCase
     # 昨日の記録を作成
     yesterday_record = HabitRecord.create!(
       user: @user,
-      habit: habits(:two),
+      habit: habits(:habit_two),
       record_date: Date.current - 1.day,
       completed: false
     )
@@ -313,7 +313,7 @@ class HabitRecordTest < ActiveSupport::TestCase
     user2 = users(:two)
     user2_record = HabitRecord.create!(
       user: user2,
-      habit: habits(:two),
+      habit: habits(:habit_two),
       record_date: Date.current,
       completed: false
     )
