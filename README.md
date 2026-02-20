@@ -31,6 +31,7 @@
 - ✅ HabitRecordモデル作成完了（AM4:00基準、UNIQUE制約、CASCADE）
 - ✅ 習慣の日次記録機能実装完了（Turbo Streams即時保存、楽観的UI）
 - ✅ 習慣の週次進捗統計自動計算実装完了（N+1問題対策済み）
+- ✅ 習慣管理機能のテスト実装完了（119 runs, 322 assertions, 0 failures）
 
 <br>
 
@@ -518,11 +519,11 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #14 | HabitRecordモデルの作成 | ✅ 完了 | 2/16 | 2 |
 | #15 | 習慣の日次記録機能（即時保存） | ✅ 完了 | 2/19 | 5 |
 | #16 | 進捗率の自動計算ロジック | ✅ 完了 | 2/19 | 2 |
-| #17 | 習慣管理機能のテスト | 🔜 予定 | - | 2 |
+| #17 | 習慣管理機能のテスト | ✅ 完了 | 2/20 | 2 |
 
 <br>
 
-**Week 2 進捗**: 18SP / 20SP（90%）
+**Week 2 進捗**: 20SP / 20SP（100%） 🎉
 
 <br>
 
@@ -627,8 +628,12 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-**今後の実装予定**:
-- Issue #17: 習慣管理機能の統合テスト
+#### ✅ Issue #17: 習慣管理機能のテスト
+- 統合テスト追加（習慣作成・削除・日次記録・AM4:00境界値）
+- 進捗率計算モデルテスト追加（0件・未完了除外・他ユーザー除外・100%上限・先週除外）
+- fixturesキー名を `one/two` → `habit_one/habit_two` に統一（可読性向上）
+- 既存テスト4ファイルのfixtures参照を一括修正
+- 全テスト成功: 119 runs, 322 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
@@ -1050,15 +1055,19 @@ habitflow/
 │   └── production-check-issue-7.md       # Issue #7 本番環境確認レポート
 ├── test/
 │   ├── models/
+│   ├── models/
 │   │   ├── user_test.rb                  # Userモデルテスト（13テストケース）
 │   │   ├── habit_test.rb                 # Habitモデルテスト（20テストケース）
-│   │   └── habit_record_test.rb          # HabitRecordモデルテスト（18テストケース、42 assertions）
+│   │   ├── habit_record_test.rb          # HabitRecordモデルテスト（18テストケース、42 assertions）
+│   │   └── habit_progress_test.rb        # 進捗率計算モデルテスト（6テストケース）Issue #17
 │   ├── integration/
 │   │   ├── user_registration_test.rb     # ユーザー登録統合テスト（2テストケース）
 │   │   ├── user_login_test.rb            # ログイン・ログアウト統合テスト（4テストケース）
 │   │   ├── habit_creation_test.rb        # 習慣新規作成統合テスト（7テストケース）
 │   │   ├── habit_deletion_test.rb        # 習慣削除統合テスト（4テストケース）
-│   │   └── habit_record_instant_save_test.rb  # 習慣記録即時保存統合テスト（5テストケース）
+│   │   ├── habit_record_instant_save_test.rb  # 習慣記録即時保存統合テスト（5テストケース）
+│   │   ├── habit_management_test.rb           # 習慣管理統合テスト（11テストケース）Issue #17
+│   │   └── habit_daily_record_test.rb         # 日次記録・AM4:00境界値テスト（6テストケース）Issue #17
 │   ├── controllers/
 │   │   ├── habits_controller_test.rb     # HabitsControllerテスト（2テストケース）
 │   │   └── habit_records_controller_test.rb  # HabitRecordsControllerテスト（AM4:00境界値・セキュリティ）
@@ -1103,6 +1112,11 @@ habitflow/
 | `test/models/habit_record_test.rb` | HabitRecordモデルテスト（18テストケース、42 assertions） |
 | `test/fixtures/habit_records.yml` | テスト用習慣記録データ（過去日付で重複回避） |
 | `app/models/habit.rb` | Habitモデル（論理削除機能、`weekly_progress_stats` で週次進捗統計を計算） |
+| `test/fixtures/habits.yml` | fixturesキー名を `habit_one/habit_two/habit_deleted` に変更（可読性向上）Issue #17 |
+| `test/fixtures/habit_records.yml` | habits参照キーを合わせて更新 Issue #17 |
+| `test/integration/habit_management_test.rb` | 習慣作成・削除の統合テスト（11テストケース）Issue #17 |
+| `test/integration/habit_daily_record_test.rb` | 日次記録・AM4:00境界値テスト（6テストケース）Issue #17 |
+| `test/models/habit_progress_test.rb` | 進捗率計算の詳細モデルテスト（6テストケース）Issue #17 |
 
 <br>
 
@@ -4087,6 +4101,42 @@ user = User.find_by(email: "yamada@example.com")
 habit = user.habits.active.first
 habit.weekly_progress_stats(user)
 # => { rate: 14, completed_count: 1 }
+```
+
+<br>
+
+#### 習慣管理機能のテスト（Issue #17）
+
+<br>
+
+**実装日**: 2026年2月20日
+
+<br>
+
+**テストカバレッジ（新規追加分）**:
+- 習慣作成テスト（正常系・バリデーション異常系・セキュリティ・未ログイン）
+- 習慣削除テスト（正常系・セキュリティ・論理削除済み・未ログイン）
+- 日次記録テスト（作成・重複防止・セキュリティ・AM4:00境界値）
+- 進捗率計算テスト（0件・未完了除外・他ユーザー除外・100%上限・先週除外）
+
+<br>
+
+**fixturesキー名の統一**:
+- `habits(:one)` / `habits(:two)` → `habits(:habit_one)` / `habits(:habit_two)` / `habits(:habit_deleted)` に変更
+- キー名に種別を含めることで、テストコードを読んだときに「何のデータか」が一目でわかる
+- 既存テスト4ファイルの参照箇所を `sed` コマンドで一括置換
+
+<br>
+
+**技術的なポイント**:
+- `setup` ブロックで `@habit.habit_records.destroy_all` を実行し、フィクスチャデータとテストデータの干渉を防止
+- `travel_to` でシステム時刻を固定し、AM4:00境界値（3:59 → 前日、4:00 → 当日）を正確に検証
+
+<br>
+
+**テスト結果**:
+```
+119 runs, 322 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>

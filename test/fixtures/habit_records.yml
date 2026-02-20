@@ -1,34 +1,29 @@
-# ==============================================================================
 # test/fixtures/habit_records.yml
-# ==============================================================================
-# 【fixtures とは】
-#   テスト用のサンプルデータ。テスト実行前に自動でDBに投入される。
-#   YAML 形式で記述し、モデル名の複数形がファイル名になる。
+# ============================================================
+# 習慣記録のテスト用固定データ（フィクスチャ）
 #
-# 【注意事項】
-#   - record_date は過去の日付にすること
-#     （UNIQUE 制約で今日の日付が tests 内で競合しないようにするため）
-#   - user: one は users.yml の :one エントリを参照する
-#   - habit: one は habits.yml の :one エントリを参照する
-# ==============================================================================
+# 【なぜ過去日付を使うのか？】
+# habit_records には UNIQUE制約(user_id, habit_id, record_date) があります。
+# テスト中に「今日」の記録を作成するテストがある場合、
+# フィクスチャで今日の日付を使うと重複エラーになります。
+# 過去の日付を使うことで衝突を回避しています。
+#
+# 【habit: habit_one とは？】
+# habits.yml の "habit_one" キーを参照します。
+# habits.yml のキー名変更に合わせてこちらも更新しています。
+# ============================================================
 
-# ユーザー1の習慣1の昨日の記録（完了済み）
-one:
+# ユーザー1の習慣1の記録（2日前・完了済み）
+record_one:
   user: one
-  habit: one
+  habit: habit_one
+  # 2.days.ago.to_date = 今日から2日前の日付
   record_date: <%= 2.days.ago.to_date %>
   completed: true
 
-# ユーザー1の習慣1の一昨日の記録（未完了）
-two:
+# ユーザー1の習慣1の記録（3日前・未完了）
+record_two:
   user: one
-  habit: one
+  habit: habit_one
   record_date: <%= 3.days.ago.to_date %>
   completed: false
-
-# ユーザー2の習慣2の記録
-three:
-  user: two
-  habit: two
-  record_date: <%= 2.days.ago.to_date %>
-  completed: true

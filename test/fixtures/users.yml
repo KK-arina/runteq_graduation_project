@@ -1,21 +1,27 @@
 # test/fixtures/users.yml
-# テスト用のユーザーデータを定義
+# ============================================================
+# ユーザーのテスト用固定データ（フィクスチャ）
+#
+# 【フィクスチャとは？】
+# テスト実行前にデータベースへ自動で挿入されるサンプルデータです。
+# テストごとに毎回リセットされるので、テスト間でデータが干渉しません。
+#
+# 【BCrypt::Password.create("password") とは？】
+# bcryptライブラリでパスワードをハッシュ化するメソッドです。
+# has_secure_password を使っているので、
+# password_digest カラムにはハッシュ化済みの文字列が必要です。
+# ============================================================
 
-# ユーザー1（メインテスト用）
+# テスト用ユーザー1（主に操作を行うユーザー）
 one:
-  name: Test User
-  # 🔴 重要: メールアドレスを他のテストと衝突しないものにする
-  # 修正前: email: test@example.com
-  # 修正後: fixtures専用のドメインを使う
+  name: Test User One
   email: fixture_one@example.com
-  # password_digest: bcrypt でハッシュ化されたパスワード
-  # 元のパスワード: "password"
-  # 以下のコマンドで生成: BCrypt::Password.create("password")
+  # BCrypt::Password.create("password") で "password" をハッシュ化
+  # <%= %> はERBタグ。YAMLファイル内でRubyコードを実行できます
   password_digest: <%= BCrypt::Password.create("password") %>
 
-# ユーザー2（セキュリティテスト用）
+# テスト用ユーザー2（セキュリティテストで「別ユーザー」として使用）
 two:
-  name: Other User
-  # 🔴 重要: こちらも衝突しないメールアドレス
+  name: Test User Two
   email: fixture_two@example.com
   password_digest: <%= BCrypt::Password.create("password") %>
