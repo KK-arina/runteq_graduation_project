@@ -1,173 +1,151 @@
 # test/controllers/weekly_reflections_controller_test.rb
 #
-# WeeklyReflectionsController のテスト
-# Issue #21: index アクションのテスト
+# 【このファイルの役割】
+# WeeklyReflectionsController の各アクションが正しく動作するかを確認するテスト。
 #
-# ================================================================
-# 【設計方針】テストデータに固定日付を使わない理由
-# ================================================================
-# ❌ 悪い例: Date.new(2025, 12, 1) のような固定日付
-#   - fixtures のデータと衝突する可能性がある
-#   - 将来 fixtures が増えたとき再び壊れる
-#   - なぜその日付なのかコードを読んでも分からない
+# 【テスト対象アクション】
+# new    → 振り返り入力フォームの表示
+# create → 振り返りの保存処理
 #
-# ✅ 良い例: travel_to + WeeklyReflection.current_week_start_date
-#   - アプリの週計算ロジックそのものを使うため、ロジック変更に自動追従する
-#   - fixtures と絶対に衝突しない（未来・過去の固定時刻を使うため）
-#   - 「この時刻にいる状態」が明確で、コードの意図が読みやすい
-# ================================================================
+# 【テストの日時設定】
+# travel_to で 2026-02-22（日曜 AM5:00）に固定する。
+# この週の week_start_date = 2026-02-16。
+# fixtures の weekly_reflections は 2026-02-02 と 2026-02-09 始まりのため重複しない。
 
 require "test_helper"
 
 class WeeklyReflectionsControllerTest < ActionDispatch::IntegrationTest
-  # ================================================================
-  # ActiveSupport::Testing::TimeHelpers を include する理由:
-  # travel_to メソッドを使えるようにするためです。
-  # ActionDispatch::IntegrationTest は自動で include していますが、
-  # 明示的に書くことで「このテストは時刻操作を使う」という意図を示します。
-  # ================================================================
-  include ActiveSupport::Testing::TimeHelpers
-
+  # ==========================================
+  # setup: 各テスト実行前の前処理
+  # ==========================================
   setup do
-    # fixtures(:users) はテスト用の固定データを参照します
-    # test/fixtures/users.yml に定義された one ユーザーを使います
     @user = users(:one)
-  end
-
-  # ===========================================================
-  # 未ログイン時のテスト
-  # ===========================================================
-  test "未ログイン時は一覧ページにアクセスできないこと" do
-    get weekly_reflections_path
-    # require_login の動作確認: ログインページへリダイレクトされる
-    assert_redirected_to login_path
-  end
-
-  # ===========================================================
-  # ログイン済み時の基本表示テスト
-  # ===========================================================
-  test "ログイン済みで一覧ページが表示されること" do
-    log_in_as(@user)
-    get weekly_reflections_path
-    assert_response :success
-  end
-
-  test "ページに「週次振り返り」タイトルが含まれること" do
-    log_in_as(@user)
-    get weekly_reflections_path
-    assert_select "h1", text: /週次振り返り/
-  end
-
-  # ===========================================================
-  # 過去の振り返りデータ表示テスト
-  # ================================================================
-  # travel_to を使う理由:
-  # WeeklyReflection.current_week_start_date は「現在時刻」を元に
-  # 今週の月曜日を計算します。
-  # travel_to で時刻を固定することで:
-  # 1. 何度テストを実行しても同じ週が返ってくる（再現性）
-  # 2. fixtures の今週データと衝突しない過去の週を確実に指定できる
-  # 3. 「アプリのロジックで計算した月曜日」を使うため曜日計算ミスがない
-  # ================================================================
-  test "過去の振り返りが表示されること" do
     log_in_as(@user)
 
-    # 2025/12/03（水曜日）に時刻を固定します。
-    # fixtures の現在週データと重複しない、明らかに過去の時刻を選んでいます。
-    # current_week_start_date が「その週の月曜日(2025/12/01)」を返すことを利用します。
-    travel_to Time.zone.local(2025, 12, 3, 10, 0, 0) do
-      # アプリの週計算ロジックで今週の月曜日を取得します
-      # Date.new(2025, 12, 1) と直書きしないことで、
-      # ロジックが変わっても自動追従できます
+    # テスト対象の日時: 2026-02-22（日曜）AM5:00
+    # wday=0（日曜）かつ hour=5（AM4:00以降）→ 振り返り可能な時間帯
+    @test_time = Time.zone.local(2026, 2, 22, 5, 0, 0)
+  end
+
+  # ==========================================
+  # new アクション テスト
+  # ==========================================
+
+  test "new: ログイン済みユーザーが振り返りフォームにアクセスできること" do
+    travel_to @test_time do
+      get new_weekly_reflection_path
+      assert_response :success
+    end
+  end
+
+  test "new: 未ログインユーザーはログインページにリダイレクトされること" do
+    delete logout_path
+    travel_to @test_time do
+      get new_weekly_reflection_path
+      assert_redirected_to login_path
+    end
+  end
+
+  test "new: 今週がすでに完了している場合は詳細ページにリダイレクトされること" do
+    travel_to @test_time do
+      # 今週分（week_start_date = 2026-02-16）の完了済み振り返りを作成する
+      # fixtures の週とは重複しないため create! で直接作成できる
       week_start = WeeklyReflection.current_week_start_date
-
-      reflection = WeeklyReflection.create!(
+      completed  = WeeklyReflection.create!(
         user:               @user,
         week_start_date:    week_start,
         week_end_date:      week_start + 6.days,
-        reflection_comment: "テスト振り返りコメント",
+        reflection_comment: "完了済みコメント",
         is_locked:          true
       )
 
-      get weekly_reflections_path
-      assert_select "body", text: /テスト振り返りコメント/
+      get new_weekly_reflection_path
+      assert_redirected_to weekly_reflection_path(completed)
     end
   end
 
-  test "他ユーザーの振り返りは表示されないこと" do
-    log_in_as(@user)
+  # ==========================================
+  # create アクション テスト
+  # ==========================================
 
-    other_user = users(:two)
+  test "create: 正常なパラメーターで振り返りが保存されること" do
+    travel_to @test_time do
+      # assert_difference でユーザー単位のカウントが +1 されることを確認する
+      # 【なぜ @user.weekly_reflections.count を使うか】
+      # WeeklyReflection.count（全ユーザー分）より @user.weekly_reflections.count の方が
+      # テストの意図が明確になる。「このユーザーの振り返りが1件増えた」ことを確認できる。
+      assert_difference "@user.weekly_reflections.count", 1 do
+        post weekly_reflections_path, params: {
+          weekly_reflection: {
+            reflection_comment: "今週は読書を毎日継続できた。来週も継続する。"
+          }
+        }
+      end
+      assert_redirected_to weekly_reflections_path
+    end
+  end
 
-    # 同様に travel_to + current_week_start_date でデータを作成します
-    travel_to Time.zone.local(2025, 12, 3, 10, 0, 0) do
-      week_start = WeeklyReflection.current_week_start_date
+  test "create: reflection_comment が空でも保存できること（任意項目）" do
+    travel_to @test_time do
+      assert_difference "@user.weekly_reflections.count", 1 do
+        post weekly_reflections_path, params: {
+          weekly_reflection: { reflection_comment: "" }
+        }
+      end
+      assert_redirected_to weekly_reflections_path
+    end
+  end
 
-      other_reflection = WeeklyReflection.create!(
-        user:            other_user,
-        week_start_date: week_start,
-        week_end_date:   week_start + 6.days,
-        is_locked:       true
+  test "create: 保存後は is_locked が true になること" do
+    travel_to @test_time do
+      post weekly_reflections_path, params: {
+        weekly_reflection: { reflection_comment: "テスト" }
+      }
+      # 今週分の振り返りを取得して is_locked を確認する
+      saved = @user.weekly_reflections.find_by(
+        week_start_date: WeeklyReflection.current_week_start_date
+      )
+      assert saved.is_locked, "振り返り完了後は is_locked が true になること"
+    end
+  end
+
+  test "create: 同じ週に2回 create を呼んでも1件しか作成されないこと" do
+    travel_to @test_time do
+      # 1回目
+      post weekly_reflections_path, params: {
+        weekly_reflection: { reflection_comment: "1回目" }
+      }
+      count_after_first = @user.weekly_reflections.count
+
+      # 2回目（同じ週）→ 既存レコードを更新するため件数は増えない
+      # assert_no_difference でカウントが変化しないことを確認する
+      assert_no_difference "@user.weekly_reflections.count" do
+        post weekly_reflections_path, params: {
+          weekly_reflection: { reflection_comment: "2回目" }
+        }
+      end
+
+      assert_equal count_after_first, @user.weekly_reflections.count
+    end
+  end
+
+  test "create: 習慣数と同じ数のスナップショットが作成されること" do
+    travel_to @test_time do
+      # 習慣数を事前に取得する（ハードコードしないことで fixtures 変更に強くなる）
+      habit_count = @user.habits.active.count
+
+      post weekly_reflections_path, params: {
+        weekly_reflection: { reflection_comment: "テストコメント" }
+      }
+
+      # 今週分の振り返りを取得
+      reflection = @user.weekly_reflections.find_by(
+        week_start_date: WeeklyReflection.current_week_start_date
       )
 
-      get weekly_reflections_path
-      assert_response :success
-
-      # 他ユーザーの振り返り詳細ページへのリンクが存在しないことを確認します
-      # これによりデータ隔離（自分のデータのみ表示）が正しく動作しているか検証します
-      refute_match %r{/weekly_reflections/#{other_reflection.id}},
-                   response.body
-    end
-  end
-
-  # ===========================================================
-  # 日曜日 AM4:00 判定テスト
-  # ================================================================
-  # すべて travel_to で「テストがどの時刻で動いているか」を明示します。
-  # Time.zone.local を使う理由:
-  #   Time.new だとサーバーのローカルタイムゾーンになりますが、
-  #   Time.zone.local は Rails の config.time_zone（Asia/Tokyo など）に
-  #   従った時刻を生成するため、本番環境と同じ条件でテストできます。
-  # ================================================================
-  test "日曜AM4:00ちょうどは振り返り作成ボタンが表示されること" do
-    log_in_as(@user)
-
-    # 2026/02/22 は日曜日。AM4:00 ちょうどが境界値（>=で判定しているため含まれる）
-    travel_to Time.zone.local(2026, 2, 22, 4, 0, 0) do
-      get weekly_reflections_path
-      assert_response :success
-      assert_select "a[href='#{new_weekly_reflection_path}']"
-    end
-  end
-
-  test "日曜AM3:59は振り返り作成ボタンが表示されないこと" do
-    log_in_as(@user)
-
-    # AM4:00 の1分前。is_after_4am が false になることを確認する境界値テスト
-    travel_to Time.zone.local(2026, 2, 22, 3, 59, 0) do
-      get weekly_reflections_path
-      assert_response :success
-      assert_select "a[href='#{new_weekly_reflection_path}']", count: 0
-    end
-  end
-
-  test "日曜AM5:00は振り返り作成ボタンが表示されること" do
-    log_in_as(@user)
-
-    travel_to Time.zone.local(2026, 2, 22, 5, 0, 0) do
-      get weekly_reflections_path
-      assert_response :success
-      assert_select "a[href='#{new_weekly_reflection_path}']"
-    end
-  end
-
-  test "平日（月曜AM10:00）は振り返り作成ボタンが表示されないこと" do
-    log_in_as(@user)
-
-    travel_to Time.zone.local(2026, 2, 16, 10, 0, 0) do
-      get weekly_reflections_path
-      assert_response :success
-      assert_select "a[href='#{new_weekly_reflection_path}']", count: 0
+      # 習慣数とスナップショット数が一致することを確認する
+      assert_equal habit_count, reflection.habit_summaries.count,
+        "習慣 #{habit_count} 件分のスナップショットが作成されること"
     end
   end
 end

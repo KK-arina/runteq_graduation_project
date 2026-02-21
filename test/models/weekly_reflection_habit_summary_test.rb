@@ -16,7 +16,7 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
   setup do
     @user       = users(:one)
     @habit      = habits(:habit_one)
-    @reflection = weekly_reflections(:current_week)
+    @reflection = weekly_reflections(:for_summary_test)
 
     # .new でインスタンスを作成（DBには保存しない）
     # → fixtureには current_week × habit_one は存在しないため
@@ -132,21 +132,28 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
   end
 
   test '異なる振り返りなら同じ習慣のサマリーを作成できること' do
-    # last_week × habit_one はfixtureに定義済みなので、
-    # ここでは last_week × habit_two（未使用の組み合わせ）を使う
-    other_habit = habits(:habit_two)
-    other_reflection = weekly_reflections(:last_week)
+    # @reflection（for_summary_test）× habit_one を保存する
+    @summary.save!
+
+    # 別の振り返り用レコードを作成（テスト内で直接作る）
+    other_reflection = WeeklyReflection.create!(
+      user:            @user,
+      week_start_date: Date.new(2025, 11, 3),
+      week_end_date:   Date.new(2025, 11, 9),
+      is_locked:       true
+    )
 
     other_summary = WeeklyReflectionHabitSummary.new(
       weekly_reflection: other_reflection,
-      habit:             other_habit,
-      habit_name:        '運動',
-      weekly_target:     5,
+      habit:             @habit,
+      habit_name:        '読書',
+      weekly_target:     7,
       actual_count:      5,
-      achievement_rate:  100.0
+      achievement_rate:  71.0
     )
 
-    assert other_summary.valid?, "異なる振り返り×習慣なら有効なはずです: #{other_summary.errors.full_messages}"
+    assert other_summary.valid?,
+      "異なる振り返りなら有効なはずです: #{other_summary.errors.full_messages}"
   end
 
   # ============================================================
@@ -320,14 +327,12 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
   # ============================================================
 
   test 'completed スコープが達成率100%のサマリーのみ返すこと' do
-    # fixtureの last_week_habit_one（achievement_rate: 100）が対象
-    completed_fixture = weekly_reflection_habit_summaries(:last_week_habit_one)
+    completed_fixture = weekly_reflection_habit_summaries(:one_habit_one)  # achievement_rate: 100
     assert_includes WeeklyReflectionHabitSummary.completed, completed_fixture
   end
 
   test 'incomplete スコープが達成率100%未満のサマリーのみ返すこと' do
-    # fixtureの current_week_habit_two（achievement_rate: 60.00）が対象
-    incomplete_fixture = weekly_reflection_habit_summaries(:current_week_habit_two)
+    incomplete_fixture = weekly_reflection_habit_summaries(:two_habit_one)  # achievement_rate: 71
     assert_includes WeeklyReflectionHabitSummary.incomplete, incomplete_fixture
     assert_not_includes WeeklyReflectionHabitSummary.completed, incomplete_fixture
   end

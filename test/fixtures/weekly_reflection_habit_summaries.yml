@@ -1,27 +1,28 @@
 # test/fixtures/weekly_reflection_habit_summaries.yml
 #
-# 【注意】
-# このfixtureは「テスト実行前にDBに自動挿入されるデータ」です。
-# テスト本体で save! を呼ぶテストと combination（reflection × habit）が
-# 被るとUNIQUE制約エラーになるため、テスト本体では使わない組み合わせにしています。
+# 【参照先の対応関係】
+# weekly_reflection: one → 2週前（user: one）
+# weekly_reflection: two → 1週前（user: one）
+# habit: habit_one       → user: one の習慣（読書）
 #
-# テスト本体では habit: habit_one × reflection: current_week を使うため、
-# fixtureでは habit_two × current_week, habit_one × last_week のみ定義します。
+# 【スコープテストのための設計】
+# completed スコープ（achievement_rate: 100）→ one_habit_one
+# incomplete スコープ（achievement_rate: 100未満）→ two_habit_one
 
-# 今週の振り返り × habit_two（テスト本体と被らない組み合わせ）
-current_week_habit_two:
-  weekly_reflection: current_week
-  habit: habit_two
-  habit_name: 運動
-  weekly_target: 5
-  actual_count: 3
-  achievement_rate: 60.00
-
-# 先週の振り返り × habit_one
-last_week_habit_one:
-  weekly_reflection: last_week
+# 2週前 × habit_one（達成率100% → completed スコープテストに使用）
+one_habit_one:
+  weekly_reflection: one
   habit: habit_one
   habit_name: 読書
   weekly_target: 7
   actual_count: 7
   achievement_rate: 100.00
+
+# 1週前 × habit_one（達成率71% → incomplete スコープテストに使用）
+two_habit_one:
+  weekly_reflection: two
+  habit: habit_one
+  habit_name: 読書
+  weekly_target: 7
+  actual_count: 5
+  achievement_rate: 71.00
