@@ -1,0 +1,44 @@
+# ==============================================================================
+# weekly_reflectionsフィクスチャ
+#
+# 【フィクスチャとは】
+# テスト実行前にDBに自動投入されるサンプルデータの定義ファイル。
+# テストごとにデータを作成するコードを書かなくて済む。
+#
+# 【命名ルール】
+# このプロジェクトでは「テーブル名_連番」ではなく
+# 「内容がわかるキー名」を使う（例: completed_last_week）。
+# Issue #17で習慣fixturesのキー名をone/two → habit_one/habit_twoに
+# 統一した際と同じ方針。
+#
+# 【ERB記法】
+# <%= %> を使うとRubyコードを実行できる。
+# 例: <%= 7.days.ago.to_date %> → 実行時の7日前の日付が入る
+# ==============================================================================
+
+# 先週の振り返り（完了済み）
+# users(:one) に紐づく、先週分の振り返りレコード
+reflection_completed:
+  user: one
+  week_start_date: <%= 7.days.ago.to_date.beginning_of_week(:monday) %>
+  week_end_date: <%= 7.days.ago.to_date.beginning_of_week(:monday) + 6.days %>
+  reflection_comment: "先週は筋トレを3回しかできなかった。仕事が忙しかったが、朝の時間を活用すべきだった。"
+  is_locked: true
+
+# 今週の振り返り（未完了）
+# users(:one) に紐づく、今週分の振り返りレコード（まだ完了していない）
+reflection_pending:
+  user: one
+  week_start_date: <%= Date.today.beginning_of_week(:monday) %>
+  week_end_date: <%= Date.today.beginning_of_week(:monday) + 6.days %>
+  reflection_comment:
+  is_locked: false
+
+# 別ユーザーの振り返り（セキュリティテスト用）
+# users(:two) に紐づく振り返り
+reflection_other_user:
+  user: two
+  week_start_date: <%= 7.days.ago.to_date.beginning_of_week(:monday) %>
+  week_end_date: <%= 7.days.ago.to_date.beginning_of_week(:monday) + 6.days %>
+  reflection_comment: "別ユーザーの振り返りデータ"
+  is_locked: true

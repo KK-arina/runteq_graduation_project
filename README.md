@@ -645,7 +645,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | Issue | タイトル | ステータス | 完了日 | SP |
 |-------|---------|-----------|--------|-----|
 | #18 | ダッシュボードの作成 | ✅ 完了 | 2/21 | 4 |
-| #19 | WeeklyReflectionモデルの作成 | ⬜ 未着手 | - | 2 |
+| #19 | WeeklyReflectionモデルの作成 | ✅ 完了 | 2/21 | 2 |
 | #20 | WeeklyReflectionHabitSummaryモデルの作成 | ⬜ 未着手 | - | 2 |
 | #21 | 週次振り返り一覧ページ | ⬜ 未着手 | - | 2 |
 | #22 | 週次振り返り入力ページ | ⬜ 未着手 | - | 4 |
@@ -654,7 +654,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-**Week 3 進捗**: 4SP / 20SP（20%）
+**Week 3 進捗**: 6SP / 20SP（30%）
 
 <br>
 
@@ -670,6 +670,19 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - `log_in_as` ヘルパーを `test_helper.rb` に追加（ログイン処理の共通化）
 - 既存テスト4ファイルをリダイレクト先変更に追従修正
 - 全テスト成功: 121 runs, 324 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #19: WeeklyReflectionモデルの作成
+- `WeeklyReflection` モデル作成（user_id, week_start_date, week_end_date, reflection_comment, is_locked）
+- UNIQUE制約（user_id + week_start_date）をDBレベル + Railsバリデーションで二重ガード
+- AM4:00基準の週計算（`HabitRecord.today_for_record` を流用した `current_week_start_date`）
+- `find_or_build_for_current_week` でコントローラー肥大化を防ぐ設計
+- カスタムバリデーション（`week_end_date` は `week_start_date + 6日` を強制）
+- スコープ追加（`completed`, `pending`, `recent`, `for_week`）
+- `Userモデル` に `has_many :weekly_reflections, dependent: :destroy` を追加
+- モデルテスト22件追加（AM4:00境界値・UNIQUE制約・CASCADE・週範囲整合性を網羅）
+- 全テスト成功: 143 runs, 362 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
@@ -1150,6 +1163,10 @@ habitflow/
 | `app/views/shared/_header.html.erb` | 共通ヘッダー（ログイン状態で表示切替） |
 | `db/seeds.rb` | サンプルデータ（2ユーザー、計10件の習慣） |
 | `app/models/habit_record.rb` | HabitRecordモデル（AM4:00基準の日付計算、toggle_completed!、スコープ） |
+| `db/migrate/YYYYMMDDHHMMSS_create_weekly_reflections.rb` | weekly_reflectionsテーブル作成 |
+| `app/models/weekly_reflection.rb` | WeeklyReflectionモデル（バリデーション・スコープ・AM4:00基準メソッド） |
+| `test/models/weekly_reflection_test.rb` | WeeklyReflectionモデルテスト（22テストケース） |
+| `test/fixtures/weekly_reflections.yml` | テスト用フィクスチャ（完了済み・未完了・別ユーザー） |
 | `test/models/habit_record_test.rb` | HabitRecordモデルテスト（18テストケース、42 assertions） |
 | `test/fixtures/habit_records.yml` | テスト用習慣記録データ（過去日付で重複回避） |
 | `app/models/habit.rb` | Habitモデル（論理削除機能、`weekly_progress_stats` で週次進捗統計を計算） |
@@ -4274,6 +4291,125 @@ end
 **テスト結果**:
 ```
 121 runs, 324 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+#### WeeklyReflectionモデル（Issue #19）
+
+<br>
+
+**実装日**: 2026年2月21日
+
+<br>
+
+**モデル設計**:
+- 週次振り返りデータを管理する基盤モデル
+- 1ユーザーにつき1週間あたり1レコードのみ作成可能
+- AM4:00基準でHabitRecordと一貫した週の判定ロジック
+- 振り返り完了フラグ（`is_locked`）によるPDCA強制ロック機能の基盤
+
+<br>
+
+**テーブル定義**:
+```sql
+CREATE TABLE weekly_reflections (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  week_start_date DATE NOT NULL,
+  week_end_date DATE NOT NULL,
+  reflection_comment TEXT,
+  is_locked BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+CREATE UNIQUE INDEX index_weekly_reflections_on_user_id_and_week_start_date
+  ON weekly_reflections(user_id, week_start_date);
+```
+
+<br>
+
+**バリデーション**:
+- week_start_date: 必須
+- week_end_date: 必須、`week_start_date + 6日` であること（カスタムバリデーション）
+- reflection_comment: 1000文字以内（任意入力）
+- is_locked: true/false のみ許可（`inclusion` で検証）
+- week_start_date: ユニーク制約（scope: :user_id）
+
+<br>
+
+**カスタムバリデーション（週範囲の整合性）**:
+```ruby
+validate :week_range_must_be_one_week
+
+private
+
+def week_range_must_be_one_week
+  return if week_start_date.blank? || week_end_date.blank?
+  unless week_end_date == week_start_date + 6.days
+    errors.add(:week_end_date, 'は開始日の6日後でなければなりません')
+  end
+end
+```
+
+<br>
+
+**クラスメソッド**:
+```ruby
+# AM4:00基準で「今週の月曜日」を取得
+def self.current_week_start_date
+  today = HabitRecord.today_for_record
+  today.beginning_of_week(:monday)
+end
+
+# 今週分を取得、なければ新規インスタンスを返す（未保存）
+def self.find_or_build_for_current_week(user)
+  start_date = current_week_start_date
+  user.weekly_reflections.find_or_initialize_by(week_start_date: start_date) do |r|
+    r.week_end_date = start_date + 6.days
+  end
+end
+```
+
+<br>
+
+**インスタンスメソッド**:
+```ruby
+def complete!     = update!(is_locked: true)   # 振り返りを完了状態にする
+def completed?    = is_locked                  # 完了済みかどうか
+def pending?      = !is_locked                 # 未完了かどうか
+def week_label    # 表示用ラベル例: "2026/02/16 - 02/22"
+  "#{week_start_date.strftime('%Y/%m/%d')} - #{week_end_date.strftime('%m/%d')}"
+end
+```
+
+<br>
+
+**スコープ**:
+```ruby
+scope :completed, -> { where(is_locked: true) }
+scope :pending,   -> { where(is_locked: false) }
+scope :recent,    -> { order(week_start_date: :desc) }
+scope :for_week,  ->(start_date) { where(week_start_date: start_date) }
+```
+
+<br>
+
+**テスト戦略**:
+- バリデーション正常系・異常系（1000文字制限・nil・週範囲不正）
+- UNIQUE制約（同一ユーザー同一週の重複作成を拒否、別ユーザーは許可）
+- アソシエーション（CASCADE: ユーザー削除時に振り返りも自動削除）
+- AM4:00境界値（`travel_to` で月曜AM3:59 → 先週、AM4:00 → 今週を検証）
+- `find_or_build_for_current_week`（既存レコード取得・新規インスタンス生成）
+- インスタンスメソッド（`complete!`, `completed?`, `week_label`）
+
+<br>
+
+**テスト結果**:
+```
+22 runs, 38 assertions, 0 failures, 0 errors, 0 skips
+（全体: 143 runs, 362 assertions, 0 failures, 0 errors, 0 skips）
 ```
 
 <br>

@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_02_16_141407) do
+ActiveRecord::Schema[7.2].define(version: 2026_02_21_023717) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -47,7 +47,20 @@ ActiveRecord::Schema[7.2].define(version: 2026_02_16_141407) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  create_table "weekly_reflections", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.date "week_start_date", null: false
+    t.date "week_end_date", null: false
+    t.text "reflection_comment"
+    t.boolean "is_locked", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "week_start_date"], name: "index_weekly_reflections_on_user_id_and_week_start_date", unique: true
+    t.index ["user_id"], name: "index_weekly_reflections_on_user_id"
+  end
+
   add_foreign_key "habit_records", "habits", on_delete: :cascade
   add_foreign_key "habit_records", "users", on_delete: :cascade
   add_foreign_key "habits", "users"
+  add_foreign_key "weekly_reflections", "users", on_delete: :cascade
 end
