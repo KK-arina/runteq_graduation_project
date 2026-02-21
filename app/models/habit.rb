@@ -22,6 +22,18 @@ class Habit < ApplicationRecord
   # ただし今回は論理削除なので、物理削除されるケースは限定的。
   has_many :habit_records, dependent: :destroy
 
+  # app/models/habit.rb の既存コードに追記する箇所
+
+  # ============================================================
+  # アソシエーションの追記（以下の1行を追加する）
+  # ============================================================
+
+  # has_many :weekly_reflection_habit_summaries
+  # → 1つのHabitは複数のHabitSummaryを持つ（複数の振り返りに登場する）
+  # → dependent: :nullify → Habit削除時にサマリーのhabit_idをNULLにする
+  #   スナップショットのデータ（habit_name等）は残すため、destroyではなくnullify
+  has_many :weekly_reflection_habit_summaries, dependent: :nullify
+
   # ============================================================
   # バリデーション（入力値の検証ルール）
   # ============================================================
