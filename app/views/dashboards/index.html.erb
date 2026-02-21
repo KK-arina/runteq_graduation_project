@@ -1,0 +1,152 @@
+<%# app/views/dashboards/index.html.erb %>
+<%# =============================================================
+    ダッシュボード画面
+    ログインユーザーのホーム画面
+    ・今週の習慣達成率サマリー（プログレスバー付き）
+    ・今日の習慣チェックリスト（即時保存）
+    ============================================================= %>
+
+<div class="min-h-screen bg-gray-50">
+  <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+    <%# ========================================
+        ページタイトルエリア
+        ======================================== %>
+    <div class="mb-8">
+      <h1 class="text-2xl font-bold text-gray-900">ダッシュボード</h1>
+      <%# @today : DashboardController で計算したAM4:00基準の「今日」の日付
+          strftime : 日付を日本語フォーマットに変換するRubyメソッド
+          例: "2026年2月20日（金）" %>
+      <p class="text-sm text-gray-500 mt-1">
+        <%= @today.strftime("%Y年%-m月%-d日（%a）") %>
+        <%# 週の表示 例: "今週: 2/17（月）〜 2/23（日）" %>
+        <span class="ml-2">
+          今週:
+          <%= @week_start.strftime("%-m/%-d（%a）") %>
+          〜
+          <%= (@week_start + 6.days).strftime("%-m/%-d（%a）") %>
+        </span>
+      </p>
+    </div>
+
+    <%# ========================================
+        今週の達成率サマリーカード
+        ======================================== %>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
+      <h2 class="text-base font-bold text-gray-700 mb-4">📊 今週の達成率</h2>
+
+      <% if @habits.empty? %>
+        <%# 習慣が1件も登録されていない場合のEmpty State %>
+        <div class="text-center py-6">
+          <p class="text-gray-400 text-sm">まだ習慣が登録されていません。</p>
+          <%= link_to "習慣を登録する →", new_habit_path,
+              class: "mt-2 inline-block text-sm text-blue-600 hover:underline" %>
+        </div>
+
+      <% else %>
+        <%# 全体の達成率バー %>
+        <div class="mb-5">
+          <div class="flex justify-between items-center mb-1">
+            <span class="text-sm font-semibold text-gray-700">全体達成率</span>
+            <%# @overall_rate : DashboardController で計算した全体平均達成率（%）
+                テキストの色を達成率に応じて変える
+                80%以上 → 緑、50%以上 → 青、それ以下 → 赤 %>
+            <span class="text-sm font-bold <%= @overall_rate >= 80 ? 'text-green-600' : (@overall_rate >= 50 ? 'text-blue-600' : 'text-red-500') %>">
+              <%= @overall_rate %>%
+            </span>
+          </div>
+          <%# プログレスバーの外側（背景） %>
+          <div class="w-full bg-gray-200 rounded-full h-3">
+            <%# プログレスバーの内側（達成率に応じた幅）
+                style="width: XX%" で動的に幅を設定
+                clamp(0%, 100%) は style 属性の中では使えないので、
+                [[@overall_rate, 0].max, 100].min でRuby側でクランプする %>
+            <div class="h-3 rounded-full transition-all duration-500
+              <%= @overall_rate >= 80 ? 'bg-green-500' : (@overall_rate >= 50 ? 'bg-blue-500' : 'bg-red-400') %>"
+              style="width: <%= [[@overall_rate, 0].max, 100].min %>%">
+            </div>
+          </div>
+        </div>
+
+        <%# 各習慣の達成率バー %>
+        <div class="space-y-3">
+          <% @habits.each do |habit| %>
+            <%# @habit_stats : { habit_id => { rate: XX, completed_count: YY } }
+                ハッシュからこの習慣の統計データを取得
+                || {} : データが存在しない場合のデフォルト値 %>
+            <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
+            <% rate = stats[:rate] %>
+            <% count = stats[:completed_count] %>
+
+            <div>
+              <div class="flex justify-between items-center mb-1">
+                <%# 習慣名 %>
+                <span class="text-sm text-gray-600 truncate max-w-xs"><%= habit.name %></span>
+                <%# "実績回数 / 週次目標 日 (達成率%)" 形式で表示 %>
+                <span class="text-xs text-gray-500 ml-2 flex-shrink-0">
+                  <%= count %> / <%= habit.weekly_target %> 日
+                  <span class="font-semibold ml-1 <%= rate >= 80 ? 'text-green-600' : (rate >= 50 ? 'text-blue-600' : 'text-red-500') %>">
+                    (<%= rate %>%)
+                  </span>
+                </span>
+              </div>
+              <%# 個別習慣のプログレスバー（高さを少し細く h-2 にして区別） %>
+              <div class="w-full bg-gray-100 rounded-full h-2">
+                <div class="h-2 rounded-full transition-all duration-500
+                  <%= rate >= 80 ? 'bg-green-400' : (rate >= 50 ? 'bg-blue-400' : 'bg-red-300') %>"
+                  style="width: <%= [rate, 100].min %>%">
+                </div>
+              </div>
+            </div>
+          <% end %>
+        </div>
+
+        <%# 習慣管理ページへのリンク %>
+        <div class="mt-4 text-right">
+          <%= link_to "習慣を管理する →", habits_path,
+              class: "text-xs text-blue-600 hover:underline" %>
+        </div>
+
+      <% end %>
+    </div>
+
+    <%# ========================================
+        今日の習慣チェックリストカード
+        ======================================== %>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
+      <h2 class="text-base font-bold text-gray-700 mb-4">
+        ✅ 今日の習慣チェック
+        <%# 完了数 / 全体数 を表示 %>
+        <span class="text-sm font-normal text-gray-400 ml-2">
+          <%# @today_records_hash.values.count { |r| r.completed } :
+              今日の記録のうち completed = true のものだけカウント %>
+          <%= @today_records_hash.values.count(&:completed) %> /
+          <%= @habits.size %> 完了
+        </span>
+      </h2>
+
+      <% if @habits.empty? %>
+        <div class="text-center py-6">
+          <p class="text-gray-400 text-sm">習慣を登録するとここにチェックリストが表示されます。</p>
+          <%= link_to "最初の習慣を登録する →", new_habit_path,
+              class: "mt-2 inline-block text-sm text-blue-600 hover:underline" %>
+        </div>
+
+      <% else %>
+        <%# 習慣ごとのチェックボックスリスト
+            @today_records_hash から今日の記録を取得してパーシャルに渡す %>
+        <div class="divide-y divide-gray-50">
+          <% @habits.each do |habit| %>
+            <%# render パーシャル : _habit_record.html.erb を埋め込む
+                habit         : 習慣オブジェクト
+                habit_record  : 今日の記録（存在しない場合はnil → パーシャル側でnewを使う） %>
+            <%= render "habit_records/habit_record",
+                habit: habit,
+                habit_record: @today_records_hash[habit.id] %>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+
+  </div>
+</div>

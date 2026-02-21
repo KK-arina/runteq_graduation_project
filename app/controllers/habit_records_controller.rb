@@ -1,87 +1,48 @@
-# ==============================================================================
-# HabitRecordsController（最終確定版）
-# ==============================================================================
-# 【設計方針】
-#   Controller は「流れの制御」だけを担当する。
-#   「どのように変更するか」のロジックは全てモデルに任せる。
-#
-# 【params 構造について】
-#   このコントローラーは Strong Parameters（require/permit）を使わない。
-#   理由: completed という単一の値を受け取るだけであり、
-#         Habit モデルの属性を一括代入するわけではないため。
-#   受け取る params: { completed: "1" } または { completed: "0" }
-#   → params[:completed] == "1" で Boolean に変換して使う。
-# ==============================================================================
-class HabitRecordsController < ApplicationController
-  before_action :require_login
+# app/controllers/habit_records_controller.rb
+# =============================================================
+# 習慣の日次記録（HabitRecord）を管理するController
+# ネストされたルーティング: /habits/:habit_id/habit_records
+# チェックボックスを押したときの即時保存を担当する
+# =============================================================
 
-  # set_habit: @habit をセットする（全アクションで実行）
-  # セキュリティ: current_user.habits.active.find で
-  #   「ログインユーザーの有効な習慣のみ」に絞る。
-  #   他ユーザーの habit_id を URL に入れると RecordNotFound → 404 になる。
+class HabitRecordsController < ApplicationController
+  # すべてのアクションの前にログインチェックを行う
+  before_action :require_login
+  # すべてのアクションの前に @habit を取得する
   before_action :set_habit
 
-  # ===========================================================================
   # POST /habits/:habit_id/habit_records
-  # create アクション
-  # ===========================================================================
-  # 【役割】
-  #   今日の HabitRecord を「取得または新規作成」し、完了状態を更新する。
-  #
-  # 【モデルメソッドを使う理由】
-  #   HabitRecord.find_or_create_for: 「どの条件で作成するか」をモデルに任せる。
-  #   update_completed!:              「どのカラムを更新するか」をモデルに任せる。
-  #   → Controller はカラム名（completed）を直接知らなくてよい設計（疎結合）。
-  # ===========================================================================
+  # チェックボックスをON/OFFしたとき（まだ今日の記録がない場合）に呼ばれる
   def create
-    # モデルメソッドで「今日のレコード」を取得または作成する
+    # 今日の記録を取得するか、なければ新規作成する
+    # find_or_create_for : HabitRecordモデルのクラスメソッド（AM4:00基準の日付で検索/作成）
     @habit_record = HabitRecord.find_or_create_for(current_user, @habit)
-
-    # モデルメソッドで完了状態を更新する
-    # params[:completed] == "1" で Stimulus から送信された文字列を Boolean に変換
+    # params[:completed] == "1" の場合 true、"0" の場合 false として更新する
     @habit_record.update_completed!(params[:completed] == "1")
 
+    # respond_to : リクエストのAcceptヘッダーに応じてレスポンス形式を切り替える
     respond_to do |format|
+      # Turbo Streamリクエスト（Stimulusから fetch で呼ばれる場合）
       format.turbo_stream do
+        # turbo_stream.replace : 指定したidのDOM要素を新しいHTMLで置き換える
+        # "habit_record_#{@habit.id}" : パーシャル側のid属性と一致させる
         render turbo_stream: turbo_stream.replace(
           "habit_record_#{@habit.id}",
           partial: "habit_records/habit_record",
           locals:  { habit: @habit, habit_record: @habit_record }
         )
       end
-      format.html { redirect_to habits_path, notice: "記録を保存しました" }
-    end
-  rescue ActiveRecord::RecordInvalid => e
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: turbo_stream.replace(
-          "habit_record_#{@habit.id}",
-          partial: "habit_records/habit_record_error",
-          locals:  { habit: @habit, error_message: e.message }
-        )
-      end
-      format.html { redirect_to habits_path, alert: "記録の保存に失敗しました" }
+      # 通常のHTMLリクエスト（JavaScriptが無効な環境など）
+      format.html { redirect_to dashboard_path, notice: "記録を保存しました" }
     end
   end
 
-  # ===========================================================================
   # PATCH /habits/:habit_id/habit_records/:id
-  # update アクション
-  # ===========================================================================
-  # 【役割】
-  #   既存の HabitRecord の完了状態を更新する。
-  #
-  # 【セキュリティ】
-  #   current_user.habit_records.find(params[:id]) で
-  #   「ログインユーザーのレコードのみ」を検索する。
-  #   他ユーザーのレコード ID を URL に入れると RecordNotFound → エラーになる。
-  #   ※ HabitRecord.find(params[:id]) だと他ユーザーのレコードも取れてしまう（NG）
-  # ===========================================================================
+  # チェックボックスをON/OFFしたとき（今日の記録が既にある場合）に呼ばれる
   def update
-    # セキュリティ: current_user のレコードのみ取得（他ユーザーは RecordNotFound）
+    # current_user.habit_records.find : セキュリティ対策
+    # 他人のレコードをURLから直接操作できないよう、ログインユーザーの記録のみ取得する
     @habit_record = current_user.habit_records.find(params[:id])
-
-    # モデルメソッドで完了状態を更新する
     @habit_record.update_completed!(params[:completed] == "1")
 
     respond_to do |format|
@@ -92,53 +53,21 @@ class HabitRecordsController < ApplicationController
           locals:  { habit: @habit, habit_record: @habit_record }
         )
       end
-      format.html { redirect_to habits_path, notice: "記録を更新しました" }
-    end
-  rescue ActiveRecord::RecordNotFound
-    # 他ユーザーのレコードや存在しない ID へのアクセス
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: turbo_stream.replace(
-          "habit_record_#{@habit.id}",
-          partial: "habit_records/habit_record_error",
-          locals:  { habit: @habit, error_message: "記録が見つかりませんでした" }
-        )
-      end
-      format.html { redirect_to habits_path, alert: "記録が見つかりませんでした" }
-    end
-  rescue ActiveRecord::RecordInvalid => e
-    respond_to do |format|
-      format.turbo_stream do
-        render turbo_stream: turbo_stream.replace(
-          "habit_record_#{@habit.id}",
-          partial: "habit_records/habit_record_error",
-          locals:  { habit: @habit, error_message: e.message }
-        )
-      end
-      format.html { redirect_to habits_path, alert: "記録の更新に失敗しました" }
+      format.html { redirect_to dashboard_path, notice: "記録を更新しました" }
     end
   end
 
   private
 
-  # ===========================================================================
-  # set_habit（private メソッド）
-  # ===========================================================================
-  # 【役割】
-  #   @habit インスタンス変数をセットする。
-  #
-  # 【head :not_found and return について】
-  #   head :not_found → HTTP 404 ステータスのみ返す（ボディなし、パーシャル不要）
-  #   and return      → メソッドを即座に終了する（アクション本体への継続を防ぐ）
-  #
-  # 【なぜ respond_to { format.turbo_stream ... } をやめたか】
-  #   共通パーシャル shared/_flash_message を render しようとすると、
-  #   そのパーシャルが存在しない場合に MissingTemplate エラーになる。
-  #   head :not_found なら外部パーシャルに依存しないため安全で堅牢。
-  # ===========================================================================
+  # @habit を取得する before_action 用メソッド
+  # current_user.habits.active.find : ログインユーザーの有効な習慣のみ検索
+  # 他人の習慣IDがURLに指定されても取得できない（セキュリティ対策）
   def set_habit
     @habit = current_user.habits.active.find(params[:habit_id])
   rescue ActiveRecord::RecordNotFound
+    # 見つからない場合は 404 を返す
+    # head :not_found : ボディなしで 404 レスポンスを返す
+    # and return : これ以降の処理を中断する
     head :not_found and return
   end
 end

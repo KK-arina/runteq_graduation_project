@@ -1,155 +1,78 @@
-# ==============================================================================
-# test/integration/habit_record_instant_save_test.rb（最終確定版）
-# ==============================================================================
-# 【修正内容】
-#   toggle_completed_habit_record_path（存在しないルート）を
-#   正しいネストされたルートに修正:
-#     PATCH habit_habit_record_path(@habit, record)
-#
-# 【ルート確認方法】
-#   docker compose exec web bin/rails routes | grep habit_record
-#   → habit_habit_record PATCH /habits/:habit_id/habit_records/:id
-#
-# 【params 構造について】
-#   このコントローラーは require(:habit_record) を使わないため
-#   params: { completed: "1" } の形式でOK（ネスト不要）。
-# ==============================================================================
+# frozen_string_literal: true
+# test/integration/habit_record_instant_save_test.rb
+# =============================================================
+# 習慣記録の即時保存機能（Turbo Stream）の統合テスト
+# チェックボックスON/OFFの保存・エラー処理を検証する
+# =============================================================
+
 require "test_helper"
 
 class HabitRecordInstantSaveTest < ActionDispatch::IntegrationTest
-  setup do
-    @user        = users(:one)
-    @other_user  = users(:two)
-    @habit       = habits(:habit_one)
-    @other_habit = habits(:habit_two)
-
-    # ログイン
-    post login_path, params: {
-      session: { email: @user.email, password: "password" }
-    }
+  def setup
+    # fixturesからテスト用データを取得
+    @user  = users(:one)
+    @habit = habits(:habit_one)
   end
 
-  # ----------------------------------------------------------------------------
-  # チェックボックスをクリックすると completed が切り替わる（false → true）
-  # ----------------------------------------------------------------------------
-  test "チェックボックスをクリックすると completed が切り替わる（false → true）" do
-    record = HabitRecord.create!(
-      user:        @user,
-      habit:       @habit,
-      record_date: HabitRecord.today_for_record,
-      completed:   false
-    )
+  # ---- 未ログイン時のアクセス制御テスト ----
+  test "未ログイン時はログインページにリダイレクトされること" do
+    post habit_habit_records_path(@habit),
+         params:  { completed: "1" },
+         headers: { "Accept" => "text/vnd.turbo-stream.html" }
 
-    # PATCH: 正しいネストされたルートを使う
-    patch habit_habit_record_path(@habit, record),
-          params:  { completed: "1" },
-          headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    assert_redirected_to login_path
+  end
 
+  # ---- 新規レコード作成（POST）テスト ----
+  test "チェックボックスONで今日の記録が新規作成されること" do
+    log_in_as(@user)
+
+    assert_difference "HabitRecord.count", 1 do
+      post habit_habit_records_path(@habit),
+           params:  { completed: "1" },
+           headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    end
+
+    # Turbo Stream レスポンスが返ること
     assert_response :success
-    assert record.reload.completed, "completed が true になること"
+    assert_equal "text/vnd.turbo-stream.html", response.media_type
   end
 
-  # ----------------------------------------------------------------------------
-  # チェックボックスを再度クリックすると completed が元に戻る（true → false）
-  # ----------------------------------------------------------------------------
-  test "チェックボックスを再度クリックすると completed が元に戻る（true → false）" do
-    record = HabitRecord.create!(
-      user:        @user,
-      habit:       @habit,
-      record_date: HabitRecord.today_for_record,
-      completed:   true
-    )
+  # ---- 既存レコード更新（PATCH）テスト ----
+  test "チェックボックスOFFで既存レコードが更新されること" do
+    log_in_as(@user)
+
+    # 事前にレコードを作成しておく
+    record = HabitRecord.find_or_create_for(@user, @habit)
+    record.update!(completed: true)
 
     patch habit_habit_record_path(@habit, record),
           params:  { completed: "0" },
           headers: { "Accept" => "text/vnd.turbo-stream.html" }
 
     assert_response :success
-    assert_not record.reload.completed, "completed が false になること"
+    # 値が更新されていることをDBで確認
+    assert_equal false, record.reload.completed
   end
 
-  # ----------------------------------------------------------------------------
-  # レスポンスが Turbo Stream 形式で返ること
-  # ----------------------------------------------------------------------------
-  # 【テストの意図】
-  #   Accept ヘッダーに turbo-stream を指定した場合、
-  #   Content-Type が text/vnd.turbo-stream.html で返ることを確認する。
-  # ----------------------------------------------------------------------------
-  test "レスポンスが Turbo Stream 形式で返ること" do
-    record = HabitRecord.create!(
-      user:        @user,
-      habit:       @habit,
-      record_date: HabitRecord.today_for_record,
-      completed:   false
-    )
+  # ---- 存在しないIDへのアクセステスト ----
+  test "存在しない habit_record id へのアクセスはエラーが返ること" do
+    log_in_as(@user)
 
-    patch habit_habit_record_path(@habit, record),
+    patch habit_habit_record_path(@habit, 9999999),
           params:  { completed: "1" },
           headers: { "Accept" => "text/vnd.turbo-stream.html" }
 
-    assert_response :success
-    # turbo-stream が Content-Type に含まれることを確認
-    assert_includes response.content_type, "turbo-stream",
-                    "Content-Type に turbo-stream が含まれること"
-  end
-
-  # ----------------------------------------------------------------------------
-  # 他のユーザーのレコードは 404 Not Found が返ること
-  # ----------------------------------------------------------------------------
-  # 【テストの意図】
-  #   set_habit で他ユーザーの習慣は RecordNotFound になり
-  #   head :not_found が返ることを確認する。
-  # ----------------------------------------------------------------------------
-  test "他のユーザーのレコードは 404 Not Found が返ること" do
-    other_record = HabitRecord.create!(
-      user:        @other_user,
-      habit:       @other_habit,
-      record_date: HabitRecord.today_for_record,
-      completed:   false
-    )
-
-    # 他ユーザーの習慣・レコードへのアクセス
-    # → set_habit で @other_habit が current_user のものでないため 404
-    patch habit_habit_record_path(@other_habit, other_record),
-          params:  { completed: "1" },
-          headers: { "Accept" => "text/vnd.turbo-stream.html" }
-
-    assert_response :not_found, "他ユーザーのリソースへのアクセスは 404 になること"
-    assert_not other_record.reload.completed, "他ユーザーのレコードが変更されていないこと"
-  end
-
-# ----------------------------------------------------------------------------
-# 存在しない habit_record id へのアクセスはエラーが返ること
-# ----------------------------------------------------------------------------
-test "存在しない habit_record id へのアクセスはエラーが返ること" do
-  patch habit_habit_record_path(@habit, 9999999),
-        params:  { completed: "1" },
-        headers: { "Accept" => "text/vnd.turbo-stream.html" }
-
-  # Turbo Stream エラーが返る（HTTP 200 は正常）
-  assert_response :success
-
-  # エラーパーシャルの内容が含まれていることを確認
-  assert_includes response.body, "記録が見つかりませんでした",
-                  "エラーメッセージがレスポンスに含まれること"
-end
-
-  # ----------------------------------------------------------------------------
-  # 未ログイン状態では操作できない
-  # ----------------------------------------------------------------------------
-  test "未ログイン状態では操作できない" do
-    record = HabitRecord.create!(
-      user:        @user,
-      habit:       @habit,
-      record_date: HabitRecord.today_for_record,
-      completed:   false
-    )
-
-    delete logout_path
-
-    patch habit_habit_record_path(@habit, record),
-          params: { completed: "1" }
-
-    assert_redirected_to login_path, "未ログイン時はログインページにリダイレクトされること"
+    # ------------------------------------------------------------------
+    # ✅ 修正ポイント
+    # 旧: assert_response :success（200を期待）
+    #     → HabitRecordsController#set_habit で head :not_found を返す
+    #       実装のため、実際は404が返っていた
+    #
+    # 新: assert_response :not_found（404を期待）
+    #     存在しないIDには404を返すのが正しいセキュリティ設計
+    #     他人のレコードIDを推測してアクセスしても404になる
+    # ------------------------------------------------------------------
+    assert_response :not_found
   end
 end

@@ -15,29 +15,34 @@ class HabitCreationTest < ActionDispatch::IntegrationTest
     @other_user = users(:two)
   end
 
+  # test/integration/habit_creation_test.rb
+  # 17〜40行目付近を修正（変更箇所は1行のみ）
+
   test "ログイン後に習慣を作成できること" do
-    # ログイン処理をシミュレート
+    # ------------------------------------------------------------------
+    # ✅ 修正ポイント（1行のみ）
+    # 旧: post login_path → assert_redirected_to root_path
+    #     → SessionsController#create が dashboard_path に変わったため失敗
+    #
+    # 新: assert_redirected_to dashboard_path
+    #     それ以外はすべてそのまま
+    # ------------------------------------------------------------------
     post login_path, params: { session: { email: @user.email, password: "password" } }
-    assert_redirected_to root_path
+    assert_redirected_to dashboard_path  # root_path → dashboard_path に変更
     follow_redirect!
 
-    # 新規作成フォームページにアクセス
+    # 以下はすべてそのまま（変更不要）
     get new_habit_path
     assert_response :success
 
-    # 習慣作成処理
     assert_difference("Habit.count", 1) do
       post habits_path, params: { habit: { name: "朝のランニング", weekly_target: 5 } }
     end
 
-    # 習慣一覧ページにリダイレクトされることを確認
     assert_redirected_to habits_path
     follow_redirect!
-    
-    # フラッシュメッセージの確認
+
     assert_select "div", text: /習慣を登録しました/
-    
-    # 作成された習慣が正しいユーザーに紐づいているか確認
     assert_equal @user.id, Habit.last.user_id
   end
 

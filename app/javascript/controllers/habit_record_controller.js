@@ -1,156 +1,103 @@
-// ==============================================================================
-// habit_record_controller.js（Issue #15 修正版）
-// ==============================================================================
-// 【修正内容】
-//   if (window.Turbo) { Turbo.renderStreamMessage(...) }
-//   　↓ window.Turbo に統一
-//   if (window.Turbo) { window.Turbo.renderStreamMessage(...) }
-//
-// 【なぜ window.Turbo に統一するか】
-//   JavaScript のスコープ問題を防ぐため。
-//   import { Turbo } from "@hotwired/turbo" でインポートした Turbo と
-//   window.Turbo（グローバル変数）は同じオブジェクトだが、
-//   バンドラーの設定によっては別オブジェクトになる可能性がある。
-//   window.Turbo に統一することで「グローバルの Turbo を使う」と明示できる。
-//   また、Turbo がロードされているかの確認（if window.Turbo）と
-//   呼び出し（window.Turbo.renderStreamMessage）を同じ参照にすることで
-//   より安全で一貫性のあるコードになる。
-// ==============================================================================
+// app/javascript/controllers/habit_record_controller.js
+// =============================================================
+// Stimulusコントローラー：習慣記録チェックボックスの即時保存を管理する
+// 
+// Stimulusの基本的な考え方：
+// - Controller: JS処理のクラス（このファイル）
+// - Target    : JSから操作したいHTML要素（checkboxなど）
+// - Value     : HTML側から渡す値（URLなど）
+// - Action    : イベント（change など）とメソッドの紐付け
+// =============================================================
+
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
+  // ---- Targets の定義 ----
+  // data-habit-record-target="checkbox" と data-habit-record-target="loading"
+  // の要素を this.checkboxTarget, this.loadingTarget で参照できるようにする
   static targets = ["checkbox", "loading"]
-  static values  = {
-    createUrl: String,
-    updateUrl: String,
-    recordId:  Number
-  }
 
-  connect() {
-    this._timeoutId = null
-    console.log("[HabitRecord] コントローラー接続:", this.element)
-  }
+  // ---- Values の定義 ----
+  // HTML側の data-habit-record-***-value 属性から値を取得する
+  // createUrl: 新規作成時のPOST URL
+  // updateUrl: 更新時のPATCH URL
+  // recordId : 既存レコードのID（0 = まだDBに存在しない）
+  static values = { createUrl: String, updateUrl: String, recordId: Number }
 
-  toggle(event) {
-    const checked = event.target.checked
+  // ---- toggle メソッド ----
+  // チェックボックスが変更されたときに呼び出される（data-action="change->habit-record#toggle"）
+  async toggle() {
+    const checkbox  = this.checkboxTarget
+    const completed = checkbox.checked  // true（チェックあり）or false（チェックなし）
+
+    // ローディング状態を開始
+    // チェックボックスを無効化してローディングアイコンを表示する
     this._setLoadingState(true)
 
-    if (this._timeoutId) clearTimeout(this._timeoutId)
-
-    // タイムアウト処理（10秒でエラー）
-    this._timeoutId = setTimeout(() => {
-      console.error("[HabitRecord] タイムアウト")
-      this._setLoadingState(false)
-      event.target.checked = !checked
-      this._showTemporaryError("タイムアウトしました。再度お試しください。")
-    }, 10000)
-
-    this._sendRequest(checked, event.target)
-  }
-
-  async _sendRequest(checked, checkboxElement) {
-    // CSRF トークンを meta タグから取得する
-    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
-
-    const isNewRecord = this.recordIdValue === 0
-    const url         = isNewRecord ? this.createUrlValue : this.updateUrlValue
-    const method      = isNewRecord ? "POST" : "PATCH"
-
-    const formData = new FormData()
-    formData.append("completed", checked ? "1" : "0")
-
     try {
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "X-CSRF-Token": csrfToken,
-          "Accept":       "text/vnd.turbo-stream.html, text/html, application/xhtml+xml"
-        },
-        body: formData
-      })
+      // ---- HTTPリクエストを送信 ----
+      // recordId が 0 の場合 → まだDBに記録がない → POST（新規作成）
+      // recordId が 1以上の場合 → 既にDBに記録がある → PATCH（更新）
+      const url    = this.recordIdValue === 0 ? this.createUrlValue : this.updateUrlValue
+      const method = this.recordIdValue === 0 ? "POST" : "PATCH"
 
-      if (!response.ok) {
-        throw new Error(`HTTP Error: ${response.status} ${response.statusText}`)
-      }
+      // Promise.race : fetchとタイムアウトを競わせ、先に終わった方を採用する
+      // 10秒以内にレスポンスが来なければタイムアウトエラーにする
+      const response = await Promise.race([
+        fetch(url, {
+          method,
+          headers: {
+            // CSRF対策トークン: RailsはこれがないとPOST/PATCHを拒否する
+            "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').content,
+            // Turbo Streamのレスポンスを要求する（サーバー側で respond_to format.turbo_stream が動く）
+            "Accept":       "text/vnd.turbo-stream.html",
+            // フォームデータ形式で送信することを宣言
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          // チェックボックスの状態を "completed=1" or "completed=0" として送信
+          body: `completed=${completed ? "1" : "0"}`
+        }),
+        // app/javascript/controllers/habit_record_controller.js
+        // （該当箇所のみ抜粋）
 
+        // ✅ タイムアウトを 10000ms(10秒) → 8000ms(8秒) に変更
+        // 理由: 10秒は体感として「フリーズしたかも」と感じる長さ
+        //       8秒でも十分な待機時間を確保しつつ、UXが向上する
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 8000)
+        )
+      ])
+
+      // HTTPエラー（4xx, 5xx）があればエラーを投げる
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+      // レスポンスのTurbo StreamのHTML文字列を取得して画面に反映する
+      // window.Turbo.renderStreamMessage がTurboのDOM更新処理を担う
       const responseText = await response.text()
-
-      // ==============================================================
-      // 【修正箇所】window.Turbo に統一する
-      // ==============================================================
-      // 修正前: if (window.Turbo) { Turbo.renderStreamMessage(responseText) }
-      //   → if の条件では window.Turbo を確認しているのに、
-      //     呼び出しは import された Turbo を使っている（不一致）
-      //
-      // 修正後: if (window.Turbo) { window.Turbo.renderStreamMessage(responseText) }
-      //   → 確認も呼び出しも window.Turbo に統一（一貫性・安全性が向上）
-      // ==============================================================
-      if (window.Turbo) {
-        window.Turbo.renderStreamMessage(responseText)
-      }
-
-      // タイムアウトタイマーをクリア
-      if (this._timeoutId) {
-        clearTimeout(this._timeoutId)
-        this._timeoutId = null
-      }
-
-      this._setLoadingState(false)
-      console.log("[HabitRecord] 保存成功:", { checked, url, method })
+      window.Turbo.renderStreamMessage(responseText)
 
     } catch (error) {
-      console.error("[HabitRecord] 保存失敗:", error)
-
-      if (this._timeoutId) {
-        clearTimeout(this._timeoutId)
-        this._timeoutId = null
-      }
-
+      // ---- エラー時のロールバック ----
+      // 通信失敗やタイムアウトの場合、チェックボックスを元の状態に戻す
+      // ユーザーに「操作は失敗した」と視覚的に伝える
+      checkbox.checked = !completed
+      console.error("保存エラー:", error)
+    } finally {
+      // 成功・失敗に関わらず、ローディング状態を終了する
+      // finally : try/catchの後に必ず実行されるブロック
       this._setLoadingState(false)
-
-      // 楽観的 UI の取り消し: チェックを元に戻す
-      checkboxElement.checked = !checked
-      this._showTemporaryError("保存に失敗しました。再度お試しください。")
     }
   }
 
+  // ---- ローディング状態の制御 ----
+  // isLoading: true のとき → チェックボックス無効化 + ローディングアイコン表示
+  // isLoading: false のとき → チェックボックス有効化 + ローディングアイコン非表示
   _setLoadingState(isLoading) {
-    if (this.hasCheckboxTarget) {
-      this.checkboxTarget.disabled = isLoading
+    this.checkboxTarget.disabled = isLoading
+    if (isLoading) {
+      this.loadingTarget.removeAttribute("hidden")
+    } else {
+      this.loadingTarget.setAttribute("hidden", "")
     }
-    if (this.hasLoadingTarget) {
-      this.loadingTarget.hidden = !isLoading
-    }
-  }
-
-  _showTemporaryError(message) {
-    let errorEl = document.getElementById("habit_record_error_toast")
-
-    if (!errorEl) {
-      errorEl                = document.createElement("div")
-      errorEl.id             = "habit_record_error_toast"
-      errorEl.className      = [
-        "fixed", "bottom-4", "right-4", "z-50",
-        "bg-red-100", "border", "border-red-400", "text-red-700",
-        "px-4", "py-3", "rounded", "shadow-lg",
-        "transition-opacity", "duration-300"
-      ].join(" ")
-      document.body.appendChild(errorEl)
-    }
-
-    errorEl.textContent    = message
-    errorEl.hidden         = false
-    errorEl.style.opacity  = "1"
-
-    setTimeout(() => {
-      errorEl.style.opacity = "0"
-      setTimeout(() => {
-        if (errorEl.parentNode) errorEl.parentNode.removeChild(errorEl)
-      }, 300)
-    }, 3000)
-  }
-
-  disconnect() {
-    if (this._timeoutId) clearTimeout(this._timeoutId)
   }
 }
