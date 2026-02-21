@@ -2618,7 +2618,7 @@ end
 
 **習慣新規作成フォーム（app/views/habits/new.html.erb）**:
 ```erb
-    新しい習慣を追加
+  新しい習慣を追加
 
   <%= form_with model: @habit, local: true do |f| %>
     <% if @habit.errors.any? %>
@@ -2630,35 +2630,35 @@ end
 
     <% end %>
     
-      <%= f.label :name, "習慣名", class: "block text-sm font-medium text-gray-700 mb-2" %>
-      <%= f.text_field :name,
-          placeholder: "例: 読書、筋トレ、英語学習",
-          class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
+    <%= f.label :name, "習慣名", class: "block text-sm font-medium text-gray-700 mb-2" %>
+    <%= f.text_field :name,
+        placeholder: "例: 読書、筋トレ、英語学習",
+        class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       
-        習慣名は50文字以内で入力してください
-      
-    
-
-    
-    
-      <%= f.label :weekly_target, "週次目標値", class: "block text-sm font-medium text-gray-700 mb-2" %>
-      <%= f.number_field :weekly_target,
-          min: 1,
-          max: 7,
-          value: f.object.weekly_target || 7,
-          placeholder: "例: 7（週7回実施）",
-          class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
-      
-        週あたりの実施回数を設定します（1〜7回）
+      習慣名は50文字以内で入力してください
       
     
 
     
     
-      <%= link_to "キャンセル", habits_path,
-          class: "flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition text-center" %>
-      <%= f.submit "登録する",
-          class: "flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition" %>
+    <%= f.label :weekly_target, "週次目標値", class: "block text-sm font-medium text-gray-700 mb-2" %>
+    <%= f.number_field :weekly_target,
+        min: 1,
+        max: 7,
+        value: f.object.weekly_target || 7,
+        placeholder: "例: 7（週7回実施）",
+        class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
+      
+      週あたりの実施回数を設定します（1〜7回）
+      
+    
+
+    
+    
+    <%= link_to "キャンセル", habits_path,
+        class: "flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition text-center" %>
+    <%= f.submit "登録する",
+        class: "flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition" %>
     
   <% end %>
 
@@ -2682,11 +2682,11 @@ end
 ```erb
 <% if @habit.errors.any? %>
   
-      <%= @habit.errors.count %> 件のエラーがあります
+  <%= @habit.errors.count %> 件のエラーがあります
     
-      <% @habit.errors.full_messages.each do |message| %>
-        <%= message %>
-      <% end %>
+  <% @habit.errors.full_messages.each do |message| %>
+    <%= message %>
+  <% end %>
   
 <% end %>
 ```
@@ -2708,21 +2708,21 @@ end
 
 **共通レイアウト（app/views/layouts/application.html.erb）**:
 ```erb
-    HabitFlow
+  HabitFlow
     
-    <%= csrf_meta_tags %>
-    <%= csp_meta_tag %>
-    <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
-    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
-    <%= javascript_importmap_tags %>
+  <%= csrf_meta_tags %>
+  <%= csp_meta_tag %>
+  <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
+  <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+  <%= javascript_importmap_tags %>
 
-    <% flash.each do |message_type, message| %>
-      <%= message %>
-    <% end %>
+  <% flash.each do |message_type, message| %>
+    <%= message %>
+  <% end %>
 
-    <%= render 'shared/header' %>
-      <%= yield %>
-    <%= render 'shared/footer' %>
+  <%= render 'shared/header' %>
+    <%= yield %>
+  <%= render 'shared/footer' %>
 ```
 
 <br>
@@ -2737,16 +2737,21 @@ end
 **共通ヘッダー（app/views/shared/_header.html.erb）**:
 ```erb
   <%= link_to "HabitFlow", root_path, class: "hover:text-blue-700 transition-colors" %>
+
   <% if logged_in? %>
+
     <%= link_to "習慣一覧", habits_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
       <%= current_user.name %> さん
     <%= button_to "ログアウト", logout_path,
       method: :delete,
       class: "px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors",
       data: { turbo_confirm: "ログアウトしますか？" } %>
+
   <% else %>
+
     <%= link_to "ログイン", login_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
     <%= link_to "新規登録", new_user_path, class: "px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors" %>
+
   <% end %>
 ```
 
@@ -3826,7 +3831,7 @@ user.destroy
 ```ruby
 # config/routes.rb
 resources :habits, only: [:index, :new, :create, :destroy] do
-  resources :habit_records, only: [:create, :update]
+resources :habit_records, only: [:create, :update]
 end
 ```
 
@@ -3835,7 +3840,7 @@ end
 **生成されるルーティング**:
 ```
 habit_habit_records POST  /habits/:habit_id/habit_records(.:format)      habit_records#create
- habit_habit_record PATCH /habits/:habit_id/habit_records/:id(.:format)  habit_records#update
+habit_habit_record PATCH /habits/:habit_id/habit_records/:id(.:format)  habit_records#update
 ```
 
 <br>
@@ -3994,9 +3999,7 @@ export default class extends Controller {
   record_id  = record.persisted? ? record.id : 0
 %>
 
-
   <%# チェックボックス + ローディングアイコン + 習慣名 + 完了バッジ %>
-
 ```
 
 <br>
@@ -4016,6 +4019,7 @@ def index
     .index_by(&:habit_id)
 end
 ```
+
 ```erb
 <%# app/views/habits/index.html.erb %>
 <%# N+1を防ぐために @today_records_hash からO(1)で取得 %>
@@ -4186,6 +4190,7 @@ habit.weekly_progress_stats(user)
 ```
 
 <br>
+
 #### ダッシュボード機能（Issue #18）
 
 <br>
@@ -4660,7 +4665,6 @@ end
 そのため `travel_to + WeeklyReflection.current_week_start_date` を使い、<br>
 アプリのロジックそのものに追従する日付非依存なテスト設計を採用しています。<br>
 
-<br>
 ```ruby
 # テスト例
 travel_to Time.zone.local(2025, 12, 3, 10, 0, 0) do
@@ -4704,7 +4708,6 @@ end
 
 `create` アクション：`find_or_build_for_current_week` による冪等性保証、トランザクション内で振り返り本体と習慣スナップショットを一括保存。
 
-<br>
 ```ruby
 # app/controllers/weekly_reflections_controller.rb（createアクション抜粋）
 
@@ -4800,7 +4803,6 @@ validates :reflection_comment, length: { maximum: 1000 }, allow_blank: true
 
 `show` アクション：`set_weekly_reflection` を `before_action` に切り出し、`current_user.weekly_reflections.find` で他ユーザーの振り返りへのアクセスを遮断。`calculate_overall_achievement_rate` を private メソッドに分離して責務を明確化。
 
-<br>
 ```ruby
 # app/controllers/weekly_reflections_controller.rb（showアクション抜粋）
 
@@ -4858,8 +4860,6 @@ end
 <br>
 
 routes.rb の置き換えにより消えていたエイリアスと、テストが参照するネストルートを復元：
-
-<br>
 ```ruby
 # login_path / logout_path エイリアス（application_controller.rb・_header.html.erb・test_helper.rb が使用）
 get    "/login",  to: "sessions#new",     as: :login
