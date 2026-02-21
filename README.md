@@ -36,6 +36,7 @@
 - ✅ WeeklyReflectionHabitSummaryモデル作成完了（スナップショット設計・冪等性対応）
 - ✅ 週次振り返り一覧ページ実装完了（日曜AM4:00判定・N+1対策・travel_to日付非依存テスト）
 - ✅ 週次振り返り入力ページ実装完了（form_with model設計・トランザクション保証・スナップショット自動作成）
+- ✅ 週次振り返り詳細ページ実装完了（コードレビュー対応・フィクスチャ設計・ルーティング整備）
 
 <br>
 
@@ -652,12 +653,12 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #20 | WeeklyReflectionHabitSummaryモデルの作成 | ✅ 完了 | 2/21 | 2 |
 | #21 | 週次振り返り一覧ページ | ✅ 完了 | 2/21 | 2 |
 | #22 | 週次振り返り入力ページ | ✅ 完了 | 2/21 | 4 |
-| #23 | 週次振り返り詳細ページ | ⬜ 未着手 | - | 2 |
+| #23 | 週次振り返り詳細ページ | ✅ 完了 | 2/21 | 2 |
 | #24 | PDCA強制ロック機能 | ⬜ 未着手 | - | 4 |
 
 <br>
 
-**Week 3 進捗**: 14SP / 20SP（70%）
+**Week 3 進捗**: 16SP / 20SP（80%）
 
 <br>
 
@@ -731,6 +732,20 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - `validates :reflection_comment, length: { maximum: 1000 }` をモデルに追加
 - fixtures の週重複・外部キー違反・ラベル不整合を全て解消し全テストグリーンを達成
 - 全テスト成功: 188 runs, 443 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #23: 週次振り返り詳細ページ
+- `WeeklyReflectionsController` に `show` アクションを追加（`set_weekly_reflection` で認可チェック）
+- `app/views/weekly_reflections/show.html.erb` 作成（総合達成率・習慣別サマリー・振り返りコメント表示）
+- `calculate_overall_achievement_rate` を private メソッドに分離（責務分離・`.size` でSQL節約）
+- `.order(achievement_rate: :desc)` をハッシュ形式に統一（SQLインジェクション対策）
+- `includes(:habit)` を追加（将来の N+1 問題を予防）
+- コードレビュー対応 5 項目（order形式・includes・partition削除・メソッド分離・テスト強化）
+- フィクスチャ設計：`for_summary_test` / `one_habit_one` / `two_habit_one` の衝突回避設計
+- `routes.rb` 整備：`login_path` / `logout_path` エイリアス・`POST /login`・ネストルート追加
+- `root "pages#index"` 修正（`pages#top` → `pages#index` でルート404を解消）
+- 全テスト成功: 189 runs, 443 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
@@ -1111,7 +1126,7 @@ habitflow/
 │   ├── controllers/
 │   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
 │   │   ├── dashboards_controller.rb     # ダッシュボード（index）今週の達成率・今日のチェックリスト
-│   │   ├── weekly_reflections_controller.rb # 週次振り返り（index, new, create）日曜AM4:00判定・トランザクション保証
+│   │   ├── weekly_reflections_controller.rb # 週次振り返り（index, new, create, show）日曜AM4:00判定・トランザクション保証
 │   │   ├── habit_records_controller.rb  # 習慣記録（create, update）ネストされたルーティング
 │   │   ├── habits_controller.rb         # 習慣管理（index, new, create, destroy）
 │   │   ├── pages_controller.rb          # ランディングページ（ログイン済みはdashboardへリダイレクト）
@@ -1142,7 +1157,8 @@ habitflow/
 │       │   └── index.html.erb            # ダッシュボード（今週の達成率・今日のチェックリスト）
 │       ├── weekly_reflections/
 │       │   ├── index.html.erb                # 週次振り返り一覧（振り返りボタン・達成率サマリー・履歴リスト）
-│       │   └── new.html.erb                  # 週次振り返り入力フォーム（今週の習慣達成実績・コメント入力）
+│       │   ├── new.html.erb                  # 週次振り返り入力フォーム（今週の習慣達成実績・コメント入力）
+│       │   └── show.html.erb                 # 週次振り返り詳細（総合達成率・習慣別サマリー・コメント表示）
 │       ├── pages/
 │       │   └── index.html.erb            # TOPページ（シンプル化済み）
 │       ├── sessions/
@@ -1184,7 +1200,7 @@ habitflow/
 │   │   └── weekly_reflection_create_test.rb   # 週次振り返り作成統合テスト（E2Eフロー・1000文字バリデーション）Issue #22
 │   ├── controllers/
 │   │   ├── dashboards_controller_test.rb      # DashboardsControllerテスト（3テストケース）Issue #18
-│   │   ├── weekly_reflections_controller_test.rb # WeeklyReflectionsControllerテスト（new/create・境界値・セキュリティ）Issue #21/#22
+│   │   ├── weekly_reflections_controller_test.rb # WeeklyReflectionsControllerテスト（show/index/new/create・認可・境界値）Issue #21/#22/#23
 │   │   ├── habits_controller_test.rb     # HabitsControllerテスト（2テストケース）
 │   │   └── habit_records_controller_test.rb  # HabitRecordsControllerテスト（AM4:00境界値・セキュリティ）
 │   └── fixtures/
@@ -4822,6 +4838,101 @@ validates :reflection_comment, length: { maximum: 1000 }, allow_blank: true
 **テスト結果**:
 ```
 188 runs, 443 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+#### 週次振り返り詳細ページ（Issue #23）
+
+<br>
+
+**実装日**: 2026年2月21日
+
+<br>
+
+**コントローラー設計**:
+
+<br>
+
+`show` アクション：`set_weekly_reflection` を `before_action` に切り出し、`current_user.weekly_reflections.find` で他ユーザーの振り返りへのアクセスを遮断。`calculate_overall_achievement_rate` を private メソッドに分離して責務を明確化。
+
+<br>
+```ruby
+# app/controllers/weekly_reflections_controller.rb（showアクション抜粋）
+
+before_action :set_weekly_reflection, only: [:show]
+
+def show
+  @habit_summaries = @weekly_reflection.habit_summaries
+                                       .includes(:habit)
+                                       .order(achievement_rate: :desc)
+  @overall_achievement_rate = calculate_overall_achievement_rate
+end
+
+private
+
+def set_weekly_reflection
+  @weekly_reflection = current_user.weekly_reflections.find(params[:id])
+rescue ActiveRecord::RecordNotFound
+  redirect_to weekly_reflections_path, alert: "振り返りが見つかりませんでした。"
+end
+
+def calculate_overall_achievement_rate
+  return 0 if @habit_summaries.empty?
+  (@habit_summaries.map(&:achievement_rate).sum / @habit_summaries.size.to_f).round(1)
+end
+```
+
+<br>
+
+**コードレビュー対応（5項目）**:
+
+<br>
+
+| 指摘 | 修正内容 | 理由 |
+|------|---------|------|
+| `.order` 文字列形式 | `order(achievement_rate: :desc)` に変更 | SQLインジェクション対策・Rails標準スタイル |
+| N+1 予防 | `includes(:habit)` を追加 | 将来の `summary.habit.name` アクセスに備えた事前対策 |
+| 不要な `partition` | ビューで使われていた `@achieved_summaries` を削除 | 未使用変数の除去 |
+| メソッド分離 | `calculate_overall_achievement_rate` を private に | show アクションの責務を「変数準備のみ」に絞る |
+| テスト強化 | `assert_select "h2"` で見出し3件を追加検証 | UI崩壊・見出し削除を検知できるよう強化 |
+
+<br>
+
+**フィクスチャ設計の教訓（UNIQUE制約回避）**:
+
+<br>
+
+モデルテストの `setup` が `for_summary_test × habit_one` を `.new` で使うため、<br>
+フィクスチャ側は `for_summary_test × habit_two`（`one_habit_one` キー）を定義して衝突を回避。<br>
+スコープテスト用の `two_habit_one` は `completed_one` に紐づけることで `for_summary_test` との競合を防ぐ設計。
+
+<br>
+
+**ルーティング整備**:
+
+<br>
+
+routes.rb の置き換えにより消えていたエイリアスと、テストが参照するネストルートを復元：
+
+<br>
+```ruby
+# login_path / logout_path エイリアス（application_controller.rb・_header.html.erb・test_helper.rb が使用）
+get    "/login",  to: "sessions#new",     as: :login
+post   "/login",  to: "sessions#create"   # test_helper.rb の post login_path 用
+delete "/logout", to: "sessions#destroy", as: :logout
+
+# habit_habit_records_path を生成するネストルート
+resources :habits, only: [:index, :new, :create, :destroy] do
+  resources :habit_records, only: [:create, :update]
+end
+```
+
+<br>
+
+**テスト結果**:
+```
+189 runs, 443 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>

@@ -1,247 +1,183 @@
 <%# app/views/weekly_reflections/index.html.erb
-    
-    【このファイルの役割】
-    週次振り返りの一覧ページ。以下の2つのセクションで構成される。
-    1. 今週の習慣達成率サマリー + 振り返りボタン（Issue #21）
-    2. 過去の振り返り履歴リスト（Issue #21）
-    
-    【Issue #22 での変更点】
-    「今週を振り返る」ボタンのリンク先を new_weekly_reflection_path に変更。
-    
-    【使用するインスタンス変数（コントローラーから受け取る）】
-    @current_week_reflection : 今週のWeeklyReflectionインスタンス（未保存の場合もある）
-    @can_create_reflection   : 振り返りボタンを表示するか（boolean）
-    @past_reflections        : 過去の完了済み振り返りの一覧
-    @habits                  : 有効な習慣の一覧
-    @habit_stats             : { habit_id => { rate:, completed_count: } }
-    @overall_rate            : 全習慣の平均達成率（整数）
+  ═══════════════════════════════════════════════════════════════════
+  【このファイルの役割】
+    週次振り返り一覧ページ。
+    ・今週の振り返りボタン（未完了時のみ表示）
+    ・今週の習慣達成率サマリー
+    ・過去の完了済み振り返り一覧 ← ここに「詳細を見る」リンクを追加する
+  ═══════════════════════════════════════════════════════════════════
 %>
 
-<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+<% content_for :title, "週次振り返り | HabitFlow" %>
 
-  <%# ===================================================
-      ページタイトルエリア
-      =================================================== %>
-  <div class="flex justify-between items-center mb-8">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">週次振り返り</h1>
-      <p class="text-sm text-gray-500 mt-1">
-        PDCAサイクルを回して習慣を改善しましょう
-      </p>
-    </div>
+<div class="max-w-3xl mx-auto px-4 py-8">
+
+  <%# ── ページヘッダー ── %>
+  <div class="mb-8">
+    <h1 class="text-2xl font-bold text-gray-900">週次振り返り</h1>
+    <p class="mt-1 text-gray-500 text-sm">毎週の習慣達成状況を振り返り、次週の行動を改善しましょう。</p>
   </div>
 
-  <%# ===================================================
-      今週の振り返りカード
-      =================================================== %>
-  <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-8">
-    <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">
-      今週の状況
-    </h2>
+  <%# ────────────────────────────────────────────────────────────
+      今週の振り返りセクション
+      日曜AM4:00以降かつ未完了のときだけ「今週を振り返る」ボタンを表示
+      ──────────────────────────────────────────────────────────── %>
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">今週の状況</h2>
 
-    <%# 今週の月曜〜日曜の日付範囲を表示する
-        current_week_start_date は AM4:00 基準で今週の月曜日を返すモデルメソッド %>
-    <% week_start = WeeklyReflection.current_week_start_date %>
-    <% week_end   = week_start + 6.days %>
-    <p class="text-base font-semibold text-gray-700 mb-4">
-      <%= week_start.strftime("%Y/%m/%d") %>（月）〜<%= week_end.strftime("%m/%d") %>（日）
-    </p>
-
-    <%# --- 今週の習慣達成率サマリー --- %>
-    <% if @habits.any? %>
-      <div class="mb-4">
-        <div class="flex justify-between items-center mb-1">
-          <span class="text-sm font-medium text-gray-600">今週の習慣達成率</span>
-          <span class="text-sm font-bold text-blue-600"><%= @overall_rate %>%</span>
-        </div>
-        <div class="w-full bg-gray-200 rounded-full h-2.5">
-          <%# Tailwind CSS の動的クラスは JIT なしでは動作しないため style で幅を直接指定する %>
-          <div class="h-2.5 rounded-full transition-all duration-300
-                      <%= @overall_rate >= 70 ? 'bg-green-500' :
-                          @overall_rate >= 40 ? 'bg-yellow-400' : 'bg-red-400' %>"
-               style="width: <%= @overall_rate %>%">
-          </div>
-        </div>
+    <%#
+      今週の振り返りが完了済みかどうかで表示を分岐
+      @current_week_reflection.persisted? ... DBに保存済みか？（true = 保存済み）
+      @current_week_reflection.is_locked? ... 完了済みか？（true = ロック済み）
+    %>
+    <% if @current_week_reflection.persisted? && @current_week_reflection.is_locked? %>
+      <%# 完了済み：詳細リンクと完了メッセージを表示 %>
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <p class="text-green-700 text-sm font-medium">
+          ✅ 今週の振り返りは完了しています。
+        </p>
+        <%#
+          link_to @current_week_reflection:
+            weekly_reflection_path(@current_week_reflection.id) と同じ意味。
+            Rails はオブジェクトを渡すと自動でパスを解決してくれる（ポリモーフィックルート）。
+        %>
+        <%= link_to "詳細を見る →", @current_week_reflection,
+              class: "text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors" %>
       </div>
 
-      <div class="space-y-2">
-        <% @habits.each do |habit| %>
-          <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
-          <div class="flex items-center justify-between text-sm">
-            <span class="text-gray-600 truncate max-w-xs"><%= habit.name %></span>
-            <div class="flex items-center gap-2 flex-shrink-0 ml-4">
-              <span class="text-gray-400 text-xs">
-                <%= stats[:completed_count] %>/<%= habit.weekly_target %>日
-              </span>
-              <span class="font-semibold
-                           <%= stats[:rate] >= 70 ? 'text-green-600' :
-                               stats[:rate] >= 40 ? 'text-yellow-500' : 'text-red-500' %>">
-                <%= stats[:rate] %>%
-              </span>
-            </div>
-          </div>
-        <% end %>
+    <%# 振り返り期間（日曜AM4:00以降）かどうかで分岐 %>
+    <% elsif Time.current >= Time.current.beginning_of_week(:sunday).change(hour: 4) %>
+      <%# 振り返り可能期間：「今週を振り返る」ボタンを表示 %>
+      <div class="text-center py-2">
+        <p class="text-gray-600 text-sm mb-4">今週の振り返りを記録しましょう。</p>
+        <%= link_to "今週を振り返る ✍️", new_weekly_reflection_path,
+              class: "inline-flex items-center justify-center px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-semibold hover:bg-indigo-700 transition-colors" %>
       </div>
+
     <% else %>
-      <p class="text-sm text-gray-400">
-        まだ習慣が登録されていません。
-        <%= link_to "習慣を追加する", new_habit_path,
-            class: "text-blue-500 hover:text-blue-700 underline" %>
+      <%# 振り返り期間外（月〜土）：案内メッセージを表示 %>
+      <p class="text-gray-500 text-sm">
+        週次振り返りは毎週日曜日の午前4時以降に記録できます。
+        <br>
+        <span class="text-xs text-gray-400">
+          今週の期間：
+          <%= WeeklyReflection.current_week_start_date.strftime("%Y/%m/%d") %>
+          〜
+          <%= (WeeklyReflection.current_week_start_date + 6.days).strftime("%Y/%m/%d") %>
+        </span>
       </p>
     <% end %>
-
-    <%# --- 振り返りボタン or 状態表示 ---
-        
-        【表示の3パターン】
-        1. @can_create_reflection = true
-             → 「今週を振り返る」ボタンを表示（日曜AM4:00以降 かつ 未完了のみ）
-        2. 今週の振り返りが完了済み
-             → 「完了しています」メッセージ + 詳細リンク
-        3. それ以外（平日・土曜）
-             → 「日曜日に行えます」メッセージ + 次の日曜日の日付
-        
-        【&.（セーフナビゲーション演算子）について】
-        @current_week_reflection&.completed?
-        @current_week_reflection が nil の場合に nil を返す（NoMethodError を防ぐ）。
-        find_or_build_for_current_week は nil を返さない設計だが、
-        万が一 nil だった場合の安全弁として &. を使う。
-        通常の .completed? だと nil.completed? で NoMethodError が発生してしまう。
-    %>
-    <div class="mt-6 pt-4 border-t border-gray-100">
-
-      <% if @can_create_reflection %>
-        <%# ---- パターン1: 振り返り可能（日曜AM4:00以降 かつ 未完了） ----
-            new_weekly_reflection_path = GET /weekly_reflections/new
-            Issue #22 で実装した振り返り入力フォームへ遷移する %>
-        <%= link_to "今週を振り返る",
-            new_weekly_reflection_path,
-            class: "block w-full py-3 px-4 bg-blue-600 text-white text-sm font-semibold
-                    rounded-xl hover:bg-blue-700 transition text-center" %>
-        <p class="text-xs text-gray-400 mt-2">
-          ✨ 今週の振り返りを記入して、来週につなげましょう
-        </p>
-
-      <% elsif @current_week_reflection&.completed? %>
-        <%# ---- パターン2: 今週の振り返りが完了済み ----
-            &. = セーフナビゲーション演算子。nil でも安全に呼び出せる。
-            @current_week_reflection が nil → false扱い → このブロックに入らない %>
-        <div class="flex items-center gap-2 text-green-600">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span class="text-sm font-semibold">今週の振り返りは完了しています</span>
-        </div>
-        <% if @current_week_reflection.persisted? %>
-          <%= link_to "詳細を見る →", weekly_reflection_path(@current_week_reflection),
-              class: "text-sm text-blue-500 hover:text-blue-700 mt-1 inline-block" %>
-        <% end %>
-
-      <% else %>
-        <%# ---- パターン3: 平日・土曜（まだ振り返りできない） ---- %>
-        <div class="flex items-center gap-2 text-gray-400">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7
-                     a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          <span class="text-sm">
-            振り返りは<strong class="text-gray-600">日曜日</strong>に行うことができます
-          </span>
-        </div>
-        <%# 次の日曜日を計算して表示する
-            today_for_record は AM4:00 基準で「今日」を返す HabitRecord のクラスメソッド
-            wday: 0=日曜, 1=月曜, ..., 6=土曜 %>
-        <% today = HabitRecord.today_for_record %>
-        <% days_until_sunday = (7 - today.wday) % 7 %>
-        <% days_until_sunday = 7 if days_until_sunday == 0 && today.wday != 0 %>
-        <% next_sunday = today + days_until_sunday.days %>
-        <p class="text-xs text-gray-400 mt-1">
-          次の振り返り日: <%= next_sunday.strftime("%m/%d（日）") %>
-        </p>
-      <% end %>
-
-    </div>
   </div>
 
-  <%# ===================================================
-      過去の振り返り履歴リスト
-      =================================================== %>
-  <div>
-    <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">
-      過去の振り返り履歴
-    </h2>
+  <%# ────────────────────────────────────────────────────────────
+      今週の習慣達成率サマリー（プログレスバー一覧）
+      ──────────────────────────────────────────────────────────── %>
+  <% if @habits.any? %>
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">📊 今週の習慣達成状況</h2>
 
-    <% if @past_reflections.any? %>
-      <div class="space-y-4">
-        <% @past_reflections.each do |reflection| %>
-          <div class="bg-white rounded-xl border border-gray-200 shadow-sm
-                      hover:shadow-md transition-shadow duration-200 p-5">
-            <div class="flex justify-between items-start">
-              <div class="flex-1">
-                <%# week_label は WeeklyReflection モデルに定義済みのインスタンスメソッド
-                    例: "2026/02/09 - 02/15" %>
-                <h3 class="text-base font-bold text-gray-800 mb-1">
-                  <%= reflection.week_label %>
-                </h3>
-                <p class="text-xs text-gray-400 mb-3">
-                  作成日: <%= reflection.created_at.strftime("%Y/%m/%d") %>
-                </p>
-                <%# truncate: 長い文字列を指定文字数で切り詰めるRailsヘルパー %>
-                <% if reflection.reflection_comment.present? %>
-                  <p class="text-sm text-gray-600 line-clamp-2">
-                    <%= truncate(reflection.reflection_comment, length: 80) %>
-                  </p>
-                <% end %>
-              </div>
-              <div class="ml-4 flex-shrink-0">
-                <%# weekly_reflection_path(reflection) = GET /weekly_reflections/:id
-                    Issue #23 で詳細ページを実装予定 %>
-                <%= link_to "詳細を見る",
-                    weekly_reflection_path(reflection),
-                    class: "inline-flex items-center px-3 py-2 text-sm font-medium
-                            text-gray-600 bg-gray-100 rounded-lg
-                            hover:bg-gray-200 transition-colors duration-200" %>
-              </div>
+      <div class="space-y-3">
+        <% @habits.each do |habit| %>
+          <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
+
+          <div>
+            <div class="flex justify-between text-sm mb-1">
+              <span class="text-gray-700 font-medium"><%= habit.name %></span>
+              <span class="text-gray-500">
+                <%= stats[:completed_count] %> / <%= habit.weekly_target %> 回
+                (<%= stats[:rate] %>%)
+              </span>
             </div>
 
-            <%# 習慣サマリーがある場合は達成率バッジを表示する
-                includes(:habit_summaries) で N+1 問題を事前に対策済み（Issue #21） %>
-            <% if reflection.habit_summaries.any? %>
-              <div class="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
-                <% reflection.habit_summaries.each do |summary| %>
-                  <% rate = summary.achievement_rate.to_i %>
-                  <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium
-                               <%= rate >= 70 ? 'bg-green-100 text-green-700' :
-                                   rate >= 40 ? 'bg-yellow-100 text-yellow-700' :
-                                                'bg-red-100 text-red-600' %>">
-                    <%= summary.habit_name %>: <%= rate %>%
-                  </span>
-                <% end %>
+            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div class="h-2 rounded-full transition-all duration-500
+                <%= stats[:rate].to_i >= 100 ? 'bg-green-500' :
+                    stats[:rate].to_i >= 70  ? 'bg-blue-500' :
+                    stats[:rate].to_i >= 40  ? 'bg-yellow-400' : 'bg-red-400' %>"
+                   style="width: <%= [stats[:rate].to_i, 100].min %>%">
               </div>
-            <% end %>
+            </div>
           </div>
         <% end %>
       </div>
+    </div>
+  <% end %>
+
+  <%# ────────────────────────────────────────────────────────────
+      過去の完了済み振り返り一覧
+      ──────────────────────────────────────────────────────────── %>
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">📖 過去の振り返り履歴</h2>
+
+    <% if @weekly_reflections.empty? %>
+      <%# 過去の振り返りがない場合の Empty State %>
+      <div class="text-center py-8">
+        <p class="text-gray-400 text-sm">まだ振り返りがありません。</p>
+        <p class="text-gray-400 text-xs mt-1">日曜日の午前4時以降に最初の振り返りができます。</p>
+      </div>
 
     <% else %>
-      <%# Empty State: 過去の振り返りが0件の場合 %>
-      <div class="bg-white rounded-xl border-2 border-dashed border-gray-300 p-12 text-center">
-        <div class="mx-auto w-16 h-16 rounded-full bg-blue-50
-                    flex items-center justify-center mb-4">
-          <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor"
-               viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7
-                     a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2
-                     M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-          </svg>
-        </div>
-        <h3 class="text-base font-semibold text-gray-700 mb-2">まだ振り返りがありません</h3>
-        <p class="text-sm text-gray-400">
-          毎週日曜日に振り返りを行い、<br>
-          習慣改善のPDCAサイクルを回しましょう
-        </p>
+      <%#
+        @weekly_reflections をループして1件ずつカード表示
+        .completed.recent で新しい順に取得済み（コントローラー側でソート済み）
+      %>
+      <div class="space-y-3">
+        <% @weekly_reflections.each do |reflection| %>
+          <%#
+            link_to reflection:
+              weekly_reflection_path(reflection) の省略形。
+              Rails がオブジェクトから自動的にパスを解決する。
+              → GET /weekly_reflections/:id （show アクション）
+          %>
+          <%= link_to reflection,
+                class: "block border border-gray-100 rounded-xl p-4 hover:border-indigo-200 hover:bg-indigo-50 transition-all group" do %>
+
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <%# 対象週の期間表示 %>
+              <div>
+                <p class="font-medium text-gray-800 text-sm group-hover:text-indigo-700 transition-colors">
+                  <%= reflection.week_start_date.strftime("%Y年%m月%d日") %>
+                  〜
+                  <%= reflection.week_end_date.strftime("%m月%d日") %>
+                </p>
+                <p class="text-xs text-gray-500 mt-0.5">
+                  <%= reflection.created_at.strftime("%Y/%m/%d") %> 記録
+                </p>
+              </div>
+
+              <%# 習慣数と平均達成率をサマリー表示 %>
+              <div class="flex items-center gap-3">
+                <%# habit_summaries の件数と達成率を計算して表示 %>
+                <% summaries = reflection.habit_summaries %>
+                <% avg_rate = summaries.any? ? (summaries.map(&:achievement_rate).sum / summaries.count.to_f).round(1) : 0 %>
+
+                <span class="text-xs text-gray-500">
+                  <%= summaries.count %>習慣
+                </span>
+
+                <span class="text-sm font-bold
+                  <%= avg_rate >= 100 ? 'text-green-600' :
+                      avg_rate >= 70  ? 'text-blue-600' :
+                      avg_rate >= 40  ? 'text-yellow-600' : 'text-red-500' %>">
+                  <%= avg_rate %>%
+                </span>
+
+                <%# 矢印アイコン（「詳細を見る」の視覚的ヒント） %>
+                <svg class="w-4 h-4 text-gray-400 group-hover:text-indigo-500 transition-colors"
+                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+              </div>
+            </div>
+
+            <%# コメントの冒頭をプレビュー表示（あれば） %>
+            <% if reflection.reflection_comment.present? %>
+              <p class="mt-2 text-xs text-gray-500 truncate">
+                💬 <%= reflection.reflection_comment.truncate(80) %>
+              </p>
+            <% end %>
+          <% end %>
+        <% end %>
       </div>
     <% end %>
   </div>

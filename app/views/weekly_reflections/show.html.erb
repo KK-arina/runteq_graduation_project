@@ -1,0 +1,281 @@
+<%# app/views/weekly_reflections/show.html.erb %>
+<%#
+  ═══════════════════════════════════════════════════════════════════
+  【このファイルの役割】
+    週次振り返りの詳細ページ。
+    コントローラーの show アクションで設定された変数を使って
+    振り返り内容・習慣達成サマリー・コメントを表示する。
+
+  【使用するインスタンス変数（コントローラーから渡される）】
+    @weekly_reflection          ... 対象の振り返りレコード
+    @habit_summaries            ... 全習慣スナップショット（達成率降順）
+    @achieved_summaries         ... 達成率100%の習慣一覧
+    @not_achieved_summaries     ... 達成率100%未満の習慣一覧
+    @overall_achievement_rate   ... 全体の平均達成率（数値）
+  ═══════════════════════════════════════════════════════════════════
+%>
+
+<%#
+  content_for :title
+  【なぜ使うのか】
+    <head> タグ内の <title> をページごとに動的に変えるために使う。
+    application.html.erb 側で yield(:title) と書いておくことで、
+    ここで指定したテキストがブラウザのタブ名になる。
+%>
+<% content_for :title, "振り返り詳細 | HabitFlow" %>
+
+<%# ══════════════════════════════════════════════════════════════ %>
+<%# ページ全体のラッパー                                           %>
+<%# max-w-3xl mx-auto: 最大幅を設定して中央揃えにする              %>
+<%# px-4 py-8: 左右のパディング・上下のパディング                  %>
+<%# ══════════════════════════════════════════════════════════════ %>
+<div class="max-w-3xl mx-auto px-4 py-8">
+
+  <%# ────────────────────────────────────────────────────────────
+      ページヘッダー：タイトル・対象週・戻るリンク
+      ──────────────────────────────────────────────────────────── %>
+  <div class="mb-8">
+
+    <%#
+      link_to ... ← (テキスト, パス, オプション)
+      weekly_reflections_path ... config/routes.rb の resources :weekly_reflections から自動生成されるパスヘルパー
+      ← の絵文字はただの装飾文字（Unicode）
+    %>
+    <%= link_to weekly_reflections_path,
+          class: "inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4 transition-colors" do %>
+      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+      振り返り一覧に戻る
+    <% end %>
+
+    <%# タイトル行：見出しと完了バッジを横並びにする %>
+    <div class="flex items-center gap-3 flex-wrap">
+      <h1 class="text-2xl font-bold text-gray-900">週次振り返り</h1>
+
+      <%#
+        span タグで「完了」バッジを表示
+        is_locked? ... WeeklyReflection モデルの is_locked カラムが true かどうかを確認するメソッド
+                       Rails が boolean カラムに自動生成する ? メソッド
+      %>
+      <% if @weekly_reflection.is_locked? %>
+        <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800">
+          ✓ 完了
+        </span>
+      <% end %>
+    </div>
+
+    <%#
+      対象週の表示
+      week_start_date ... WeeklyReflection の DB カラム（日付型）
+      week_end_date   ... WeeklyReflection の DB カラム（日付型）
+      strftime        ... Rubyの日付フォーマットメソッド
+                          %Y=年, %m=月, %d=日 の形式で日付を文字列にする
+    %>
+    <p class="mt-2 text-gray-600">
+      対象期間：
+      <span class="font-medium text-gray-800">
+        <%= @weekly_reflection.week_start_date.strftime("%Y年%m月%d日") %>
+        〜
+        <%= @weekly_reflection.week_end_date.strftime("%Y年%m月%d日") %>
+      </span>
+    </p>
+  </div>
+
+  <%# ────────────────────────────────────────────────────────────
+      セクション①：全体達成率サマリーカード
+      ──────────────────────────────────────────────────────────── %>
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">📊 今週の総合達成率</h2>
+
+    <%# 全体達成率の大きな数値表示 %>
+    <div class="flex items-end gap-3 mb-4">
+      <%#
+        @overall_achievement_rate ... showアクションで計算した平均達成率（Float）
+        round(1) は コントローラー側で実施済みなので、ここでは .to_s で文字列化するだけ
+      %>
+      <span class="text-5xl font-bold
+        <%= @overall_achievement_rate >= 100 ? 'text-green-600' :
+            @overall_achievement_rate >= 70  ? 'text-blue-600' :
+            @overall_achievement_rate >= 40  ? 'text-yellow-600' : 'text-red-500' %>">
+        <%= @overall_achievement_rate %>%
+      </span>
+      <span class="text-gray-500 mb-1 text-sm">
+        (<%= @habit_summaries.count %>個の習慣)
+      </span>
+    </div>
+
+    <%#
+      全体の達成率プログレスバー
+      width: style 属性で動的に幅を指定
+      [value, 100].min ... 100を超えないようにクランプ（CSS幅が100%を超えるとはみ出るため）
+    %>
+    <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+      <div class="h-4 rounded-full transition-all duration-500
+        <%= @overall_achievement_rate >= 100 ? 'bg-green-500' :
+            @overall_achievement_rate >= 70  ? 'bg-blue-500' :
+            @overall_achievement_rate >= 40  ? 'bg-yellow-400' : 'bg-red-400' %>"
+           style="width: <%= [@overall_achievement_rate, 100].min %>%">
+      </div>
+    </div>
+
+    <%# 達成習慣数 / 全習慣数 の表示 %>
+    <p class="mt-2 text-sm text-gray-500 text-right">
+      達成: <%= @habit_summaries.count { |s| s.achievement_rate >= 100 } %> / <%= @habit_summaries.size %> 習慣
+    </p>
+  </div>
+
+  <%# ────────────────────────────────────────────────────────────
+      セクション②：習慣ごとの達成サマリー
+      ──────────────────────────────────────────────────────────── %>
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-5">📋 習慣別 実績サマリー</h2>
+
+    <%# habit_summaries が1件もない場合の表示（空状態） %>
+    <% if @habit_summaries.empty? %>
+      <div class="text-center py-8 text-gray-400">
+        <p class="text-sm">この振り返り期間に登録されていた習慣はありませんでした。</p>
+      </div>
+
+    <%# 習慣が1件以上あれば一覧表示 %>
+    <% else %>
+      <%#
+        @habit_summaries を1件ずつループして表示
+        summary ... WeeklyReflectionHabitSummary のインスタンス
+                    カラム: habit_name_snapshot, weekly_target_snapshot,
+                            actual_count, achievement_rate
+      %>
+      <div class="space-y-4">
+        <% @habit_summaries.each do |summary| %>
+          <div class="border border-gray-100 rounded-xl p-4
+            <%= summary.achievement_rate >= 100 ? 'bg-green-50 border-green-200' : 'bg-gray-50' %>">
+
+            <%# 習慣名・達成バッジ・件数を横並びに %>
+            <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+
+              <%# 習慣名（スナップショット）
+                  habit_name: 振り返り登録時点の習慣名を保存したカラム
+                  後から習慣名を変更しても、ここには当時の名前が表示される %>
+              <div class="flex items-center gap-2">
+                <% if summary.achievement_rate >= 100 %>
+                  <span class="text-green-500 text-lg">✅</span>
+                <% else %>
+                  <span class="text-gray-300 text-lg">⬜</span>
+                <% end %>
+                <span class="font-medium text-gray-800 text-sm">
+                  <%= summary.habit_name %>
+                </span>
+              </div>
+
+              <%# 達成率バッジ %>
+              <span class="text-xs font-semibold px-2 py-1 rounded-full
+                <%= summary.achievement_rate >= 100 ? 'bg-green-100 text-green-700' :
+                    summary.achievement_rate >= 70  ? 'bg-blue-100 text-blue-700' :
+                    summary.achievement_rate >= 40  ? 'bg-yellow-100 text-yellow-700' :
+                                                      'bg-red-100 text-red-600' %>">
+                <%= summary.achievement_rate %>%
+              </span>
+            </div>
+
+            <%# 実績数 / 目標数 の表示
+                actual_count   ... 実際に記録した回数（DB カラム）
+                weekly_target  ... 振り返り時点の週目標回数（スナップショット）
+            %>
+            <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
+              <span>
+                <%= summary.actual_count %> / <%= summary.weekly_target %> 回達成
+              </span>
+              <span>
+                週<%= summary.weekly_target %>回目標
+              </span>
+            </div>
+
+            <%# 個別習慣のプログレスバー
+                [@overall... , 100].min ... 100を超えないようにクランプ
+            %>
+            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div class="h-2 rounded-full transition-all duration-500
+                <%= summary.achievement_rate >= 100 ? 'bg-green-500' :
+                    summary.achievement_rate >= 70  ? 'bg-blue-500' :
+                    summary.achievement_rate >= 40  ? 'bg-yellow-400' : 'bg-red-400' %>"
+                   style="width: <%= [summary.achievement_rate, 100].min %>%">
+              </div>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+      <%# ── 達成まとめの小さなフッターテキスト ── %>
+      <% achieved_count = @habit_summaries.count { |s| s.achievement_rate >= 100 } %>
+      <% if achieved_count > 0 %>
+        <p class="mt-4 text-sm text-green-700 bg-green-50 rounded-lg px-4 py-2">
+          🎉 <span class="font-semibold"><%= achieved_count %>個</span>の習慣を100%達成しました！
+        </p>
+      <% end %>
+    <% end %>
+  </div>
+
+  <%# ────────────────────────────────────────────────────────────
+      セクション③：振り返りコメント
+      ──────────────────────────────────────────────────────────── %>
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">💬 振り返りコメント</h2>
+
+    <%# reflection_comment ... WeeklyReflection モデルのテキストカラム %>
+    <% if @weekly_reflection.reflection_comment.present? %>
+      <%#
+        simple_format:
+          Rails のヘルパーメソッド。改行文字(\n)を <br> タグに変換し、
+          テキストを読みやすく表示する。
+          ユーザーが入力したコメントをそのまま表示するときに使う。
+          XSS対策のエスケープも自動で行われる。
+      %>
+      <div class="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-xl p-4">
+        <%= simple_format(@weekly_reflection.reflection_comment) %>
+      </div>
+    <% else %>
+      <p class="text-gray-400 text-sm italic">コメントは記入されていませんでした。</p>
+    <% end %>
+  </div>
+
+  <%# ────────────────────────────────────────────────────────────
+      セクション④：振り返りメタ情報（登録日時など）
+      ──────────────────────────────────────────────────────────── %>
+  <div class="bg-gray-50 rounded-xl px-5 py-4 mb-8 flex flex-wrap gap-4 text-xs text-gray-500">
+
+    <%#
+      created_at ... ActiveRecord が自動管理するレコード作成日時（DateTime型）
+      strftime   ... Rubyの日付フォーマットメソッド
+    %>
+    <span>
+      📅 振り返り登録日：
+      <span class="font-medium text-gray-700">
+        <%= @weekly_reflection.created_at.strftime("%Y年%m月%d日 %H:%M") %>
+      </span>
+    </span>
+
+    <% if @weekly_reflection.updated_at != @weekly_reflection.created_at %>
+      <span>
+        ✏️ 最終更新：
+        <span class="font-medium text-gray-700">
+          <%= @weekly_reflection.updated_at.strftime("%Y年%m月%d日 %H:%M") %>
+        </span>
+      </span>
+    <% end %>
+  </div>
+
+  <%# ────────────────────────────────────────────────────────────
+      フッターボタン群
+      ──────────────────────────────────────────────────────────── %>
+  <div class="flex flex-col sm:flex-row gap-3 justify-between">
+
+    <%# 一覧に戻るボタン %>
+    <%= link_to "← 振り返り一覧", weekly_reflections_path,
+          class: "inline-flex items-center justify-center px-6 py-3 bg-white border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" %>
+
+    <%# ダッシュボードへのリンク %>
+    <%= link_to "ダッシュボードへ", dashboard_path,
+          class: "inline-flex items-center justify-center px-6 py-3 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors" %>
+  </div>
+
+</div>

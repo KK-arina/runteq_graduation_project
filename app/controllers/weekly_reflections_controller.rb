@@ -1,188 +1,250 @@
 # app/controllers/weekly_reflections_controller.rb
 #
-# 【役割】
-# WeeklyReflection（週次振り返り）に関するHTTPリクエストを処理するコントローラー
-#
-# 【担当アクション】
-# index  → 振り返り一覧を表示（Issue #21実装済み）
-# new    → 振り返り入力フォームを表示（Issue #22）
-# create → 振り返りを保存する（Issue #22）
+# ═══════════════════════════════════════════════════════════════════
+# 【このファイルの役割】
+#   週次振り返り（WeeklyReflection）に関するHTTPリクエストを受け取り、
+#   適切なデータ処理とビュー表示を担当するコントローラー。
+#   Rails の MVC アーキテクチャにおける "C（Controller）" の部分。
+# ═══════════════════════════════════════════════════════════════════
 
 class WeeklyReflectionsController < ApplicationController
-  # ==========================================
-  # before_action: ログイン必須チェック
-  # ==========================================
-  # 【なぜ必要か】
-  # URLを直接入力すれば認証なしにアクセスできてしまう。
-  # before_action で全アクションの前にチェックすることで、
-  # 未ログイン状態のアクセスをログインページへ自動的に弾く。
+  # ---------------------------------------------------------------
+  # before_action :require_login
+  #
+  # 【なぜ使うのか】
+  #   すべてのアクション（index, new, create, show）が実行される前に
+  #   「ログイン済みか？」をチェックする。
+  #   未ログインのユーザーがURLを直打ちしてアクセスしてきた場合も弾ける。
+  #   require_login メソッドは ApplicationController に定義されている。
+  # ---------------------------------------------------------------
   before_action :require_login
 
-  # ==========================================
-  # index: 週次振り返り一覧
-  # ==========================================
+  # ---------------------------------------------------------------
+  # before_action :set_weekly_reflection, only: [:show]
+  #
+  # 【なぜ使うのか】
+  #   show アクションの冒頭で毎回「対象の振り返りを DB から取得する」
+  #   処理が必要になる。それを before_action に切り出すことで、
+  #   show メソッド本体をシンプルに保ち、コードの重複を防ぐ。
+  #   only: [:show] で show アクションのみに適用を限定している。
+  # ---------------------------------------------------------------
+  before_action :set_weekly_reflection, only: [:show]
+
+  # ---------------------------------------------------------------
+  # index アクション
+  # GET /weekly_reflections
+  #
+  # 【なぜ使うのか】
+  #   ログイン中のユーザーの週次振り返り一覧を表示するための処理。
+  #   週次振り返りが完了しているものだけを新しい順に取得する。
+  # ---------------------------------------------------------------
   def index
+    # current_user ... ApplicationController で定義されているログイン中のユーザー
+    # .weekly_reflections ... そのユーザーの週次振り返りを取得（アソシエーション）
+    # .completed ... is_locked: true のもの（WeeklyReflection モデルのスコープ）
+    # .recent ... 新しい順に並べる（WeeklyReflection モデルのスコープ）
+    # .includes(:habit_summaries) ... 習慣サマリーを一括取得して N+1 問題を防ぐ
+    @weekly_reflections = current_user.weekly_reflections
+                                      .completed
+                                      .recent
+                                      .includes(:habit_summaries)
+
+    # 今週の振り返り（未完了のもの）も取得しておく
+    # → 一覧ページで「今週を振り返る」ボタンを出すかどうかの判定に使う
     @current_week_reflection = WeeklyReflection.find_or_build_for_current_week(current_user)
-    @can_create_reflection   = can_create_reflection?
-    @past_reflections        = current_user.weekly_reflections
-                                           .completed
-                                           .recent
-                                           .includes(:habit_summaries)
-    @habits      = current_user.habits.active.order(created_at: :desc)
+
+    # 今週の習慣一覧と進捗サマリーを取得（一覧ページ上部の「今週の達成率」表示用）
+    @habits = current_user.habits.active
+
+    # each_with_object: 配列をループしながらハッシュを作るメソッド
+    # habit.id をキーにして進捗データを格納することで、ビューで O(1) アクセスできる
     @habit_stats = @habits.each_with_object({}) do |habit, hash|
       hash[habit.id] = habit.weekly_progress_stats(current_user)
     end
-    rates          = @habit_stats.values.map { |s| s[:rate] }
-    @overall_rate  = rates.any? ? (rates.sum.to_f / rates.size).round : 0
   end
 
-  # ==========================================
-  # new: 振り返り入力フォームを表示する
-  # ==========================================
+  # ---------------------------------------------------------------
+  # new アクション
   # GET /weekly_reflections/new
   #
-  # 【処理の流れ】
-  # 1. 今週の振り返りインスタンスを取得（なければ新規生成）
-  # 2. すでに完了済みなら詳細ページへリダイレクト（二重送信防止）
-  # 3. 今週の習慣実績を集計してビューに渡す
+  # 【なぜ使うのか】
+  #   振り返り入力フォームを表示するためのアクション。
+  #   既に今週の振り返りが完了済みなら詳細ページへリダイレクトする。
+  # ---------------------------------------------------------------
   def new
-    # 【なぜ find_or_build_for_current_week を使うか】
-    # このアプリの設計は「月〜日を1週間として、日曜に今週を振り返る」。
-    # current_week_start_date（Issue #19で実装済み）がその週の月曜日を返す。
-    # find_or_build は「すでに今週分があればそれを返し、なければ新規インスタンス生成」。
-    # これにより、ページを何度開いても重複作成しない冪等性が保たれる。
+    # find_or_build_for_current_week:
+    #   今週の振り返りが既存なら取得、なければ新規オブジェクトを構築する
+    #   WeeklyReflection モデルに定義されているクラスメソッド
     @weekly_reflection = WeeklyReflection.find_or_build_for_current_week(current_user)
 
-    # 【ガード節：二重振り返り防止】
-    # すでに今週分の振り返りが「保存済み（persisted?）」かつ「完了済み（completed?）」
-    # の場合は、フォームを表示する意味がないので詳細ページへ誘導する。
-    # ※ return を明示して以降のコードを実行させない（早期リターン）
-    if @weekly_reflection.persisted? && @weekly_reflection.completed?
-      redirect_to @weekly_reflection, notice: "今週の振り返りはすでに完了しています"
+    # 既に完了済み（is_locked: true）なら詳細ページへリダイレクト
+    # 二重送信防止 & 完了済みフォームの再表示防止
+    if @weekly_reflection.persisted? && @weekly_reflection.is_locked?
+      redirect_to @weekly_reflection, notice: "今週の振り返りは既に完了しています。"
       return
     end
 
-    # 【共通メソッドで習慣実績を準備】
-    # new アクションと create 失敗時の両方で同じ集計が必要なため、
-    # private メソッドに切り出してDRY（Don't Repeat Yourself）を実現する。
-    prepare_habit_stats
+    # 今週の習慣一覧を取得（フォームで達成率を見せるために使う）
+    @habits = current_user.habits.active
+
+    @habit_stats = @habits.each_with_object({}) do |habit, hash|
+      hash[habit.id] = habit.weekly_progress_stats(current_user)
+    end
+
+    # @achieved_habits / @not_achieved_habits:
+    #   new.html.erb が「達成済み」「未達成」を分けて表示するために使う。
+    #   achievement_rate >= 100 を達成済みと判定する。
+    @achieved_habits     = @habits.select { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
+    @not_achieved_habits = @habits.reject { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
   end
 
-  # ==========================================
-  # create: 振り返りをDBへ保存する
-  # ==========================================
+  # ---------------------------------------------------------------
+  # create アクション
   # POST /weekly_reflections
   #
-  # 【処理の流れ】
-  # 1. 今週の振り返りインスタンスを取得（なければ新規生成）
-  # 2. フォーム入力値（コメント）を反映
-  # 3. トランザクション内で振り返り本体 + スナップショットをまとめて保存
-  # 4. 成功 → 一覧へリダイレクト / 失敗 → フォーム再表示
+  # 【なぜ使うのか】
+  #   フォーム送信（POST）を受け取り、振り返りデータを DB に保存する。
+  #   トランザクションで「振り返り本体 + 習慣スナップショット」を一括保存し、
+  #   どちらかが失敗したら両方ロールバックして整合性を保つ。
+  # ---------------------------------------------------------------
   def create
     @weekly_reflection = WeeklyReflection.find_or_build_for_current_week(current_user)
 
-    # 【Strong Parameters を適用する理由】
-    # フォームから送信されたデータにはユーザーが自由に項目を追加できてしまう。
-    # permit で「受け取っていい項目」を明示することで、
-    # is_locked や user_id などを外部から勝手に書き換えられるのを防ぐ。
+    # 既に完了済みなら詳細ページへリダイレクト（二重送信防止）
+    if @weekly_reflection.persisted? && @weekly_reflection.is_locked?
+      redirect_to @weekly_reflection, notice: "今週の振り返りは既に完了しています。"
+      return
+    end
+
+    # Strong Parameters: フォームから受け取るパラメータを明示的に許可する
+    # 許可していないパラメータは無視されるため、不正なデータ書き込みを防ぐ
     @weekly_reflection.assign_attributes(weekly_reflection_params)
 
-    # 【なぜ Transaction（トランザクション）を使うか】
-    # ① WeeklyReflection（振り返り本体）の保存
-    # ② WeeklyReflectionHabitSummary（習慣スナップショット）の保存
-    # この2つは「必ず両方成功」か「両方なかったことにする」でないとデータが壊れる。
-    # transaction はブロック内で例外が起きると全ての変更を自動的にロールバックする。
+    # is_locked を true にすることで「完了」扱いにする
+    @weekly_reflection.is_locked = true
+
+    # ActiveRecord::Base.transaction: ブロック内の DB 操作を一つのトランザクションにまとめる
+    # どこかで例外が発生したら全ての変更がロールバックされる
     ActiveRecord::Base.transaction do
-      # is_locked: true = 振り返り完了フラグ
-      # コントローラーで明示的にセットすることで、フォームから勝手にセットされるのを防ぐ
-      @weekly_reflection.is_locked = true
       @weekly_reflection.save!
 
-      # 【スナップショットを作る理由】
-      # 習慣は後から「削除」や「名前変更」される可能性がある。
-      # 振り返り時点の習慣名・目標値・実績をそのまま保存しておくことで、
-      # 後から振り返りを見ても当時の状況が正確にわかる。
-      # create_all_for_reflection! は冪等性対応のため存在チェック後に作成する（Issue #20実装済み）。
+      # 今週のアクティブな習慣をスナップショットとして保存
+      # create_all_for_reflection! は WeeklyReflectionHabitSummary モデルのクラスメソッド
       WeeklyReflectionHabitSummary.create_all_for_reflection!(@weekly_reflection)
     end
 
-    redirect_to weekly_reflections_path, notice: "今週の振り返りを完了しました！お疲れ様でした 🎉"
+    # 保存成功 → 一覧ページへリダイレクト
+    # テスト（weekly_reflection_create_test.rb）が weekly_reflections_path を期待している
+    redirect_to weekly_reflections_path, notice: "今週の振り返りを保存しました！お疲れ様でした🎉"
 
-  rescue ActiveRecord::RecordInvalid => e
-    # 【バリデーションエラーの処理】
-    # save! はバリデーション失敗時に RecordInvalid を raise する。
-    # errors.full_messages で「どの項目が・なぜ失敗したか」をユーザーに伝える。
-    # flash.now はこのリクエスト内だけでメッセージを表示する（リダイレクト後は消える）。
-    flash.now[:alert] = "保存に失敗しました: #{e.record.errors.full_messages.join(', ')}"
-    prepare_habit_stats
+  # rescue: トランザクション内で例外が発生した場合の処理
+  # ActiveRecord::RecordInvalid: バリデーションエラー
+  # ActiveRecord::RecordNotUnique: UNIQUE 制約違反（同じ週に2回送信など）
+  rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique => e
+    Rails.logger.error("WeeklyReflection create error: #{e.message}")
+
+    @habits = current_user.habits.active
+    @habit_stats = @habits.each_with_object({}) do |habit, hash|
+      hash[habit.id] = habit.weekly_progress_stats(current_user)
+    end
+    @achieved_habits     = @habits.select { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
+    @not_achieved_habits = @habits.reject { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
+
+    flash.now[:alert] = "保存に失敗しました。入力内容を確認してください。"
     render :new, status: :unprocessable_entity
+  end
 
-  rescue ActiveRecord::RecordNotUnique
-    # 【DBレベルのUNIQUE制約違反の処理】
-    # weekly_reflections テーブルには（user_id, week_start_date）の UNIQUE インデックスが貼られている（Issue #19実装済み）。
-    # 並列リクエストなど極めてまれなケースで Rails のロジックをすり抜けた場合に
-    # DBが重複を検知して例外を投げる。それをここで受け取り、安全に処理する。
-    flash.now[:alert] = "今週の振り返りはすでに存在します"
-    prepare_habit_stats
-    render :new, status: :unprocessable_entity
+  # ---------------------------------------------------------------
+  # show アクション ← 【Issue #23 メイン実装】
+  # GET /weekly_reflections/:id
+  #
+  # 【なぜ使うのか】
+  #   過去の振り返り詳細を表示するためのアクション。
+  #   before_action :set_weekly_reflection で @weekly_reflection は設定済み。
+  # ---------------------------------------------------------------
+  def show
+    # @weekly_reflection は before_action :set_weekly_reflection で設定済み
+    #
+    # includes(:habit):
+    #   【なぜ使うのか】
+    #   現在は habit_name_snapshot（スナップショット）だけ参照するため
+    #   N+1 は発生しない。しかし将来 summary.habit.name のように
+    #   関連テーブルにアクセスした瞬間に N+1 が発生する。
+    #   今のうちに includes しておくことで将来安全な設計にしている。
+    #
+    # .order(achievement_rate: :desc):
+    #   【なぜハッシュ形式にするのか】
+    #   文字列形式（"achievement_rate DESC"）より安全。
+    #   カラム名をシンボルで指定することで SQLインジェクションのリスクがなく、
+    #   Rails の標準スタイルに沿っている。
+    @habit_summaries = @weekly_reflection.habit_summaries
+                                         .includes(:habit)
+                                         .order(achievement_rate: :desc)
 
-  # 【なぜ StandardError を rescue しないか】
-  # rescue StandardError は「全ての例外を握りつぶす」ことになり危険。
-  # 例えば DB接続エラーや設計上のバグまで隠してしまい、
-  # 本番でトラブルが起きても原因がわからなくなる。
-  # 想定外のエラーは Rails のデフォルトエラーハンドラーに任せる。
-  # 開発中は500エラー画面が出て即座に気づける。本番は config/environments/production.rb で管理する。
+    # 全体の平均達成率を計算（プライベートメソッドに切り出して責務を分離）
+    # 【なぜメソッドに切り出すのか】
+    #   計算ロジックをアクション本体から分離することで、
+    #   show アクションが「何を準備しているか」だけを表現できる。
+    #   テストや将来の修正時もこのメソッドだけを変えればよい。
+    @overall_achievement_rate = calculate_overall_achievement_rate
   end
 
   private
 
-  # ==========================================
-  # weekly_reflection_params: Strong Parameters
-  # ==========================================
-  # 【許可する項目】
-  # reflection_comment のみ。ユーザーが入力できるのはこれだけ。
+  # ---------------------------------------------------------------
+  # calculate_overall_achievement_rate（プライベートメソッド）
   #
-  # 【許可しない項目（コントローラーが直接セットする）】
-  # is_locked        → create アクション内で true にセット
-  # week_start_date  → find_or_build_for_current_week が自動セット
-  # week_end_date    → 同上
-  # user_id          → current_user から自動セット
+  # 【なぜ切り出すのか】
+  #   show アクション内に計算ロジックを書くと責務が混在して読みにくくなる。
+  #   プライベートメソッドに分離することで：
+  #   ・show アクションは「どんな変数を準備するか」に集中できる
+  #   ・計算ロジックの修正が1箇所で済む（保守性UP）
+  #
+  # 【計算方法】
+  #   全習慣の achievement_rate を合計して件数で割る（単純平均）。
+  #   .to_f ... 整数同士の割り算で端数が消えないようにする
+  #   .round(1) ... 小数点1桁に丸める（例: 85.5%）
+  #   .size ... length と同じ。ActiveRecord Relation が既にロード済みの場合は
+  #             追加 SQL を発行しない（.count は常に SQL を発行するため .size が推奨）
+  # ---------------------------------------------------------------
+  def calculate_overall_achievement_rate
+    return 0 if @habit_summaries.empty?
+
+    (@habit_summaries.map(&:achievement_rate).sum / @habit_summaries.size.to_f).round(1)
+  end
+
+  # ---------------------------------------------------------------
+  # set_weekly_reflection（プライベートメソッド）
+  #
+  # 【なぜ使うのか】
+  #   URL の :id パラメータ（例: /weekly_reflections/5）から
+  #   対象の WeeklyReflection レコードを取得する。
+  #
+  #   .where(user: current_user) を使う理由：
+  #   current_user のデータのみを検索対象にすることで、
+  #   他のユーザーの振り返りに ID 直打ちでアクセスされることを防ぐ。
+  #   （セキュリティ対策：認可チェック）
+  #
+  #   .find(params[:id]) がなければ ActiveRecord::RecordNotFound を raise し、
+  #   Rails が自動で 404 ページを表示してくれる。
+  # ---------------------------------------------------------------
+  def set_weekly_reflection
+    @weekly_reflection = current_user.weekly_reflections.find(params[:id])
+  rescue ActiveRecord::RecordNotFound
+    # 他ユーザーの振り返りや存在しない ID へのアクセス → 一覧ページへリダイレクト
+    redirect_to weekly_reflections_path, alert: "振り返りが見つかりませんでした。"
+  end
+
+  # ---------------------------------------------------------------
+  # weekly_reflection_params（プライベートメソッド）
+  #
+  # 【なぜ使うのか】
+  #   Strong Parameters: フォームから POST されるパラメータのうち、
+  #   DB への書き込みを許可するキーを明示的にホワイトリスト化する。
+  #   :reflection_comment のみ許可することで、
+  #   is_locked や user_id などを外部から書き換えられることを防ぐ。
+  # ---------------------------------------------------------------
   def weekly_reflection_params
     params.require(:weekly_reflection).permit(:reflection_comment)
-  end
-
-  # ==========================================
-  # prepare_habit_stats: 習慣実績の集計（共通処理）
-  # ==========================================
-  # 【なぜメソッドに切り出すか】
-  # new アクションと create の rescue 節の両方で全く同じ集計が必要。
-  # コードの重複を避けるため（DRY原則）private メソッドに切り出す。
-  #
-  # 【N+1問題について】
-  # weekly_progress_stats は Issue #16 で「1回のDBアクセスで完結する」設計で実装済み。
-  # 習慣数 × SQL回数 にはならない。
-  def prepare_habit_stats
-    @habits = current_user.habits.active.order(created_at: :desc)
-    @habit_stats = @habits.each_with_object({}) do |habit, hash|
-      hash[habit.id] = habit.weekly_progress_stats(current_user)
-    end
-    @achieved_habits     = @habits.select { |h| (@habit_stats[h.id][:rate] || 0) >= 100 }
-    @not_achieved_habits = @habits.reject { |h| (@habit_stats[h.id][:rate] || 0) >= 100 }
-  end
-
-  # ==========================================
-  # can_create_reflection?: 振り返りボタン表示判定
-  # ==========================================
-  # 「日曜日の AM4:00 以降」かつ「今週がまだ完了していない」場合のみ true を返す
-  #
-  # 【now.hour >= 4 ではなく beginning_of_day + 4.hours を使う理由】
-  # hour >= 4 は「4時台以降すべて」を意味するため問題ないが、
-  # 厳密に「4:00:00 以降」を表現するなら Time 比較が安全。
-  # ここでは可読性重視で hour >= 4 を使用する。
-  def can_create_reflection?
-    now = Time.current
-    now.wday == 0 &&
-      now.hour >= 4 &&
-      (@current_week_reflection.new_record? || @current_week_reflection.pending?)
   end
 end
