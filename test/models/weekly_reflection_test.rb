@@ -324,4 +324,31 @@ class WeeklyReflectionTest < ActiveSupport::TestCase
     )
     assert_equal '2026/02/16 - 02/22', reflection.week_label
   end
+
+  # test/models/weekly_reflection_test.rb
+  # ※ 既存ファイルに以下のテストを追記してください
+  # （ファイル末尾の end の前に追加）
+
+  # ===========================================================
+  # Issue #21 で追加: can_create_reflection? に関連するロジックのテスト
+  # ===========================================================
+
+  # 日曜日の AM4:00 以降であることを確認するテスト
+  # wday メソッドが正しく日曜を判定できるか確認します
+  test "日曜日の AM4:00 以降は wday が 0 を返すこと" do
+    # travel_to は指定した日時にシステム時刻を固定するメソッドです
+    # 2026/02/22（日曜日）の AM5:00 に固定します
+    travel_to Time.zone.local(2026, 2, 22, 5, 0, 0) do
+      today = HabitRecord.today_for_record
+      assert_equal 0, today.wday, "日曜日は wday が 0 であること"
+    end
+  end
+
+  test "土曜日は wday が 6 を返すこと" do
+    # 2026/02/21（土曜日）の AM10:00 に固定します
+    travel_to Time.zone.local(2026, 2, 21, 10, 0, 0) do
+      today = HabitRecord.today_for_record
+      assert_equal 6, today.wday, "土曜日は wday が 6 であること"
+    end
+  end
 end
