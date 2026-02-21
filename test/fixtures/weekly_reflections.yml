@@ -1,23 +1,89 @@
-one:
-  user: one
-  week_start_date: 2026-02-02
-  week_end_date:   2026-02-08
-  reflection_comment: "先週は筋トレを継続できた"
-  is_locked: true
+# test/fixtures/weekly_reflections.yml
+#
+# ═══════════════════════════════════════════════════════════════════
+# 【このファイルの役割】
+#   テスト用のダミーデータ（フィクスチャ）を定義するYAMLファイル。
+#   テスト実行時にこのデータが自動でテスト用DBに投入される。
+#
+# 【キー一覧】
+#   - for_summary_test     : WeeklyReflectionHabitSummaryモデルテスト用（既存・削除禁止）
+#   - completed_one        : showアクション・認可テスト用（Issue #23 追加）
+#   - pending_one          : 未完了状態のテスト用（Issue #23 追加）
+#   - other_user_reflection: 他ユーザー所有の振り返り・認可テスト用（Issue #23 追加）
+#
+# 【UNIQUE制約について】
+#   weekly_reflections テーブルには (user_id, week_start_date) の UNIQUE 制約がある。
+#   同じ user の week_start_date が重複するとフィクスチャ投入時にエラーになる。
+#   下記の通り user: one の week_start_date は全て異なる日付になっている。
+#
+#   user: one の week_start_date 一覧：
+#     for_summary_test  → 2025-12-29
+#     completed_one     → 2026-01-12
+#     pending_one       → 2026-01-19
+#   user: two の week_start_date 一覧：
+#     other_user_reflection → 2026-01-05
+# ═══════════════════════════════════════════════════════════════════
 
-two:
-  user: one
-  week_start_date: 2026-02-09
-  week_end_date:   2026-02-15
-  reflection_comment: "読書習慣が身についてきた"
-  is_locked: true
-
-# テストの setup 専用。
-# habit_summaries fixtures が紐づいていないため、
-# テスト本体で自由に habit_one のサマリーを作成できる。
+# ---------------------------------------------------------------
+# for_summary_test（既存キー・削除禁止）
+#
+# 【なぜこのデータが必要か】
+#   weekly_reflection_habit_summary_test.rb の setup で
+#   weekly_reflections(:for_summary_test) として参照される。
+#   このキーが存在しないと全モデルテストが「No fixture named」エラーになる。
+#
+# 【fixture衝突回避の設計】
+#   weekly_reflection_habit_summaries.yml には
+#   「for_summary_test × habit_two（one_habit_one）」を定義する。
+#   モデルテスト本体では「for_summary_test × habit_one」を .new で作成するため
+#   UNIQUE制約（weekly_reflection_id + habit_id）に違反しない。
+# ---------------------------------------------------------------
 for_summary_test:
   user: one
-  week_start_date: 2025-12-01
-  week_end_date:   2025-12-07
-  reflection_comment: "サマリーテスト用"
+  week_start_date: "2025-12-29"
+  week_end_date:   "2026-01-04"
+  reflection_comment: "モデルテスト用の振り返りデータ"
+  is_locked: true
+
+# ---------------------------------------------------------------
+# completed_one（Issue #23 追加）
+#
+# 【なぜこのデータが必要か】
+#   WeeklyReflectionsController#show のテストで使用する完了済み振り返り。
+#   weekly_reflection_habit_summaries の summary_one / summary_two が
+#   この completed_one に紐づいている。
+# ---------------------------------------------------------------
+completed_one:
+  user: one
+  week_start_date: "2026-01-12"
+  week_end_date:   "2026-01-18"
+  reflection_comment: "今週はランニングを3回できました。来週はもう1回増やしたいです。"
+  is_locked: true
+
+# ---------------------------------------------------------------
+# pending_one（Issue #23 追加）
+#
+# 【なぜこのデータが必要か】
+#   new アクションの「完了済みならリダイレクト」テストで参照する未完了データ。
+# ---------------------------------------------------------------
+pending_one:
+  user: one
+  week_start_date: "2026-01-19"
+  week_end_date:   "2026-01-25"
+  reflection_comment: ""
+  is_locked: false
+
+# ---------------------------------------------------------------
+# other_user_reflection（Issue #23 追加）
+#
+# 【なぜこのデータが必要か】
+#   「他ユーザーの振り返りにアクセスできないこと」を確認する認可テスト用。
+#   user: two が所有するため user: one との week_start_date 重複は問題なし
+#   （UNIQUE制約は user_id + week_start_date の組み合わせで判定するため）。
+# ---------------------------------------------------------------
+other_user_reflection:
+  user: two
+  week_start_date: "2026-01-05"
+  week_end_date:   "2026-01-11"
+  reflection_comment: "別ユーザーの振り返りデータ（アクセス不可テスト用）"
   is_locked: true

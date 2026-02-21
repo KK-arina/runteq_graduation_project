@@ -57,7 +57,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_02_21_054123) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["habit_id"], name: "index_weekly_reflection_habit_summaries_on_habit_id"
-    t.index ["weekly_reflection_id", "habit_id"], name: "index_wrhs_on_reflection_and_habit", unique: true
+    t.index ["weekly_reflection_id", "habit_id"], name: "idx_wr_habit_summaries_on_wr_id_and_habit_id", unique: true
     t.index ["weekly_reflection_id"], name: "idx_on_weekly_reflection_id_641bf747c5"
   end
 

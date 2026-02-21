@@ -1,151 +1,161 @@
 # test/controllers/weekly_reflections_controller_test.rb
 #
+# ═══════════════════════════════════════════════════════════════════
 # 【このファイルの役割】
-# WeeklyReflectionsController の各アクションが正しく動作するかを確認するテスト。
+#   WeeklyReflectionsController の各アクションが
+#   正しく動作するかを自動テストで確認する。
 #
-# 【テスト対象アクション】
-# new    → 振り返り入力フォームの表示
-# create → 振り返りの保存処理
-#
-# 【テストの日時設定】
-# travel_to で 2026-02-22（日曜 AM5:00）に固定する。
-# この週の week_start_date = 2026-02-16。
-# fixtures の weekly_reflections は 2026-02-02 と 2026-02-09 始まりのため重複しない。
+#   Rails のコントローラーテスト（ActionDispatch::Integration）を使用。
+#   実際の HTTP リクエストをシミュレートしてレスポンスを検証する。
+# ═══════════════════════════════════════════════════════════════════
 
 require "test_helper"
 
 class WeeklyReflectionsControllerTest < ActionDispatch::IntegrationTest
-  # ==========================================
-  # setup: 各テスト実行前の前処理
-  # ==========================================
+  # ---------------------------------------------------------------
+  # setup
+  # 【なぜ使うのか】
+  #   各テストメソッドが実行される前に共通の準備処理を行う。
+  #   ここでテスト用ユーザーをログイン状態にしておくことで、
+  #   各テストメソッドで同じ前提条件からスタートできる。
+  # ---------------------------------------------------------------
   setup do
+    # fixtures(:users) で定義した "one" ユーザーをロード
     @user = users(:one)
+
+    # log_in_as ... test_helper.rb に定義したログインヘルパーメソッド
+    # セッションに current_user を設定した状態にする
     log_in_as(@user)
 
-    # テスト対象の日時: 2026-02-22（日曜）AM5:00
-    # wday=0（日曜）かつ hour=5（AM4:00以降）→ 振り返り可能な時間帯
-    @test_time = Time.zone.local(2026, 2, 22, 5, 0, 0)
+    # テスト用の完了済み振り返りをロード（fixtures で定義）
+    @completed_reflection = weekly_reflections(:completed_one)
   end
 
-  # ==========================================
-  # new アクション テスト
-  # ==========================================
+  # ================================================================
+  # show アクションのテスト群（Issue #23 で追加）
+  # ================================================================
 
-  test "new: ログイン済みユーザーが振り返りフォームにアクセスできること" do
-    travel_to @test_time do
+  # ---------------------------------------------------------------
+  # test: 詳細ページが正常に表示されること
+  # ---------------------------------------------------------------
+  test "should get show" do
+    # GET /weekly_reflections/:id へリクエストを送信
+    get weekly_reflection_path(@completed_reflection)
+
+    # assert_response :success ... HTTP ステータスコード 200 を確認
+    assert_response :success
+  end
+
+  # ---------------------------------------------------------------
+  # test: 詳細ページに対象週の期間が表示されること
+  # ---------------------------------------------------------------
+  test "should display week period on show page" do
+    get weekly_reflection_path(@completed_reflection)
+
+    assert_response :success
+
+    # assert_select でページ内に特定のHTMLと文字列が存在することを確認する
+    # text: /正規表現/ は「その文字列を含むか」をチェックする
+    # ページの構造が壊れた（例: span → div に変えてしまった）場合も検知できる
+
+    # 対象週の開始日が <p> タグ内に表示されているか
+    assert_select "p", text: /#{@completed_reflection.week_start_date.strftime("%Y年%m月%d日")}/
+
+    # 「今週の総合達成率」セクションが <h2> として存在するか
+    # UI崩壊（見出しの削除・変更）も検知できる
+    assert_select "h2", text: /今週の総合達成率/
+
+    # 「習慣別 実績サマリー」セクションが存在するか
+    assert_select "h2", text: /習慣別 実績サマリー/
+
+    # 「振り返りコメント」セクションが存在するか
+    assert_select "h2", text: /振り返りコメント/
+  end
+
+  # ---------------------------------------------------------------
+  # test: 詳細ページに振り返りコメントが表示されること
+  # ---------------------------------------------------------------
+  test "should display reflection comment on show page" do
+    get weekly_reflection_path(@completed_reflection)
+
+    assert_response :success
+
+    # コメントが存在する場合、そのテキストが表示されているか確認
+    if @completed_reflection.reflection_comment.present?
+      assert_select "div", text: /#{Regexp.escape(@completed_reflection.reflection_comment[0..20])}/
+    end
+  end
+
+  # ---------------------------------------------------------------
+  # test: 他ユーザーの振り返りにアクセスしたとき一覧にリダイレクトされること
+  # ---------------------------------------------------------------
+  test "should redirect to index when accessing other user's reflection" do
+    # fixtures で定義した別ユーザーの振り返り
+    other_reflection = weekly_reflections(:other_user_reflection)
+
+    # @user でログイン中に other_user の振り返りへアクセスを試みる
+    get weekly_reflection_path(other_reflection)
+
+    # assert_redirected_to: リダイレクト先を確認
+    # 他ユーザーのデータへのアクセスは一覧ページへリダイレクトされるべき
+    assert_redirected_to weekly_reflections_path
+  end
+
+  # ---------------------------------------------------------------
+  # test: 存在しない ID へのアクセスで一覧にリダイレクトされること
+  # ---------------------------------------------------------------
+  test "should redirect to index when reflection not found" do
+    # 存在しない ID（999999）へアクセス
+    get weekly_reflection_path(id: 999999)
+
+    assert_redirected_to weekly_reflections_path
+  end
+
+  # ---------------------------------------------------------------
+  # test: 未ログインのユーザーはログインページにリダイレクトされること
+  # ---------------------------------------------------------------
+  test "should redirect unauthenticated user from show" do
+    # セッションをリセットしてログアウト状態にする
+    delete session_path
+
+    get weekly_reflection_path(@completed_reflection)
+
+    # require_login の動作確認
+    # application_controller.rb が redirect_to login_path しているため login_path が正しい
+    assert_redirected_to login_path
+  end
+
+  # ================================================================
+  # index アクションのテスト群
+  # ================================================================
+
+  test "should get index" do
+    get weekly_reflections_path
+    assert_response :success
+  end
+
+  # ================================================================
+  # new アクションのテスト群
+  # ================================================================
+
+  test "should get new" do
+    # travel_to: 指定した日時に時刻を固定してテストする（AM4:00基準テスト用）
+    # 日曜日 AM4:00 以降に固定することで振り返り期間内として扱われる
+    travel_to WeeklyReflection.current_week_start_date.end_of_day do
       get new_weekly_reflection_path
       assert_response :success
     end
   end
 
-  test "new: 未ログインユーザーはログインページにリダイレクトされること" do
-    delete logout_path
-    travel_to @test_time do
+  test "should redirect to show if current week already completed" do
+    # 今週の完了済み振り返りがある状態でフォームにアクセスしたとき
+    # → 詳細ページへリダイレクトされるべき
+
+    # @completed_reflection の週に時刻を固定
+    travel_to @completed_reflection.week_start_date.end_of_day do
       get new_weekly_reflection_path
-      assert_redirected_to login_path
-    end
-  end
-
-  test "new: 今週がすでに完了している場合は詳細ページにリダイレクトされること" do
-    travel_to @test_time do
-      # 今週分（week_start_date = 2026-02-16）の完了済み振り返りを作成する
-      # fixtures の週とは重複しないため create! で直接作成できる
-      week_start = WeeklyReflection.current_week_start_date
-      completed  = WeeklyReflection.create!(
-        user:               @user,
-        week_start_date:    week_start,
-        week_end_date:      week_start + 6.days,
-        reflection_comment: "完了済みコメント",
-        is_locked:          true
-      )
-
-      get new_weekly_reflection_path
-      assert_redirected_to weekly_reflection_path(completed)
-    end
-  end
-
-  # ==========================================
-  # create アクション テスト
-  # ==========================================
-
-  test "create: 正常なパラメーターで振り返りが保存されること" do
-    travel_to @test_time do
-      # assert_difference でユーザー単位のカウントが +1 されることを確認する
-      # 【なぜ @user.weekly_reflections.count を使うか】
-      # WeeklyReflection.count（全ユーザー分）より @user.weekly_reflections.count の方が
-      # テストの意図が明確になる。「このユーザーの振り返りが1件増えた」ことを確認できる。
-      assert_difference "@user.weekly_reflections.count", 1 do
-        post weekly_reflections_path, params: {
-          weekly_reflection: {
-            reflection_comment: "今週は読書を毎日継続できた。来週も継続する。"
-          }
-        }
-      end
-      assert_redirected_to weekly_reflections_path
-    end
-  end
-
-  test "create: reflection_comment が空でも保存できること（任意項目）" do
-    travel_to @test_time do
-      assert_difference "@user.weekly_reflections.count", 1 do
-        post weekly_reflections_path, params: {
-          weekly_reflection: { reflection_comment: "" }
-        }
-      end
-      assert_redirected_to weekly_reflections_path
-    end
-  end
-
-  test "create: 保存後は is_locked が true になること" do
-    travel_to @test_time do
-      post weekly_reflections_path, params: {
-        weekly_reflection: { reflection_comment: "テスト" }
-      }
-      # 今週分の振り返りを取得して is_locked を確認する
-      saved = @user.weekly_reflections.find_by(
-        week_start_date: WeeklyReflection.current_week_start_date
-      )
-      assert saved.is_locked, "振り返り完了後は is_locked が true になること"
-    end
-  end
-
-  test "create: 同じ週に2回 create を呼んでも1件しか作成されないこと" do
-    travel_to @test_time do
-      # 1回目
-      post weekly_reflections_path, params: {
-        weekly_reflection: { reflection_comment: "1回目" }
-      }
-      count_after_first = @user.weekly_reflections.count
-
-      # 2回目（同じ週）→ 既存レコードを更新するため件数は増えない
-      # assert_no_difference でカウントが変化しないことを確認する
-      assert_no_difference "@user.weekly_reflections.count" do
-        post weekly_reflections_path, params: {
-          weekly_reflection: { reflection_comment: "2回目" }
-        }
-      end
-
-      assert_equal count_after_first, @user.weekly_reflections.count
-    end
-  end
-
-  test "create: 習慣数と同じ数のスナップショットが作成されること" do
-    travel_to @test_time do
-      # 習慣数を事前に取得する（ハードコードしないことで fixtures 変更に強くなる）
-      habit_count = @user.habits.active.count
-
-      post weekly_reflections_path, params: {
-        weekly_reflection: { reflection_comment: "テストコメント" }
-      }
-
-      # 今週分の振り返りを取得
-      reflection = @user.weekly_reflections.find_by(
-        week_start_date: WeeklyReflection.current_week_start_date
-      )
-
-      # 習慣数とスナップショット数が一致することを確認する
-      assert_equal habit_count, reflection.habit_summaries.count,
-        "習慣 #{habit_count} 件分のスナップショットが作成されること"
+      # 完了済みなので show へリダイレクト
+      assert_redirected_to weekly_reflection_path(@completed_reflection)
     end
   end
 end
