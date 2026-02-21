@@ -2618,27 +2618,17 @@ end
 
 **習慣新規作成フォーム（app/views/habits/new.html.erb）**:
 ```erb
-
-  
     新しい習慣を追加
-  
 
   <%= form_with model: @habit, local: true do |f| %>
-    
     <% if @habit.errors.any? %>
-      
-        
-          <%= @habit.errors.count %> 件のエラーがあります
-        
-        
-          <% @habit.errors.full_messages.each do |message| %>
-            <%= message %>
-          <% end %>
-        
-      
-    <% end %>
+      <%= @habit.errors.count %> 件のエラーがあります
 
-    
+      <% @habit.errors.full_messages.each do |message| %>
+        <%= message %>
+      <% end %>
+
+    <% end %>
     
       <%= f.label :name, "習慣名", class: "block text-sm font-medium text-gray-700 mb-2" %>
       <%= f.text_field :name,
@@ -2692,14 +2682,11 @@ end
 ```erb
 <% if @habit.errors.any? %>
   
-    
       <%= @habit.errors.count %> 件のエラーがあります
-    
     
       <% @habit.errors.full_messages.each do |message| %>
         <%= message %>
       <% end %>
-    
   
 <% end %>
 ```
@@ -2721,9 +2708,6 @@ end
 
 **共通レイアウト（app/views/layouts/application.html.erb）**:
 ```erb
-
-
-  
     HabitFlow
     
     <%= csrf_meta_tags %>
@@ -2731,30 +2715,14 @@ end
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags %>
-  
 
-  
-    
     <% flash.each do |message_type, message| %>
-      
-        
-          <%= message %>
-        
-      
+      <%= message %>
     <% end %>
 
-    
     <%= render 'shared/header' %>
-
-    
-    
       <%= yield %>
-    
-
-    
     <%= render 'shared/footer' %>
-  
-
 ```
 
 <br>
@@ -2768,35 +2736,18 @@ end
 
 **共通ヘッダー（app/views/shared/_header.html.erb）**:
 ```erb
-
-  
-    
-      
-      
-        <%= link_to "HabitFlow", root_path, class: "hover:text-blue-700 transition-colors" %>
-      
-
-      
-      
-        <% if logged_in? %>
-          
-          <%= link_to "習慣一覧", habits_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
-          
-            <%= current_user.name %> さん
-          
-          <%= button_to "ログアウト", logout_path,
-              method: :delete,
-              class: "px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors",
-              data: { turbo_confirm: "ログアウトしますか？" } %>
-        <% else %>
-          
-          <%= link_to "ログイン", login_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
-          <%= link_to "新規登録", new_user_path, class: "px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors" %>
-        <% end %>
-      
-    
-  
-
+  <%= link_to "HabitFlow", root_path, class: "hover:text-blue-700 transition-colors" %>
+  <% if logged_in? %>
+    <%= link_to "習慣一覧", habits_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
+      <%= current_user.name %> さん
+    <%= button_to "ログアウト", logout_path,
+      method: :delete,
+      class: "px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors",
+      data: { turbo_confirm: "ログアウトしますか？" } %>
+  <% else %>
+    <%= link_to "ログイン", login_path, class: "text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium transition-colors" %>
+    <%= link_to "新規登録", new_user_path, class: "px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 transition-colors" %>
+  <% end %>
 ```
 
 <br>
@@ -3235,27 +3186,15 @@ end
 
 **習慣一覧ページ（app/views/habits/index.html.erb）**:
 ```erb
-
-
-  
-  
-    
-      <%= habit.name %>
-    
-  
-
-  
-  
+  <%= habit.name %>
   <!-- method: :delete で DELETE /habits/:id にリクエスト -->
-  
-  
+
   <%= button_to habit_path(habit), 
       method: :delete,
       data: { turbo_confirm: "本当に削除しますか？\n「#{habit.name}」を削除すると、過去の記録も表示されなくなります。" },
       class: "px-3 py-1 text-sm bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors" do %>
     削除
   <% end %>
-
 ```
 
 <br>
@@ -3504,8 +3443,6 @@ end
 <br>
 
 ### 動作確認（Railsコンソール）
-
-<br>
 ```ruby
 # ユーザーと習慣を取得
 user = User.first
@@ -4170,15 +4107,8 @@ end
 <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
 <% progress = stats[:rate] %>
 <% completed_count = stats[:completed_count] %>
-
 <%# プログレスバー（進捗率に応じて色が変化） %>
-
-  
-  
-
-
-
-  <%= completed_count %> / <%= habit.weekly_target %> 日達成
+<%= completed_count %> / <%= habit.weekly_target %> 日達成
 
 ```
 
@@ -4974,8 +4904,6 @@ end
 <br>
 
 ### ロック判定ロジック（locked?）
-
-<br>
 ```ruby
 # app/controllers/application_controller.rb
 
@@ -5002,12 +4930,9 @@ def locked?
   last_week_reflection.pending?
 end
 ```
-
 <br>
 
 ### ロック時のサーバー側ブロック（require_unlocked）
-
-<br>
 ```ruby
 # app/controllers/application_controller.rb
 
@@ -5030,8 +4955,6 @@ end
 <br>
 
 ### HabitsController への適用
-
-<br>
 ```ruby
 # app/controllers/habits_controller.rb
 
@@ -5043,8 +4966,6 @@ before_action :require_unlocked, only: [:create, :destroy]
 <br>
 
 ### ビューでのUI制御
-
-<br>
 ```erb
 <%# ロック中は非活性ボタン（クリックしても何も起きない）を表示 %>
 <% if @locked %>
@@ -5080,8 +5001,6 @@ before_action :require_unlocked, only: [:create, :destroy]
 <br>
 
 ### テスト戦略
-
-<br>
 ```ruby
 # test/integration/pdca_lock_test.rb
 
