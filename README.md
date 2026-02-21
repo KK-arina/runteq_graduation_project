@@ -2065,7 +2065,7 @@ end
 <br>
 
 **共通ヘッダー（app/views/shared/_header.html.erb）**:
-erb
+```erb
 <header class="bg-gray-50 border-b border-gray-200">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
     <div class="flex justify-between items-center">
@@ -2087,11 +2087,12 @@ erb
     </div>
   </div>
 </header>
+```
 
 <br>
 
 **共通フッター（app/views/shared/_footer.html.erb）**:
-erb
+```erb
 <footer class="bg-gray-900 text-white py-8 mt-auto">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="text-center text-sm">
@@ -2103,11 +2104,12 @@ erb
     </div>
   </div>
 </footer>
+```
 
 <br>
 
 **レイアウトファイル（app/views/layouts/application.html.erb）**:
-erb
+```erb
 <body class="min-h-screen flex flex-col bg-white text-gray-900">
   <%= render "shared/header" %>
 
@@ -2124,6 +2126,7 @@ erb
 
   <%= render "shared/footer" %>
 </body>
+```
 
 <br>
 
