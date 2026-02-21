@@ -33,6 +33,7 @@
 - ✅ 習慣の週次進捗統計自動計算実装完了（N+1問題対策済み）
 - ✅ 習慣管理機能のテスト実装完了（119 runs, 322 assertions, 0 failures）
 - ✅ ダッシュボード機能実装完了（今週の達成率・今日の習慣チェックリスト）
+- ✅ WeeklyReflectionHabitSummaryモデル作成完了（スナップショット設計・冪等性対応）
 
 <br>
 
@@ -646,7 +647,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 |-------|---------|-----------|--------|-----|
 | #18 | ダッシュボードの作成 | ✅ 完了 | 2/21 | 4 |
 | #19 | WeeklyReflectionモデルの作成 | ✅ 完了 | 2/21 | 2 |
-| #20 | WeeklyReflectionHabitSummaryモデルの作成 | ⬜ 未着手 | - | 2 |
+| #20 | WeeklyReflectionHabitSummaryモデルの作成 | ✅ 完了 | 2/21 | 2 |
 | #21 | 週次振り返り一覧ページ | ⬜ 未着手 | - | 2 |
 | #22 | 週次振り返り入力ページ | ⬜ 未着手 | - | 4 |
 | #23 | 週次振り返り詳細ページ | ⬜ 未着手 | - | 2 |
@@ -654,7 +655,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-**Week 3 進捗**: 6SP / 20SP（30%）
+**Week 3 進捗**: 8SP / 20SP（40%）
 
 <br>
 
@@ -683,6 +684,22 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - `Userモデル` に `has_many :weekly_reflections, dependent: :destroy` を追加
 - モデルテスト22件追加（AM4:00境界値・UNIQUE制約・CASCADE・週範囲整合性を網羅）
 - 全テスト成功: 143 runs, 362 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #20: WeeklyReflectionHabitSummaryモデルの作成
+
+<br>
+
+- スナップショット設計によるデータ不変性の実現（振り返り時点の習慣名・目標値をコピー保存）
+- `build_from_habit` クラスメソッド（単体スナップショット構築）
+- `create_all_for_reflection!` クラスメソッド（全習慣一括作成・トランザクション保証・冪等性対応）
+- 達成率の自動計算（`actual_count / weekly_target × 100`、0〜100にclamp、小数点2桁）
+- UNIQUE制約（weekly_reflection_id + habit_id）をDBレベル + Railsバリデーションで二重ガード
+- `habit_id` を `null: true` に設定（`on_delete: :nullify` との整合性・スナップショット保護）
+- `WeeklyReflection` に `has_many :habit_summaries` を追加
+- `Habit` に `has_many :weekly_reflection_habit_summaries` を追加
+- 全テスト成功: 172 runs, 409 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
@@ -4410,6 +4427,165 @@ scope :for_week,  ->(start_date) { where(week_start_date: start_date) }
 ```
 22 runs, 38 assertions, 0 failures, 0 errors, 0 skips
 （全体: 143 runs, 362 assertions, 0 failures, 0 errors, 0 skips）
+```
+
+<br>
+
+#### WeeklyReflectionHabitSummaryモデル（Issue #20）
+
+<br>
+
+**実装日**: 2026年2月21日
+
+<br>
+
+**設計思想（スナップショット）**:
+
+<br>
+
+このテーブルは「履歴」ではなく「スナップショット」です。
+
+<br>
+
+習慣（habits）テーブルのデータはユーザーによって後から変更・削除される可能性があります。<br>
+しかし週次振り返りは「振り返りを行った時点の状態」を永続保存する必要があります。<br>
+
+<br>
+
+例：<br>
+1週目：習慣名「読書」目標7回 → サマリーに「読書, 7回」をコピー保存<br>
+2週目：習慣名を「英語学習」に変更<br>
+→ 1週目の振り返りを見ても「読書」のまま表示される（正しい記録を守れる）<br>
+
+<br>
+
+**テーブル定義**:
+```sql
+CREATE TABLE weekly_reflection_habit_summaries (
+  id BIGSERIAL PRIMARY KEY,
+  weekly_reflection_id BIGINT NOT NULL REFERENCES weekly_reflections(id) ON DELETE CASCADE,
+  habit_id BIGINT REFERENCES habits(id) ON DELETE SET NULL,
+  habit_name VARCHAR NOT NULL,
+  weekly_target INTEGER NOT NULL,
+  actual_count INTEGER NOT NULL DEFAULT 0,
+  achievement_rate DECIMAL(5,2) NOT NULL DEFAULT 0.0,
+  created_at TIMESTAMP NOT NULL,
+  updated_at TIMESTAMP NOT NULL
+);
+
+CREATE UNIQUE INDEX idx_wr_habit_summaries_on_wr_id_and_habit_id
+  ON weekly_reflection_habit_summaries(weekly_reflection_id, habit_id);
+```
+
+<br>
+
+**外部キー制約の設計**:
+
+<br>
+
+| カラム | NULL | on_delete | 理由 |
+|--------|------|-----------|------|
+| weekly_reflection_id | NOT NULL | CASCADE | 振り返り本体が消えたらサマリーも不要 |
+| habit_id | NULL許容 | NULLIFY | 習慣が削除されてもスナップショットデータは残す |
+
+<br>
+
+`habit_id` を `null: true` にする理由：<br>
+`on_delete: :nullify` により habit 削除時に DB が habit_id を NULL に書き換えようとする。<br>
+`null: false`（NOT NULL制約）のままだと `PG::NotNullViolation` エラーになるため、NULL を許容する設計が正しい。<br>
+
+<br>
+
+**バリデーション**:
+- habit_name: 必須・50文字以内（スナップショット）
+- weekly_target: 必須・1以上の整数（達成率計算の分母になるため0禁止）
+- actual_count: 必須・0以上の整数
+- achievement_rate: 必須・0〜100の範囲
+- habit_id: ユニーク制約（scope: :weekly_reflection_id）、NULL許容
+
+<br>
+
+**クラスメソッド**:
+```ruby
+# 単体スナップショット構築（DBには保存しない）
+def self.build_from_habit(weekly_reflection, habit)
+  week_range = weekly_reflection.week_start_date..weekly_reflection.week_end_date
+  actual_count = habit.habit_records
+                      .where(user: weekly_reflection.user,
+                             record_date: week_range,
+                             completed: true)
+                      .count
+  rate = calculate_rate(actual_count, habit.weekly_target)
+  weekly_reflection.habit_summaries.build(
+    habit:            habit,
+    habit_name:       habit.name,           # スナップショット
+    weekly_target:    habit.weekly_target,  # スナップショット
+    actual_count:     actual_count,
+    achievement_rate: rate
+  )
+end
+
+# 全習慣のサマリーを一括作成（トランザクション保証・冪等性対応）
+def self.create_all_for_reflection!(weekly_reflection)
+  transaction do
+    weekly_reflection.user.habits.active.each do |habit|
+      next if weekly_reflection.habit_summaries.exists?(habit: habit) # 冪等性
+      build_from_habit(weekly_reflection, habit).save!
+    end
+  end
+end
+```
+
+<br>
+
+**達成率の計算ロジック**:
+```ruby
+# actual / target * 100、0〜100にclamp、小数点2桁で丸め
+((actual.to_f / target) * 100).clamp(0, 100).round(2)
+```
+
+<br>
+
+**冪等性（idempotent）の保証**:
+
+<br>
+
+`create_all_for_reflection!` は同じ振り返りに対して何度呼んでもデータが重複しない設計です。<br>
+`next if exists?(habit: habit)` により既存サマリーをスキップするため、<br>
+ページリロードや二重送信が発生しても安全に動作します。<br>
+
+<br>
+
+**アソシエーション**:
+```ruby
+# WeeklyReflectionHabitSummary
+belongs_to :weekly_reflection
+belongs_to :habit, optional: true  # habit_id が NULL になっても許容
+
+# WeeklyReflection
+has_many :habit_summaries,
+         class_name: 'WeeklyReflectionHabitSummary',
+         dependent: :destroy
+
+# Habit
+has_many :weekly_reflection_habit_summaries, dependent: :nullify
+```
+
+<br>
+
+**テスト戦略**:
+- バリデーションテスト（正常系・異常系・境界値）
+- UNIQUE制約テスト（同一振り返り×習慣の重複禁止、異なる組み合わせは許可）
+- スナップショットテスト（`build_from_habit` で habit_name・weekly_target が正しくコピーされること）
+- 実績集計テスト（未完了記録・他ユーザー記録が含まれないこと）
+- 冪等性テスト（`create_all_for_reflection!` を2回呼んでも件数が増えないこと）
+- CASCADEテスト（WeeklyReflection削除時にサマリーも削除されること）
+
+<br>
+
+**テスト結果**:
+```
+172 runs, 409 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>

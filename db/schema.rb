@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_02_21_023717) do
+ActiveRecord::Schema[7.2].define(version: 2026_02_21_054123) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -47,6 +47,20 @@ ActiveRecord::Schema[7.2].define(version: 2026_02_21_023717) do
     t.index ["email"], name: "index_users_on_email", unique: true
   end
 
+  create_table "weekly_reflection_habit_summaries", force: :cascade do |t|
+    t.bigint "weekly_reflection_id", null: false
+    t.bigint "habit_id"
+    t.string "habit_name", null: false
+    t.integer "weekly_target", null: false
+    t.integer "actual_count", default: 0, null: false
+    t.decimal "achievement_rate", precision: 5, scale: 2, default: "0.0", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["habit_id"], name: "index_weekly_reflection_habit_summaries_on_habit_id"
+    t.index ["weekly_reflection_id", "habit_id"], name: "index_wrhs_on_reflection_and_habit", unique: true
+    t.index ["weekly_reflection_id"], name: "idx_on_weekly_reflection_id_641bf747c5"
+  end
+
   create_table "weekly_reflections", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.date "week_start_date", null: false
@@ -62,5 +76,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_02_21_023717) do
   add_foreign_key "habit_records", "habits", on_delete: :cascade
   add_foreign_key "habit_records", "users", on_delete: :cascade
   add_foreign_key "habits", "users"
+  add_foreign_key "weekly_reflection_habit_summaries", "habits", on_delete: :nullify
+  add_foreign_key "weekly_reflection_habit_summaries", "weekly_reflections", on_delete: :cascade
   add_foreign_key "weekly_reflections", "users", on_delete: :cascade
 end

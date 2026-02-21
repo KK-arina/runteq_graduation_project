@@ -86,6 +86,21 @@ class WeeklyReflection < ApplicationRecord
   # --------------------------------------------------------------------------
   validate :week_range_must_be_one_week
 
+  # app/models/weekly_reflection.rb の既存コードに追記する箇所
+
+  # ============================================================
+  # アソシエーションの追記（以下の1行を追加する）
+  # ============================================================
+
+  # has_many :habit_summaries
+  # → 1つのWeeklyReflectionは複数のHabitSummaryを持つ（1対多）
+  # → class_name で明示的にモデル名を指定（デフォルトの推測と一致させる）
+  # → dependent: :destroy → WeeklyReflection削除時にサマリーも一緒に削除
+  #   （DBのCASCADE制約とアプリレベルの二重保証）
+  has_many :habit_summaries,
+           class_name: 'WeeklyReflectionHabitSummary',
+           dependent: :destroy
+
   # ============================================================================
   # スコープ（よく使う検索条件を名前付きで定義）
   #

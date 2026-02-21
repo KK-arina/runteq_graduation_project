@@ -1,0 +1,27 @@
+# test/fixtures/weekly_reflection_habit_summaries.yml
+#
+# 【注意】
+# このfixtureは「テスト実行前にDBに自動挿入されるデータ」です。
+# テスト本体で save! を呼ぶテストと combination（reflection × habit）が
+# 被るとUNIQUE制約エラーになるため、テスト本体では使わない組み合わせにしています。
+#
+# テスト本体では habit: habit_one × reflection: current_week を使うため、
+# fixtureでは habit_two × current_week, habit_one × last_week のみ定義します。
+
+# 今週の振り返り × habit_two（テスト本体と被らない組み合わせ）
+current_week_habit_two:
+  weekly_reflection: current_week
+  habit: habit_two
+  habit_name: 運動
+  weekly_target: 5
+  actual_count: 3
+  achievement_rate: 60.00
+
+# 先週の振り返り × habit_one
+last_week_habit_one:
+  weekly_reflection: last_week
+  habit: habit_one
+  habit_name: 読書
+  weekly_target: 7
+  actual_count: 7
+  achievement_rate: 100.00
