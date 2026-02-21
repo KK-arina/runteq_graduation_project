@@ -1,65 +1,67 @@
 <%# app/views/shared/_header.html.erb %>
-<%# =============================================================
-    全ページ共通で表示されるヘッダー
-    logged_in? ヘルパーでログイン状態に応じてナビゲーションを切り替える
-    ============================================================= %>
+<%#
+  共通ヘッダー
+  全ページで使用される共通のナビゲーションバーです
+  Issue #21 で「振り返り」ナビリンクを追加しました
+%>
 
-<header class="bg-white border-b border-gray-200 sticky top-0 z-50">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-    <div class="flex justify-between items-center h-14">
+<header class="bg-gray-50 border-b border-gray-200">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+    <div class="flex justify-between items-center">
 
-      <%# ========== ロゴ ========== %>
-      <%# logged_in? によってリンク先を切り替える
-          ログイン済み → ダッシュボード
-          未ログイン  → ランディングページ %>
-      <div class="flex items-center">
-        <%= link_to logged_in? ? dashboard_path : root_path,
-            class: "text-xl font-bold text-blue-600 tracking-tight hover:text-blue-700 transition-colors" do %>
-          HabitFlow
-        <% end %>
+      <%# ロゴエリア %>
+      <div class="text-2xl font-bold text-blue-600">
+        <%= link_to "HabitFlow", root_path, class: "hover:text-blue-700 transition-colors" %>
       </div>
 
-      <%# ========== ナビゲーション ========== %>
-      <nav class="flex items-center gap-2">
+      <%# ナビゲーションエリア %>
+      <div class="flex items-center space-x-4">
         <% if logged_in? %>
-          <%# ---- ログイン済みユーザー向けナビ ---- %>
+          <%# ログイン中のナビゲーションリンク %>
 
-          <%# ダッシュボードへのリンク
-              current_page? : 現在のページかどうかを判定するRailsヘルパー
-              現在のページなら青色、そうでなければグレー %>
+          <%# ダッシュボードリンク %>
           <%= link_to "ダッシュボード", dashboard_path,
-              class: "text-sm font-medium px-3 py-2 rounded-md transition-colors #{
-                current_page?(dashboard_path) ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }" %>
+              class: "text-gray-600 hover:text-gray-900 px-3 py-2
+                      text-sm font-medium transition-colors" %>
 
-          <%# 習慣一覧へのリンク %>
-          <%= link_to "習慣管理", habits_path,
-              class: "text-sm font-medium px-3 py-2 rounded-md transition-colors #{
-                current_page?(habits_path) ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-              }" %>
+          <%# 習慣一覧リンク %>
+          <%= link_to "習慣一覧", habits_path,
+              class: "text-gray-600 hover:text-gray-900 px-3 py-2
+                      text-sm font-medium transition-colors" %>
 
-          <%# ユーザー名の表示 %>
-          <span class="text-sm text-gray-500 px-2">
+          <%# 週次振り返りリンク（Issue #21 で追加）
+              weekly_reflections_path は routes.rb の
+              resources :weekly_reflections が生成するパスです
+              GET /weekly_reflections にアクセスします %>
+          <%= link_to "振り返り", weekly_reflections_path,
+              class: "text-gray-600 hover:text-gray-900 px-3 py-2
+                      text-sm font-medium transition-colors" %>
+
+          <%# ユーザー名表示 %>
+          <span class="text-gray-700 text-sm font-medium">
             <%= current_user.name %> さん
           </span>
 
           <%# ログアウトボタン
-              method: :delete → DELETEリクエストを送信（Turbo対応）
-              data-turbo-confirm → 確認ダイアログを表示 %>
+              data-turbo-confirm で削除前に確認ダイアログを表示します
+              method: :delete で DELETE /logout にリクエストを送ります %>
           <%= button_to "ログアウト", logout_path,
               method: :delete,
-              class: "text-sm font-medium px-3 py-2 rounded-md text-gray-600 border border-gray-300 hover:bg-gray-50 transition-colors",
+              class: "px-4 py-2 text-sm font-medium text-gray-700 bg-white
+                      border border-gray-300 rounded-md hover:bg-gray-50
+                      transition-colors",
               data: { turbo_confirm: "ログアウトしますか？" } %>
 
         <% else %>
-          <%# ---- 未ログインユーザー向けナビ ---- %>
+          <%# 未ログイン時のナビゲーション %>
           <%= link_to "ログイン", login_path,
-              class: "text-sm font-medium px-3 py-2 rounded-md text-gray-600 hover:text-gray-900 transition-colors" %>
+              class: "text-gray-600 hover:text-gray-900 px-3 py-2
+                      text-sm font-medium transition-colors" %>
           <%= link_to "新規登録", new_user_path,
-              class: "text-sm font-medium px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition-colors" %>
+              class: "px-4 py-2 text-sm font-medium text-white bg-blue-600
+                      rounded-md hover:bg-blue-700 transition-colors" %>
         <% end %>
-      </nav>
-
+      </div>
     </div>
   </div>
 </header>

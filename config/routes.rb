@@ -1,33 +1,42 @@
 # config/routes.rb
-# =============================================================
-# Railsのルーティング設定ファイル
-# 「どのURLにアクセスしたら、どのControllerのどのActionを呼ぶか」を定義する
-# =============================================================
 
 Rails.application.routes.draw do
-  # ルートパス（"/"）にアクセスしたときの処理
-  # ログインしていない場合はランディングページ、ログイン済みならダッシュボードへ
-  # この振り分けはApplicationControllerで行う（後述）
+  # ===================================================
+  # ルーティング設定
+  # ===================================================
+  # root: アプリのトップページ（/）にアクセスした時に
+  # PagesController の index アクションを呼び出す
   root "pages#index"
 
-  # ユーザー登録（新規作成のみ許可）
+  # ユーザー登録（new: 登録フォーム表示、create: 登録処理）
   resources :users, only: [:new, :create]
 
-  # ログイン・ログアウト（セッション管理）
+  # ログイン（GET: フォーム表示、POST: 認証処理）
   get  "login",  to: "sessions#new",     as: :login
   post "login",  to: "sessions#create"
+  # ログアウト（DELETE: セッション削除）
   delete "logout", to: "sessions#destroy", as: :logout
 
-  # ダッシュボード
-  # GET /dashboard でdashboards#indexを呼ぶ
-  # as: :dashboard で dashboard_path というヘルパーメソッドが使えるようになる
+  # ダッシュボード（ログイン後のホーム画面）
   get "dashboard", to: "dashboards#index", as: :dashboard
 
   # 習慣管理
+  # do...end ブロック内にネストすることで
+  # /habits/:habit_id/habit_records のようなURLを生成します
   resources :habits, only: [:index, :new, :create, :destroy] do
-    # ネストされたルーティング
-    # GET  /habits/:habit_id/habit_records       → habit_records#create
-    # PATCH /habits/:habit_id/habit_records/:id  → habit_records#update
     resources :habit_records, only: [:create, :update]
   end
+
+  # ===================================================
+  # 週次振り返り（Issue #21 で追加）
+  # ===================================================
+  # resources :weekly_reflections を追加します
+  # index:  一覧ページ  GET /weekly_reflections
+  # new:    新規作成フォーム GET /weekly_reflections/new  ← Issue #22 で実装
+  # create: 保存処理    POST /weekly_reflections        ← Issue #22 で実装
+  # show:   詳細ページ  GET /weekly_reflections/:id     ← Issue #23 で実装
+  #
+  # only: で必要なアクションだけを定義することで、
+  # 不要なルートが生成されるのを防ぎ、セキュリティを向上させます
+  resources :weekly_reflections, only: [:index, :new, :create, :show]
 end
