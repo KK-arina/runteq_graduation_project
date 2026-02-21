@@ -37,6 +37,7 @@
 - ✅ 週次振り返り一覧ページ実装完了（日曜AM4:00判定・N+1対策・travel_to日付非依存テスト）
 - ✅ 週次振り返り入力ページ実装完了（form_with model設計・トランザクション保証・スナップショット自動作成）
 - ✅ 週次振り返り詳細ページ実装完了（コードレビュー対応・フィクスチャ設計・ルーティング整備）
+- ✅ PDCA強制ロック機能実装完了（月曜AM4:00判定・新規作成/削除ブロック・ダッシュボード警告バナー）
 
 <br>
 
@@ -654,11 +655,11 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #21 | 週次振り返り一覧ページ | ✅ 完了 | 2/21 | 2 |
 | #22 | 週次振り返り入力ページ | ✅ 完了 | 2/21 | 4 |
 | #23 | 週次振り返り詳細ページ | ✅ 完了 | 2/21 | 2 |
-| #24 | PDCA強制ロック機能 | ⬜ 未着手 | - | 4 |
+| #24 | PDCA強制ロック機能 | ✅ 完了 | 2/21 | 4 |
 
 <br>
 
-**Week 3 進捗**: 16SP / 20SP（80%）
+**Week 3 進捗**: 20SP / 20SP（100%） 🎉
 
 <br>
 
@@ -746,6 +747,18 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - `routes.rb` 整備：`login_path` / `logout_path` エイリアス・`POST /login`・ネストルート追加
 - `root "pages#index"` 修正（`pages#top` → `pages#index` でルート404を解消）
 - 全テスト成功: 189 runs, 443 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #24: PDCA強制ロック機能
+- `ApplicationController` に `locked?` メソッドを追加（月曜AM4:00以降かつ前週振り返り未完了でロック発動）
+- `ApplicationController` に `require_unlocked` メソッドを追加（ロック中の操作をサーバー側でブロック）
+- `HabitsController` の `create` / `destroy` に `before_action :require_unlocked` を追加（URL直打ち対策）
+- ダッシュボード・習慣一覧ページに警告バナーを追加（振り返りページへの導線付き）
+- ロック中は新規作成・削除ボタンを非活性化（🔒アイコン表示・cursor-not-allowed）
+- 即時保存（チェックボックス）はロック中でも動作維持
+- `travel_to` による月曜AM4:00境界値テストを追加（AM3:59はロックしない・AM4:00以降はロック）
+- 全テスト成功: 198 runs, 474 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
@@ -1124,7 +1137,7 @@ docker compose exec web bin/rails db:test:prepare
 habitflow/
 ├── app/
 │   ├── controllers/
-│   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
+│   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login, locked?, require_unlocked）
 │   │   ├── dashboards_controller.rb     # ダッシュボード（index）今週の達成率・今日のチェックリスト
 │   │   ├── weekly_reflections_controller.rb # 週次振り返り（index, new, create, show）日曜AM4:00判定・トランザクション保証
 │   │   ├── habit_records_controller.rb  # 習慣記録（create, update）ネストされたルーティング
@@ -1197,7 +1210,8 @@ habitflow/
 │   │   ├── weekly_reflection_index_test.rb    # 週次振り返り一覧統合テスト Issue #21
 │   │   ├── habit_daily_record_test.rb         # 日次記録・AM4:00境界値テスト（6テストケース）Issue #17
 │   │   ├── weekly_reflection_index_test.rb    # 週次振り返り一覧統合テスト Issue #21
-│   │   └── weekly_reflection_create_test.rb   # 週次振り返り作成統合テスト（E2Eフロー・1000文字バリデーション）Issue #22
+│   │   ├── weekly_reflection_create_test.rb   # 週次振り返り作成統合テスト（E2Eフロー・1000文字バリデーション）Issue #22
+│   │   └── pdca_lock_test.rb                  # PDCAロック統合テスト（月曜AM4:00判定・ロック中の作成/削除ブロック・即時保存維持）Issue #24
 │   ├── controllers/
 │   │   ├── dashboards_controller_test.rb      # DashboardsControllerテスト（3テストケース）Issue #18
 │   │   ├── weekly_reflections_controller_test.rb # WeeklyReflectionsControllerテスト（show/index/new/create・認可・境界値）Issue #21/#22/#23
@@ -4933,6 +4947,163 @@ end
 **テスト結果**:
 ```
 189 runs, 443 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+## PDCA強制ロック機能（Issue #24）
+
+<br>
+
+### 機能概要
+
+<br>
+
+月曜日のAM4:00時点で前週の週次振り返りが未完了の場合、以下の操作をブロックします。
+
+<br>
+
+- **習慣の新規作成をブロック** — 振り返りを優先させるため
+- **習慣の削除をブロック** — 逃げの削除を防止し、PDCAを回すため
+- **ダッシュボード・習慣一覧に警告バナーを表示** — 振り返りページへの導線を提供
+
+<br>
+
+即時保存（チェックボックスによる日次記録）はロック中でも動作します。
+
+<br>
+
+### ロック判定ロジック（locked?）
+
+<br>
+```ruby
+# app/controllers/application_controller.rb
+
+def locked?
+  return false unless logged_in?
+
+  # 今週月曜日のAM4:00を計算
+  # Date.current.beginning_of_week(:monday) でDateを基準にすることで
+  # タイムゾーン混在を防ぎます
+  this_monday_4am = Date.current
+                        .beginning_of_week(:monday)
+                        .in_time_zone
+                        .change(hour: 4, min: 0, sec: 0)
+
+  # AM4:00未満（日曜深夜〜月曜3:59）はロックしない
+  return false if Time.current < this_monday_4am
+
+  # 前週の振り返りが存在しかつ未完了（pending?）ならロック
+  last_week_start = HabitRecord.today_for_record
+                               .beginning_of_week(:monday) - 1.week
+  last_week_reflection = current_user.weekly_reflections
+                                     .find_by(week_start_date: last_week_start)
+  return false if last_week_reflection.nil?
+  last_week_reflection.pending?
+end
+```
+
+<br>
+
+### ロック時のサーバー側ブロック（require_unlocked）
+
+<br>
+```ruby
+# app/controllers/application_controller.rb
+
+# ロック中は create / destroy を実行させない「門番」メソッド
+# before_action として HabitsController に設定します
+def require_unlocked
+  return unless locked?
+
+  respond_to do |format|
+    format.html do
+      flash[:alert] = "先週の振り返りが未完了のため、この操作はできません。先に振り返りを完了してください。"
+      redirect_back fallback_location: habits_path
+    end
+    format.turbo_stream { head :locked }  # HTTP 423 Locked
+    format.json { render json: { error: "locked" }, status: :locked }
+  end
+end
+```
+
+<br>
+
+### HabitsController への適用
+
+<br>
+```ruby
+# app/controllers/habits_controller.rb
+
+# create と destroy の実行前にロックチェックを走らせます
+# index（一覧表示）や new（フォーム表示）はロック中でも閲覧可能にするため除外しています
+before_action :require_unlocked, only: [:create, :destroy]
+```
+
+<br>
+
+### ビューでのUI制御
+
+<br>
+```erb
+<%# ロック中は非活性ボタン（クリックしても何も起きない）を表示 %>
+<% if @locked %>
+  
+    🔒 + 新しい習慣を追加
+  
+<% else %>
+  <%= link_to new_habit_path, class: "..." do %>
+    + 新しい習慣を追加
+  <% end %>
+<% end %>
+```
+
+<br>
+
+### 設計上のポイント
+
+<br>
+
+**月曜AM4:00という時間条件を厳密に実装している理由：**<br>
+仕様は「月曜AM4:00を過ぎた時点でロック発動」です。<br>
+この条件がない場合、月曜になった瞬間ではなく前週中からずっとロックされてしまいます。<br>
+`Date.current.beginning_of_week(:monday).in_time_zone.change(hour: 4)` で<br>
+タイムゾーンを考慮した正確な時刻計算をしています。<br>
+
+<br>
+
+**サーバー側でもブロックする理由：**<br>
+ビュー側でボタンを非活性にするだけでは、URLを直接叩けばリクエストが通ってしまいます。<br>
+`before_action :require_unlocked` をコントローラーに設定することで、<br>
+どんな方法でリクエストを送っても必ずサーバー側でブロックされます。<br>
+
+<br>
+
+### テスト戦略
+
+<br>
+```ruby
+# test/integration/pdca_lock_test.rb
+
+# travel_to で月曜AM4:01に固定することで
+# テストを実行する曜日・時間に関わらず同じ結果になる（テストの再現性を保証）
+setup do
+  travel_to next_monday.in_time_zone.change(hour: 4, min: 1) + 1.week
+end
+
+# AM4:00前はロックしないことの境界値テスト
+test "月曜AM3:59は前週未完了でもロックされない" do
+  travel_to this_monday.in_time_zone.change(hour: 3, min: 59)
+  get dashboard_path
+  assert_select "p", text: /先週の振り返りが未完了/, count: 0
+end
+```
+
+<br>
+
+**テスト結果**:
+```
+198 runs, 474 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
