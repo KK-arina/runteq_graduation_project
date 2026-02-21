@@ -35,6 +35,7 @@
 - ✅ ダッシュボード機能実装完了（今週の達成率・今日の習慣チェックリスト）
 - ✅ WeeklyReflectionHabitSummaryモデル作成完了（スナップショット設計・冪等性対応）
 - ✅ 週次振り返り一覧ページ実装完了（日曜AM4:00判定・N+1対策・travel_to日付非依存テスト）
+- ✅ 週次振り返り入力ページ実装完了（form_with model設計・トランザクション保証・スナップショット自動作成）
 
 <br>
 
@@ -650,13 +651,13 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #19 | WeeklyReflectionモデルの作成 | ✅ 完了 | 2/21 | 2 |
 | #20 | WeeklyReflectionHabitSummaryモデルの作成 | ✅ 完了 | 2/21 | 2 |
 | #21 | 週次振り返り一覧ページ | ✅ 完了 | 2/21 | 2 |
-| #22 | 週次振り返り入力ページ | ⬜ 未着手 | - | 4 |
+| #22 | 週次振り返り入力ページ | ✅ 完了 | 2/21 | 4 |
 | #23 | 週次振り返り詳細ページ | ⬜ 未着手 | - | 2 |
 | #24 | PDCA強制ロック機能 | ⬜ 未着手 | - | 4 |
 
 <br>
 
-**Week 3 進捗**: 10SP / 20SP（50%）
+**Week 3 進捗**: 14SP / 20SP（70%）
 
 <br>
 
@@ -716,6 +717,20 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - ヘッダーナビに「振り返り」リンクを追加
 - `travel_to + current_week_start_date` による日付非依存なテスト設計（固定日付ハードコードを廃止）
 - 全テスト成功: 187 runs, 435 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #22: 週次振り返り入力ページ
+- `WeeklyReflectionsController` に `new` / `create` アクションを追加
+- `form_with model: @weekly_reflection` による Rails らしい RESTful フォーム設計（`url:` / `method:` 不要）
+- トランザクション内で振り返り本体（WeeklyReflection）とスナップショット（WeeklyReflectionHabitSummary）を一括保存
+- `find_or_build_for_current_week` による冪等性保証（同じ週に2回送信しても1件のみ作成）
+- 今週すでに完了済みの場合は詳細ページへリダイレクト（二重送信防止）
+- `rescue RecordInvalid` / `rescue RecordNotUnique` による二重防衛エラーハンドリング
+- 振り返りフォームに今週の習慣達成率（達成済み・未達成の分類）を表示し、記入内容のヒントを提供
+- `validates :reflection_comment, length: { maximum: 1000 }` をモデルに追加
+- fixtures の週重複・外部キー違反・ラベル不整合を全て解消し全テストグリーンを達成
+- 全テスト成功: 188 runs, 443 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
@@ -1096,14 +1111,14 @@ habitflow/
 │   ├── controllers/
 │   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
 │   │   ├── dashboards_controller.rb     # ダッシュボード（index）今週の達成率・今日のチェックリスト
-│   │   ├── weekly_reflections_controller.rb # 週次振り返り（index）日曜AM4:00判定ロジック
+│   │   ├── weekly_reflections_controller.rb # 週次振り返り（index, new, create）日曜AM4:00判定・トランザクション保証
 │   │   ├── habit_records_controller.rb  # 習慣記録（create, update）ネストされたルーティング
 │   │   ├── habits_controller.rb         # 習慣管理（index, new, create, destroy）
 │   │   ├── pages_controller.rb          # ランディングページ（ログイン済みはdashboardへリダイレクト）
 │   │   ├── sessions_controller.rb       # ログイン・ログアウト（new, create, destroy）
 │   │   └── users_controller.rb          # ユーザー登録（new, create）
 │   ├── models/
-│   │   ├── user.rb                       # Userモデル（認証機能、has_many :habits, :habit_records）
+│   │   ├── user.rb                       # Userモデル（認証機能、has_many :habits, :habit_records, :weekly_reflections）
 │   │   ├── habit.rb                      # Habitモデル（習慣管理、論理削除機能、has_many :habit_records）
 │   │   ├── habit_record.rb               # HabitRecordモデル（日次記録、AM4:00基準、UNIQUE制約）
 │   │   ├── weekly_reflection.rb              # WeeklyReflectionモデル（UNIQUE制約・AM4:00基準週計算・スコープ）
@@ -1126,7 +1141,8 @@ habitflow/
 │       ├── dashboards/
 │       │   └── index.html.erb            # ダッシュボード（今週の達成率・今日のチェックリスト）
 │       ├── weekly_reflections/
-│       │   └── index.html.erb                # 週次振り返り一覧（振り返りボタン・達成率サマリー・履歴リスト）
+│       │   ├── index.html.erb                # 週次振り返り一覧（振り返りボタン・達成率サマリー・履歴リスト）
+│       │   └── new.html.erb                  # 週次振り返り入力フォーム（今週の習慣達成実績・コメント入力）
 │       ├── pages/
 │       │   └── index.html.erb            # TOPページ（シンプル化済み）
 │       ├── sessions/
@@ -1140,13 +1156,13 @@ habitflow/
 │   │   ├── YYYYMMDDHHMMSS_create_habit_records.rb # HabitRecordsテーブル作成（AM4:00基準、UNIQUE制約）
 │   │   ├── YYYYMMDDHHMMSS_create_weekly_reflections.rb # WeeklyReflectionsテーブル作成
 │   │   └── YYYYMMDDHHMMSS_create_weekly_reflection_habit_summaries.rb # WeeklyReflectionHabitSummariesテーブル作成
-│   └── schema.rb                              # データベーススキーマ
+│   ├── schema.rb                              # データベーススキーマ
+│   └── seeds.rb                               # サンプルデータ（2ユーザー、計10件の習慣）
 ├── docs/
 │   ├── er-diagram-mvp.md                 # ER図（Mermaid形式）
 │   ├── database-schema-mvp.md            # テーブル定義書
 │   └── production-check-issue-7.md       # Issue #7 本番環境確認レポート
 ├── test/
-│   ├── models/
 │   ├── models/
 │   │   ├── user_test.rb                  # Userモデルテスト（13テストケース）
 │   │   ├── habit_test.rb                 # Habitモデルテスト（20テストケース）
@@ -1163,17 +1179,22 @@ habitflow/
 │   │   ├── habit_management_test.rb           # 習慣管理統合テスト（11テストケース）Issue #17
 │   │   ├── dashboard_test.rb                  # ダッシュボード統合テスト（3テストケース）Issue #18
 │   │   ├── weekly_reflection_index_test.rb    # 週次振り返り一覧統合テスト Issue #21
-│   │   └── habit_daily_record_test.rb         # 日次記録・AM4:00境界値テスト（6テストケース）Issue #17
+│   │   ├── habit_daily_record_test.rb         # 日次記録・AM4:00境界値テスト（6テストケース）Issue #17
+│   │   ├── weekly_reflection_index_test.rb    # 週次振り返り一覧統合テスト Issue #21
+│   │   └── weekly_reflection_create_test.rb   # 週次振り返り作成統合テスト（E2Eフロー・1000文字バリデーション）Issue #22
 │   ├── controllers/
 │   │   ├── dashboards_controller_test.rb      # DashboardsControllerテスト（3テストケース）Issue #18
-│   │   ├── weekly_reflections_controller_test.rb # WeeklyReflectionsControllerテスト（日曜AM4:00境界値・セキュリティ）Issue #21
+│   │   ├── weekly_reflections_controller_test.rb # WeeklyReflectionsControllerテスト（new/create・境界値・セキュリティ）Issue #21/#22
 │   │   ├── habits_controller_test.rb     # HabitsControllerテスト（2テストケース）
 │   │   └── habit_records_controller_test.rb  # HabitRecordsControllerテスト（AM4:00境界値・セキュリティ）
 │   └── fixtures/
 │       ├── users.yml                     # テスト用ユーザーデータ
-│       ├── habits.yml                    # テスト用習慣データ
+│       ├── habits.yml                    # テスト用習慣データ（habit_one/habit_two/habit_deleted）
 │       ├── habit_records.yml             # テスト用習慣記録データ（AM4:00基準、UNIQUE制約テスト）
-│       └── weekly_reflections.yml             # テスト用週次振り返りデータ（完了済み・未完了・別ユーザー）
+│       ├── weekly_reflections.yml        # テスト用週次振り返りデータ（for_summary_test含む・travel_to週と非衝突設計）
+│       └── weekly_reflection_habit_summaries.yml  # テスト用習慣サマリーデータ（スコープテスト用達成率設計）
+├── bin/
+│   └── docker-entrypoint                     # コンテナ起動時の初期化スクリプト
 ├── config/
 │   ├── database.yml                      # DB接続設定
 │   └── routes.rb                         # ルーティング設定（習慣管理追加）
@@ -1183,57 +1204,6 @@ habitflow/
 ├── render.yaml                           # Renderデプロイ設定
 └── Gemfile                               # Gem依存関係
 ```
-<br>
-
-### 重要ファイルの説明
-
-<br>
-
-| ファイル | 説明 |
-|---------|------|
-| `render.yaml` | Renderのインフラ設定（IaC） |
-| `Dockerfile` | 本番環境用（マルチステージビルド） |
-| `Dockerfile.dev` | 開発環境用（ホットリロード対応） |
-| `bin/docker-entrypoint` | コンテナ起動時の初期化スクリプト |
-| `docs/er-diagram-mvp.md` | ER図（Mermaid）とMVP範囲説明 |
-| `docs/database-schema-mvp.md` | 全テーブル詳細定義 |
-| `docs/production-check-issue-7.md` | Issue #7 本番環境確認レポート |
-| `test/integration/user_login_test.rb` | ログイン・ログアウト統合テスト |
-| `test/integration/habit_creation_test.rb` | 習慣新規作成統合テスト（7テストケース） |
-| `test/models/habit_test.rb` | Habitモデルテスト（20テストケース） |
-| `app/models/habit.rb` | Habitモデル（論理削除機能実装） |
-| `app/controllers/habits_controller.rb` | 習慣管理コントローラー（index, new, create実装） |
-| `app/views/habits/index.html.erb` | 習慣一覧ビュー（カード形式、レスポンシブ対応） |
-| `app/views/habits/new.html.erb` | 習慣新規作成フォーム（バリデーションエラー表示） |
-| `app/views/shared/_header.html.erb` | 共通ヘッダー（ログイン状態で表示切替） |
-| `db/seeds.rb` | サンプルデータ（2ユーザー、計10件の習慣） |
-| `app/models/habit_record.rb` | HabitRecordモデル（AM4:00基準の日付計算、toggle_completed!、スコープ） |
-| `db/migrate/YYYYMMDDHHMMSS_create_weekly_reflections.rb` | weekly_reflectionsテーブル作成 |
-| `app/models/weekly_reflection.rb` | WeeklyReflectionモデル（バリデーション・スコープ・AM4:00基準メソッド） |
-| `test/models/weekly_reflection_test.rb` | WeeklyReflectionモデルテスト（22テストケース） |
-| `test/fixtures/weekly_reflections.yml` | テスト用フィクスチャ（完了済み・未完了・別ユーザー） |
-| `test/models/habit_record_test.rb` | HabitRecordモデルテスト（18テストケース、42 assertions） |
-| `test/fixtures/habit_records.yml` | テスト用習慣記録データ（過去日付で重複回避） |
-| `app/models/habit.rb` | Habitモデル（論理削除機能、`weekly_progress_stats` で週次進捗統計を計算） |
-| `test/fixtures/habits.yml` | fixturesキー名を `habit_one/habit_two/habit_deleted` に変更（可読性向上）Issue #17 |
-| `test/fixtures/habit_records.yml` | habits参照キーを合わせて更新 Issue #17 |
-| `test/integration/habit_management_test.rb` | 習慣作成・削除の統合テスト（11テストケース）Issue #17 |
-| `test/integration/habit_daily_record_test.rb` | 日次記録・AM4:00境界値テスト（6テストケース）Issue #17 |
-| `test/models/habit_progress_test.rb` | 進捗率計算の詳細モデルテスト（6テストケース）Issue #17 |
-| `app/controllers/dashboards_controller.rb` | ダッシュボードController（今週の達成率・今日のチェックリスト・N+1対策） |
-| `app/views/dashboards/index.html.erb` | ダッシュボード画面（プログレスバー・習慣チェックリスト） |
-| `test/controllers/dashboards_controller_test.rb` | DashboardsControllerテスト（3テストケース）Issue #18 |
-| `test/integration/dashboard_test.rb` | ダッシュボード統合テスト（3テストケース）Issue #18 |
-| `app/controllers/weekly_reflections_controller.rb` | 週次振り返りController（index: 日曜AM4:00判定・N+1対策） |
-| `app/views/weekly_reflections/index.html.erb` | 週次振り返り一覧画面（振り返りボタン・達成率サマリー・履歴リスト） |
-| `app/models/weekly_reflection.rb` | WeeklyReflectionモデル（UNIQUE制約・AM4:00基準週計算・find_or_build_for_current_week） |
-| `app/models/weekly_reflection_habit_summary.rb` | WeeklyReflectionHabitSummaryモデル（スナップショット設計・build_from_habit・create_all_for_reflection!） |
-| `test/models/weekly_reflection_test.rb` | WeeklyReflectionモデルテスト（22テストケース）Issue #19 |
-| `test/models/weekly_reflection_habit_summary_test.rb` | WeeklyReflectionHabitSummaryモデルテスト（29テストケース）Issue #20 |
-| `test/controllers/weekly_reflections_controller_test.rb` | WeeklyReflectionsControllerテスト（日曜AM4:00境界値・セキュリティ）Issue #21 |
-| `test/integration/weekly_reflection_index_test.rb` | 週次振り返り一覧統合テスト Issue #21 |
-| `test/fixtures/weekly_reflections.yml` | テスト用週次振り返りデータ（完了済み・未完了・別ユーザー） |
-
 <br>
 
 ---
@@ -4752,6 +4722,106 @@ end
 **テスト結果**:
 ```
 187 runs, 435 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+#### 週次振り返り入力ページ（Issue #22）
+
+<br>
+
+**実装日**: 2026年2月21日
+
+<br>
+
+**コントローラー設計**:
+
+<br>
+
+`new` アクション：`find_or_build_for_current_week` で今週分のインスタンスを取得し、完了済みなら詳細ページへ早期リダイレクト。`prepare_habit_stats` を private メソッドに切り出して `new` と `create` 失敗時で再利用（DRY原則）。
+
+<br>
+
+`create` アクション：`find_or_build_for_current_week` による冪等性保証、トランザクション内で振り返り本体と習慣スナップショットを一括保存。
+
+<br>
+```ruby
+# app/controllers/weekly_reflections_controller.rb（createアクション抜粋）
+
+def create
+  @weekly_reflection = WeeklyReflection.find_or_build_for_current_week(current_user)
+  @weekly_reflection.assign_attributes(weekly_reflection_params)
+
+  ActiveRecord::Base.transaction do
+    @weekly_reflection.is_locked = true
+    @weekly_reflection.save!
+    WeeklyReflectionHabitSummary.create_all_for_reflection!(@weekly_reflection)
+  end
+
+  redirect_to weekly_reflections_path, notice: "今週の振り返りを完了しました！"
+
+rescue ActiveRecord::RecordInvalid => e
+  flash.now[:alert] = "保存に失敗しました: #{e.record.errors.full_messages.join(', ')}"
+  prepare_habit_stats
+  render :new, status: :unprocessable_entity
+
+rescue ActiveRecord::RecordNotUnique
+  flash.now[:alert] = "今週の振り返りはすでに存在します"
+  prepare_habit_stats
+  render :new, status: :unprocessable_entity
+end
+```
+
+<br>
+
+**フォーム設計（form_with）**:
+
+<br>
+
+`url:` と `method:` を省略し `model: @weekly_reflection` のみ指定。Rails が `new_record?` / `persisted?` を自動判定し、新規なら `POST /weekly_reflections`、既存なら `PATCH /weekly_reflections/:id` を自動設定するため、Rails らしいシンプルなコードになる。
+
+<br>
+
+**バリデーション追加**:
+```ruby
+# app/models/weekly_reflection.rb
+validates :reflection_comment, length: { maximum: 1000 }, allow_blank: true
+```
+
+<br>
+
+**エラーハンドリング設計（二重防衛）**:
+
+<br>
+
+| rescue 対象 | 想定シナリオ | 対応 |
+|------------|------------|------|
+| `RecordInvalid` | バリデーション失敗（1000文字超過等） | エラーメッセージを表示してフォーム再レンダリング |
+| `RecordNotUnique` | DB の UNIQUE 制約違反（並列リクエスト等の極まれなケース） | 安全にフォーム再レンダリング |
+
+<br>
+
+`rescue StandardError` は使わない。想定外のエラー（DB接続エラー等）は Rails のデフォルトエラーハンドラーに委ねることで、開発中は即座に問題に気づける。
+
+<br>
+
+**fixtures 設計の教訓**:
+
+<br>
+
+今回のテスト修正で得られた重要な知見：
+
+<br>
+
+- Rails の fixtures は `before_validation` 等のモデルコールバックをバイパスして DB に直接 INSERT する。`week_end_date` のような NOT NULL カラムは fixtures に明示的に書く必要がある
+- `uniqueness` バリデーションは DB を参照するため、fixtures に存在する組み合わせは `valid?` が `false` になる。`setup` で使う reflection は fixtures にサマリーが紐づいていない専用レコード（`for_summary_test`）を用意する
+- fixtures のラベル名を変更したときは、外部キーで参照している全 fixtures ファイルを必ず確認する
+
+<br>
+
+**テスト結果**:
+```
+188 runs, 443 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>

@@ -1,16 +1,23 @@
-# test/fixtures/weekly_reflections.yml
-# （既存ファイルに current_week / last_week がなければ追記する）
-
-current_week:
+one:
   user: one
-  week_start_date: <%= Date.current.beginning_of_week(:monday) %>
-  week_end_date: <%= Date.current.beginning_of_week(:monday) + 6.days %>
-  reflection_comment: '今週の振り返りコメント'
-  is_locked: false
+  week_start_date: 2026-02-02
+  week_end_date:   2026-02-08
+  reflection_comment: "先週は筋トレを継続できた"
+  is_locked: true
 
-last_week:
+two:
   user: one
-  week_start_date: <%= 1.week.ago.to_date.beginning_of_week(:monday) %>
-  week_end_date: <%= 1.week.ago.to_date.beginning_of_week(:monday) + 6.days %>
-  reflection_comment: '先週の振り返りコメント'
+  week_start_date: 2026-02-09
+  week_end_date:   2026-02-15
+  reflection_comment: "読書習慣が身についてきた"
+  is_locked: true
+
+# テストの setup 専用。
+# habit_summaries fixtures が紐づいていないため、
+# テスト本体で自由に habit_one のサマリーを作成できる。
+for_summary_test:
+  user: one
+  week_start_date: 2025-12-01
+  week_end_date:   2025-12-07
+  reflection_comment: "サマリーテスト用"
   is_locked: true
