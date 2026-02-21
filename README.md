@@ -32,6 +32,7 @@
 - ✅ 習慣の日次記録機能実装完了（Turbo Streams即時保存、楽観的UI）
 - ✅ 習慣の週次進捗統計自動計算実装完了（N+1問題対策済み）
 - ✅ 習慣管理機能のテスト実装完了（119 runs, 322 assertions, 0 failures）
+- ✅ ダッシュボード機能実装完了（今週の達成率・今日の習慣チェックリスト）
 
 <br>
 
@@ -637,6 +638,41 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
+### Week 3（2/21〜）: ダッシュボード・週次振り返り
+
+<br>
+
+| Issue | タイトル | ステータス | 完了日 | SP |
+|-------|---------|-----------|--------|-----|
+| #18 | ダッシュボードの作成 | ✅ 完了 | 2/21 | 4 |
+| #19 | WeeklyReflectionモデルの作成 | ⬜ 未着手 | - | 2 |
+| #20 | WeeklyReflectionHabitSummaryモデルの作成 | ⬜ 未着手 | - | 2 |
+| #21 | 週次振り返り一覧ページ | ⬜ 未着手 | - | 2 |
+| #22 | 週次振り返り入力ページ | ⬜ 未着手 | - | 4 |
+| #23 | 週次振り返り詳細ページ | ⬜ 未着手 | - | 2 |
+| #24 | PDCA強制ロック機能 | ⬜ 未着手 | - | 4 |
+
+<br>
+
+**Week 3 進捗**: 4SP / 20SP（20%）
+
+<br>
+
+**Week 3 目標**: 20SP
+
+<br>
+
+#### ✅ Issue #18: ダッシュボードの作成
+- `DashboardsController` の作成（今週の達成率・今日の習慣チェックリスト）
+- AM4:00基準での「今日」の判定（`HabitRecord.today_for_record` を流用）
+- N+1問題対策（`today_records_hash` + `habit_stats` ハッシュで一括取得）
+- ログイン・登録後のリダイレクト先を `dashboard_path` に統一（直接遷移でUX向上）
+- `log_in_as` ヘルパーを `test_helper.rb` に追加（ログイン処理の共通化）
+- 既存テスト4ファイルをリダイレクト先変更に追従修正
+- 全テスト成功: 121 runs, 324 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
 ---
 
 <br>
@@ -1013,9 +1049,10 @@ habitflow/
 ├── app/
 │   ├── controllers/
 │   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login）
+│   │   ├── dashboards_controller.rb     # ダッシュボード（index）今週の達成率・今日のチェックリスト
 │   │   ├── habit_records_controller.rb  # 習慣記録（create, update）ネストされたルーティング
 │   │   ├── habits_controller.rb         # 習慣管理（index, new, create, destroy）
-│   │   ├── pages_controller.rb          # ランディングページ
+│   │   ├── pages_controller.rb          # ランディングページ（ログイン済みはdashboardへリダイレクト）
 │   │   ├── sessions_controller.rb       # ログイン・ログアウト（new, create, destroy）
 │   │   └── users_controller.rb          # ユーザー登録（new, create）
 │   ├── models/
@@ -1037,6 +1074,8 @@ habitflow/
 │       ├── habits/
 │       │   ├── index.html.erb            # 習慣一覧ページ（カード形式、レスポンシブ対応）
 │       │   └── new.html.erb              # 習慣新規作成フォーム
+│       ├── dashboards/
+│       │   └── index.html.erb            # ダッシュボード（今週の達成率・今日のチェックリスト）
 │       ├── pages/
 │       │   └── index.html.erb            # TOPページ（シンプル化済み）
 │       ├── sessions/
@@ -1067,8 +1106,10 @@ habitflow/
 │   │   ├── habit_deletion_test.rb        # 習慣削除統合テスト（4テストケース）
 │   │   ├── habit_record_instant_save_test.rb  # 習慣記録即時保存統合テスト（5テストケース）
 │   │   ├── habit_management_test.rb           # 習慣管理統合テスト（11テストケース）Issue #17
+│   │   ├── dashboard_test.rb                  # ダッシュボード統合テスト（3テストケース）Issue #18
 │   │   └── habit_daily_record_test.rb         # 日次記録・AM4:00境界値テスト（6テストケース）Issue #17
 │   ├── controllers/
+│   │   ├── dashboards_controller_test.rb      # DashboardsControllerテスト（3テストケース）Issue #18
 │   │   ├── habits_controller_test.rb     # HabitsControllerテスト（2テストケース）
 │   │   └── habit_records_controller_test.rb  # HabitRecordsControllerテスト（AM4:00境界値・セキュリティ）
 │   └── fixtures/
@@ -1117,6 +1158,10 @@ habitflow/
 | `test/integration/habit_management_test.rb` | 習慣作成・削除の統合テスト（11テストケース）Issue #17 |
 | `test/integration/habit_daily_record_test.rb` | 日次記録・AM4:00境界値テスト（6テストケース）Issue #17 |
 | `test/models/habit_progress_test.rb` | 進捗率計算の詳細モデルテスト（6テストケース）Issue #17 |
+| `app/controllers/dashboards_controller.rb` | ダッシュボードController（今週の達成率・今日のチェックリスト・N+1対策） |
+| `app/views/dashboards/index.html.erb` | ダッシュボード画面（プログレスバー・習慣チェックリスト） |
+| `test/controllers/dashboards_controller_test.rb` | DashboardsControllerテスト（3テストケース）Issue #18 |
+| `test/integration/dashboard_test.rb` | ダッシュボード統合テスト（3テストケース）Issue #18 |
 
 <br>
 
@@ -4137,6 +4182,98 @@ habit.weekly_progress_stats(user)
 **テスト結果**:
 ```
 119 runs, 322 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+#### ダッシュボード機能（Issue #18）
+
+<br>
+
+**実装日**: 2026年2月21日
+
+<br>
+
+**コントローラー設計**:
+```ruby
+# app/controllers/dashboards_controller.rb
+
+class DashboardsController < ApplicationController
+  before_action :require_login
+
+  def index
+    @today      = HabitRecord.today_for_record          # AM4:00基準の「今日」
+    @week_start = @today.beginning_of_week(:monday)     # 今週月曜日
+
+    @habits = current_user.habits.active.order(created_at: :desc)
+
+    # N+1対策①: 今日の記録を1クエリで一括取得 → { habit_id => HabitRecord }
+    @today_records_hash = HabitRecord
+      .where(user: current_user, habit: @habits, record_date: @today)
+      .index_by(&:habit_id)
+
+    # N+1対策②: 全習慣の週次統計を事前計算 → { habit_id => { rate:, completed_count: } }
+    @habit_stats = @habits.each_with_object({}) do |habit, hash|
+      hash[habit.id] = habit.weekly_progress_stats(current_user)
+    end
+
+    # 全体達成率（全習慣の平均）
+    @overall_rate = @habits.empty? ? 0 :
+      (@habit_stats.values.map { |s| s[:rate] }.sum.to_f / @habit_stats.size).round
+  end
+end
+```
+
+<br>
+
+**リダイレクト設計の変更**:
+
+<br>
+
+| コントローラー | 変更前 | 変更後 | 理由 |
+|--------------|--------|--------|------|
+| `SessionsController#create` | `root_path` | `dashboard_path` | リダイレクト1回に削減、UX向上 |
+| `UsersController#create` | `root_path` | `dashboard_path` | 同上 |
+| `PagesController#index` | なし | `logged_in?` → `dashboard_path` | 直接アクセス時の振り分け |
+
+<br>
+
+**テストの共通化**:
+```ruby
+# test/test_helper.rb に追加
+
+module TestLoginHelper
+  # ログイン処理を1箇所に集約
+  # 将来ログイン実装が変わっても、ここだけ修正すれば全テストに反映される
+  def log_in_as(user)
+    post login_path, params: {
+      session: { email: user.email, password: "password" }
+    }
+  end
+end
+
+class ActionDispatch::IntegrationTest
+  include TestLoginHelper
+end
+```
+
+<br>
+
+**今回の修正で直った既存テストの失敗原因**:
+
+<br>
+
+| 失敗していたテスト | 原因 | 修正内容 |
+|-----------------|------|---------|
+| `user_registration_test.rb` | `div.ユーザー登録が完了しました` がダッシュボードにない | `assert_select "h1", text: /ダッシュボード/` に変更 |
+| `user_login_test.rb` | `assert_redirected_to root_path` だが実際は `dashboard_path` | `assert_redirected_to dashboard_path` に変更 |
+| `habit_record_instant_save_test.rb` | `assert_response :success` だが `head :not_found` で404を返していた | `assert_response :not_found` に変更 |
+| `habit_creation_test.rb` | `assert_redirected_to root_path` だが実際は `dashboard_path` | `assert_redirected_to dashboard_path` に変更 |
+
+<br>
+
+**テスト結果**:
+```
+121 runs, 324 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>

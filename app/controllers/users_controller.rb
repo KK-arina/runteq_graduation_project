@@ -43,10 +43,18 @@ class UsersController < ApplicationController
       # 次のページ（root_path）で表示され、その後自動的に消える
       flash[:notice] = "ユーザー登録が完了しました"
       
-      # redirect_to root_path: TOPページにリダイレクト（画面遷移）
-      # redirect_to: 別のURLに遷移する（新しいHTTPリクエストが発生）
-      # root_path: config/routes.rbで定義したルートパス（/）
-      redirect_to root_path
+      # app/controllers/users_controller.rb
+      # 46〜49行目付近（ユーザー登録成功時）を修正
+
+      # ------------------------------------------------------------------
+      # ✅ 修正ポイント
+      # 旧: redirect_to root_path
+      #     → 登録後に root_path → dashboard_path と2回リダイレクト
+      #
+      # 新: redirect_to dashboard_path
+      #     → 登録完了後は直接ダッシュボードへ（1回で完結）
+      # ------------------------------------------------------------------
+      redirect_to dashboard_path, notice: "ユーザー登録が完了しました"
     else
       # ==================== 保存失敗時の処理 ====================
       

@@ -1,39 +1,41 @@
 # test/test_helper.rb
-# ============================================================
-# テスト全体の設定ファイル
-#
-# 【このファイルの役割】
-# - テスト実行前の共通設定
-# - 全テストで使えるヘルパーモジュールの読み込み
-# ============================================================
+# =============================================================
+# テストの共通設定ファイル
+# すべてのテストファイルから require される
+# =============================================================
 
 ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"
 
-# ActiveSupport::TestCase: Railsの標準テストベースクラス
+# =============================================================
+# TestLoginHelper モジュール
+# ログイン処理を1箇所にまとめることで、将来ログイン実装が
+# 変わっても test_helper.rb だけ修正すれば済む
+# =============================================================
+module TestLoginHelper
+  # log_in_as(user) : 指定ユーザーでログインする
+  # post login_path で実際のHTTPリクエストを通じてログインする
+  # これにより SessionsController の動作も含めてテストできる
+  def log_in_as(user)
+    post login_path, params: {
+      session: {
+        email: user.email,
+        password: "password"  # fixturesで設定したパスワード
+      }
+    }
+  end
+end
+
 module ActiveSupport
   class TestCase
-    # ============================================================
-    # parallel_tests の設定
-    # parallelize: テストを並列実行してスピードアップする設定
-    # workers: :number_of_processors → CPUコア数に応じてワーカー数を決定
-    # ============================================================
-    parallelize(workers: :number_of_processors)
-
-    # ============================================================
-    # fixtures :all
-    # test/fixtures/ ディレクトリの全YAMLファイルを
-    # テスト開始前にDBへロードする設定
-    # ============================================================
+    # fixtures :all : test/fixtures/ 以下のすべてのYAMLをテストデータとして読み込む
     fixtures :all
-
-    # ============================================================
-    # include ActiveSupport::Testing::TimeHelpers
-    # travel_to メソッドを使うために必要なモジュール
-    # travel_to を使うことで、テスト中のシステム時刻を任意の時間に変更できます
-    # AM4:00 境界値テストで使用しています
-    # ============================================================
-    include ActiveSupport::Testing::TimeHelpers
   end
+end
+
+# ActionDispatch::IntegrationTest（統合テスト）で
+# TestLoginHelper のメソッドが使えるよう組み込む
+class ActionDispatch::IntegrationTest
+  include TestLoginHelper
 end

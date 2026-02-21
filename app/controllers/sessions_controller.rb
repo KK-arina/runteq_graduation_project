@@ -85,9 +85,21 @@ class SessionsController < ApplicationController
       # notice: 成功メッセージ用（緑色で表示されることが多い）
       flash[:notice] = "ログインしました"
       
-      # redirect_to root_path: TOPページにリダイレクト
-      # ログイン後は通常、ダッシュボードやTOPページに遷移する
-      redirect_to root_path
+      # app/controllers/sessions_controller.rb
+      # 88〜90行目付近（ログイン成功時）を修正
+
+      # ------------------------------------------------------------------
+      # ✅ 修正ポイント
+      # 旧: redirect_to root_path
+      #     → root_path → PagesController#index → dashboard_path と
+      #       2回リダイレクトが発生していた（無駄な1ステップ）
+      #
+      # 新: redirect_to dashboard_path
+      #     → ログイン成功後は直接ダッシュボードへ（1回で完結）
+      #     → テストもシンプルになる
+      #     → ユーザーの体感速度も向上する
+      # ------------------------------------------------------------------
+      redirect_to dashboard_path, notice: "ログインしました"
     else
       # ==================== ログイン失敗時の処理 ====================
       
@@ -126,15 +138,11 @@ class SessionsController < ApplicationController
     # flash[:notice]: フラッシュメッセージ（成功メッセージ）
     flash[:notice] = "ログアウトしました"
     
-    # redirect_to root_path: TOPページにリダイレクト
-    # status: :see_other: HTTPステータスコード 303
-    # 
-    # なぜ status: :see_other が必要？
-    # - Rails 7 + Turbo の環境では、DELETE リクエスト後のリダイレクトに推奨
-    # - 303 See Other: POSTやDELETEの後、GETでリダイレクトすることを明示
-    # - これにより、ブラウザの「戻る」ボタンで再度DELETEリクエストが送られるのを防ぐ
-    # 
-    # Turboが有効な環境では、このステータスコードがないと正しくリダイレクトされない場合がある
-    redirect_to root_path, status: :see_other
+      # app/controllers/sessions_controller.rb
+      # 129〜138行目付近（ログアウト時）はそのまま root_path でOK
+
+      # ログアウト後はランディングページ（未ログイン状態）へ
+      # ここは root_path のままで正しい
+      redirect_to root_path, status: :see_other
   end
 end

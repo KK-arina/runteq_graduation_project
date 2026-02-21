@@ -1,139 +1,102 @@
-<%# パーシャル: app/views/habit_records/_habit_record.html.erb %>
-<%#
-  【このファイルの役割】
-  習慣カード内の「今日の記録チェックボックス」パーシャル。
-  habits/index.html.erb からレンダリングされる。
+<%# app/views/habit_records/_habit_record.html.erb %>
+<%# =============================================================
+    習慣の日次記録チェックボックスパーシャル
+    このパーシャルは以下の2箇所から呼び出される：
+    1. app/views/habits/index.html.erb（習慣一覧ページ）
+    2. app/views/dashboards/index.html.erb（ダッシュボード）
+    
+    渡されるローカル変数：
+    - habit        : Habit オブジェクト（必須）
+    - habit_record : HabitRecord オブジェクト（今日の記録。なければnil）
+    ============================================================= %>
 
-  受け取る変数:
-    habit        - Habit オブジェクト（習慣情報）
-    habit_record - HabitRecord オブジェクト または nil（今日の記録）
+<%# -------------------------------------------------------
+    ローカル変数の準備
+    habit_record が nil の場合（まだ記録がない場合）は
+    完了フラグ false の新しいHabitRecordオブジェクトを作って代用する
+    record.persisted? : DBに保存済みかどうかを確認するRailsメソッド
+    ------------------------------------------------------- %>
+<% record     = habit_record || HabitRecord.new(completed: false) %>
+<% create_url = habit_habit_records_path(habit) %>
+<% update_url = record.persisted? ? habit_habit_record_path(habit, record) : "" %>
+<% record_id  = record.persisted? ? record.id : 0 %>
 
-  【表示内容をチェックボックス＋完了バッジのみにした理由】
-  カードヘッダー側（index.html.erb）で以下を既に表示している:
-    - 習慣名（h2タグ）
-    - 週◯回目標
-    - チェック型
-  そのためこのパーシャルに「今日の記録」などのテキストを追加すると
-  情報が過剰になりUIが野暮ったくなる。
-  チェックボックスの意味はカード全体の文脈から自明なので、
-  テキストラベルなしでも UX として自然に成立する。
-%>
-
-<%
-  # habit_record が nil の場合（今日まだ記録がない）はダミーオブジェクトで代替する。
-  # HabitRecord.new(completed: false) はDBに保存されていないオブジェクトなので
-  # persisted? が false になり、update_url と record_id が「未作成」扱いになる。
-  record = habit_record || HabitRecord.new(completed: false)
-
-  # POST URL: 新規作成（今日初めてチェックする場合）
-  # habit_habit_records_path(habit) → POST /habits/:habit_id/habit_records
-  create_url = habit_habit_records_path(habit)
-
-  # PATCH URL: 更新（今日すでにレコードがある場合）
-  # persisted? が true なら既存レコードのURLを生成、false なら空文字（JS側で create_url を使う）
-  update_url = record.persisted? ? habit_habit_record_path(habit, record) : ""
-
-  # record_id: Stimulus の JS 側で create/update どちらを使うか判断するための値
-  # persisted? が true なら実際の id、false なら 0（新規作成の目印）
-  record_id = record.persisted? ? record.id : 0
-%>
-
-<%#
-  【div の id について】
-  id="habit_record_<habit.id>" は Turbo Stream の置換ターゲット。
-  チェックボックスを操作して保存が完了したとき、
-  サーバーから返ってくる Turbo Stream がこの id を指定して
-  このパーシャル全体を差し替える（即時保存・楽観的UI）。
-
-  class="flex items-center gap-2":
-    flex          → チェックボックスと完了バッジを横並びにする
-    items-center  → 縦方向の中央揃え
-    gap-2         → 要素間に適度な余白（gap-3より少し詰めてスッキリさせる）
-%>
+<%# -------------------------------------------------------
+    Turbo Stream の置換ターゲット
+    id="habit_record_XX" : Stimulus/Turboが差し替えるDOM要素のID
+    XX には習慣のIDが入る（例: habit_record_3）
+    チェックボックスを押すと、このdiv要素全体が
+    サーバーからの新しいHTMLで置き換えられる
+    ------------------------------------------------------- %>
 <div id="habit_record_<%= habit.id %>"
-     class="flex items-center gap-2"
-     data-controller="habit-record"
-     data-habit-record-create-url-value="<%= create_url %>"
-     data-habit-record-update-url-value="<%= update_url %>"
-     data-habit-record-record-id-value="<%= record_id %>">
+     class="flex items-center gap-3 py-3">
 
-  <%# チェックボックス + ローディングアイコンのラッパー %>
-  <%#
-    relative: ローディングアイコンをチェックボックスに重ねて表示するための基準点。
-    absolute inset-0（ローディング側）と組み合わせることで、
-    保存中にチェックボックスの上にスピナーをオーバーレイできる。
-  %>
-  <div class="relative flex items-center">
+  <%# -------------------------------------------------------
+      Stimulus コントローラーのルートdiv
+      data-controller="habit-record" : habit_record_controller.js を紐付ける
+      data-habit-record-create-url-value : POSTするURL（新規作成時）
+      data-habit-record-update-url-value : PATCHするURL（更新時）
+      data-habit-record-record-id-value  : 既存レコードのID（0 = 未作成）
+      ------------------------------------------------------- %>
+  <div class="flex items-center gap-3 w-full"
+       data-controller="habit-record"
+       data-habit-record-create-url-value="<%= create_url %>"
+       data-habit-record-update-url-value="<%= update_url %>"
+       data-habit-record-record-id-value="<%= record_id %>">
 
-    <%#
-      【チェックボックス本体】
-      type="checkbox": HTML標準のチェックボックス入力要素。
+    <%# ---- チェックボックス ---- %>
+    <%# data-habit-record-target="checkbox" : Stimulusがこの要素を参照するためのターゲット指定
+        data-action="change->habit-record#toggle" :
+          チェックボックスが変更されたときに habit_record_controller.js の toggle() を呼ぶ
+        checked : record.completed が true のときチェック済み状態にする %>
+    <input type="checkbox"
+           class="w-5 h-5 rounded accent-blue-600 cursor-pointer flex-shrink-0"
+           data-habit-record-target="checkbox"
+           data-action="change->habit-record#toggle"
+           <%= record.completed ? "checked" : "" %>>
 
-      data-habit-record-target="checkbox":
-        Stimulus コントローラーからこの要素を参照するためのターゲット指定。
-        保存中に disabled にしたり、チェック状態を操作するために使う。
+    <%# ---- 習慣名 ---- %>
+    <%# 完了済みなら打ち消し線（line-through）とグレー文字で視覚的フィードバック %>
+    <span class="text-sm flex-1 <%= record.completed ? 'line-through text-gray-400' : 'text-gray-700' %>">
+      <%= habit.name %>
+    </span>
 
-      data-action="change->habit-record#toggle":
-        チェックボックスの状態が変化（change イベント）したとき、
-        habit_record_controller.js の toggle() メソッドを呼び出す。
+    <%# ---- 完了バッジ（完了時のみ表示） ---- %>
+    <% if record.completed %>
+      <span class="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">
+        ✓ 完了
+      </span>
+    <% end %>
 
-      checked属性:
-        record.completed が true なら "checked" を出力してチェック済み状態にする。
-        false なら何も出力しない（空文字）。
-
-      accent-green-500 / accent-blue-500:
-        チェックボックスの色を Tailwind で指定。
-        完了済みは緑、未完了は青で区別する。
-
-      aria-label:
-        スクリーンリーダー（視覚障害者向け読み上げツール）のためのラベル。
-        「読書の今日の記録」のように読み上げられる。
-    %>
-    <input
-      type="checkbox"
-      data-habit-record-target="checkbox"
-      data-action="change->habit-record#toggle"
-      <%= record.completed ? "checked" : "" %>
-      class="w-5 h-5 rounded cursor-pointer <%= record.completed ? 'accent-green-500' : 'accent-blue-500' %> disabled:opacity-50 disabled:cursor-not-allowed"
-      aria-label="<%= habit.name %>の今日の記録">
-
-    <%#
-      【ローディングスピナー】
-      hidden 属性: 初期状態は非表示。
-      Stimulus の setLoadingState(true) が呼ばれたとき表示される。
-
-      absolute inset-0:
-        親要素（relative な div）を基準に全面を覆うように配置。
-        チェックボックスの上にオーバーレイされ、
-        「今保存中です」という視覚的フィードバックになる。
-
-      animate-spin: Tailwind の回転アニメーションクラス。くるくる回るスピナー。
-    %>
-    <span data-habit-record-target="loading" hidden
-          class="absolute inset-0 flex items-center justify-center">
-      <svg class="animate-spin w-4 h-4 text-blue-500"
-           xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
-        <circle class="opacity-25" cx="12" cy="12" r="10"
-                stroke="currentColor" stroke-width="4"></circle>
-        <path class="opacity-75" fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+    <%# app/views/habit_records/_habit_record.html.erb %>
+    <%# （該当箇所のみ抜粋）       %>
+    <%# ---- ローディングアイコン ---- %>
+    <%# 保存処理中に表示するスピナー
+        hidden 属性 : 初期状態では非表示
+        data-habit-record-target="loading" : Stimulusから操作するためのターゲット %>
+    <div data-habit-record-target="loading"
+        hidden
+        class="flex-shrink-0">
+      <%#
+        ✅ 修正済み SVGスピナー
+        旧: d="M4 12a8 8 0 018-8V0C5.373 0 12 0 12 0v4z"
+            → C5.373 の部分が不正なパス記述でブラウザによって描画崩れが起きる
+        新: d="M4 12a8 8 0 018-8V4a8 8 0 00-8 8z"
+            → 正しい円弧パス。すべてのブラウザで確実に描画される
+      %>
+      <svg class="animate-spin h-4 w-4 text-blue-500"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24">
+        <circle class="opacity-25"
+                cx="12" cy="12" r="10"
+                stroke="currentColor"
+                stroke-width="4"></circle>
+        <path class="opacity-75"
+              fill="currentColor"
+              d="M4 12a8 8 0 018-8V4a8 8 0 00-8 8z"></path>
       </svg>
-    </span>
+    </div>
+
   </div>
-
-  <%#
-    【完了バッジ】
-    record.completed が true のときだけ表示する。
-    チェックを入れると緑の「完了」バッジが現れ、達成感を視覚的に演出する。
-    テキストラベルを廃止した代わりに、完了状態のみこのバッジで示す。
-
-    チェックボックスが未完了のときはバッジを表示しない。
-    「何もない = まだ今日の記録をしていない」と自然に読み取れる。
-  %>
-  <% if record.completed %>
-    <span class="text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-      完了
-    </span>
-  <% end %>
-
 </div>
