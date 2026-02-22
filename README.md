@@ -39,6 +39,7 @@
 - ✅ 週次振り返り詳細ページ実装完了（コードレビュー対応・フィクスチャ設計・ルーティング整備）
 - ✅ PDCA強制ロック機能実装完了（月曜AM4:00判定・新規作成/削除ブロック・ダッシュボード警告バナー）
 - ✅ 振り返り完了時のPDCAロック自動解除機能実装完了（completed_at記録・前週pending_reflection自動完了・ロック解除バナー表示）
+- ✅ レスポンシブデザイン実装完了（全ページスマホ対応・ハンバーガーメニュー）
 
 <br>
 
@@ -770,7 +771,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
  Issue | タイトル | ステータス | 完了日 | SP |
 |-------|---------|-----------|--------|-----|
 | #25 | 振り返り完了時のPDCAロック自動解除 | ✅ 完了 | 2/22 | 4 |
-| #26 | レスポンシブデザインの調整 | 🔲 未着手 | - | 4 |
+| #26 | レスポンシブデザインの調整 | ✅ 完了 | 2/23 | 4 |
 | #27 | エラーハンドリングの改善 | 🔲 未着手 | - | 3 |
 | #28 | セキュリティ対策 | 🔲 未着手 | - | 3 |
 | #29 | パフォーマンス最適化 | 🔲 未着手 | - | 2 |
@@ -778,7 +779,7 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
-**Week 4 進捗**: 2SP / 20SP（10%）
+**Week 4 進捗**: 8SP / 20SP（40%）
 
 <br>
 
@@ -798,6 +799,17 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - 通常ユーザーは `weekly_reflections_path` へリダイレクト（元の動作を維持）
 - `pdca_lock_test.rb` の `create_last_week_reflection` 引数を `is_locked:` → `completed:` に変更（`completed_at` ベースの判定に統一）
 - 全テスト成功: 182 runs, 467 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #26: レスポンシブデザインの調整
+- PC版のデザインを完全に維持しつつ、全ページのスマホ対応を実装
+- `_header.html.erb` にハンバーガーメニューを追加（PC用ナビは `hidden md:flex` でモバイル時のみ非表示）
+- `mobile_menu_controller.js`（Stimulus）を新規作成（外側クリック・ESCキー・メモリリーク対策・ARIA属性完全対応）
+- TOPページ `h1` フォントサイズをモバイル対応（`text-4xl sm:text-5xl`）
+- 利用フロー矢印を CSS 疑似要素（`::before`）で実装（モバイル: ↓ / PC: →）
+- モバイルメニューのボタンを同幅・同高さに統一（`w-full py-4 text-base`）・`focus-visible` でキーボードアクセシビリティ対応
+- 全ページ（ダッシュボード・習慣一覧・振り返りページ）のレスポンシブ対応を確認・完了
 
 <br>
 
@@ -1175,6 +1187,9 @@ docker compose exec web bin/rails db:test:prepare
 ```
 habitflow/
 ├── app/
+│   ├── assets/
+│   │   └── stylesheets/
+│   │       └── application.css              # カスタムCSS（.arrow-divider 疑似要素：モバイル↓/PC→の矢印切り替え）
 │   ├── controllers/
 │   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login, locked?, require_unlocked）
 │   │   ├── dashboards_controller.rb     # ダッシュボード（index）今週の達成率・今日のチェックリスト
@@ -1184,15 +1199,16 @@ habitflow/
 │   │   ├── pages_controller.rb          # ランディングページ（ログイン済みはdashboardへリダイレクト）
 │   │   ├── sessions_controller.rb       # ログイン・ログアウト（new, create, destroy）
 │   │   └── users_controller.rb          # ユーザー登録（new, create）
+│   ├── javascript/
+│   │   └── controllers/
+│   │       ├── habit_record_controller.js   # Stimulusコントローラー（即時保存・楽観的UI）
+│   │       └── mobile_menu_controller.js    # Stimulusコントローラー（ハンバーガーメニュー開閉・外側クリック・ESCキー・メモリリーク対策・ARIA対応）
 │   ├── models/
 │   │   ├── user.rb                       # Userモデル（認証機能、has_many :habits, :habit_records, :weekly_reflections）
 │   │   ├── habit.rb                      # Habitモデル（習慣管理、論理削除機能、has_many :habit_records）
 │   │   ├── habit_record.rb               # HabitRecordモデル（日次記録、AM4:00基準、UNIQUE制約）
 │   │   ├── weekly_reflection.rb              # WeeklyReflectionモデル（UNIQUE制約・AM4:00基準週計算・complete!/completed?/pending?/week_label）
 │   │   └── weekly_reflection_habit_summary.rb # スナップショット設計・達成率計算・冪等性対応
-│   ├── javascript/
-│   │   └── controllers/
-│   │       └── habit_record_controller.js  # Stimulusコントローラー（即時保存・楽観的UI）
 │   └── views/
 │       ├── habit_records/
 │       │   ├── _habit_record.html.erb        # チェックボックス付き習慣記録カード（Turbo Streamターゲット）
@@ -1200,7 +1216,7 @@ habitflow/
 │       ├── layouts/
 │       │   └── application.html.erb      # 全ページ共通レイアウト（ヘッダー・フッター・フラッシュ）
 │       ├── shared/
-│       │   ├── _header.html.erb          # 共通ヘッダー（ログイン状態で表示切替）
+│       │   ├── _header.html.erb          # 共通ヘッダー（ログイン状態で表示切替・Issue #26でハンバーガーメニュー追加）
 │       │   └── _footer.html.erb          # 共通フッター（全ページ）
 │       ├── habits/
 │       │   ├── index.html.erb            # 習慣一覧ページ（カード形式、レスポンシブ対応）
@@ -5162,6 +5178,105 @@ end
 ```
 182 runs, 467 assertions, 0 failures, 0 errors, 0 skips
 ```
+
+<br>
+
+## レスポンシブデザインの調整（Issue #26）
+
+<br>
+
+### 対応方針
+
+<br>
+
+**PC版のデザインを1ミリも変えず、モバイルにだけ機能を追加するアプローチを採用。**<br>
+Issue #24 時点の PC 版デザインをベースに、Tailwind CSS のモバイルファースト設計（`md:` プレフィックス）で安全に対応しました。
+
+<br>
+
+### ハンバーガーメニュー（ナビゲーションのモバイル対応）
+
+<br>
+
+**PC 用ナビゲーションの変更点（最小限）**：
+```erb
+<%# 変更前 %>
+
+
+<%# 変更後（hidden を追加しただけ） %>
+
+```
+
+<br>
+
+`hidden` : モバイルでは非表示（`display: none`）<br>
+`md:flex` : 768px 以上で横並びフレックスに切り替わる<br>
+
+<br>
+
+**追加した要素（モバイルのみ）**：
+- ハンバーガーボタン（`md:hidden` で PC では非表示）
+- モバイル用ドロップダウンメニュー（初期状態 `hidden`・Stimulus で制御）
+- ARIA 属性（`aria-expanded`・`aria-controls`・`aria-label`）によるアクセシビリティ対応
+
+<br>
+
+### Stimulus コントローラー（mobile_menu_controller.js）
+```javascript
+// app/javascript/controllers/mobile_menu_controller.js
+static targets = ["menu", "button", "openIcon", "closeIcon"]
+
+connect()    // isOpen フラグ初期化・ESCキーリスナー登録
+disconnect() // メモリリーク防止（リスナー全解除・overflow-hidden 残留防止）
+toggle()     // ボタンクリック時に開閉状態を反転
+closeOnOutsideClick() // ヘッダー外クリックで閉じる
+closeOnEscape()       // ESCキーで閉じる
+_openMenu()  // hidden 削除・アイコン切替・aria-expanded="true"・スクロールロック
+_closeMenu() // hidden 追加・アイコン切替・aria-expanded="false"・スクロールロック解除
+```
+
+<br>
+
+`bind(this)` を使う理由：イベントリスナーに渡した関数の `this` がコントローラーインスタンスに固定されるため。<br>
+`disconnect()` で必ず解除する理由：Turbo でページ遷移を繰り返すとメモリリークが累積するため。
+
+<br>
+
+### 利用フロー矢印の CSS 実装
+
+<br>
+
+Tailwind CSS では疑似要素（`::before`）の `content` プロパティを直接制御できないため、<br>
+`application.css` に `@media` クエリで実装しました。
+```css
+/* モバイル: 縦並びなので下向き矢印 */
+.arrow-divider::before {
+  content: "↓";
+  color: #9ca3af;
+  font-size: 1.5rem;
+  font-weight: bold;
+}
+
+/* PC（768px 以上）: 右向き矢印に切り替え */
+@media (min-width: 768px) {
+  .arrow-divider::before {
+    content: "→";
+  }
+}
+```
+
+<br>
+
+### モバイルボタンの UX 改善
+
+<br>
+
+| 項目 | 変更前 | 変更後 | 理由 |
+|------|--------|--------|------|
+| 高さ | `py-3` | `py-4` | Apple 推奨タップ領域 44px 以上を確保 |
+| フォント | `text-sm` | `text-base` | モバイルでの視認性向上 |
+| フォーカス | なし | `focus-visible:outline` | キーボード操作のアクセシビリティ対応 |
+| ボタン幅 | 不均一 | `w-full` + 同一スタイル | ログイン・新規登録のバランスを統一 |
 
 <br>
 ```

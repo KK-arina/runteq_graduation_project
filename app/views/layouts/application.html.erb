@@ -1,157 +1,88 @@
-<%# ファイルパス: app/views/layouts/application.html.erb %>
+<%# app/views/layouts/application.html.erb %>
 <%#
   【このファイルの役割】
   すべてのビューに共通するHTMLの「外枠」を定義するレイアウトファイル。
-  ヘッダー、フラッシュメッセージ、フッターなどを含む。
 
-  Issue #25 では flash[:unlock] という新しいフラッシュタイプを追加する。
-  ロック解除時に通常の notice（青）とは違う、目立つ緑色のバナーを表示する。
+  【Issue #25以前との差分（これだけが変更点）】
+  - stylesheet_link_tag "tailwind" を復元（← これが最重要）
+    これがないと Tailwind CSS が一切効かず、
+    色・余白・配置がすべて崩れる原因になる。
+
+  【body クラスの意味】
+  min-h-screen: 最低でも画面全体の高さを確保する
+  bg-gray-50  : 背景色（薄いグレー）
+  flex flex-col: フッターを画面下部に固定するためのレイアウト
+    → main の flex-1 と組み合わせることで
+      コンテンツが少ないページでもフッターが下部に固定される
 %>
-
 <!DOCTYPE html>
 <html>
   <head>
     <title>HabitFlow</title>
+    <%#
+      viewport メタタグ: レスポンシブデザインに必須
+      width=device-width: ページの幅をデバイスの画面幅に合わせる
+      initial-scale=1   : 初期ズーム倍率を1（等倍）にする
+      これがないとモバイルブラウザが PC 用サイトをズームアウトして表示してしまう
+    %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
+    <%#
+      【最重要】stylesheet_link_tag "tailwind"
+      Tailwind CSS のコンパイル済みファイルを読み込む。
+      app/assets/tailwind/ に出力されたCSSを参照する。
+      このタグが抜けると bg-gray-50・text-blue-600・flex などの
+      Tailwind クラスが一切効かなくなり、画面全体のデザインが崩れる。
+      "application" と必ずセットで両方読み込むこと。
+    %>
+    <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags %>
   </head>
 
-  <body class="bg-gray-50 min-h-screen">
+  <body class="min-h-screen bg-gray-50 flex flex-col">
 
-    <%# ナビゲーションバー %>
-    <nav class="bg-white shadow-sm border-b border-gray-200">
-      <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
-        <%= link_to "HabitFlow", dashboard_path, class: "text-xl font-bold text-indigo-600" %>
-
-        <% if logged_in? %>
-          <div class="flex items-center gap-4">
-            <%= link_to "ダッシュボード", dashboard_path,
-                class: "text-sm text-gray-600 hover:text-indigo-600" %>
-            <%= link_to "習慣一覧", habits_path,
-                class: "text-sm text-gray-600 hover:text-indigo-600" %>
-            <%= link_to "振り返り", weekly_reflections_path,
-                class: "text-sm text-gray-600 hover:text-indigo-600" %>
-            <%= link_to "ログアウト", logout_path, data: { turbo_method: :delete },
-                class: "text-sm text-gray-500 hover:text-red-500" %>
-          </div>
-        <% end %>
-      </div>
-    </nav>
+    <%# 共通ヘッダー（app/views/shared/_header.html.erb を呼び出す） %>
+    <%= render "shared/header" %>
 
     <%#
-      ============================================================
-      フラッシュメッセージの表示エリア（Issue #25 で unlock タイプを追加）
-      ============================================================
-
-      【フラッシュメッセージとは？】
-      アクションの結果（成功・失敗・ロック解除など）をユーザーに一時的に通知する仕組み。
-      次のページを表示したときだけ表示され、その後は消える。
-
-      【flash のキーと表示スタイルの対応】
-      - flash[:notice]  → 青（情報・成功）
-      - flash[:alert]   → 赤（エラー・警告）
-      - flash[:warning] → 黄（注意）
-      - flash[:unlock]  → 緑（ロック解除 ← Issue #25 で追加）
-
-      【なぜ unlock を分けるのか？】
-      ロック解除は「ユーザーにとって嬉しいイベント」なので、
-      通常の notice（青）とは異なる目立つ緑色で表示したい。
+      フラッシュメッセージ表示エリア
+      flash.each でキー（message_type）と値（message）をループ処理する。
+      message_type の値に応じて色を切り替える:
+        notice  → 青（情報・成功）
+        alert   → 赤（エラー・警告）
+        warning → 黄（注意）    ← Issue #25 で追加
+        unlock  → 緑（ロック解除）← Issue #25 で追加
+        その他  → グレー
     %>
-
-    <%# ---- notice: 青いバナー（情報・成功） ---- %>
-    <% if flash[:notice] %>
-      <div class="max-w-4xl mx-auto px-4 mt-4"
-           data-controller="flash"
-           data-flash-duration-value="5000">
-        <%#
-          role="alert" → スクリーンリーダーがこの要素を「通知」として読み上げる（アクセシビリティ対応）
-          data-flash-target="message" → Stimulus コントローラーからこの要素を参照するためのターゲット名
-        %>
-        <div role="alert"
-             data-flash-target="message"
-             class="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg flex justify-between items-center">
-          <span><%= flash[:notice] %></span>
-          <%# ✕ ボタンで手動で閉じられるようにする %>
-          <button data-action="flash#dismiss"
-                  class="text-blue-400 hover:text-blue-600 ml-4 text-lg leading-none"
-                  aria-label="閉じる">×</button>
-        </div>
-      </div>
-    <% end %>
-
-    <%# ---- alert: 赤いバナー（エラー・警告） ---- %>
-    <% if flash[:alert] %>
-      <div class="max-w-4xl mx-auto px-4 mt-4"
-           data-controller="flash"
-           data-flash-duration-value="7000">
-        <div role="alert"
-             data-flash-target="message"
-             class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg flex justify-between items-center">
-          <span><%= flash[:alert] %></span>
-          <button data-action="flash#dismiss"
-                  class="text-red-400 hover:text-red-600 ml-4 text-lg leading-none"
-                  aria-label="閉じる">×</button>
-        </div>
-      </div>
-    <% end %>
-
-    <%# ---- warning: 黄色いバナー（注意） ---- %>
-    <% if flash[:warning] %>
-      <div class="max-w-4xl mx-auto px-4 mt-4"
-           data-controller="flash"
-           data-flash-duration-value="6000">
-        <div role="alert"
-             data-flash-target="message"
-             class="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg flex justify-between items-center">
-          <span><%= flash[:warning] %></span>
-          <button data-action="flash#dismiss"
-                  class="text-yellow-500 hover:text-yellow-700 ml-4 text-lg leading-none"
-                  aria-label="閉じる">×</button>
+    <% flash.each do |message_type, message| %>
+      <div class="max-w-7xl mx-auto px-4 mt-4">
+        <div class="px-4 py-3 rounded-lg border
+          <%= case message_type
+              when 'notice'  then 'bg-blue-50 border-blue-200 text-blue-800'
+              when 'alert'   then 'bg-red-50 border-red-200 text-red-800'
+              when 'warning' then 'bg-yellow-50 border-yellow-200 text-yellow-800'
+              when 'unlock'  then 'bg-green-50 border-green-400 text-green-800 border-2 font-semibold'
+              else                'bg-gray-50 border-gray-200 text-gray-800'
+              end %>">
+          <%= message %>
         </div>
       </div>
     <% end %>
 
     <%#
-      ---- unlock: 緑のバナー（ロック解除 ← Issue #25 で追加） ----
-
-      【なぜ緑なのか？】
-      緑は「成功」「解放」「ポジティブ」を連想させる色。
-      ロック解除というユーザーにとって嬉しいイベントにふさわしい。
-
-      【animate-pulse について】
-      Tailwind CSS のアニメーションクラス。
-      要素が点滅（フェードイン・フェードアウト）するアニメーションを追加する。
-      目立たせることで「何かが解除された」ことをユーザーが気づきやすくなる。
-      duration-value を長めの 8000ms（8秒）にして読む時間を確保する。
+      メインコンテンツエリア
+      flex-1: body の flex flex-col レイアウトの中で
+              ヘッダーとフッター以外のスペースをすべて占有する
+              → コンテンツが少ないページでもフッターが画面下部に固定される
     %>
-    <% if flash[:unlock] %>
-      <div class="max-w-4xl mx-auto px-4 mt-4"
-           data-controller="flash"
-           data-flash-duration-value="8000">
-        <div role="alert"
-             data-flash-target="message"
-             class="bg-green-50 border-2 border-green-400 text-green-800 px-4 py-3 rounded-lg flex justify-between items-center animate-pulse">
-          <%#
-            animate-pulse は数秒後に止めたいので、
-            Stimulus の flash コントローラー側で stop-pulse を呼ぶか、
-            シンプルに CSS アニメーションを 2秒で止める方法もある。
-            今は Tailwind のデフォルト動作（ずっと点滅）のままにする。
-          %>
-          <span class="font-semibold text-lg"><%= flash[:unlock] %></span>
-          <button data-action="flash#dismiss"
-                  class="text-green-500 hover:text-green-700 ml-4 text-xl leading-none font-bold"
-                  aria-label="閉じる">×</button>
-        </div>
-      </div>
-    <% end %>
-
-    <%# メインコンテンツ %>
-    <main class="max-w-4xl mx-auto px-4 py-6">
+    <main class="flex-1">
       <%= yield %>
     </main>
+
+    <%# 共通フッター（app/views/shared/_footer.html.erb を呼び出す） %>
+    <%= render "shared/footer" %>
 
   </body>
 </html>

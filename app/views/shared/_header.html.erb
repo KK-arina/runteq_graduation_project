@@ -1,50 +1,98 @@
 <%# app/views/shared/_header.html.erb %>
 <%#
-  共通ヘッダー
-  全ページで使用される共通のナビゲーションバーです
-  Issue #21 で「振り返り」ナビリンクを追加しました
+  【このファイルの役割】
+  全ページで使用される共通のナビゲーションバー。
+  Issue #21 で「振り返り」ナビリンクを追加。
+  Issue #26 でモバイル対応（ハンバーガーメニュー）を追加。
+
+  【PC版はIssue #24と完全一致】
+  タグ      : <header>
+  背景色    : bg-gray-50
+  最大幅    : max-w-7xl
+  ロゴ      : text-2xl font-bold text-blue-600
+  リンク    : text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium
+  ログアウト: button_to + bg-white border border-gray-300
+
+  【Issue #26 で追加したもの（モバイル対応のみ）】
+  ・PC用ナビに hidden md:flex を追加（モバイルで非表示にする）
+  ・ハンバーガーメニューボタンを追加（md:hidden でPCでは非表示）
+  ・モバイル用ドロップダウンメニューを追加
+  ・Stimulus コントローラー（mobile-menu）の紐付け
+  ・ARIA属性によるアクセシビリティ対応
+
+  【Tailwind CSS ブレークポイント】
+  プレフィックスなし → 全サイズ（モバイル含む）に適用
+  md:xxx            → 画面幅 768px 以上に適用
+  これを「モバイルファースト」と呼ぶ
 %>
 
-<header class="bg-gray-50 border-b border-gray-200">
+<%#
+  data-controller="mobile-menu":
+    このヘッダー全体を Stimulus の mobile-menu コントローラーに紐付ける。
+    app/javascript/controllers/mobile_menu_controller.js が動作する。
+%>
+<header class="bg-gray-50 border-b border-gray-200"
+        data-controller="mobile-menu">
+
+  <%#
+    max-w-7xl             : 最大幅 1280px（Issue #24と同じ）
+    mx-auto               : 左右マージン自動で中央揃え
+    px-4 sm:px-6 lg:px-8 : レスポンシブなパディング（Issue #24と同じ）
+    py-4                  : 上下パディング 16px（Issue #24と同じ）
+  %>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+
+    <%#
+      flex            : フレックスボックスで横並びレイアウト
+      justify-between : 左端（ロゴ）と右端（ナビ）に振り分ける
+      items-center    : 縦方向を中央揃え
+    %>
     <div class="flex justify-between items-center">
 
-      <%# ロゴエリア %>
+      <%# ── ロゴ（全画面サイズで表示・Issue #24と同じ） ── %>
       <div class="text-2xl font-bold text-blue-600">
-        <%= link_to "HabitFlow", root_path, class: "hover:text-blue-700 transition-colors" %>
+        <%= link_to "HabitFlow", root_path,
+            class: "hover:text-blue-700 transition-colors" %>
       </div>
 
-      <%# ナビゲーションエリア %>
-      <div class="flex items-center space-x-4">
+      <%# ── PC用ナビゲーション（md以上で表示） ── %>
+      <%#
+        【Issue #26 で変更した唯一の箇所】
+        変更前: class="flex items-center space-x-4"
+        変更後: class="hidden md:flex items-center space-x-4"
+          hidden  を追加: モバイルでは非表示（display:none）
+          md:flex を追加: 768px以上でフレックス表示に切り替わる
+        PC表示は Issue #24 と完全一致、モバイルでだけ非表示になる
+      %>
+      <div class="hidden md:flex items-center space-x-4">
         <% if logged_in? %>
-          <%# ログイン中のナビゲーションリンク %>
 
-          <%# ダッシュボードリンク %>
+          <%# ダッシュボードリンク（Issue #24と同じ） %>
           <%= link_to "ダッシュボード", dashboard_path,
               class: "text-gray-600 hover:text-gray-900 px-3 py-2
                       text-sm font-medium transition-colors" %>
 
-          <%# 習慣一覧リンク %>
+          <%# 習慣一覧リンク（Issue #24と同じ） %>
           <%= link_to "習慣一覧", habits_path,
               class: "text-gray-600 hover:text-gray-900 px-3 py-2
                       text-sm font-medium transition-colors" %>
 
-          <%# 週次振り返りリンク（Issue #21 で追加）
-              weekly_reflections_path は routes.rb の
-              resources :weekly_reflections が生成するパスです
-              GET /weekly_reflections にアクセスします %>
+          <%# 振り返りリンク（Issue #21で追加・Issue #24と同じ） %>
           <%= link_to "振り返り", weekly_reflections_path,
               class: "text-gray-600 hover:text-gray-900 px-3 py-2
                       text-sm font-medium transition-colors" %>
 
-          <%# ユーザー名表示 %>
+          <%# ユーザー名表示（Issue #24と同じ） %>
           <span class="text-gray-700 text-sm font-medium">
             <%= current_user.name %> さん
           </span>
 
-          <%# ログアウトボタン
-              data-turbo-confirm で削除前に確認ダイアログを表示します
-              method: :delete で DELETE /logout にリクエストを送ります %>
+          <%#
+            ログアウトボタン（Issue #24と同じ）
+            button_to    : フォームとして DELETE リクエストを送る Rails ヘルパー
+            method:delete: DELETE /logout にリクエストを送る
+            turbo_confirm: クリック時に確認ダイアログを表示する
+          %>
           <%= button_to "ログアウト", logout_path,
               method: :delete,
               class: "px-4 py-2 text-sm font-medium text-gray-700 bg-white
@@ -53,15 +101,195 @@
               data: { turbo_confirm: "ログアウトしますか？" } %>
 
         <% else %>
-          <%# 未ログイン時のナビゲーション %>
+
+          <%# 未ログイン時（Issue #24と同じ） %>
           <%= link_to "ログイン", login_path,
               class: "text-gray-600 hover:text-gray-900 px-3 py-2
                       text-sm font-medium transition-colors" %>
+
           <%= link_to "新規登録", new_user_path,
               class: "px-4 py-2 text-sm font-medium text-white bg-blue-600
                       rounded-md hover:bg-blue-700 transition-colors" %>
+
         <% end %>
       </div>
-    </div>
-  </div>
+
+      <%# ── ハンバーガーメニューボタン（モバイルのみ表示）── %>
+      <%#
+        md:hidden:
+          画面幅 768px 以上では非表示にする。
+          PCでは上の PC 用ナビが表示されるのでこのボタンは不要。
+
+        data-action="click->mobile-menu#toggle":
+          クリック時に mobile-menu コントローラーの toggle() を呼び出す。
+
+        data-mobile-menu-target="button":
+          コントローラーから this.buttonTarget でこの要素を参照する。
+          aria-expanded の値を動的に更新するために必要。
+
+        aria-expanded="false":
+          メニューが開いているか閉じているかをスクリーンリーダーに伝える。
+          Stimulus が開閉に合わせて "true"/"false" を動的に変更する。
+
+        aria-controls="mobile-menu":
+          「このボタンは id='mobile-menu' の要素を制御している」ことを
+          スクリーンリーダーに伝える ARIA 属性。
+          支援技術がどのボタンがどのメニューを操作するかを正確に把握できる。
+
+        aria-label="メニューを開く":
+          SVGアイコンだけのボタンにはテキストがないため必須のアクセシビリティ対応。
+      %>
+      <button type="button"
+              class="md:hidden inline-flex items-center justify-center p-2
+                     rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100
+                     transition-colors"
+              data-action="click->mobile-menu#toggle"
+              data-mobile-menu-target="button"
+              aria-expanded="false"
+              aria-controls="mobile-menu"
+              aria-label="メニューを開く">
+
+        <%#
+          ハンバーガーアイコン（三本線）
+          data-mobile-menu-target="openIcon":
+            メニューが閉じているときに表示するアイコン。
+          aria-hidden="true":
+            装飾用SVGのためスクリーンリーダーに読み上げさせない。
+        %>
+        <svg data-mobile-menu-target="openIcon"
+             class="w-6 h-6"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24"
+             aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 6h16M4 12h16M4 18h16"/>
+        </svg>
+
+        <%#
+          閉じるアイコン（×印）
+          data-mobile-menu-target="closeIcon":
+            メニューが開いているときに表示するアイコン。
+          hidden: 初期状態では非表示。
+        %>
+        <svg data-mobile-menu-target="closeIcon"
+             class="w-6 h-6 hidden"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24"
+             aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+
+    </div><%# end flex justify-between %>
+
+    <%# ── モバイル用ドロップダウンメニュー ── %>
+    <%#
+      id="mobile-menu":
+        ハンバーガーボタンの aria-controls="mobile-menu" と対応する識別子。
+        スクリーンリーダーが「このボタンがこのメニューを制御している」と認識できる。
+
+      hidden:
+        初期状態では非表示（display:none）。
+        Stimulus の _openMenu()/_closeMenu() が
+        hidden クラスの付け外しで表示/非表示を制御する。
+
+      md:hidden:
+        画面幅 768px 以上では常に非表示。
+        PCでは上の PC 用ナビが表示されるためこのメニューは不要。
+
+      data-mobile-menu-target="menu":
+        コントローラーから this.menuTarget でこの要素を参照する。
+    %>
+    <div id="mobile-menu"
+         class="hidden md:hidden"
+         data-mobile-menu-target="menu">
+
+      <div class="pt-2 pb-3 border-t border-gray-200 space-y-1">
+
+        <% if logged_in? %>
+
+          <%#
+            モバイルメニューの各リンク
+            block: ブロック要素にして幅いっぱいに広げる（タップしやすくする）
+            py-2 : 上下パディング 8px（タップ領域を十分に確保する）
+          %>
+          <%= link_to "ダッシュボード", dashboard_path,
+              class: "block px-3 py-2 rounded-md text-sm font-medium
+                      text-gray-600 hover:text-gray-900 hover:bg-gray-100
+                      transition-colors" %>
+
+          <%= link_to "習慣一覧", habits_path,
+              class: "block px-3 py-2 rounded-md text-sm font-medium
+                      text-gray-600 hover:text-gray-900 hover:bg-gray-100
+                      transition-colors" %>
+
+          <%= link_to "振り返り", weekly_reflections_path,
+              class: "block px-3 py-2 rounded-md text-sm font-medium
+                      text-gray-600 hover:text-gray-900 hover:bg-gray-100
+                      transition-colors" %>
+
+          <div class="border-t border-gray-200 mt-1 pt-1">
+            <%# ユーザー名表示 %>
+            <p class="px-3 py-2 text-sm text-gray-700 font-medium">
+              <%= current_user.name %> さん
+            </p>
+
+            <%#
+              ログアウトボタン（モバイル用）
+              w-full   : 幅いっぱいに広げてタップしやすくする
+              text-left: テキストを左揃えにする
+            %>
+            <%= button_to "ログアウト", logout_path,
+                method: :delete,
+                class: "w-full text-left px-3 py-2 rounded-md text-sm font-medium
+                        text-gray-700 hover:text-gray-900 hover:bg-gray-100
+                        transition-colors",
+                data: { turbo_confirm: "ログアウトしますか？" } %>
+          </div>
+
+        <% else %>
+
+          <%#
+            未ログイン時のモバイルメニュー（Issue #26 で調整）
+
+            【ログインリンク】
+            block      : ブロック要素にして幅いっぱいに広げる
+            w-full     : 幅を親要素いっぱいに広げて新規登録と幅を統一する
+            text-center: テキストを中央揃えにする
+            py-4       : 上下パディングを大きめに設定する
+                         Apple の UI ガイドラインでは最小タップ領域は 44px 以上を推奨。
+                         py-4 = 上下 16px × 2 + テキスト高さ ≒ 44px以上を確保できる。
+            text-base  : フォントサイズ 16px。
+                         モバイルでは text-sm(14px) より text-base(16px) の方が
+                         視認性・タップしやすさが向上する。
+            border border-gray-300: 枠線を付けてボタンらしく見せる
+            rounded-md : 角を丸くする
+            focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500:
+                         キーボードのTabキーでフォーカスしたときだけ
+                         青い枠線を表示する。マウス操作時は表示されない。
+                         視覚障害者やキーボード操作ユーザーへのアクセシビリティ対応。
+
+            【新規登録リンク】
+            mt-2       : ログインボタンとの間に 8px の余白を作る
+            bg-blue-600: 青背景で「主要アクション」であることを視覚的に示す
+            text-white : 白文字で青背景に合わせる
+            その他はログインと同じ理由
+          %>
+          <%= link_to "ログイン", login_path,
+              class: "block w-full text-center px-3 py-4 rounded-md text-base font-medium
+                      text-gray-700 border border-gray-300 hover:bg-gray-50
+                      focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500
+                      transition-colors" %>
+
+          <%= link_to "新規登録", new_user_path,
+              class: "block w-full text-center px-3 py-4 rounded-md text-base font-medium
+                      text-white bg-blue-600 hover:bg-blue-700
+                      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500
+                      transition-colors mt-2" %>
+
+        <% end %>
+
+      </div>
+    </div><%# end モバイルドロップダウン %>
+
+  </div><%# end max-w-7xl %>
 </header>

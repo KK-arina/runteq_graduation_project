@@ -1,78 +1,95 @@
-<!-- ========================================================= -->
-<!-- ヒーローセクション -->
-<!-- ========================================================= -->
-<section class="bg-white py-20 text-center">
+<%# app/views/pages/index.html.erb %>
+<%#
+  【このファイルの役割】
+  HabitFlow のランディングページ（TOP画面）。
+  Issue #26 でスマホ表示を最適化。
 
+  【変更点まとめ】
+  ① ヒーローセクション: h1 のフォントサイズをモバイルで調整
+     text-5xl → text-3xl sm:text-5xl
+     （モバイルでは 30px、640px以上では 48px）
+  ② 利用フローセクション: 矢印を CSS で切り替える方式に変更
+     .arrow-divider クラス → application.css で定義
+     モバイルでは「↓」、PCでは「→」を表示
+%>
+
+<%# ============================================================ %>
+<%# ヒーローセクション %>
+<%# ============================================================ %>
+<section class="bg-white py-20 text-center">
   <div class="max-w-4xl mx-auto px-4">
 
-    <!-- キャッチコピー -->
-    <h1 class="text-5xl font-extrabold text-gray-900 mb-6">
+    <%#
+      キャッチコピー
+      text-4xl   : モバイルは 36px（text-3xl=30px から変更。小さすぎたため）
+      sm:text-5xl: 640px以上では 48px（元のデザイン通り）
+    %>
+    <h1 class="text-4xl sm:text-5xl font-extrabold text-gray-900 mb-6">
       甘えを可視化する
     </h1>
 
-    <!-- サブコピー -->
-    <p class="text-xl text-gray-600 mb-10">
+    <%#
+      サブコピー
+      text-lg   : モバイルは 18px
+      sm:text-xl: 640px以上では 20px
+    %>
+    <p class="text-lg sm:text-xl text-gray-600 mb-10">
       習慣 × PDCA で目標達成を加速
     </p>
 
-    <!-- CTAボタン -->
+    <%# CTAボタン（ログイン済みかどうかで遷移先を切り替える） %>
     <% if logged_in? %>
-      <%= link_to "ダッシュボードへ",
-                  root_path,
-                  class: "inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg text-lg transition duration-200" %>
+      <%= link_to "ダッシュボードへ", root_path,
+            class: "inline-block bg-blue-600 hover:bg-blue-700 text-white
+                    font-bold py-4 px-8 rounded-lg text-lg transition duration-200" %>
     <% else %>
-      <%= link_to "今すぐ始める",
-                  new_user_path,
-                  class: "inline-block bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-lg text-lg transition duration-200" %>
+      <%= link_to "今すぐ始める", new_user_path,
+            class: "inline-block bg-blue-600 hover:bg-blue-700 text-white
+                    font-bold py-4 px-8 rounded-lg text-lg transition duration-200" %>
     <% end %>
 
   </div>
 </section>
 
 
-<!-- ========================================================= -->
-<!-- 価値説明セクション（3つの特徴） -->
-<!-- ========================================================= -->
+<%# ============================================================ %>
+<%# 価値説明セクション（3つの特徴） %>
+<%# ============================================================ %>
 <section class="bg-gray-50 py-16">
-
   <div class="max-w-6xl mx-auto px-4">
 
     <h2 class="text-3xl font-bold text-center mb-12">
       価値説明（3つの特徴）
     </h2>
 
+    <%#
+      グリッドレイアウト
+      grid-cols-1  : モバイルは1列（縦積み）← デフォルトのまま
+      md:grid-cols-3: 768px以上は3列（横並び）← 元のデザインのまま
+    %>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
 
-      <!-- カード1 -->
       <div class="bg-white p-6 rounded-lg shadow-md">
-        <h3 class="text-xl font-bold mb-3">
-          1. 続かない理由が分かる
-        </h3>
+        <h3 class="text-xl font-bold mb-3">1. 続かない理由が分かる</h3>
         <p class="text-gray-600 text-sm leading-relaxed">
-          週次振り返りで「できなかった理由」を記録<br>
-          AIが本質的な原因を分析
+          週次振り返りで「できなかった理由」を記録。
+          AIが本質的な原因を分析します。
         </p>
       </div>
 
-      <!-- カード2 -->
       <div class="bg-white p-6 rounded-lg shadow-md">
-        <h3 class="text-xl font-bold mb-3">
-          2. 計画倒れを防ぐ
-        </h3>
+        <h3 class="text-xl font-bold mb-3">2. 計画倒れを防ぐ</h3>
         <p class="text-gray-600 text-sm leading-relaxed">
-          毎週必ず振り返りを強制<br>
-          甘えを許さないロック機能
+          毎週必ず振り返りを強制。
+          甘えを許さないロック機能で継続をサポートします。
         </p>
       </div>
 
-      <!-- カード3 -->
       <div class="bg-white p-6 rounded-lg shadow-md">
-        <h3 class="text-xl font-bold mb-3">
-          3. 自動で最適化される
-        </h3>
+        <h3 class="text-xl font-bold mb-3">3. 自動で最適化される</h3>
         <p class="text-gray-600 text-sm leading-relaxed">
-          AI分析に基づく改善提案<br>
-          ワンクリックで計画を更新
+          AI分析に基づく改善提案。
+          ワンクリックで計画を更新できます。
         </p>
       </div>
 
@@ -81,41 +98,57 @@
 </section>
 
 
-<!-- ========================================================= -->
-<!-- 利用フロー -->
-<!-- ========================================================= -->
+<%# ============================================================ %>
+<%# 利用フローセクション %>
+<%# Issue #26: 矢印を CSS の .arrow-divider クラスで実装 %>
+<%# ============================================================ %>
 <section class="bg-white py-16">
-
   <div class="max-w-6xl mx-auto px-4">
 
     <h2 class="text-3xl font-bold text-center mb-12">
       利用フロー
     </h2>
 
-    <div class="flex flex-col md:flex-row items-center justify-between gap-6 bg-gray-50 border rounded-lg p-6">
+    <%#
+      フローのラッパー
+      flex-col    : モバイルは縦並び
+      md:flex-row : 768px以上は横並び（元のデザイン通り）
+      items-center: 縦・横どちらでも中央揃え
+    %>
+    <div class="flex flex-col md:flex-row items-center justify-between
+                gap-2 bg-gray-50 border rounded-lg p-6">
 
-      <div class="flex-1 text-center">
+      <div class="flex-1 text-center py-3 md:py-0 w-full">
         <div class="font-bold mb-2">平日</div>
         <div class="text-sm text-gray-600">習慣チェック・タスク管理</div>
       </div>
 
-      <div class="text-gray-400 text-2xl">→</div>
+      <%#
+        .arrow-divider:
+          app/assets/stylesheets/application.css で定義したクラス。
+          ::before 疑似要素で矢印文字を表示する。
+          モバイル（縦並び）: "↓" を表示
+          PC（768px以上・横並び）: "→" を表示
+          Tailwind の hidden/md:block では Tailwind v4 環境で
+          確実に動作しない場合があるため、CSS @media クエリで実装する。
+      %>
+      <div class="arrow-divider"></div>
 
-      <div class="flex-1 text-center">
+      <div class="flex-1 text-center py-3 md:py-0 w-full">
         <div class="font-bold mb-2">週末</div>
         <div class="text-sm text-gray-600">振り返り入力</div>
       </div>
 
-      <div class="text-gray-400 text-2xl">→</div>
+      <div class="arrow-divider"></div>
 
-      <div class="flex-1 text-center">
+      <div class="flex-1 text-center py-3 md:py-0 w-full">
         <div class="font-bold mb-2">AI分析</div>
         <div class="text-sm text-gray-600">真の原因を究明</div>
       </div>
 
-      <div class="text-gray-400 text-2xl">→</div>
+      <div class="arrow-divider"></div>
 
-      <div class="flex-1 text-center">
+      <div class="flex-1 text-center py-3 md:py-0 w-full">
         <div class="font-bold mb-2">計画更新</div>
         <div class="text-sm text-gray-600">改善提案を自動反映</div>
       </div>
