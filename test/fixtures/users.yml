@@ -1,27 +1,37 @@
-# test/fixtures/users.yml
-# ============================================================
-# ユーザーのテスト用固定データ（フィクスチャ）
+# ファイルパス: test/fixtures/users.yml
 #
-# 【フィクスチャとは？】
-# テスト実行前にデータベースへ自動で挿入されるサンプルデータです。
-# テストごとに毎回リセットされるので、テスト間でデータが干渉しません。
+# 【このファイルの役割】
+# テスト用のユーザーサンプルデータ。
+# Issue #25 では「前週の振り返りが未完了でロック中」のユーザーを追加する。
 #
-# 【BCrypt::Password.create("password") とは？】
-# bcryptライブラリでパスワードをハッシュ化するメソッドです。
-# has_secure_password を使っているので、
-# password_digest カラムにはハッシュ化済みの文字列が必要です。
-# ============================================================
+# 【BCryptパスワードについて】
+# has_secure_password を使っているため、password_digest に BCrypt ハッシュが必要。
+# テスト用の固定ハッシュ（"password" → BCryptハッシュ）を使う。
+# これは rails console で BCrypt::Password.create("password") で生成できる。
 
-# テスト用ユーザー1（主に操作を行うユーザー）
+# ---- 既存のフィクスチャ（Week 1 で追加済み） ----
+
 one:
-  name: Test User One
-  email: fixture_one@example.com
-  # BCrypt::Password.create("password") で "password" をハッシュ化
-  # <%= %> はERBタグ。YAMLファイル内でRubyコードを実行できます
-  password_digest: <%= BCrypt::Password.create("password") %>
+  name: "テストユーザー1"
+  email: "test1@example.com"
+  # "$2a$12$..." は "password" を BCrypt でハッシュ化した文字列
+  password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
 
-# テスト用ユーザー2（セキュリティテストで「別ユーザー」として使用）
 two:
-  name: Test User Two
-  email: fixture_two@example.com
-  password_digest: <%= BCrypt::Password.create("password") %>
+  name: "テストユーザー2"
+  email: "test2@example.com"
+  password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
+
+
+# ============================================================
+# Issue #25 で追加するフィクスチャ
+# ============================================================
+
+# locked_user
+#   → PDCA強制ロックがかかっているユーザーのテスト用
+#   → このユーザーは weekly_reflections.yml の pending_reflection（未完了）に紐づいている
+#   → travel_to "2026-02-16 04:01:00"（月曜AM4:01）のとき locked? が true になる
+locked_user:
+  name: "ロックテストユーザー"
+  email: "locked@example.com"
+  password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
