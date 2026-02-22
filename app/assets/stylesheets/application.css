@@ -8,8 +8,50 @@
  * You're free to add application-wide styles to this file and they'll appear at the bottom of the
  * compiled file so the styles you add here take precedence over styles defined in any other CSS
  * files in this directory. Styles in this file should be added after the last require_* statement.
- * It is generally better to create a new file per style scope.
  *
  *= require_tree .
  *= require_self
  */
+
+/*
+  ============================================================
+  利用フロー矢印（レスポンシブ切り替え）Issue #26 で追加
+  ============================================================
+
+  【なぜ Tailwind クラスではなく CSS で実装するのか】
+  本質的な理由：
+    CSS の疑似要素（::before）の content プロパティは
+    Tailwind CSS では直接制御できない。
+    Tailwind は既存のCSSプロパティをユーティリティクラスとして
+    提供しているが、疑似要素の content を動的に切り替える
+    クラスは存在しない。
+    そのため、@media クエリを使った通常の CSS で実装する。
+
+  【仕組み】
+  .arrow-divider::before:
+    CSS の「疑似要素」。
+    実際の HTML 要素の直前に仮想的なコンテンツを挿入できる。
+    content プロパティで表示する文字（矢印）を指定する。
+
+  モバイル（デフォルト）:
+    flex-col（縦並び）レイアウトなので「↓」（下向き矢印）を表示する。
+
+  PC（768px 以上 = Tailwind の md ブレークポイント）:
+    flex-row（横並び）レイアウトになるので「→」（右向き矢印）に上書きする。
+  ============================================================
+*/
+
+/* モバイル: 縦並びなので下向き矢印を表示 */
+.arrow-divider::before {
+  content: "↓";
+  color: #9ca3af; /* Tailwind の text-gray-400 相当（rgb 156 163 175） */
+  font-size: 1.5rem; /* Tailwind の text-2xl 相当（24px） */
+  font-weight: bold;
+}
+
+/* PC（768px 以上 = Tailwind の md ブレークポイント）: 右向き矢印に切り替え */
+@media (min-width: 768px) {
+  .arrow-divider::before {
+    content: "→";
+  }
+}

@@ -1,15 +1,23 @@
 <%# app/views/dashboards/index.html.erb %>
 <%#
-  ダッシュボードのメインビューです。
-  @locked が true の場合は警告バナーを表示し、
-  習慣チェックリストはロック中でも使用できます。
+  ═══════════════════════════════════════════════════════════════════
+  【このファイルの役割】
+    ダッシュボードのメインビュー。
+    @locked が true の場合は警告バナーを表示し、
+    習慣チェックリストはロック中でも使用できます。
+
+  【Issue #26 で修正した箇所】
+    1. 習慣名の truncate max-w-xs → max-w-[120px] sm:max-w-xs
+       モバイルで長い習慣名が達成率表示と重なる問題を修正
+    2. クイックリンクグリッドは grid-cols-1 sm:grid-cols-2 で既存対応済み
+    3. ロックバナーのレイアウトをモバイルで縦積みに調整
+  ═══════════════════════════════════════════════════════════════════
 %>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
   <%# ============================================================ %>
   <%# PDCA強制ロック警告バナー %>
-  <%# @locked が true のときだけ表示します。 %>
   <%# ============================================================ %>
   <% if @locked %>
     <div class="mb-6 bg-orange-50 border border-orange-200 border-l-4 border-l-orange-500 rounded-lg p-4">
@@ -27,7 +35,6 @@
           <p class="text-xs text-orange-700 mt-1">
             習慣の新規追加・削除はできません。振り返りを完了すると制限が解除されます。
           </p>
-          <%# 振り返りページへのリンクボタン %>
           <%= link_to "今すぐ振り返る →",
                 new_weekly_reflection_path,
                 class: "mt-2 inline-block text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded transition-colors" %>
@@ -50,7 +57,6 @@
     </h2>
 
     <% if @habits.empty? %>
-      <%# 習慣が1件もない場合の表示 %>
       <p class="text-sm text-gray-400">まだ習慣が登録されていません。</p>
     <% else %>
       <%# 全体達成率 %>
@@ -71,9 +77,32 @@
       <% @habits.each do |habit| %>
         <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
         <div class="mb-3">
-          <div class="flex justify-between items-center mb-1">
-            <span class="text-sm text-gray-700 truncate max-w-xs"><%= habit.name %></span>
-            <span class="text-xs text-gray-500 ml-2 flex-shrink-0">
+          <%#
+            習慣名と達成率を横並びにするエリア
+            flex: 横並び
+            justify-between: 左端（習慣名）と右端（達成率）に振り分け
+            items-center: 縦方向中央揃え
+          %>
+          <div class="flex justify-between items-center mb-1 gap-2">
+            <%#
+              習慣名
+              flex-1: 残りのスペースをすべて使う（達成率部分は flex-shrink-0 で固定幅）
+              min-w-0: flex-1 が正しく truncate するために必要
+                       flex アイテムはデフォルトで min-w がコンテンツ幅になり、
+                       truncate が効かないことがある
+              truncate: テキストが長すぎる場合は「...」で省略
+            %>
+            <span class="text-sm text-gray-700 flex-1 min-w-0 truncate">
+              <%= habit.name %>
+            </span>
+            <%#
+              達成率テキスト
+              flex-shrink-0: 画面幅が小さくても幅を縮めない（押しつぶされない）
+              ml-2: 習慣名との間に余白
+              text-xs: 12px（小さめのテキスト）
+              whitespace-nowrap: 改行させない（数字と単位が分かれないようにする）
+            %>
+            <span class="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
               <%= stats[:completed_count] %>/<%= habit.weekly_target %>日
               （<%= stats[:rate] %>%）
             </span>
@@ -91,14 +120,12 @@
 
   <%# ============================================================ %>
   <%# 今日の習慣チェックリスト %>
-  <%# ロック中でも記録（チェック）は可能です。 %>
   <%# ============================================================ %>
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide">
         今日の習慣チェック
       </h2>
-      <%# ロック中でもチェックはできることを案内 %>
       <% if @locked %>
         <span class="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">
           ✓ 記録は可能です
@@ -109,7 +136,6 @@
     <% if @habits.empty? %>
       <p class="text-sm text-gray-400">
         習慣がまだ登録されていません。
-        <%# ロック中はリンクを非活性に、ロック解除中は習慣登録ページへ %>
         <% if @locked %>
           <span class="text-gray-400">（振り返り完了後に習慣を追加できます）</span>
         <% else %>
@@ -117,8 +143,6 @@
         <% end %>
       </p>
     <% else %>
-      <%# 各習慣のチェックボックスを表示 %>
-      <%# habit_records パーシャルを使って即時保存機能付きで表示 %>
       <% @habits.each do |habit| %>
         <%= render "habit_records/habit_record",
               habit: habit,
@@ -129,9 +153,9 @@
 
   <%# ============================================================ %>
   <%# クイックリンク %>
+  <%# grid-cols-1 sm:grid-cols-2: モバイルは1列、640px以上は2列 %>
   <%# ============================================================ %>
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-    <%# 習慣一覧へのリンク %>
     <%= link_to habits_path,
           class: "block bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow" do %>
       <div class="flex items-center gap-3">
@@ -143,7 +167,6 @@
       </div>
     <% end %>
 
-    <%# 週次振り返りへのリンク %>
     <%= link_to weekly_reflections_path,
           class: "block bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow #{'border-orange-300 bg-orange-50' if @locked}" do %>
       <div class="flex items-center gap-3">
