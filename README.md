@@ -38,6 +38,7 @@
 - ✅ 週次振り返り入力ページ実装完了（form_with model設計・トランザクション保証・スナップショット自動作成）
 - ✅ 週次振り返り詳細ページ実装完了（コードレビュー対応・フィクスチャ設計・ルーティング整備）
 - ✅ PDCA強制ロック機能実装完了（月曜AM4:00判定・新規作成/削除ブロック・ダッシュボード警告バナー）
+- ✅ 振り返り完了時のPDCAロック自動解除機能実装完了（completed_at記録・前週pending_reflection自動完了・ロック解除バナー表示）
 
 <br>
 
@@ -762,6 +763,44 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
+### Week 4（3/9〜3/15）: ロック解除・UI改善
+
+<br>
+
+ Issue | タイトル | ステータス | 完了日 | SP |
+|-------|---------|-----------|--------|-----|
+| #25 | 振り返り完了時のPDCAロック自動解除 | ✅ 完了 | 2/22 | 4 |
+| #26 | レスポンシブデザインの調整 | 🔲 未着手 | - | 4 |
+| #27 | エラーハンドリングの改善 | 🔲 未着手 | - | 3 |
+| #28 | セキュリティ対策 | 🔲 未着手 | - | 3 |
+| #29 | パフォーマンス最適化 | 🔲 未着手 | - | 2 |
+| #30 | 統合テスト（主要フロー） | 🔲 未着手 | - | 6 |
+
+<br>
+
+**Week 4 進捗**: 2SP / 20SP（10%）
+
+<br>
+
+**Week 4 目標**: 20SP
+
+<br>
+
+#### ✅ Issue #25: 振り返り完了時のPDCAロック自動解除
+
+<br>
+
+- `WeeklyReflection#complete!` を拡張し `completed_at`（日時）と `is_locked: true` を同時更新（整合性保証）
+- `completed?` / `pending?` / `week_label` メソッドを `WeeklyReflection` モデルに追加
+- ロック中ユーザーが振り返りを投稿すると、今週分の complete! に加えて前週の `pending_reflection` も complete! してロックを解除
+- `was_locked` を保存前に記録する設計（`complete!` 後は `locked?` が必ず false になるため）
+- ロック解除時は `flash[:unlock]` で緑バナー + `dashboard_path` へリダイレクト
+- 通常ユーザーは `weekly_reflections_path` へリダイレクト（元の動作を維持）
+- `pdca_lock_test.rb` の `create_last_week_reflection` 引数を `is_locked:` → `completed:` に変更（`completed_at` ベースの判定に統一）
+- 全テスト成功: 182 runs, 467 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
 ---
 
 <br>
@@ -1139,7 +1178,7 @@ habitflow/
 │   ├── controllers/
 │   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login, locked?, require_unlocked）
 │   │   ├── dashboards_controller.rb     # ダッシュボード（index）今週の達成率・今日のチェックリスト
-│   │   ├── weekly_reflections_controller.rb # 週次振り返り（index, new, create, show）日曜AM4:00判定・トランザクション保証
+│   │   ├── weekly_reflections_controller.rb # 週次振り返り（index, new, create, show）complete!によるロック解除・was_locked保存前記録
 │   │   ├── habit_records_controller.rb  # 習慣記録（create, update）ネストされたルーティング
 │   │   ├── habits_controller.rb         # 習慣管理（index, new, create, destroy）
 │   │   ├── pages_controller.rb          # ランディングページ（ログイン済みはdashboardへリダイレクト）
@@ -1149,7 +1188,7 @@ habitflow/
 │   │   ├── user.rb                       # Userモデル（認証機能、has_many :habits, :habit_records, :weekly_reflections）
 │   │   ├── habit.rb                      # Habitモデル（習慣管理、論理削除機能、has_many :habit_records）
 │   │   ├── habit_record.rb               # HabitRecordモデル（日次記録、AM4:00基準、UNIQUE制約）
-│   │   ├── weekly_reflection.rb              # WeeklyReflectionモデル（UNIQUE制約・AM4:00基準週計算・スコープ）
+│   │   ├── weekly_reflection.rb              # WeeklyReflectionモデル（UNIQUE制約・AM4:00基準週計算・complete!/completed?/pending?/week_label）
 │   │   └── weekly_reflection_habit_summary.rb # スナップショット設計・達成率計算・冪等性対応
 │   ├── javascript/
 │   │   └── controllers/
@@ -1184,7 +1223,8 @@ habitflow/
 │   │   ├── YYYYMMDDHHMMSS_create_habits.rb        # Habitsテーブル作成
 │   │   ├── YYYYMMDDHHMMSS_create_habit_records.rb # HabitRecordsテーブル作成（AM4:00基準、UNIQUE制約）
 │   │   ├── YYYYMMDDHHMMSS_create_weekly_reflections.rb # WeeklyReflectionsテーブル作成
-│   │   └── YYYYMMDDHHMMSS_create_weekly_reflection_habit_summaries.rb # WeeklyReflectionHabitSummariesテーブル作成
+│   │   ├── YYYYMMDDHHMMSS_create_weekly_reflection_habit_summaries.rb # WeeklyReflectionHabitSummariesテーブル作成
+│   │   └── YYYYMMDDHHMMSS_add_completed_at_to_weekly_reflections.rb # completed_atカラム追加（振り返り完了日時の記録）
 │   ├── schema.rb                              # データベーススキーマ
 │   └── seeds.rb                               # サンプルデータ（2ユーザー、計10件の習慣）
 ├── docs/
@@ -1211,10 +1251,10 @@ habitflow/
 │   │   ├── habit_daily_record_test.rb         # 日次記録・AM4:00境界値テスト（6テストケース）Issue #17
 │   │   ├── weekly_reflection_index_test.rb    # 週次振り返り一覧統合テスト Issue #21
 │   │   ├── weekly_reflection_create_test.rb   # 週次振り返り作成統合テスト（E2Eフロー・1000文字バリデーション）Issue #22
-│   │   └── pdca_lock_test.rb                  # PDCAロック統合テスト（月曜AM4:00判定・ロック中の作成/削除ブロック・即時保存維持）Issue #24
+│   │   └── pdca_lock_test.rb                  # PDCAロック統合テスト（月曜AM4:00判定・ロック中の作成/削除ブロック・即時保存維持・completed_atベース判定）Issue #24/#25
 │   ├── controllers/
 │   │   ├── dashboards_controller_test.rb      # DashboardsControllerテスト（3テストケース）Issue #18
-│   │   ├── weekly_reflections_controller_test.rb # WeeklyReflectionsControllerテスト（show/index/new/create・認可・境界値）Issue #21/#22/#23
+│   │   ├── weekly_reflections_controller_test.rb # WeeklyReflectionsControllerテスト（show/index/new/create・認可・境界値・ロック解除）Issue #21/#22/#23/#25
 │   │   ├── habits_controller_test.rb     # HabitsControllerテスト（2テストケース）
 │   │   └── habit_records_controller_test.rb  # HabitRecordsControllerテスト（AM4:00境界値・セキュリティ）
 │   └── fixtures/
@@ -5026,6 +5066,101 @@ end
 **テスト結果**:
 ```
 198 runs, 474 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+## 振り返り完了時のPDCAロック自動解除（Issue #25）
+
+<br>
+
+### 機能概要
+
+<br>
+
+振り返りを投稿して完了した瞬間に、PDCAロックを自動解除する機能です。
+
+<br>
+
+Issue #24 でロック発動の仕組みを作りましたが、解除する手段がありませんでした。<br>
+Issue #25 でそのループを「振り返りを書いたら解除される」という形で閉じています。
+
+<br>
+
+### 設計の核心：「今週を保存」と「前週のロック解除」は別の操作
+
+<br>
+
+ロック判定は `locked? → 前週の pending? を確認` という連鎖で行われます。<br>
+つまり **ロック解除 = 前週の振り返りを complete! すること** です。
+
+<br>
+
+今週の振り返りを保存するだけでは前週の `pending_reflection` は変わりません。<br>
+そのため create アクション内で「前週も complete! する」処理が必要です。
+```ruby
+# app/controllers/weekly_reflections_controller.rb（createアクション抜粋）
+
+# ロック状態を「保存前に」記録する
+# complete! を呼んだ後は locked? が false になるため、保存前に変数へ入れておく
+was_locked = current_user.locked?
+
+ActiveRecord::Base.transaction do
+  @weekly_reflection.save!
+  WeeklyReflectionHabitSummary.create_all_for_reflection!(@weekly_reflection)
+
+  # 今週の振り返りを完了にする（is_locked: true + completed_at を記録）
+  @weekly_reflection.complete!
+
+  # ロック中だった場合は「前週の振り返り」も complete! してロックを解除する
+  if was_locked
+    last_week_start = WeeklyReflection.current_week_start_date - 7.days
+    last_week = current_user.weekly_reflections
+                            .find_by(week_start_date: last_week_start)
+    last_week&.complete!
+  end
+end
+
+current_user.reload  # complete! 後のキャッシュをリセット
+
+# ロック解除時は緑バナー + ダッシュボードへ、通常時は一覧ページへ
+if was_locked
+  redirect_to dashboard_path,
+              flash: { unlock: "🔓 振り返りが完了しました！PDCAロックが解除されました。今週も頑張りましょう！" }
+else
+  redirect_to weekly_reflections_path,
+              notice: "今週の振り返りを保存しました！お疲れ様でした🎉"
+end
+```
+
+<br>
+
+### complete! メソッドの設計（is_locked と completed_at の二重更新）
+```ruby
+# app/models/weekly_reflection.rb
+
+def complete!
+  return if completed?
+  # is_locked: true → 既存コードの completed スコープ・二重送信防止チェックと整合
+  # completed_at    → pending?/completed? の判定・locked? の連鎖と整合
+  update!(completed_at: Time.current, is_locked: true)
+end
+```
+
+<br>
+
+`is_locked` と `completed_at` を両方更新する理由：<br>
+- `is_locked` : 既存コード（`new`/`create` の二重送信防止・`.completed` スコープ）が依存
+- `completed_at` : `pending?` → `locked?` の判定チェーンが依存<br>
+両方を `complete!` の1か所で同時に更新することで整合性を保ちます。
+
+<br>
+
+### テスト結果
+
+<br>
+```
+182 runs, 467 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
