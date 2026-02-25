@@ -4,86 +4,52 @@
     このパーシャルは以下の2箇所から呼び出される：
     1. app/views/habits/index.html.erb（習慣一覧ページ）
     2. app/views/dashboards/index.html.erb（ダッシュボード）
-    
+
     渡されるローカル変数：
     - habit        : Habit オブジェクト（必須）
     - habit_record : HabitRecord オブジェクト（今日の記録。なければnil）
+
+    【修正内容】
+    外側divのIDを habit_record_row_XX に変更。
+    habits/index.html.erb の習慣カードdiv（habit_record_XX）と
+    IDが重複していたため、チェック後にTurboがカード全体を
+    パーシャルの中身で上書きしてしまっていた。
     ============================================================= %>
 
-<%# -------------------------------------------------------
-    ローカル変数の準備
-    habit_record が nil の場合（まだ記録がない場合）は
-    完了フラグ false の新しいHabitRecordオブジェクトを作って代用する
-    record.persisted? : DBに保存済みかどうかを確認するRailsメソッド
-    ------------------------------------------------------- %>
 <% record     = habit_record || HabitRecord.new(completed: false) %>
 <% create_url = habit_habit_records_path(habit) %>
 <% update_url = record.persisted? ? habit_habit_record_path(habit, record) : "" %>
 <% record_id  = record.persisted? ? record.id : 0 %>
 
-<%# -------------------------------------------------------
-    Turbo Stream の置換ターゲット
-    id="habit_record_XX" : Stimulus/Turboが差し替えるDOM要素のID
-    XX には習慣のIDが入る（例: habit_record_3）
-    チェックボックスを押すと、このdiv要素全体が
-    サーバーからの新しいHTMLで置き換えられる
-    ------------------------------------------------------- %>
-<div id="habit_record_<%= habit.id %>"
+<%# Turbo Stream の置換ターゲット（IDを habit_record_row_XX に変更） %>
+<div id="habit_record_row_<%= habit.id %>"
      class="flex items-center gap-3 py-3">
 
-  <%# -------------------------------------------------------
-      Stimulus コントローラーのルートdiv
-      data-controller="habit-record" : habit_record_controller.js を紐付ける
-      data-habit-record-create-url-value : POSTするURL（新規作成時）
-      data-habit-record-update-url-value : PATCHするURL（更新時）
-      data-habit-record-record-id-value  : 既存レコードのID（0 = 未作成）
-      ------------------------------------------------------- %>
   <div class="flex items-center gap-3 w-full"
        data-controller="habit-record"
        data-habit-record-create-url-value="<%= create_url %>"
        data-habit-record-update-url-value="<%= update_url %>"
        data-habit-record-record-id-value="<%= record_id %>">
 
-    <%# ---- チェックボックス ---- %>
-    <%# data-habit-record-target="checkbox" : Stimulusがこの要素を参照するためのターゲット指定
-        data-action="change->habit-record#toggle" :
-          チェックボックスが変更されたときに habit_record_controller.js の toggle() を呼ぶ
-        checked : record.completed が true のときチェック済み状態にする %>
     <input type="checkbox"
            class="w-5 h-5 rounded accent-blue-600 cursor-pointer flex-shrink-0"
            data-habit-record-target="checkbox"
            data-action="change->habit-record#toggle"
            <%= record.completed ? "checked" : "" %>>
 
-    <%# ---- 習慣名 ---- %>
-    <%# 完了済みなら打ち消し線（line-through）とグレー文字で視覚的フィードバック %>
     <span class="text-sm flex-1 <%= record.completed ? 'line-through text-gray-400' : 'text-gray-700' %>">
       <%= habit.name %>
     </span>
 
-    <%# ---- 完了バッジ（完了時のみ表示） ---- %>
     <% if record.completed %>
       <span class="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">
         ✓ 完了
       </span>
     <% end %>
 
-    <%# app/views/habit_records/_habit_record.html.erb %>
-    <%# （該当箇所のみ抜粋）       %>
-    <%# ---- ローディングアイコン ---- %>
-    <%# 保存処理中に表示するスピナー
-        hidden 属性 : 初期状態では非表示
-        data-habit-record-target="loading" : Stimulusから操作するためのターゲット %>
     <div data-habit-record-target="loading"
         hidden
         class="flex-shrink-0">
-      <%#
-        ✅ 修正済み SVGスピナー
-        旧: d="M4 12a8 8 0 018-8V0C5.373 0 12 0 12 0v4z"
-            → C5.373 の部分が不正なパス記述でブラウザによって描画崩れが起きる
-        新: d="M4 12a8 8 0 018-8V4a8 8 0 00-8 8z"
-            → 正しい円弧パス。すべてのブラウザで確実に描画される
-      %>
       <svg class="animate-spin h-4 w-4 text-blue-500"
           xmlns="http://www.w3.org/2000/svg"
           fill="none"

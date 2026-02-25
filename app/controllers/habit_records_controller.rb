@@ -25,9 +25,9 @@ class HabitRecordsController < ApplicationController
       # Turbo Streamリクエスト（Stimulusから fetch で呼ばれる場合）
       format.turbo_stream do
         # turbo_stream.replace : 指定したidのDOM要素を新しいHTMLで置き換える
-        # "habit_record_#{@habit.id}" : パーシャル側のid属性と一致させる
+        # "habit_record_row_#{@habit.id}" : パーシャル側のid属性と一致させる
         render turbo_stream: turbo_stream.replace(
-          "habit_record_#{@habit.id}",
+          "habit_record_row_#{@habit.id}",
           partial: "habit_records/habit_record",
           locals:  { habit: @habit, habit_record: @habit_record }
         )
@@ -48,7 +48,7 @@ class HabitRecordsController < ApplicationController
     respond_to do |format|
       format.turbo_stream do
         render turbo_stream: turbo_stream.replace(
-          "habit_record_#{@habit.id}",
+          "habit_record_row_#{@habit.id}",
           partial: "habit_records/habit_record",
           locals:  { habit: @habit, habit_record: @habit_record }
         )

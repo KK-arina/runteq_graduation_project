@@ -10,6 +10,11 @@
   @habit_stats         : 各習慣の進捗 { habit_id => { rate:, completed_count: } }
   @achieved_habits     : 達成済み習慣（rate >= 100）の配列
   @not_achieved_habits : 未達成習慣（rate < 100）の配列
+
+  【Issue #27 での変更点】
+  バリデーションエラー表示を独自実装から shared/_form_errors パーシャルに統一。
+  変更箇所は form_with ブロック内の最初のセクション（<% if @weekly_reflection.errors.any? %> 〜 end %> の部分）のみ。
+  それ以外は一切変更なし。
 %>
 
 <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -103,31 +108,37 @@
 
   <%# ==========================================
       振り返りフォーム
-      
+
       【form_with の書き方について】
       model: @weekly_reflection だけを渡す。url: と method: は不要。
       理由: Rails は model の状態（new_record? か persisted? か）を自動判断して
       「新規なら POST /weekly_reflections」「既存なら PATCH /weekly_reflections/:id」
       と正しく設定してくれる。余分なオプションを省くことで Railsらしいシンプルなコードになる。
-      
+
       local: true を指定する理由: Hotwire/Turbo の Ajax 送信を無効化して、
       通常のHTMLフォーム送信（フルページリロード）として動作させるため。
   ========================================== %>
   <%= form_with model: @weekly_reflection, local: true, class: "space-y-6" do |f| %>
 
     <%# ---- バリデーションエラーの表示 ---- %>
-    <% if @weekly_reflection.errors.any? %>
-      <div class="rounded-xl border border-red-300 bg-red-50 p-4">
-        <h3 class="text-sm font-bold text-red-700 mb-2">
-          <%= @weekly_reflection.errors.count %> 件のエラーがあります
-        </h3>
-        <ul class="list-disc list-inside space-y-1">
-          <% @weekly_reflection.errors.full_messages.each do |msg| %>
-            <li class="text-xs text-red-600"><%= msg %></li>
-          <% end %>
-        </ul>
-      </div>
-    <% end %>
+    <%#
+      【Issue #27 変更点】
+      変更前: このファイルに直接 if @weekly_reflection.errors.any? 〜 end と書いていた。
+      変更後: shared/_form_errors パーシャルに切り出して render で呼び出す。
+
+      render "shared/form_errors":
+        app/views/shared/_form_errors.html.erb を呼び出す。
+        ファイル名の _ は省略して書く Rails の規約。
+
+      model: @weekly_reflection:
+        パーシャル内で model 変数として @weekly_reflection を参照できるように渡す。
+        @weekly_reflection.errors を参照してエラー件数・メッセージを表示する。
+
+      メリット:
+        users/new.html.erb や habits/new.html.erb と同じパーシャルを使うため、
+        デザイン変更が1箇所の修正で全フォームに反映される。
+    %>
+    <%= render "shared/form_errors", model: @weekly_reflection %>
 
     <%# ---- 振り返りコメント入力欄 ---- %>
     <div>
