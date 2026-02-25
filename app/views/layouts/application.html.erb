@@ -3,39 +3,18 @@
   【このファイルの役割】
   すべてのビューに共通するHTMLの「外枠」を定義するレイアウトファイル。
 
-  【Issue #25以前との差分（これだけが変更点）】
-  - stylesheet_link_tag "tailwind" を復元（← これが最重要）
-    これがないと Tailwind CSS が一切効かず、
-    色・余白・配置がすべて崩れる原因になる。
-
-  【body クラスの意味】
-  min-h-screen: 最低でも画面全体の高さを確保する
-  bg-gray-50  : 背景色（薄いグレー）
-  flex flex-col: フッターを画面下部に固定するためのレイアウト
-    → main の flex-1 と組み合わせることで
-      コンテンツが少ないページでもフッターが下部に固定される
+  【Issue #27 での変更点】
+  - フラッシュメッセージに Stimulus flash コントローラーを紐付けてトースト通知化
+  - アイコン追加・✕ボタン追加
+  - message_type.to_s を使って symbol/string 両対応
 %>
 <!DOCTYPE html>
 <html>
   <head>
     <title>HabitFlow</title>
-    <%#
-      viewport メタタグ: レスポンシブデザインに必須
-      width=device-width: ページの幅をデバイスの画面幅に合わせる
-      initial-scale=1   : 初期ズーム倍率を1（等倍）にする
-      これがないとモバイルブラウザが PC 用サイトをズームアウトして表示してしまう
-    %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
-    <%#
-      【最重要】stylesheet_link_tag "tailwind"
-      Tailwind CSS のコンパイル済みファイルを読み込む。
-      app/assets/tailwind/ に出力されたCSSを参照する。
-      このタグが抜けると bg-gray-50・text-blue-600・flex などの
-      Tailwind クラスが一切効かなくなり、画面全体のデザインが崩れる。
-      "application" と必ずセットで両方読み込むこと。
-    %>
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
     <%= javascript_importmap_tags %>
@@ -43,45 +22,94 @@
 
   <body class="min-h-screen bg-gray-50 flex flex-col">
 
-    <%# 共通ヘッダー（app/views/shared/_header.html.erb を呼び出す） %>
     <%= render "shared/header" %>
 
     <%#
-      フラッシュメッセージ表示エリア
-      flash.each でキー（message_type）と値（message）をループ処理する。
-      message_type の値に応じて色を切り替える:
-        notice  → 青（情報・成功）
-        alert   → 赤（エラー・警告）
-        warning → 黄（注意）    ← Issue #25 で追加
-        unlock  → 緑（ロック解除）← Issue #25 で追加
-        その他  → グレー
+      ════════════════════════════════════════════════════
+      フラッシュメッセージ（トースト通知）表示エリア
+      Issue #27: Stimulus の flash コントローラーと連携
+      ════════════════════════════════════════════════════
+
+      flash.each:
+        flash ハッシュを1件ずつ処理する。
+        flash は Hash のようなオブジェクトで、
+        redirect_to ~, notice: "..." で値がセットされる。
     %>
     <% flash.each do |message_type, message| %>
-      <div class="max-w-7xl mx-auto px-4 mt-4">
-        <div class="px-4 py-3 rounded-lg border
-          <%= case message_type
+      <%#
+        【重要】message_type.to_s で文字列に統一する
+        Rails の flash は内部で symbol（:notice）として扱うこともあれば
+        string（"notice"）として扱うこともある。
+        .to_s で統一しないと when 'notice' が :notice にマッチしない場合がある。
+        例: :notice.to_s → "notice"（文字列に変換される）
+      %>
+      <% type = message_type.to_s %>
+
+      <div class="max-w-7xl mx-auto px-4 mt-4"
+           data-controller="flash"
+           data-flash-target="message"
+           data-flash-duration-value="<%= case type
+                                           when 'unlock' then 6000
+                                           when 'alert'  then 6000
+                                           when 'warning' then 5000
+                                           else 4000
+                                           end %>"
+           role="alert">
+
+        <%#
+          relative: ✕ボタンを絶対配置するための基準
+          pr-10: ✕ボタンが文字に重ならないよう右側に余白を確保
+        %>
+        <div class="relative px-4 py-3 rounded-lg border pr-10
+          <%= case type
               when 'notice'  then 'bg-blue-50 border-blue-200 text-blue-800'
               when 'alert'   then 'bg-red-50 border-red-200 text-red-800'
               when 'warning' then 'bg-yellow-50 border-yellow-200 text-yellow-800'
               when 'unlock'  then 'bg-green-50 border-green-400 text-green-800 border-2 font-semibold'
               else                'bg-gray-50 border-gray-200 text-gray-800'
               end %>">
-          <%= message %>
+
+          <div class="flex items-start gap-2">
+            <%# メッセージタイプ別アイコン %>
+            <span class="flex-shrink-0">
+              <%= case type
+                  when 'notice'  then '✅'
+                  when 'alert'   then '❌'
+                  when 'warning' then '⚠️'
+                  when 'unlock'  then '🔓'
+                  else                'ℹ️'
+                  end %>
+            </span>
+            <span class="text-sm leading-relaxed"><%= message %></span>
+          </div>
+
+          <%#
+            ✕（閉じる）ボタン
+            data-action="flash#dismiss":
+              クリック時に FlashController の dismiss() を呼び出す。
+            absolute top-2 right-2:
+              親の relative div の右上に絶対配置する。
+          %>
+          <button type="button"
+                  data-action="flash#dismiss"
+                  class="absolute top-2 right-2 p-1 rounded
+                         opacity-60 hover:opacity-100 transition-opacity"
+                  aria-label="閉じる">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                 aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+
         </div>
       </div>
     <% end %>
 
-    <%#
-      メインコンテンツエリア
-      flex-1: body の flex flex-col レイアウトの中で
-              ヘッダーとフッター以外のスペースをすべて占有する
-              → コンテンツが少ないページでもフッターが画面下部に固定される
-    %>
     <main class="flex-1">
       <%= yield %>
     </main>
 
-    <%# 共通フッター（app/views/shared/_footer.html.erb を呼び出す） %>
     <%= render "shared/footer" %>
 
   </body>

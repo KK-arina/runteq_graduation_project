@@ -1,0 +1,114 @@
+<%# app/views/errors/not_found.html.erb %>
+<%#
+  ════════════════════════════════════════════════════════
+  【このファイルの役割】
+    404 Not Found エラーが発生したときに表示するカスタムエラーページ。
+    「ページが見つかりません」をユーザーフレンドリーに伝える。
+
+  【このファイルが呼ばれる条件】
+    - 存在しないURLにアクセスした場合
+    - find(id) で該当レコードが見つからなかった場合
+    ApplicationController の render_404 メソッドから呼ばれる。
+
+  【レイアウトについて】
+    render layout: "application" を指定しているので、
+    app/views/layouts/application.html.erb のヘッダー・フッターが
+    この内容の前後に自動で追加される。
+  ════════════════════════════════════════════════════════
+%>
+
+<%#
+  min-h-[60vh]:
+    このセクションの最小高さをビューポート高さの 60% に設定する。
+    ヘッダー・フッターを除いた残りのスペースにコンテンツを
+    ある程度広げて、殺風景にならないようにする。
+  flex flex-col items-center justify-center:
+    コンテンツを縦方向・横方向ともに中央揃えにする。
+  text-center:
+    すべてのテキストを中央揃えにする。
+  px-4:
+    モバイルでの左右余白（16px）。
+%>
+<div class="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 py-16">
+
+  <%# エラーコード表示 %>
+  <%#
+    text-8xl:
+      フォントサイズを非常に大きく（128px）して「404」を目立たせる。
+    font-bold:
+      太字にして視覚的なインパクトを出す。
+    text-blue-200:
+      薄い青色にすることで「エラー」という重さを和らげ、
+      白背景に馴染む落ち着いたデザインにする。
+    leading-none:
+      行間を詰めて数字とその下のメッセージが離れすぎないようにする。
+    select-none:
+      ユーザーがこの数字をテキストとして選択できないようにする（装飾的な要素のため）。
+  %>
+  <p class="text-8xl font-bold text-blue-200 leading-none select-none">404</p>
+
+  <%# アイコン（絵文字） %>
+  <%#
+    text-6xl: 絵文字を大きく表示（96px相当）。
+    mt-4 mb-6: 上に16px、下に24pxの余白を入れて数字との距離を調整。
+  %>
+  <p class="text-6xl mt-4 mb-6">🔍</p>
+
+  <%# メインメッセージ %>
+  <%#
+    text-2xl font-bold: 見出しとして目立たせる。
+    text-gray-800: 白背景に対して読みやすいダークグレー。
+    mb-3: 下に12pxの余白。
+  %>
+  <h1 class="text-2xl font-bold text-gray-800 mb-3">
+    ページが見つかりません
+  </h1>
+
+  <%# サブメッセージ %>
+  <%#
+    text-gray-500: ヒントテキストは控えめなグレーにする。
+    mb-8: ボタンとの間に十分な余白（32px）を確保する。
+    max-w-md: テキストが横に広がりすぎないよう最大幅を制限する。
+    mx-auto: max-w-md と組み合わせて中央揃えにする。
+  %>
+  <p class="text-gray-500 mb-8 max-w-md mx-auto">
+    お探しのページは移動または削除された可能性があります。<br>
+    URLをもう一度ご確認ください。
+  </p>
+
+  <%# アクションボタン群 %>
+  <%#
+    flex flex-col sm:flex-row: モバイルは縦積み、タブレット以上は横並び。
+    gap-3: ボタン間の余白（12px）。
+    justify-center: 横方向に中央揃え。
+  %>
+  <div class="flex flex-col sm:flex-row gap-3 justify-center">
+
+    <%# ダッシュボードへ戻るボタン（主要アクション） %>
+    <%#
+      bg-blue-600 text-white: 主要なアクションを青色で強調する。
+      px-6 py-3: 十分なクリック/タップ領域を確保する。
+      rounded-lg: 角を丸くして親しみやすいデザインにする。
+      hover:bg-blue-700 transition-colors: ホバー時に少し濃くしてクリック可能と分かるようにする。
+      font-medium: 読みやすいウェイト。
+    %>
+    <%= link_to dashboard_path,
+          class: "px-6 py-3 bg-blue-600 text-white rounded-lg font-medium
+                  hover:bg-blue-700 transition-colors" do %>
+      🏠 ダッシュボードへ
+    <% end %>
+
+    <%# 習慣一覧へ行くボタン（サブアクション） %>
+    <%#
+      border border-gray-300: 枠線だけで背景色なし → サブアクションとして差別化。
+      text-gray-700: 枠線に合わせたグレーテキスト。
+      hover:bg-gray-50: ホバー時に薄いグレー背景でフィードバックを与える。
+    %>
+    <%= link_to habits_path,
+          class: "px-6 py-3 border border-gray-300 text-gray-700 rounded-lg
+                  font-medium hover:bg-gray-50 transition-colors" do %>
+      📋 習慣一覧へ
+    <% end %>
+
+  </div>
+</div>

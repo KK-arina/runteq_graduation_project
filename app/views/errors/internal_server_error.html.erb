@@ -1,0 +1,59 @@
+<%# app/views/errors/internal_server_error.html.erb %>
+<%#
+  ════════════════════════════════════════════════════════
+  【このファイルの役割】
+    500 Internal Server Error が発生したときに表示するカスタムエラーページ。
+    予期しないサーバーエラー全般で表示される。
+
+  【このファイルが呼ばれる条件】
+    - DBの接続エラーや予期しないRubyの例外が発生した場合
+    ApplicationController の render_500 メソッドから呼ばれる。
+
+  【開発・テスト環境では表示されない】
+    ApplicationController の render_500 メソッド内で
+    Rails.env.development? || Rails.env.test? の場合は raise するため、
+    このページは本番環境（production）でのみ表示される。
+  ════════════════════════════════════════════════════════
+%>
+
+<div class="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 py-16">
+
+  <p class="text-8xl font-bold text-red-200 leading-none select-none">500</p>
+
+  <p class="text-6xl mt-4 mb-6">🔧</p>
+
+  <h1 class="text-2xl font-bold text-gray-800 mb-3">
+    サーバーエラーが発生しました
+  </h1>
+
+  <%#
+    500エラーはユーザーのせいではないことを明示する。
+    「しばらく待ってから再試行してください」という案内で
+    ユーザーの不安を和らげる。
+  %>
+  <p class="text-gray-500 mb-8 max-w-md mx-auto">
+    申し訳ありません。サーバー側で問題が発生しました。<br>
+    しばらく待ってから、もう一度お試しください。
+  </p>
+
+  <div class="flex flex-col sm:flex-row gap-3 justify-center">
+
+    <%#
+      link_to に onclick: "history.back()" を付けることで
+      ブラウザの「戻る」と同じ動作をさせる。
+      これにより前のページに戻ることができる。
+    %>
+    <a href="#" onclick="history.back(); return false;"
+       class="px-6 py-3 bg-blue-600 text-white rounded-lg font-medium
+              hover:bg-blue-700 transition-colors">
+      ← 前のページへ戻る
+    </a>
+
+    <%= link_to dashboard_path,
+          class: "px-6 py-3 border border-gray-300 text-gray-700 rounded-lg
+                  font-medium hover:bg-gray-50 transition-colors" do %>
+      🏠 ダッシュボードへ
+    <% end %>
+
+  </div>
+</div>

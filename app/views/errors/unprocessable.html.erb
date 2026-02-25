@@ -1,0 +1,49 @@
+<%# app/views/errors/unprocessable.html.erb %>
+<%#
+  ════════════════════════════════════════════════════════
+  【このファイルの役割】
+    422 Unprocessable Entity エラーが発生したときに表示するカスタムエラーページ。
+    主に CSRFトークンエラー（古いタブからのフォーム送信など）で表示される。
+
+  【このファイルが呼ばれる条件】
+    - フォームの送信トークンが一致しない場合（セッションの有効期限切れなど）
+    ApplicationController の render_422 メソッドから呼ばれる。
+  ════════════════════════════════════════════════════════
+%>
+
+<div class="min-h-[60vh] flex flex-col items-center justify-center text-center px-4 py-16">
+
+  <p class="text-8xl font-bold text-yellow-200 leading-none select-none">422</p>
+
+  <p class="text-6xl mt-4 mb-6">⚠️</p>
+
+  <h1 class="text-2xl font-bold text-gray-800 mb-3">
+    セッションが期限切れです
+  </h1>
+
+  <%#
+    CSRFエラーはユーザーには難しい言葉なので
+    「ページの有効期限が切れた」という分かりやすい言葉で伝える。
+    「もう一度ログインしてください」という具体的な行動を促すのがポイント。
+  %>
+  <p class="text-gray-500 mb-8 max-w-md mx-auto">
+    ページの有効期限が切れました。<br>
+    もう一度ログインして操作をやり直してください。
+  </p>
+
+  <div class="flex flex-col sm:flex-row gap-3 justify-center">
+
+    <%= link_to login_path,
+          class: "px-6 py-3 bg-blue-600 text-white rounded-lg font-medium
+                  hover:bg-blue-700 transition-colors" do %>
+      🔑 ログインページへ
+    <% end %>
+
+    <%= link_to root_path,
+          class: "px-6 py-3 border border-gray-300 text-gray-700 rounded-lg
+                  font-medium hover:bg-gray-50 transition-colors" do %>
+      🏠 トップページへ
+    <% end %>
+
+  </div>
+</div>

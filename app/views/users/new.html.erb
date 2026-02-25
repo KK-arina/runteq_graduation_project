@@ -1,186 +1,67 @@
+<%# app/views/users/new.html.erb %>
 <%# ユーザー登録ページ %>
 <%# このファイルは UsersController の new アクション（GET /users/new）で表示される %>
 
-<%# メインコンテナ %>
-<%# max-w-md: 最大幅 448px %>
-<%#   - 登録フォームに適した幅（ログインページと同じ幅で統一感を出す） %>
-<%# mx-auto: margin-left と margin-right を auto に設定 %>
-<%#   - 左右のマージンを自動計算して中央揃えにする %>
-<%# px-4 sm:px-6 lg:px-8: 左右のパディング（レスポンシブ対応） %>
-<%#   - モバイル: 16px、タブレット: 24px、PC: 32px %>
-<%# py-8: 上下のパディング 32px %>
 <div class="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-8">
-  <%# ページタイトル %>
-  <%# text-2xl: フォントサイズ 24px %>
-  <%# font-bold: フォントウェイト 700（太字） %>
-  <%# mb-6: 下マージン 24px %>
-  <%# text-gray-900: テキスト色（濃いグレー、ほぼ黒） %>
-  <%# text-center: テキストを中央揃え %>
   <h2 class="text-2xl font-bold mb-6 text-gray-900 text-center">
     新規登録
   </h2>
 
-  <%# form_with: Rails のフォームヘルパー %>
-  <%# model: @user => フォームが @user オブジェクトに紐づく %>
-  <%#   - @user が新規レコード → POST /users に送信 %>
-  <%#   - @user が既存レコード → PATCH /users/:id に送信（Rails が自動判別） %>
-  <%# local: true => 非同期送信を無効化（通常のHTMLフォームとして動作） %>
   <%= form_with model: @user, local: true do |f| %>
-    <%# エラーメッセージ表示エリア %>
-    <%# @user.errors.any?: バリデーションエラーがあるか判定 %>
-    <%#   - errors は ActiveModel::Errors オブジェクト %>
-    <%#   - バリデーション失敗時（save が false を返した時）に自動的にセットされる %>
-    <%#   - any? はエラーが1件以上あるかチェックするメソッド %>
-    <% if @user.errors.any? %>
-      <%# エラーボックス（赤色の警告エリア） %>
-      <%# bg-red-50: 薄い赤背景 %>
-      <%#   - 50 は最も薄い赤 %>
-      <%#   - エラーメッセージの背景として目立ちすぎず、かつ注意を引く色 %>
-      <%# border-l-4: 左ボーダー 4px %>
-      <%#   - border-l = border-left（左側のボーダー） %>
-      <%#   - 4 は 4px の太さ %>
-      <%#   - 左側に太いボーダーを付けることで、エラーボックスを視覚的に強調 %>
-      <%# border-red-500: ボーダー色（赤） %>
-      <%#   - 500 は中間の明るさの赤 %>
-      <%# p-4: 全方向のパディング 16px %>
-      <%#   - p = padding（上下左右すべて） %>
-      <%# mb-6: 下マージン 24px %>
-      <%#   - エラーボックスとフォームの間に余白 %>
-      <div class="bg-red-50 border-l-4 border-red-500 p-4 mb-6">
-        <%# エラー件数の見出し %>
-        <%# text-red-800: テキスト色（濃い赤） %>
-        <%#   - 800 は濃いめの赤 %>
-        <%#   - 薄い赤背景に濃い赤文字でコントラストを出す %>
-        <%# font-bold: フォントウェイト 700（太字） %>
-        <%# mb-2: 下マージン 8px %>
-        <%#   - 見出しとリストの間に余白 %>
-        <h3 class="text-red-800 font-bold mb-2">
-          <%# @user.errors.count: エラーの件数を取得 %>
-          <%#   - count メソッドでエラーの総数を数える %>
-          <%= @user.errors.count %> 件のエラーがあります
-        </h3>
-        
-        <%# エラーメッセージのリスト %>
-        <%# list-disc: リストスタイルを「●」（ディスク）にする %>
-        <%#   - disc = 黒い丸（●） %>
-        <%#   - circle（○）、square（■）などもある %>
-        <%# list-inside: リストマーカー（●）をリスト項目の内側に配置 %>
-        <%#   - outside（デフォルト）だとインデントされる %>
-        <%# text-red-700: テキスト色（赤） %>
-        <%#   - 700 は濃いめの赤 %>
-        <%# text-sm: フォントサイズ 14px %>
-        <ul class="list-disc list-inside text-red-700 text-sm">
-          <%# @user.errors.full_messages: すべてのエラーメッセージを配列で取得 %>
-          <%#   - full_messages は "Name can't be blank" のような完全な文章を返す %>
-          <%#   - 例: ["Name can't be blank", "Email is invalid"] %>
-          <%# each: 配列の各要素に対してループ処理 %>
-          <%# do |message|: 各要素を message 変数として受け取る %>
-          <% @user.errors.full_messages.each do |message| %>
-            <%# 各エラーメッセージをリスト項目として表示 %>
-            <li><%= message %></li>
-          <% end %>
-        </ul>
-      </div>
-    <% end %>
 
-    <%# ユーザー名入力エリア %>
-    <%# mb-4: 下マージン 16px %>
-    <%#   - 各入力フィールド間の余白 %>
+    <%#
+      共通バリデーションエラーパーシャルの呼び出し
+      ════════════════════════════════════════════════════════
+      render "shared/form_errors":
+        app/views/shared/_form_errors.html.erb を呼び出す。
+        ファイル名の _ は省略して書く Rails の規約。
+
+      model: @user:
+        パーシャル内で model 変数として @user を参照できるように渡す。
+        @user.errors を参照してエラー件数・メッセージを表示する。
+
+      【変更前との違い】
+        変更前: このファイルにエラー表示のHTMLを直接書いていた。
+        変更後: パーシャルに切り出して render で呼び出す。
+        メリット: デザイン変更が1箇所の修正で全フォームに反映される。
+      ════════════════════════════════════════════════════════
+    %>
+    <%= render "shared/form_errors", model: @user %>
+
     <div class="mb-4">
-      <%# label タグ: 入力欄のラベル %>
-      <%# f.label :name: name フィールドのラベルを生成 %>
-      <%# "ユーザー名": ラベルのテキスト（日本語表示） %>
       <%= f.label :name, "ユーザー名", class: "block text-sm font-medium text-gray-700 mb-2" %>
-      
-      <%# text_field: テキスト入力欄 %>
-      <%# f.text_field :name: name 属性の入力欄を生成 %>
-      <%#   - type="text" の input タグが生成される %>
-      <%# placeholder: 入力例を表示 %>
-      <%#   - ユーザーに入力のヒントを与える %>
       <%= f.text_field :name,
           placeholder: "山田太郎",
           class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
     </div>
 
-    <%# メールアドレス入力エリア %>
     <div class="mb-4">
       <%= f.label :email, "メールアドレス", class: "block text-sm font-medium text-gray-700 mb-2" %>
-      
-      <%# email_field: メールアドレス入力欄 %>
-      <%# f.email_field :email: email 属性の入力欄を生成 %>
-      <%#   - type="email" の input タグが生成される %>
-      <%#   - ブラウザがメールアドレス形式を自動チェック %>
-      <%#   - 例: "@" がないとエラーになる %>
       <%= f.email_field :email,
           placeholder: "email@example.com",
           class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
     </div>
 
-    <%# パスワード入力エリア %>
     <div class="mb-4">
       <%= f.label :password, "パスワード", class: "block text-sm font-medium text-gray-700 mb-2" %>
-      
-      <%# password_field: パスワード入力欄 %>
-      <%# f.password_field :password: password 属性の入力欄を生成 %>
-      <%#   - type="password" の input タグが生成される %>
-      <%#   - 入力内容が「●●●」のように隠される（セキュリティ） %>
-      <%# placeholder: 入力のヒント %>
-      <%#   - 最小文字数を示すことでバリデーションエラーを防ぐ %>
       <%= f.password_field :password,
           placeholder: "8文字以上",
           class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
     </div>
 
-    <%# パスワード確認入力エリア %>
-    <%# mb-6: 下マージン 24px %>
-    <%#   - 最後の入力欄とボタンの間は少し広めにする %>
     <div class="mb-6">
       <%= f.label :password_confirmation, "パスワード（確認）", class: "block text-sm font-medium text-gray-700 mb-2" %>
-      
-      <%# password_field: パスワード確認入力欄 %>
-      <%# f.password_field :password_confirmation: password_confirmation 属性の入力欄を生成 %>
-      <%#   - has_secure_password により、password と password_confirmation が一致するかチェックされる %>
-      <%#   - 一致しない場合はバリデーションエラーになる %>
       <%= f.password_field :password_confirmation,
           placeholder: "パスワードを再入力",
           class: "w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
     </div>
 
-    <%# 送信ボタン %>
-    <%# f.submit: フォーム送信ボタン %>
-    <%# "登録する": ボタンのラベル %>
-    <%# w-full: 幅 100% %>
-    <%#   - ボタンを入力欄と同じ幅にする %>
-    <%# px-4: 左右パディング 16px %>
-    <%# py-2: 上下パディング 8px %>
-    <%# bg-blue-600: 背景色（青） %>
-    <%# text-white: テキスト色（白） %>
-    <%# rounded-md: 角丸 6px %>
-    <%# hover:bg-blue-700: ホバー時に背景色を濃く %>
-    <%#   - ユーザーにボタンがクリック可能であることを伝える %>
-    <%# transition: アニメーション効果（滑らかに変化） %>
-    <%#   - 色の変化が瞬間的ではなく、0.3秒かけて滑らかに変わる %>
     <%= f.submit "登録する",
         class: "w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition" %>
   <% end %>
 
-  <%# ログインへのリンク %>
-  <%# mt-4: 上マージン 16px %>
-  <%#   - ボタンとリンクの間の余白 %>
-  <%# text-center: テキストを中央揃え %>
-  <%# text-sm: フォントサイズ 14px %>
-  <%#   - リンクはボタンより小さめにして、主要なアクション（登録）を強調 %>
-  <%# text-gray-600: テキスト色（グレー） %>
-  <%#   - 補足テキストとして目立ちすぎないようにする %>
   <div class="mt-4 text-center text-sm text-gray-600">
     すでにアカウントをお持ちの方は
-    <%# link_to: リンクを生成する Rails ヘルパー %>
-    <%# "ログイン": リンクのテキスト %>
-    <%# login_path: /login への名前付きルート %>
-    <%# text-blue-600: テキスト色（青） %>
-    <%#   - リンクであることを示す色 %>
-    <%# hover:text-blue-700: ホバー時に濃い青 %>
-    <%#   - リンクがクリック可能であることを示す %>
     <%= link_to "ログイン", login_path, class: "text-blue-600 hover:text-blue-700" %>
   </div>
 </div>

@@ -1,0 +1,18 @@
+<%# app/views/shared/_form_errors.html.erb %>
+<% if model.errors.any? %>
+  <div class="mb-6 bg-red-50 border border-red-200 border-l-4 border-l-red-500 rounded-r-lg p-4"
+       role="alert">
+    <div class="flex items-center gap-2 mb-3">
+      <h3 class="text-red-800 font-bold text-sm">
+        <%= model.errors.count %> 件の入力エラーがあります
+      </h3>
+    </div>
+    <ul class="space-y-1">
+      <% model.errors.full_messages.each do |message| %>
+        <li class="text-sm text-red-700">
+          <%= message %>
+        </li>
+      <% end %>
+    </ul>
+  </div>
+<% end %>
