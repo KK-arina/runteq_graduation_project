@@ -41,6 +41,7 @@
 - ✅ 振り返り完了時のPDCAロック自動解除機能実装完了（completed_at記録・前週pending_reflection自動完了・ロック解除バナー表示）
 - ✅ レスポンシブデザイン実装完了（全ページスマホ対応・ハンバーガーメニュー）
 - ✅ エラーハンドリング実装完了（カスタム404/422/500ページ・バリデーションエラー共通化・トースト通知）
+- ✅ セキュリティ対策実装完了（CSRF対策・SQLインジェクション対策・XSS対策・Strong Parameters・CSP設定・セッション管理強化）
 
 <br>
 
@@ -774,13 +775,13 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #25 | 振り返り完了時のPDCAロック自動解除 | ✅ 完了 | 2/22 | 4 |
 | #26 | レスポンシブデザインの調整 | ✅ 完了 | 2/23 | 4 |
 | #27 | エラーハンドリングの改善 | ✅ 完了 | 2/25 | 3 |
-| #28 | セキュリティ対策 | 🔲 未着手 | - | 3 |
+| #28 | セキュリティ対策 | ✅ 完了 | 2/26 | 3 |
 | #29 | パフォーマンス最適化 | 🔲 未着手 | - | 2 |
 | #30 | 統合テスト（主要フロー） | 🔲 未着手 | - | 6 |
 
 <br>
 
-**Week 4 進捗**: 11SP / 20SP（55%）
+**Week 4 進捗**: 14SP / 20SP（70%）
 
 <br>
 
@@ -823,6 +824,16 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - `render file:` → `render template:` 修正（ERBが正しく処理されない問題を解消）
 - `_form_errors.html.erb` 内の自己参照 `render` を除去（`SystemStackError` 無限ループを修正）
 - `habit_record_row_` にTurboターゲットIDを変更（習慣カードのID重複によるDOM置換崩れを修正）
+
+<br>
+
+#### ✅ Issue #28: セキュリティ対策
+- `config/application.rb` にセッションCookie設定を明示化（`secure`・`httponly`・`same_site: :lax`・`expire_after: 14.days`）
+- `config/environments/production.rb` にセキュリティヘッダーを `.merge!` で追加（既存Railsデフォルトヘッダーを保持）
+- `config/initializers/content_security_policy.rb` を新規作成（CSP設定・nonceによるImportmapインラインスクリプト許可）
+- `style_src :unsafe_inline` でプログレスバーのインラインスタイルを許可
+- `application_controller.rb` にCSRF/SQLi/XSS/Strong Parameters/セッション管理の実装状況コメントを補強
+- CSPブロックによるチェックボックス動作不全・プログレスバー表示崩れを修正
 
 <br>
 
@@ -1302,6 +1313,10 @@ habitflow/
 │   └── docker-entrypoint                     # コンテナ起動時の初期化スクリプト
 ├── config/
 │   ├── database.yml                      # DB接続設定
+│   ├── initializers/
+│   │   └── content_security_policy.rb   # CSP設定（nonce方式・script_src/style_src/img_src等）
+│   ├── environments/
+│   │   └── production.rb                # 本番用セキュリティヘッダー（X-Frame-Options・Referrer-Policy等を .merge! で追加）
 │   └── routes.rb                         # ルーティング設定（習慣管理追加）
 ├── Dockerfile                            # 本番環境用Dockerfile
 ├── Dockerfile.dev                        # 開発環境用Dockerfile
@@ -5427,6 +5442,134 @@ ERBコメント（`<%# %>`）内に `<%= render ... %>` を書いても、環境
 <br>
 
 パーシャルのIDとコントローラーの `turbo_stream.replace` のターゲットIDを一致させることで、チェックボックス操作後もカードのデザインが正しく保たれます。
+
+<br>
+
+## セキュリティ対策（Issue #28）
+
+<br>
+
+### 実装概要
+
+<br>
+
+- セッションCookieの明示的な設定強化
+- 本番環境へのセキュリティレスポンスヘッダー追加
+- Content Security Policy（CSP）初期化ファイルの新規作成
+- ApplicationController へのセキュリティ実装状況コメント補強
+- CSP起因のフロントエンドバグ（チェックボックス・プログレスバー）の修正
+
+<br>
+
+### セッションCookie設定（config/application.rb）
+```ruby
+# config/application.rb
+
+config.session_store :cookie_store,
+  key:          "_habitflow_session",
+  secure:       Rails.env.production?,
+  httponly:     true,
+  same_site:    :lax,
+  expire_after: 14.days
+```
+
+<br>
+
+| 設定項目 | 値 | 理由 |
+|---------|-----|------|
+| `key` | `_habitflow_session` | アプリ固有名でCookieを識別 |
+| `secure` | 本番のみ true | HTTPS通信時のみCookieを送信（本番限定） |
+| `httponly` | true | JavaScriptからのCookieアクセスを遮断（XSS対策） |
+| `same_site` | :lax | 外部サイトからのリクエストでCookieを送らない（CSRF追加対策） |
+| `expire_after` | 14.days | 端末紛失・公共PC利用リスクを考慮したバランス値 |
+
+<br>
+
+### セキュリティレスポンスヘッダー（config/environments/production.rb）
+```ruby
+# config/environments/production.rb
+
+config.action_dispatch.default_headers.merge!(
+  "X-Frame-Options"                  => "SAMEORIGIN",
+  "X-XSS-Protection"                 => "0",
+  "X-Content-Type-Options"           => "nosniff",
+  "X-Download-Options"               => "noopen",
+  "X-Permitted-Cross-Domain-Policies"=> "none",
+  "Referrer-Policy"                  => "strict-origin-when-cross-origin"
+)
+```
+
+<br>
+
+**`.merge!` を使う理由：**<br>
+`=` で代入すると Railsのデフォルトセキュリティヘッダー（CSP・Permissions-Policy等）が全消去されてしまいます。<br>
+`.merge!` で既存ヘッダーを保持しながら追加設定を上書きします。
+
+<br>
+
+### Content Security Policy（config/initializers/content_security_policy.rb）
+```ruby
+# config/initializers/content_security_policy.rb
+
+Rails.application.config.content_security_policy do |policy|
+  policy.default_src :self
+  policy.font_src    :self, :https, :data
+  policy.img_src     :self, :https, :data
+  policy.object_src  :none
+  policy.script_src  :self, :https        # nonce で Importmap のインラインスクリプトを許可
+  policy.style_src   :self, :https, :unsafe_inline  # プログレスバーのインラインスタイル対応
+end
+
+# 毎リクエストごとにランダムな nonce を生成し script タグに自動付与
+Rails.application.config.content_security_policy_nonce_generator =
+  ->(_request) { SecureRandom.base64(16) }
+
+Rails.application.config.content_security_policy_nonce_directives = ["script-src"]
+```
+
+<br>
+
+**nonce 方式を採用した理由：**<br>
+Rails 7 の Importmap は `<script type="importmap">` というインラインスクリプトを HTML に直接埋め込みます。<br>
+`script-src :self` だけではこれがブロックされ、Turbo が初期化されずチェックボックスが動作しません。<br>
+`:unsafe_inline` は全インラインスクリプトを許可してしまうため、nonce（ワンタイムトークン）方式を採用しています。<br>
+nonce を持つスクリプトのみ実行が許可されるため、攻撃者が注入したスクリプトはブロックされます。
+
+<br>
+
+**`style_src :unsafe_inline` が必要な理由：**<br>
+プログレスバーは `style="width: <%= stats[:rate] %>%"` というインライン style 属性を使用しています。<br>
+nonce は script 専用のため style 属性には使えません。<br>
+CSS インジェクションは JS インジェクションより危険度が低く、script_src は保護済みのため許容範囲と判断しています。
+
+<br>
+
+### CSPバグ修正（チェックボックス・プログレスバー）
+
+<br>
+
+Issue #27 完了後、CSP設定を有効化した際に2つのフロントエンドバグが発覚しました。
+
+<br>
+
+| バグ | 原因 | 修正 |
+|------|------|------|
+| チェックボックスが動作しない（「✓ 完了」・取り消し線が出ない） | `script-src :self` が Importmap のインラインスクリプトをブロック → Turbo が初期化されず `renderStreamMessage` が無効 | nonce 設定を追加して Importmap を許可 |
+| プログレスバーが常に全幅表示 | `style-src` が `style="width: XX%"` をブロック → ブラウザのデフォルト幅（100%）が適用 | `style_src :unsafe_inline` を追加 |
+
+<br>
+
+### 既存のセキュリティ実装（確認済み）
+
+<br>
+
+| 対策 | 実装箇所 | 実装内容 |
+|------|---------|---------|
+| CSRF対策 | ApplicationController（Rails標準） | `csrf_meta_tags` + `reset_session`（ログイン・ログアウト時） |
+| SQLインジェクション対策 | 全コントローラー | Active Record プレースホルダー使用・生SQL未使用 |
+| XSS対策 | 全ビュー | ERB `<%= %>` による自動エスケープ・`raw`/`html_safe` 未使用 |
+| Strong Parameters | 各コントローラー | `permit` で許可カラムを明示 |
+| 認可制御 | ApplicationController / 各コントローラー | `require_login` / `current_user.habits.find` で他ユーザーデータへのアクセスを遮断 |
 
 <br>
 ```

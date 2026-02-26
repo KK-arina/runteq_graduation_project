@@ -1,15 +1,62 @@
 # app/controllers/application_controller.rb
 #
+# ============================================================
+# 【このファイルの役割】
 # ApplicationController は全コントローラーの親クラスです。
 # ここに定義したメソッドはアプリ全体で共有されます。
 # helper_method に登録したメソッドはビュー(ERBファイル)からも呼び出せます。
+#
+# ============================================================
+# Issue #28: セキュリティ対策の実装状況まとめ
+# ============================================================
+#
+# 【1. CSRF対策】
+#   Rails の ActionController::Base を継承すると、
+#   CSRF保護が自動的に有効になる。
+#   具体的には:
+#   - フォーム送信時に authenticity_token（ランダムなトークン）を埋め込む
+#   - サーバーはトークンを検証し、不正なリクエストを 422 で拒否する
+#   - application.html.erb の csrf_meta_tags がそのトークンを HTML に出力している
+#   - SessionsController#create / #destroy で reset_session を呼んでいるため、
+#     ログイン時にセッション固定攻撃も防いでいる
+#
+# 【2. SQLインジェクション対策】
+#   Active Record のクエリメソッド（where, find, find_by など）は
+#   内部でプレースホルダー（? や :name）を使ってSQLを組み立てるため、
+#   ユーザー入力が SQL として実行されることはない。
+#   このアプリでは生SQL（execute や find_by_sql）を使っていないため安全。
+#
+# 【3. XSS対策（クロスサイトスクリプティング）】
+#   Rails の ERB テンプレートは <%= %> で出力する文字列を
+#   自動的に HTML エスケープする。
+#   例: <script>alert('XSS')</script> → &lt;script&gt;...&lt;/script&gt;
+#   raw() や html_safe を意図的に使わない限り、XSSは発生しない。
+#   また config/environments/production.rb で X-XSS-Protection ヘッダーも設定済み。
+#
+# 【4. Strong Parameters】
+#   各コントローラーで params.require().permit() を使い、
+#   許可するパラメータを明示的に指定している（ホワイトリスト方式）。
+#   これにより、攻撃者が意図しないカラム（admin: true など）を
+#   フォームから書き換えることを防いでいる。
+#
+# 【5. セッション管理】
+#   - config/application.rb で Cookie のセキュリティ設定を明示化
+#     (secure, httponly, same_site: :lax, expire_after: 30.days)
+#   - ログイン時: reset_session でセッション固定攻撃を防止
+#   - ログアウト時: reset_session でセッションデータを完全消去
+#   - current_user は session[:user_id] からのみ取得（JWT等は使わない）
+# ============================================================
 
 class ApplicationController < ActionController::Base
   # ============================================================
   # セキュリティ設定
   # ============================================================
 
-  # モダンなブラウザのみアクセスを許可するRails標準の設定
+  # allow_browser versions: :modern
+  #   古いブラウザ（セキュリティアップデートが止まったもの）からの
+  #   アクセスをブロックする Rails 7.1 以降の機能。
+  #   モダンブラウザのみを許可することで、
+  #   古いブラウザの脆弱性を突いた攻撃リスクを低減する。
   allow_browser versions: :modern
 
   # ============================================================
@@ -21,17 +68,25 @@ class ApplicationController < ActionController::Base
   # ActiveRecord::RecordNotFound:
   #   find(id) で該当レコードがDBに存在しない場合に Rails が発生させる例外。
   #   例: /habits/99999 にアクセスしたが id=99999 の習慣が存在しない場合。
+  #
+  #   【セキュリティ上の意味】
+  #   404を返すことで、存在しないリソースへのアクセスに対して
+  #   「存在しない」とだけ伝え、DBの内部構造などを漏らさない。
   rescue_from ActiveRecord::RecordNotFound, with: :render_404
 
   # ActionController::InvalidAuthenticityToken:
   #   CSRFトークンが不正なときに発生する例外。
-  #   例: 古いタブからフォームを送信した場合。
+  #   例: 古いタブからフォームを送信した場合や、
+  #       外部サイトからフォームを偽装して送信しようとした場合。
+  #
+  #   【セキュリティ上の意味】
+  #   CSRF攻撃を検知した場合に 422 を返し、処理を中断する。
   rescue_from ActionController::InvalidAuthenticityToken, with: :render_422
 
   # StandardError（本番環境のみ）:
   #   上記以外の予期しないエラー全般。
   #
-  # 【なぜ本番環境限定にするのか】
+  #   【なぜ本番環境限定にするのか】
   #   rescue_from StandardError を全環境で有効にすると、
   #   開発中のバグ（typoやnilエラーなど）まで全部 500ページとして表示されてしまい、
   #   どの行でどんなエラーが起きたかが分からなくなる。
@@ -59,6 +114,11 @@ class ApplicationController < ActionController::Base
   # ユーザーを取得して返します。
   # ||= を使ってメモ化しています。同じリクエスト内で2回以上呼ばれても
   # DBへの問い合わせは1回だけです。
+  #
+  # 【セキュリティ上の意味】
+  # session[:user_id] は Rails が暗号化した Cookie から取得する。
+  # 攻撃者が Cookie を改ざんしても、復号に失敗するため user_id を
+  # 書き換えることはできない（Rails の暗号化セッションの恩恵）。
   def current_user
     @current_user ||= User.find_by(id: session[:user_id]) if session[:user_id]
   end
@@ -76,6 +136,11 @@ class ApplicationController < ActionController::Base
   # ----------------------------------------------------------
   # before_action として使用します。
   # ログインしていない場合はログインページにリダイレクトします。
+  #
+  # 【セキュリティ上の意味】
+  # 認証が必要なアクション（習慣管理、ダッシュボード等）の前に
+  # 必ずこのチェックを挟むことで、未ログインユーザーが
+  # 直接URLを叩いてもデータにアクセスできないようにしている。
   def require_login
     unless logged_in?
       flash[:alert] = "ログインしてください"
@@ -87,6 +152,12 @@ class ApplicationController < ActionController::Base
   # PDCA強制ロック判定
   # ============================================================
 
+  # locked?
+  #   月曜AM4:00以降かつ前週の振り返りが未完了の場合に true を返す。
+  #
+  #   【セキュリティ上の意味】
+  #   ロック判定は「現在のユーザー」のデータだけを見ているため、
+  #   他ユーザーのロック状態に影響されることはない。
   def locked?
     return false unless logged_in?
 
@@ -110,6 +181,14 @@ class ApplicationController < ActionController::Base
   # ----------------------------------------------------------
   # require_unlocked
   # ----------------------------------------------------------
+  # before_action として使用します。
+  # ロック中は create / destroy などの書き込み操作を禁止します。
+  #
+  # 【セキュリティ上の意味】
+  # ロック判定をコントローラー層で行うことで、
+  # ビューのボタン非活性化だけに頼らない多重防御になっている。
+  # （ビューのボタン非活性は見た目だけで、HTTPリクエストを直接送れば
+  #   バイパスできてしまうため、サーバー側でも必ずチェックする）
   def require_unlocked
     return unless locked?
 
@@ -131,61 +210,40 @@ class ApplicationController < ActionController::Base
   # Issue #27: カスタムエラーページ表示メソッド
   # ============================================================
 
-  # ----------------------------------------------------------
   # render_404
-  # ----------------------------------------------------------
-  # 404 Not Found エラー時に呼ばれます。
-  # rescue_from ActiveRecord::RecordNotFound と
-  # routes.rb の catch-all（match "*path"）から呼ばれます。
+  #   404 Not Found エラー時に呼ばれます。
+  #   【セキュリティ上の意味】
+  #   詳細なエラーメッセージを返さないことで、
+  #   DBの構造やデータの存在有無を攻撃者に教えない。
   def render_404(exception = nil)
-    # Rails.logger.info:
-    #   ログレベル「info」で記録する。
-    #   Renderのログや開発環境のターミナルで確認できる。
-    #   exception&.message の & はnilセーフ演算子で、
-    #   exception が nil でも NoMethodError にならないようにする。
     Rails.logger.info "404 Not Found: #{exception&.message}"
     render_error_page("errors/not_found", :not_found)
   end
 
-  # ----------------------------------------------------------
   # render_422
-  # ----------------------------------------------------------
-  # 422 Unprocessable Entity エラー時に呼ばれます。
-  # セキュリティ上重要なイベントなので logger.warn（警告レベル）で記録します。
+  #   422 Unprocessable Entity エラー時に呼ばれます。
+  #   CSRFトークン不正など、セキュリティ上重要なイベントを
+  #   logger.warn（警告レベル）で記録します。
   def render_422(exception = nil)
     Rails.logger.warn "422 Unprocessable Entity: #{exception&.message}"
     render_error_page("errors/unprocessable", :unprocessable_entity)
   end
 
-  # ----------------------------------------------------------
   # render_500
-  # ----------------------------------------------------------
-  # 500 Internal Server Error エラー時に呼ばれます。
-  # rescue_from StandardError（本番環境のみ有効）から呼ばれます。
-  # 開発・テスト環境では rescue_from 自体が無効なので、このメソッドは呼ばれません。
+  #   500 Internal Server Error エラー時に呼ばれます。
+  #   本番環境のみ有効（開発環境ではRailsのデバッグ画面を使う）。
+  #   【セキュリティ上の意味】
+  #   スタックトレースをユーザーに見せないことで、
+  #   内部実装の詳細が攻撃者に漏れることを防ぐ。
   def render_500(exception = nil)
-    # logger.error:
-    #   ログレベル「error」で記録する。予期しないエラーが起きたときに
-    #   すぐに気づけるよう、最も高い重要度でログを残す。
-    # backtrace&.first(5):
-    #   エラーが発生したファイルと行番号を最大5行記録する。
-    #   スタックトレース全体は長すぎるので先頭5行だけ取得する。
     Rails.logger.error "500 Internal Server Error: #{exception&.message}"
     Rails.logger.error exception&.backtrace&.first(5)&.join("\n")
     render_error_page("errors/internal_server_error", :internal_server_error)
   end
 
-  # ----------------------------------------------------------
   # render_error_page（共通ヘルパー）
-  # ----------------------------------------------------------
-  # render_404 / render_422 / render_500 から呼ばれる共通処理。
-  # DRY（Don't Repeat Yourself）の原則に従い、
-  # 同じ render の書き方を3回書かないために切り出している。
-  #
-  # template: "errors/not_found" のような文字列
-  #           → app/views/errors/not_found.html.erb を指す
-  # status:   :not_found / :unprocessable_entity / :internal_server_error など
-  #           → HTTP ステータスコードをシンボルで指定する
+  #   render_404 / render_422 / render_500 から呼ばれる共通処理。
+  #   DRY原則に従い、同じ render の書き方を繰り返さないために切り出している。
   def render_error_page(template, status)
     render template: template, layout: "application", status: status
   end
