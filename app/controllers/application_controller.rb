@@ -155,12 +155,36 @@ class ApplicationController < ActionController::Base
   # locked?
   #   月曜AM4:00以降かつ前週の振り返りが未完了の場合に true を返す。
   #
-  #   【セキュリティ上の意味】
-  #   ロック判定は「現在のユーザー」のデータだけを見ているため、
-  #   他ユーザーのロック状態に影響されることはない。
+  # ============================================================
+  # Issue #29: クエリ最適化（修正版）
+  # ============================================================
+  # 【問題の経緯】
+  #   初版の .completed.exists? 変更では「前週レコードが存在しない場合」の
+  #   考慮が不足していた。
+  #
+  #   exists? は「完了済みレコードが存在するか」を返すため:
+  #   - 前週レコードが存在しない → exists? = false → !false = true（ロックあり）❌
+  #   - 前週レコードが未完了    → exists? = false → !false = true（ロックあり）✅
+  #   → 初週ユーザー（前週レコードなし）が誤ってロックされてしまう
+  #
+  # 【解決方法】
+  #   「前週レコードが存在するか」を先に確認し、存在しない場合は初週として
+  #   ロックしない（return false）。
+  #   存在する場合のみ「完了済みか」を確認する。
+  #
+  # 【最終的なSQLの流れ】
+  #   1. SELECT 1 FROM weekly_reflections WHERE user_id=? AND week_start_date=? LIMIT 1
+  #      → 前週レコードの存在確認（EXISTS）
+  #   2. SELECT 1 FROM weekly_reflections WHERE user_id=? AND week_start_date=?
+  #      AND completed_at IS NOT NULL LIMIT 1
+  #      → 完了済みかの確認（EXISTS）
+  #   両方とも SELECT * ではなく SELECT 1 なのでレコードをメモリにロードしない（高速）
   def locked?
     return false unless logged_in?
 
+    # ── Step 1: 現在が「月曜日のAM4:00以降」かどうかを確認する ────────
+    # change(hour: 4, min: 0, sec: 0): 今週月曜日の AM4:00 を計算する
+    # now < this_monday_4am: まだ AM4:00 前ならロック条件を満たさないので即 false
     now = Time.current
     this_monday_4am = Date.current
                           .beginning_of_week(:monday)
@@ -168,14 +192,38 @@ class ApplicationController < ActionController::Base
                           .change(hour: 4, min: 0, sec: 0)
     return false if now < this_monday_4am
 
+    # ── Step 2: 前週の月曜日を計算する ─────────────────────────────
+    # HabitRecord.today_for_record: AM4:00基準の「今日」を返すモデルメソッド
+    # .beginning_of_week(:monday) - 1.week: 前週の月曜日
     last_week_start = HabitRecord.today_for_record
                                  .beginning_of_week(:monday) - 1.week
 
-    last_week_reflection = current_user.weekly_reflections
-                                       .find_by(week_start_date: last_week_start)
-    return false if last_week_reflection.nil?
+    # ── Step 3: 前週のレコード自体が存在するか確認する ─────────────
+    # 【なぜ存在確認が必要か】
+    # 初週ユーザーは前週の振り返りレコードが存在しない。
+    # この場合「振り返りを完了していない」ではなく「まだ振り返りの対象期間がない」
+    # ため、ロックすべきではない（ユーザー体験として不合理）。
+    #
+    # .for_week(last_week_start): week_start_date = 前週月曜日 で絞り込むスコープ
+    # .exists?: レコードが1件でも存在すれば true（SELECT 1 ... LIMIT 1）
+    last_week_exists = current_user.weekly_reflections
+                                   .for_week(last_week_start)
+                                   .exists?
 
-    last_week_reflection.pending?
+    # 前週レコードが存在しない = 初週ユーザー → ロックしない
+    return false unless last_week_exists
+
+    # ── Step 4: 前週の振り返りが「完了済み」かどうかを確認する ──────
+    # .completed: completed_at が NOT NULL のもの（WeeklyReflection に定義済みスコープ）
+    # .exists?: 完了済みレコードが存在すれば true（メモリロードなし）
+    #
+    # last_week_completed が true  → 前週は完了済み → ロックなし（false）
+    # last_week_completed が false → 前週は未完了   → ロックあり（true）
+    last_week_completed = current_user.weekly_reflections
+                                      .for_week(last_week_start)
+                                      .completed
+                                      .exists?
+    !last_week_completed
   end
 
   # ----------------------------------------------------------
@@ -243,8 +291,40 @@ class ApplicationController < ActionController::Base
 
   # render_error_page（共通ヘルパー）
   #   render_404 / render_422 / render_500 から呼ばれる共通処理。
-  #   DRY原則に従い、同じ render の書き方を繰り返さないために切り出している。
+  #
+  # ============================================================
+  # Issue #29: turbo_stream 形式への対応を追加
+  # ============================================================
+  # 【問題の経緯】
+  #   Turbo Stream リクエスト（headers: { Accept: "text/vnd.turbo-stream.html" }）に対して
+  #   render template: "errors/not_found", layout: "application" を実行すると、
+  #   Rails が turbo_stream 形式のテンプレート（errors/not_found.turbo_stream.erb）を
+  #   探しに行くが存在しないため MissingTemplate エラーが発生していた。
+  #
+  # 【解決方法】
+  #   respond_to で形式を分岐する。
+  #   - turbo_stream の場合: head :status のみを返す（ボディなし）
+  #     → テンプレート不要で確実に動作する
+  #     → Turbo はステータスコードを見てエラーを判断できる
+  #   - html の場合: 既存のエラーページをレンダリング（変更なし）
+  #
+  # 【head :status とは？】
+  #   ボディ（HTML）を含まずにHTTPステータスコードだけを返すメソッド。
+  #   例: head :not_found → HTTP/1.1 404 Not Found のレスポンスだけを返す
+  #   テンプレートを必要としないため MissingTemplate エラーが起きない。
   def render_error_page(template, status)
-    render template: template, layout: "application", status: status
+    respond_to do |format|
+      # turbo_stream リクエスト（Stimulusからのfetchなど）の場合
+      # テンプレートなしでステータスコードだけを返す
+      format.turbo_stream { head status }
+
+      # 通常の HTML リクエストの場合
+      # 既存のエラーページテンプレートをレンダリングする（変更なし）
+      format.html { render template: template, layout: "application", status: status }
+
+      # JSON リクエストの場合（APIからのアクセスや将来の拡張を考慮）
+      # シンプルなエラーメッセージをJSONで返す
+      format.json { render json: { error: status.to_s }, status: status }
+    end
   end
 end

@@ -42,6 +42,7 @@
 - ✅ レスポンシブデザイン実装完了（全ページスマホ対応・ハンバーガーメニュー）
 - ✅ エラーハンドリング実装完了（カスタム404/422/500ページ・バリデーションエラー共通化・トースト通知）
 - ✅ セキュリティ対策実装完了（CSRF対策・SQLインジェクション対策・XSS対策・Strong Parameters・CSP設定・セッション管理強化）
+- ✅ パフォーマンス最適化実装完了（Bullet gem導入・N+1問題解消・DBインデックス追加）
 
 <br>
 
@@ -776,12 +777,12 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #26 | レスポンシブデザインの調整 | ✅ 完了 | 2/23 | 4 |
 | #27 | エラーハンドリングの改善 | ✅ 完了 | 2/25 | 3 |
 | #28 | セキュリティ対策 | ✅ 完了 | 2/26 | 3 |
-| #29 | パフォーマンス最適化 | 🔲 未着手 | - | 2 |
+| #29 | パフォーマンス最適化 | ✅ 完了 | 2/26 | 2 |
 | #30 | 統合テスト（主要フロー） | 🔲 未着手 | - | 6 |
 
 <br>
 
-**Week 4 進捗**: 14SP / 20SP（70%）
+**Week 4 進捗**: 16SP / 20SP（80%）
 
 <br>
 
@@ -834,6 +835,19 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - `style_src :unsafe_inline` でプログレスバーのインラインスタイルを許可
 - `application_controller.rb` にCSRF/SQLi/XSS/Strong Parameters/セッション管理の実装状況コメントを補強
 - CSPブロックによるチェックボックス動作不全・プログレスバー表示崩れを修正
+
+#### ✅ Issue #29: パフォーマンス最適化
+
+<br>
+
+- Bullet gem 導入（development環境でのN+1問題自動検出・ログ出力・フッター表示）
+- `build_habit_stats` メソッドを `WeeklyReflectionsController` に実装（`.group(:habit_id).count` によるDB集計でActiveRecordオブジェクト生成をゼロに）
+- `ApplicationController#locked?` を `find_by` → `exists?` に変更（SELECT 1 ... LIMIT 1 でメモリロードなし）
+- 初週ユーザーの誤ロックを修正（前週レコード存在確認を追加）
+- `render_error_page` に turbo_stream 対応を追加（`head status` でMissingTemplateエラーを解消）
+- `weekly_reflections` フィクスチャの `completed_at` を全件明示設定（`pending_reflection` は `locked_user` 専用に分離）
+- `weekly_reflections (user_id, week_start_date, completed_at)` 3カラム複合インデックス追加（部分インデックス・CONCURRENTLY）
+- 全テスト成功: 182 runs, 467 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
@@ -1215,9 +1229,9 @@ habitflow/
 │   │   └── stylesheets/
 │   │       └── application.css              # カスタムCSS（.arrow-divider 疑似要素：モバイル↓/PC→の矢印切り替え）
 │   ├── controllers/
-│   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login, locked?, require_unlocked）
+│   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login, locked?, require_unlocked, render_error_page）※turbo_stream対応済み
 │   │   ├── dashboards_controller.rb     # ダッシュボード（index）今週の達成率・今日のチェックリスト
-│   │   ├── weekly_reflections_controller.rb # 週次振り返り（index, new, create, show）complete!によるロック解除・was_locked保存前記録
+│   │   ├── weekly_reflections_controller.rb # 週次振り返り（index, new, create, show）complete!によるロック解除・was_locked保存前記録・build_habit_statsによるDB集計
 │   │   ├── habit_records_controller.rb  # 習慣記録（create, update）ネストされたルーティング
 │   │   ├── habits_controller.rb         # 習慣管理（index, new, create, destroy）
 │   │   ├── errors_controller.rb         # カスタムエラーページ（not_found / unprocessable / internal_server_error）catch-all対応
@@ -1270,7 +1284,8 @@ habitflow/
 │   │   ├── YYYYMMDDHHMMSS_create_habit_records.rb # HabitRecordsテーブル作成（AM4:00基準、UNIQUE制約）
 │   │   ├── YYYYMMDDHHMMSS_create_weekly_reflections.rb # WeeklyReflectionsテーブル作成
 │   │   ├── YYYYMMDDHHMMSS_create_weekly_reflection_habit_summaries.rb # WeeklyReflectionHabitSummariesテーブル作成
-│   │   └── YYYYMMDDHHMMSS_add_completed_at_to_weekly_reflections.rb # completed_atカラム追加（振り返り完了日時の記録）
+│   │   ├── YYYYMMDDHHMMSS_add_completed_at_to_weekly_reflections.rb # completed_atカラム追加（振り返り完了日時の記録）
+│   │   └── YYYYMMDDHHMMSS_add_performance_indexes.rb # パフォーマンス最適化インデックス（weekly_reflections 3カラム複合インデックス・CONCURRENTLY）
 │   ├── schema.rb                              # データベーススキーマ
 │   └── seeds.rb                               # サンプルデータ（2ユーザー、計10件の習慣）
 ├── docs/
@@ -5570,6 +5585,121 @@ Issue #27 完了後、CSP設定を有効化した際に2つのフロントエン
 | XSS対策 | 全ビュー | ERB `<%= %>` による自動エスケープ・`raw`/`html_safe` 未使用 |
 | Strong Parameters | 各コントローラー | `permit` で許可カラムを明示 |
 | 認可制御 | ApplicationController / 各コントローラー | `require_login` / `current_user.habits.find` で他ユーザーデータへのアクセスを遮断 |
+
+<br>
+
+## パフォーマンス最適化（Issue #29）
+
+<br>
+
+### Bullet gem 導入
+
+<br>
+
+development環境に Bullet gem を追加し、N+1問題を自動検出できる環境を整備しました。
+```ruby
+# config/environments/development.rb
+
+config.after_initialize do
+  Bullet.enable       = true
+  Bullet.alert        = true
+  Bullet.rails_logger = true
+  Bullet.add_footer   = true
+end
+```
+
+<br>
+
+### N+1問題の解消：build_habit_stats
+
+<br>
+
+**変更前の問題**：<br>
+`WeeklyReflectionsController` の `index` / `new` / `create` で `habit.weekly_progress_stats(current_user)` をループ内で呼んでいたため、習慣がN件あるとSQLがN回発行されていました。
+
+<br>
+
+**変更後**：<br>
+`.group(:habit_id).count` によりDB側でCOUNT/GROUP BYを実行し、ActiveRecordオブジェクトを一切生成しない設計に変更しました。
+```ruby
+# app/controllers/weekly_reflections_controller.rb
+
+def build_habit_stats(habits, user)
+  today      = HabitRecord.today_for_record
+  week_start = today.beginning_of_week(:monday)
+  week_range = week_start..today
+
+  # 変更前: .group_by(&:habit_id) → 全レコードをメモリにロード
+  # 変更後: .group(:habit_id).count → DBがCOUNT/GROUP BYで集計
+  records_count_by_habit = HabitRecord
+    .where(user: user, habit: habits, record_date: week_range, completed: true)
+    .group(:habit_id)
+    .count
+
+  habits.each_with_object({}) do |habit, hash|
+    completed_count = records_count_by_habit[habit.id] || 0
+    rate = habit.weekly_target.zero? ? 0 :
+      ((completed_count.to_f / habit.weekly_target) * 100).clamp(0, 100).floor
+    hash[habit.id] = { rate: rate, completed_count: completed_count }
+  end
+end
+```
+
+<br>
+
+**効果**：SQL発行回数 N+1回 → 2回（habits取得 + records一括集計）
+
+<br>
+
+### ApplicationController#locked? の最適化
+
+<br>
+
+`find_by` でレコード全体をメモリにロードしていた箇所を `exists?` に変更しました。
+
+<br>
+
+| 変更点 | 変更前 | 変更後 |
+|--------|--------|--------|
+| SQL | `SELECT * FROM ...` | `SELECT 1 FROM ... LIMIT 1` |
+| メモリ | ActiveRecordオブジェクト生成あり | オブジェクト生成なし |
+| 初週ユーザー | 前週レコードなし → `!false` → 誤ってロック | 前週レコード存在確認を追加 → 正しくスルー |
+
+<br>
+
+### インデックス追加
+
+<br>
+
+`locked?` と振り返り一覧の両クエリパターンをカバーする3カラム複合インデックスを1本追加しました。
+```ruby
+# db/migrate/YYYYMMDDHHMMSS_add_performance_indexes.rb
+
+add_index :weekly_reflections,
+          [:user_id, :week_start_date, :completed_at],
+          where: "completed_at IS NOT NULL",
+          name: "idx_weekly_reflections_user_week_completed",
+          algorithm: :concurrently
+```
+
+<br>
+
+- 部分インデックス（`WHERE completed_at IS NOT NULL`）でインデックスサイズを削減
+- `CONCURRENTLY` で既存データへのロックなしにインデックスを作成
+- 複合インデックスの左端の法則により `locked?` と `index` 両クエリをカバー
+
+<br>
+
+### フィクスチャ設計の改善
+
+<br>
+
+`pending_reflection`（`completed_at: ~`）が `users(:one)` に干渉して Habit 系テストが全滅する問題を修正しました。
+
+<br>
+
+**基本方針**：フィクスチャは「完了済み（`completed_at` あり）」を基本とし、未完了データが必要なテストはテストコード内で動的に作成します。<br>
+`pending_reflection` は `locked_user`（`users(:one)` とは別ユーザー）専用に分離し、干渉を完全に排除しています。
 
 <br>
 ```

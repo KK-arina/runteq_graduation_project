@@ -1,27 +1,36 @@
-# ファイルパス: test/fixtures/weekly_reflections.yml
+# test/fixtures/weekly_reflections.yml
 #
-# 【このファイルの役割】
-# テスト用のサンプルデータ（フィクスチャ）を定義する。
-# Issue #25 では以下の2つのフィクスチャを追加する:
-#   - pending_reflection: 未完了の振り返り（complete! テスト用）
-#   - completed_reflection: 完了済みの振り返り（冪等性テスト用）
+# ============================================================
+# Issue #29: フィクスチャの completed_at を全件見直し
+# ============================================================
+# 【修正理由】
+#   テストの基本前提は「ロック解除状態（ロックされていない）」であること。
+#   completed_at が nil のフィクスチャが users(:one) に紐づく前週の日付に
+#   存在すると、locked? が true になり Habit 系テストが全滅する。
 #
-# 【フィクスチャの書き方】
-# キー名: そのフィクスチャの識別名（テストコードで reflections(:キー名) として使う）
-# カラム名: DBのカラム名をそのまま書く
-# <%= %> : ERB記法。Rubyコードを実行してその結果を埋め込む
+#   原則: フィクスチャは「完了済み（completed_at あり）」を基本とする。
+#   「未完了」が必要なテストは、テストコード内で動的に作成する（create_last_week_reflection）。
+#
+# 【completed_at の設定ルール】
+#   - 完了済み振り返り → 固定の過去日時を設定
+#   - 未完了の振り返り → テストコード内で動的に作成（フィクスチャには書かない）
+#   - pending_reflection だけ例外的に nil のままにするが、
+#     locked_user（users(:one) とは別ユーザー）に紐づけることで干渉しない
 
-# ---- 既存のフィクスチャ（Week 3 で追加済み） ----
-
+# ----------------------------------------------------------------
 # for_summary_test: 振り返り詳細テスト用
+# ----------------------------------------------------------------
 for_summary_test:
   user: one
   week_start_date: "2026-01-12"
   week_end_date:   "2026-01-18"
   reflection_comment: "テスト振り返り1"
+  # completed_at を明示的に設定する（nil だと locked? に干渉するリスクがある）
   completed_at: "2026-01-18 15:00:00"
 
+# ----------------------------------------------------------------
 # one_habit_one: 習慣スナップショットテスト用
+# ----------------------------------------------------------------
 one_habit_one:
   user: one
   week_start_date: "2026-01-19"
@@ -29,7 +38,9 @@ one_habit_one:
   reflection_comment: "テスト振り返り2"
   completed_at: "2026-01-25 14:00:00"
 
-# two_habit_one: 習慣スナップショットテスト用
+# ----------------------------------------------------------------
+# two_habit_one: ユーザー2の振り返りテスト用
+# ----------------------------------------------------------------
 two_habit_one:
   user: two
   week_start_date: "2026-01-19"
@@ -37,25 +48,12 @@ two_habit_one:
   reflection_comment: "ユーザー2の振り返り"
   completed_at: "2026-01-25 16:00:00"
 
-
-# ---------------------------------------------------------------
-# completed_one（既存キー・削除禁止）
-#
-# 【なぜこのキーが必要か】
-# weekly_reflection_habit_summaries.yml の以下のキーが参照している:
-#   - two_habit_one  → weekly_reflection: completed_one
-#   - summary_one    → weekly_reflection: completed_one
-#   - summary_two    → weekly_reflection: completed_one
-#
-# これらのフィクスチャを有効にするためには、
-# weekly_reflections テーブルに completed_one レコードが存在している必要がある。
-# このキーを削除または名前変更すると外部キー違反エラーになる。
-#
-# 【週が重複しない日付を選ぶ理由】
-# フィクスチャのUNIQUE制約（user_id + week_start_date）に違反しないよう、
-# 他のキー（for_summary_test: 2026-01-12, one_habit_one: 2026-01-19）と
-# 異なる週の日付を使用する。
-# ---------------------------------------------------------------
+# ----------------------------------------------------------------
+# completed_one: habit_summaries フィクスチャが参照する（削除禁止）
+# ----------------------------------------------------------------
+# weekly_reflection_habit_summaries.yml の以下が参照している:
+#   - two_habit_one / summary_one / summary_two → weekly_reflection: completed_one
+# このキーを削除すると外部キー違反エラーになるため変更しない。
 completed_one:
   user: one
   week_start_date: "2026-01-05"
@@ -63,32 +61,28 @@ completed_one:
   reflection_comment: "completed_oneの振り返り"
   completed_at: "2026-01-11 15:00:00"
 
-# ============================================================
-# Issue #25 で追加するフィクスチャ
-# ============================================================
-
-# pending_reflection
-#   → completed_at が nil（未完了）の振り返り
-#   → complete! メソッドのテストで使う
-#   → locked_user (users.yml に追加) に紐づける
-pending_reflection:
-  user: locked_user
-  # week_start_date: 2026-02-09（先週の月曜日）を設定
-  # これにより travel_to "2026-02-16 04:01:00" のときに「前週未完了」状態が作れる
-  week_start_date: "2026-02-09"
-  week_end_date:   "2026-02-15"
-  reflection_comment: "未完了の振り返り"
-  # completed_at は nil（設定しない = 未完了）
-  # YMLで null を使うか、単純に省略することで nil になる
-  completed_at: ~
-
-# completed_reflection
-#   → completed_at が設定済みの振り返り
-#   → 冪等性テスト（二重 complete! でも変化しないこと）で使う
+# ----------------------------------------------------------------
+# completed_reflection: 完了済み振り返りテスト用
+# ----------------------------------------------------------------
 completed_reflection:
   user: one
   week_start_date: "2026-02-02"
   week_end_date:   "2026-02-08"
   reflection_comment: "完了済みの振り返り"
-  # 固定の日時を設定しておくことで、テストが日時に依存しない
   completed_at: "2026-02-08 15:00:00"
+
+# ----------------------------------------------------------------
+# pending_reflection: 未完了振り返りテスト用（locked_user 専用）
+# ----------------------------------------------------------------
+# 【重要】このフィクスチャは必ず locked_user（users(:one) とは別）に
+# 紐づけること。users(:one) に紐づけると Habit 系テストがロックされる。
+#
+# completed_at: ~ は意図的な nil。
+# PdcaLockTest は travel_to + create_last_week_reflection で
+# 動的にデータを作るため、このフィクスチャは complete! の単体テスト専用。
+pending_reflection:
+  user: locked_user
+  week_start_date: "2026-02-09"
+  week_end_date:   "2026-02-15"
+  reflection_comment: "未完了の振り返り"
+  completed_at: ~
