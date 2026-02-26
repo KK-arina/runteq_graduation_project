@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_02_22_004225) do
+ActiveRecord::Schema[7.2].define(version: 2026_02_26_141431) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -70,6 +70,8 @@ ActiveRecord::Schema[7.2].define(version: 2026_02_22_004225) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "completed_at"
+    t.index ["completed_at"], name: "index_weekly_reflections_on_completed_at", where: "(completed_at IS NOT NULL)"
+    t.index ["user_id", "completed_at"], name: "index_weekly_reflections_on_user_id_and_completed_at", where: "(completed_at IS NOT NULL)"
     t.index ["user_id", "week_start_date"], name: "index_weekly_reflections_on_user_id_and_week_start_date", unique: true
     t.index ["user_id"], name: "index_weekly_reflections_on_user_id"
   end
