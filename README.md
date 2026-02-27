@@ -43,6 +43,7 @@
 - ✅ エラーハンドリング実装完了（カスタム404/422/500ページ・バリデーションエラー共通化・トースト通知）
 - ✅ セキュリティ対策実装完了（CSRF対策・SQLインジェクション対策・XSS対策・Strong Parameters・CSP設定・セッション管理強化）
 - ✅ パフォーマンス最適化実装完了（Bullet gem導入・N+1問題解消・DBインデックス追加）
+- ✅ 統合テスト（主要フロー）実装完了（202 runs, 602 assertions, 0 failures）
 
 <br>
 
@@ -773,16 +774,16 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
  Issue | タイトル | ステータス | 完了日 | SP |
 |-------|---------|-----------|--------|-----|
-| #25 | 振り返り完了時のPDCAロック自動解除 | ✅ 完了 | 2/22 | 4 |
+| #25 | 振り返り完了時のPDCAロック自動解除 | ✅ 完了 | 2/22 | 2 |
 | #26 | レスポンシブデザインの調整 | ✅ 完了 | 2/23 | 4 |
 | #27 | エラーハンドリングの改善 | ✅ 完了 | 2/25 | 3 |
 | #28 | セキュリティ対策 | ✅ 完了 | 2/26 | 3 |
 | #29 | パフォーマンス最適化 | ✅ 完了 | 2/26 | 2 |
-| #30 | 統合テスト（主要フロー） | 🔲 未着手 | - | 6 |
+| #30 | 統合テスト（主要フロー） | ✅ 完了 | 2/27 | 6 |
 
 <br>
 
-**Week 4 進捗**: 16SP / 20SP（80%）
+**Week 4 進捗**: 20SP / 20SP（100%） 🎉
 
 <br>
 
@@ -848,6 +849,21 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - `weekly_reflections` フィクスチャの `completed_at` を全件明示設定（`pending_reflection` は `locked_user` 専用に分離）
 - `weekly_reflections (user_id, week_start_date, completed_at)` 3カラム複合インデックス追加（部分インデックス・CONCURRENTLY）
 - 全テスト成功: 182 runs, 467 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #30: 統合テスト（主要フロー）
+
+<br>
+
+- エンドツーエンドの主要フロー統合テスト5ファイル（20テストケース）を新規作成
+- 既存11ファイルは個別機能テスト担当・今回は「一連の流れ」のみをカバーする棲み分け設計
+- `travel_to` による完全固定日付（2026-03-09/16等）でどの環境・時間帯でも再現性保証
+- `log_in_as` ヘルパーを統合テストでも共通利用（test_helper.rb の設計方針を統一維持）
+- fixtures 日付との重複回避設計（week_start_date が既存fixtures と衝突しない日付を選定）
+- `HabitRecord.where(user: @user).delete_all` でテスト間のデータ干渉を排除（pdca_lock_flow_test）
+- Sprockets キャッシュの権限エラー（`Permission denied @ apply2files`）を `sudo rm -rf tmp/cache/assets` で解消
+- 全テスト成功: 202 runs, 602 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
@@ -1312,7 +1328,12 @@ habitflow/
 │   │   ├── habit_daily_record_test.rb         # 日次記録・AM4:00境界値テスト（6テストケース）Issue #17
 │   │   ├── weekly_reflection_index_test.rb    # 週次振り返り一覧統合テスト Issue #21
 │   │   ├── weekly_reflection_create_test.rb   # 週次振り返り作成統合テスト（E2Eフロー・1000文字バリデーション）Issue #22
-│   │   └── pdca_lock_test.rb                  # PDCAロック統合テスト（月曜AM4:00判定・ロック中の作成/削除ブロック・即時保存維持・completed_atベース判定）Issue #24/#25
+│   │   ├── pdca_lock_test.rb                  # PDCAロック統合テスト（月曜AM4:00判定・ロック中の作成/削除ブロック・即時保存維持・completed_atベース判定）Issue #24/#25
+│   │   ├── user_auth_flow_test.rb             # ユーザー認証E2Eフロー統合テスト（登録→ダッシュボード→ログアウト→再ログイン・未ログイン時アクセス制限）Issue #30
+│   │   ├── habit_full_flow_test.rb            # 習慣E2Eフロー統合テスト（作成→日次記録→進捗確認・Turbo Stream検証・Empty State）Issue #30
+│   │   ├── weekly_reflection_flow_test.rb     # 週次振り返りE2Eフロー統合テスト（一覧→新規作成→保存→詳細確認・スナップショット作成確認）Issue #30
+│   │   ├── pdca_lock_flow_test.rb             # PDCAロックE2Eフロー統合テスト（ロック発動→解除→習慣作成・初週ユーザー確認・travel_to完全固定日付）Issue #30
+│   │   └── error_cases_test.rb               # エラーケース統合テスト（404・認可・バリデーション422・他ユーザーデータアクセス防止）Issue #30
 │   ├── controllers/
 │   │   ├── dashboards_controller_test.rb      # DashboardsControllerテスト（3テストケース）Issue #18
 │   │   ├── weekly_reflections_controller_test.rb # WeeklyReflectionsControllerテスト（show/index/new/create・認可・境界値・ロック解除）Issue #21/#22/#23/#25
@@ -5700,6 +5721,120 @@ add_index :weekly_reflections,
 
 **基本方針**：フィクスチャは「完了済み（`completed_at` あり）」を基本とし、未完了データが必要なテストはテストコード内で動的に作成します。<br>
 `pending_reflection` は `locked_user`（`users(:one)` とは別ユーザー）専用に分離し、干渉を完全に排除しています。
+
+<br>
+
+## 統合テスト（Issue #30）
+
+<br>
+
+### テスト設計方針
+
+<br>
+
+既存11ファイルが「個別機能の正常系・異常系」を担当しているのに対し、<br>
+Issue #30 では「複数機能が連携して動く一連のフロー（エンドツーエンド）」のみをカバーします。<br>
+責務を明確に分離することで、テスト同士の重複をなくしメンテナンスコストを最小化しています。
+
+<br>
+
+### 作成した統合テストファイル（5ファイル・20テストケース）
+
+<br>
+
+| ファイル | テスト数 | カバー範囲 |
+|---------|---------|-----------|
+| `user_auth_flow_test.rb` | 3 | 登録→ダッシュボード→ログアウト→再ログインの完全フロー |
+| `habit_full_flow_test.rb` | 3 | 習慣作成→日次記録（Turbo Stream）→ダッシュボード進捗確認 |
+| `weekly_reflection_flow_test.rb` | 3 | 振り返り一覧→新規作成→保存→詳細確認・スナップショット検証 |
+| `pdca_lock_flow_test.rb` | 2 | ロック発動→振り返り完了→ロック解除→習慣作成の完全フロー |
+| `error_cases_test.rb` | 9 | 404・認可エラー・バリデーション422・他ユーザーデータアクセス防止 |
+
+<br>
+
+### 主要な実装ポイント
+
+<br>
+
+**travel_to による完全固定日付（再現性保証）**
+
+<br>
+
+PDCAロックや週次振り返りは「今週」「前週」という時間依存の概念を持つため、<br>
+テストを実行する曜日・時間帯によって結果が変わるリスクがあります。
+```ruby
+# travel_to の外で Date.current を計算すると travel_to の効果が当たらない（NG）
+next_monday = Date.current.beginning_of_week(:monday) + 1.week
+travel_to next_monday.in_time_zone.change(hour: 4, min: 1) do ...
+
+# 完全固定の日付を使うことで「どこで実行しても同じ結果」になる（OK）
+travel_to Time.zone.local(2026, 3, 9, 4, 1, 0) do ...
+```
+
+<br>
+
+**Turbo Stream レスポンスの検証**
+```ruby
+# Accept ヘッダーを明示することで Turbo Stream フォーマットでレスポンスが返ることを確認
+post habit_habit_records_path(habit),
+     params:  { completed: "1" },
+     headers: { "Accept" => "text/vnd.turbo-stream.html" }
+
+assert_response :success
+assert_equal "text/vnd.turbo-stream.html", response.media_type
+```
+
+<br>
+
+**422 テストのビュー確認（レビュー反映）**
+
+<br>
+
+HTTPステータスが 422 でも、ビューが壊れてエラーが表示されていない場合はテストをパスしてしまいます。<br>
+`assert_select "form"` を追加することでフォームの再レンダリングまで検証しています。
+```ruby
+assert_response :unprocessable_entity
+assert_select "form"  # フォームが再表示されていること（ビュー崩壊を検知）
+```
+
+<br>
+
+**fixtures との日付重複回避設計**
+
+<br>
+
+`travel_to` で固定する日付は既存 fixtures の `week_start_date` と重複しない週を選定しています。
+
+<br>
+
+| テストファイル | 固定日付 | 対応する前週 |
+|-------------|---------|------------|
+| `weekly_reflection_flow_test.rb` | 2026-03-01 / 03-08 / 03-15 | fixtures と非重複 |
+| `pdca_lock_flow_test.rb（テスト1）` | 2026-03-09（月）AM4:01 | 前週: 03-02〜03-08 |
+| `pdca_lock_flow_test.rb（テスト2）` | 2026-03-16（月）AM4:01 | テスト1と異なる週で干渉防止 |
+
+<br>
+
+**テスト実行コマンド**
+```bash
+# 統合テスト5ファイルのみ実行
+bundle exec rails test \
+  test/integration/user_auth_flow_test.rb \
+  test/integration/habit_full_flow_test.rb \
+  test/integration/weekly_reflection_flow_test.rb \
+  test/integration/pdca_lock_flow_test.rb \
+  test/integration/error_cases_test.rb
+
+# 全テスト実行（202件）
+bundle exec rails test
+```
+
+<br>
+
+**テスト結果**:
+```
+202 runs, 602 assertions, 0 failures, 0 errors, 0 skips
+```
 
 <br>
 ```
