@@ -52,8 +52,30 @@ class HabitFullFlowTest < ActionDispatch::IntegrationTest
     # HabitsController#create は成功時に habits_path にリダイレクトします
     assert_redirected_to habits_path
 
-    # 作成した習慣を取得します（以降のステップで使用）
-    new_habit = Habit.order(created_at: :desc).first
+    # ── 【Issue #31 バグ修正】作成した習慣の取得方法を変更 ──────────
+    #
+    # 【修正前の問題点】
+    #   new_habit = Habit.order(created_at: :desc).first
+    #   → 全ユーザーの習慣から「最新のもの」を取得していた。
+    #
+    #   フィクスチャ（users.yml）は ERB で動的に password_digest を生成するため、
+    #   Rails がフィクスチャをDBに挿入するたびに created_at が変わる。
+    #   その結果、フィクスチャの habit_one（読書）の created_at が
+    #   テスト内で作成した「統合テスト用習慣」より新しくなることがあり、
+    #   .first で取得される習慣が「読書」になってしまうバグが発生していた。
+    #
+    # 【修正後の方法】
+    #   @user.habits.active.find_by(name: "統合テスト用習慣")
+    #   → ログインユーザーの有効な習慣の中から習慣名で検索する。
+    #   → 習慣名は一意ではないが、テスト用途なら十分に特定できる名前を使えば問題ない。
+    #   → フィクスチャの created_at に依存しないため、テスト環境に左右されない。
+    #
+    # 【さらに安全にする追加チェック】
+    #   assert_not_nil で確実に習慣が取得できたかを検証してから使う。
+    #   nil のまま後続のテストに進むと NoMethodError になり、
+    #   原因が分かりにくくなるため、ここで早期に検出する。
+    new_habit = @user.habits.active.find_by(name: "統合テスト用習慣")
+    assert_not_nil new_habit, "作成した習慣が見つかりませんでした。habits_path へのリダイレクト後に取得できているか確認してください。"
     assert_equal "統合テスト用習慣", new_habit.name
     assert_equal @user.id, new_habit.user_id
 
@@ -83,7 +105,7 @@ class HabitFullFlowTest < ActionDispatch::IntegrationTest
     end
 
     # Turbo Stream レスポンスが返ること
-    # assert_response :success → HTTP 200 であること
+    # assert_response :success → HTTP 200 であることを確認
     assert_response :success
     # response.media_type → レスポンスの Content-Type を確認
     assert_equal "text/vnd.turbo-stream.html", response.media_type
@@ -154,7 +176,7 @@ class HabitFullFlowTest < ActionDispatch::IntegrationTest
   end
 
   # ============================================================
-  # テスト3: 複数習慣を持つユーザーの全体達成率が表示されること
+  # テスト3: 習慣が0件の場合はEmpty Stateが表示されること
   # ============================================================
   # 【なぜこのテストが必要か？】
   # DashboardsController#index の @overall_rate 計算

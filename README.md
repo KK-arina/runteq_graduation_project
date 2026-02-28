@@ -44,6 +44,7 @@
 - ✅ セキュリティ対策実装完了（CSRF対策・SQLインジェクション対策・XSS対策・Strong Parameters・CSP設定・セッション管理強化）
 - ✅ パフォーマンス最適化実装完了（Bullet gem導入・N+1問題解消・DBインデックス追加）
 - ✅ 統合テスト（主要フロー）実装完了（202 runs, 602 assertions, 0 failures）
+- ✅ 統合テスト バグ修正完了（202 runs, 603 assertions, 0 failures）
 
 <br>
 
@@ -867,6 +868,39 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
+### Week 5（3/16〜3/22）: バグ修正・最終調整
+
+<br>
+
+| Issue | タイトル | ステータス | 完了日 | SP |
+|-------|---------|-----------|--------|-----|
+| #31 | バグ修正週 | ✅ 完了 | 2/28 | 8 |
+| #32 | UI/UX最終調整 | 🔄 進行中 | - | 4 |
+| #33 | パフォーマンス最終確認 | ⏳ 未着手 | - | 3 |
+| #34 | ドキュメント整備 | ⏳ 未着手 | - | 3 |
+| #35 | 最終デプロイ・本番確認 | ⏳ 未着手 | - | 2 |
+
+<br>
+
+**Week 5 進捗**: 8SP / 20SP（40%）
+
+<br>
+
+**Week 5 目標**: 20SP
+
+<br>
+
+#### ✅ Issue #31: バグ修正週
+
+<br>
+
+- Issue #30 の統合テストで発見した失敗1件（`HabitFullFlowTest`）を優先修正
+- `Habit.order(created_at: :desc).first` → `@user.habits.active.find_by(name:)` に変更（フィクスチャの `created_at` に依存しない安定した取得方法に修正）
+- `assert_not_nil` を追加し、習慣取得失敗時に原因を早期検出できるよう改善
+- 全テスト回帰確認: 202 runs, 603 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
 ---
 
 <br>
@@ -1330,7 +1364,7 @@ habitflow/
 │   │   ├── weekly_reflection_create_test.rb   # 週次振り返り作成統合テスト（E2Eフロー・1000文字バリデーション）Issue #22
 │   │   ├── pdca_lock_test.rb                  # PDCAロック統合テスト（月曜AM4:00判定・ロック中の作成/削除ブロック・即時保存維持・completed_atベース判定）Issue #24/#25
 │   │   ├── user_auth_flow_test.rb             # ユーザー認証E2Eフロー統合テスト（登録→ダッシュボード→ログアウト→再ログイン・未ログイン時アクセス制限）Issue #30
-│   │   ├── habit_full_flow_test.rb            # 習慣E2Eフロー統合テスト（作成→日次記録→進捗確認・Turbo Stream検証・Empty State）Issue #30
+│   │   ├── habit_full_flow_test.rb            # 【Issue #31修正】習慣E2Eフロー統合テスト（作成→日次記録→進捗確認・習慣取得をfind_byに安定化）
 │   │   ├── weekly_reflection_flow_test.rb     # 週次振り返りE2Eフロー統合テスト（一覧→新規作成→保存→詳細確認・スナップショット作成確認）Issue #30
 │   │   ├── pdca_lock_flow_test.rb             # PDCAロックE2Eフロー統合テスト（ロック発動→解除→習慣作成・初週ユーザー確認・travel_to完全固定日付）Issue #30
 │   │   └── error_cases_test.rb               # エラーケース統合テスト（404・認可・バリデーション422・他ユーザーデータアクセス防止）Issue #30
@@ -5834,6 +5868,62 @@ bundle exec rails test
 **テスト結果**:
 ```
 202 runs, 602 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+## バグ修正週（Issue #31）
+
+<br>
+
+### 修正内容
+
+<br>
+
+**対象ファイル**: `test/integration/habit_full_flow_test.rb`
+
+<br>
+
+**バグの概要**:
+
+<br>
+
+`Habit.order(created_at: :desc).first` で習慣を取得していたため、フィクスチャの `created_at` と競合し、テスト内で作成した「統合テスト用習慣」ではなく fixtures の「読書」（`habit_one`）が取得されるケースがあり、テストが失敗していました。
+
+<br>
+
+**根本原因**:
+
+<br>
+
+- `order(created_at: :desc).first` は**全ユーザーの習慣**から最新のものを取得する
+- Rails がフィクスチャを DB に挿入するたびに `created_at` が変わるため、テスト環境によってはフィクスチャの習慣の方が新しくなる
+
+<br>
+
+**修正内容**:
+```ruby
+# 修正前（不安定）
+new_habit = Habit.order(created_at: :desc).first
+
+# 修正後（安定）
+new_habit = @user.habits.active.find_by(name: "統合テスト用習慣")
+assert_not_nil new_habit, "作成した習慣がDBに見つかりません。保存処理に問題がある可能性があります。"
+```
+
+<br>
+
+| 観点 | 修正前 | 修正後 |
+|------|--------|--------|
+| 取得スコープ | 全ユーザーの習慣 | ログインユーザーのみ |
+| 取得方法 | `created_at` 順（環境依存） | 習慣名で直接特定（決定的） |
+| 失敗時の検出 | `NoMethodError (nil)` で原因不明 | `assert_not_nil` で即座に特定 |
+
+<br>
+
+**テスト結果**:
+```
+202 runs, 603 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
