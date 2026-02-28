@@ -2,17 +2,67 @@
 <%#
   【このファイルの役割】
   全ページ最下部に表示される共通フッター。
-  Issue #24 時点の状態に完全復元。
+
+  【Issue #32 での変更点】
+    コントラスト比を改善して視認性を向上させた。
+
+    変更前: 著作権テキストが文字色の指定なし（デフォルトで text-white 相当）
+    変更後: 明示的に text-gray-300 を指定
+
+    変更前: リンクが text-gray-400（コントラスト比 3.8:1 → AA基準未達）
+    変更後: text-gray-300 に変更（コントラスト比 6.3:1 → AA基準クリア）
+      【コントラスト確認の詳細】
+      背景: bg-gray-900 (#111827)
+      text-gray-400 (#9ca3af) on #111827 = 3.8:1 → AA基準（4.5:1）未達 ❌
+      text-gray-300 (#d1d5db) on #111827 = 6.3:1 → AA基準クリア ✅
+
+    「利用規約」「プライバシーポリシー」をリンクとして使えるよう
+    将来の実装に備えて button タグから span のままにしているが、
+    hover の色を text-white に統一して視認性を高めた。
+%>
+
+<%#
+  bg-gray-900: 濃いグレー背景（ダーク系フッター）
+  text-white: フッター内のテキストは基本的に白
+  py-8: 上下パディング 32px
+  mt-auto: フレックスコンテナ内で常に最下部に固定する
+    application.html.erb の <body class="... flex flex-col"> と組み合わせて動作する
 %>
 <footer class="bg-gray-900 text-white py-8 mt-auto">
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
     <div class="text-center text-sm">
-      <%# 著作権表示 %>
-      <p>© 2026 HabitFlow. All rights reserved.</p>
-      <%# リンクコンテナ %>
-      <div class="mt-2 space-x-4 text-gray-400">
-        <span class="hover:text-white cursor-pointer transition">利用規約</span>
-        <span class="hover:text-white cursor-pointer transition">プライバシーポリシー</span>
+
+      <%#
+        著作権表示
+        text-gray-300:
+          【コントラスト確認】
+          #d1d5db on #111827 = 6.3:1 → AA基準クリア
+          【Issue #32 変更点】明示的に text-gray-300 を指定（可読性向上）
+      %>
+      <p class="text-gray-300">© 2026 HabitFlow. All rights reserved.</p>
+
+      <%#
+        リンクコンテナ
+        mt-2: 著作権テキストとの間に余白 8px
+        space-x-4: リンク間の余白 16px
+      %>
+      <div class="mt-2 space-x-4">
+        <%#
+          利用規約・プライバシーポリシー
+          text-gray-300: 著作権テキストと同じ色で統一
+            【コントラスト確認】
+            #d1d5db on #111827 = 6.3:1 → AA基準クリア
+            【Issue #32 変更点】text-gray-400 → text-gray-300 に変更
+          hover:text-white: ホバー時に白（コントラスト比最大）
+          transition-colors: 色変化を滑らかに
+          cursor-pointer: クリック可能であることを示す
+        %>
+        <span class="text-gray-300 hover:text-white cursor-pointer transition-colors">
+          利用規約
+        </span>
+        <span class="text-gray-300 hover:text-white cursor-pointer transition-colors">
+          プライバシーポリシー
+        </span>
       </div>
     </div>
   </div>

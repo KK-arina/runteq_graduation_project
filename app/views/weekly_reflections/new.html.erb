@@ -12,9 +12,16 @@
   @not_achieved_habits : 未達成習慣（rate < 100）の配列
 
   【Issue #27 での変更点】
-  バリデーションエラー表示を独自実装から shared/_form_errors パーシャルに統一。
-  変更箇所は form_with ブロック内の最初のセクション（<% if @weekly_reflection.errors.any? %> 〜 end %> の部分）のみ。
-  それ以外は一切変更なし。
+  バリデーションエラー表示を shared/_form_errors パーシャルに統一。
+
+  【Issue #32 での変更点】
+    ① フォームタグに form-submit コントローラーを紐付けてローディングを実装
+    ② ボタンエリアの「キャンセル」と「振り返りを完了する」の視覚的重みを差別化
+       変更前: 両方が flex-1 で同じ幅・同じ重みに見えた
+       変更後:
+         キャンセル → セカンダリボタン（グレー系、幅 auto）
+         完了 → プライマリボタン（青、flex-1 で広く）
+         → 主要アクションに目線が誘導され、誤操作リスクが下がる
 %>
 
 <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -25,7 +32,7 @@
   <div class="mb-8">
     <%= link_to "← 振り返り一覧に戻る",
         weekly_reflections_path,
-        class: "text-sm text-blue-600 hover:text-blue-800 transition-colors" %>
+        class: "text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors" %>
     <h1 class="mt-3 text-2xl font-bold text-gray-900">今週を振り返る</h1>
     <p class="mt-1 text-sm text-gray-500">
       対象期間:
@@ -110,34 +117,26 @@
       振り返りフォーム
 
       【form_with の書き方について】
-      model: @weekly_reflection だけを渡す。url: と method: は不要。
-      理由: Rails は model の状態（new_record? か persisted? か）を自動判断して
-      「新規なら POST /weekly_reflections」「既存なら PATCH /weekly_reflections/:id」
-      と正しく設定してくれる。余分なオプションを省くことで Railsらしいシンプルなコードになる。
+      model: @weekly_reflection だけを渡す。
+      Rails は model の状態（new_record? か persisted? か）を自動判断して
+      「新規なら POST /weekly_reflections」と正しく設定してくれる。
 
-      local: true を指定する理由: Hotwire/Turbo の Ajax 送信を無効化して、
-      通常のHTMLフォーム送信（フルページリロード）として動作させるため。
+      local: true: Hotwire/Turbo の Ajax 送信を無効化して通常のHTMLフォーム送信にする。
+
+      【Issue #32 追加】
+      data-controller="form-submit": 送信ローディングコントローラーを紐付ける
+      data-action="submit->form-submit#submit":
+        フォームの submit イベントで form-submit#submit を呼ぶ
   ========================================== %>
-  <%= form_with model: @weekly_reflection, local: true, class: "space-y-6" do |f| %>
+  <%= form_with model: @weekly_reflection,
+                local: true,
+                class: "space-y-6",
+                data: {
+                  controller: "form-submit",
+                  action: "submit->form-submit#submit"
+                } do |f| %>
 
     <%# ---- バリデーションエラーの表示 ---- %>
-    <%#
-      【Issue #27 変更点】
-      変更前: このファイルに直接 if @weekly_reflection.errors.any? 〜 end と書いていた。
-      変更後: shared/_form_errors パーシャルに切り出して render で呼び出す。
-
-      render "shared/form_errors":
-        app/views/shared/_form_errors.html.erb を呼び出す。
-        ファイル名の _ は省略して書く Rails の規約。
-
-      model: @weekly_reflection:
-        パーシャル内で model 変数として @weekly_reflection を参照できるように渡す。
-        @weekly_reflection.errors を参照してエラー件数・メッセージを表示する。
-
-      メリット:
-        users/new.html.erb や habits/new.html.erb と同じパーシャルを使うため、
-        デザイン変更が1箇所の修正で全フォームに反映される。
-    %>
     <%= render "shared/form_errors", model: @weekly_reflection %>
 
     <%# ---- 振り返りコメント入力欄 ---- %>
@@ -148,10 +147,11 @@
         今週の気づき・反省・来週への意気込みなどを自由に書いてください（任意、1000文字以内）
       </p>
       <%#
-        f.text_area でコメント入力欄を生成する。
-        rows:        表示する行数
-        placeholder: 入力前に薄く表示するヒント文
-        maxlength:   ブラウザ側で最大文字数を制限（サーバー側バリデーションと二重防御）
+        text_area: 複数行テキスト入力
+        rows: 6: 表示する行数（ユーザーが一定量のテキストを書きやすい高さ）
+        maxlength: 1000: ブラウザ側での最大文字数制限（サーバー側バリデーションと二重防御）
+        resize-none: ユーザーがリサイズできないようにする
+          リサイズするとレイアウトが崩れる可能性があるため
       %>
       <%= f.text_area :reflection_comment,
           rows: 6,
@@ -159,18 +159,88 @@
           maxlength: 1000,
           class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                  resize-none transition" %>
+                  resize-none transition-colors" %>
     </div>
 
     <%# ---- ボタンエリア ---- %>
-    <div class="flex gap-3 pt-2">
+    <%#
+      【Issue #32 変更点】ボタンの視覚的重みを差別化する
+
+      変更前:
+        両ボタンが flex-1 で同じ幅・同じ重みに見えた。
+        ユーザーはどちらが主要アクションかわからず、誤クリックリスクがあった。
+
+      変更後:
+        「キャンセル」: セカンダリボタン（グレー系, width: auto）
+          → 補助的な操作であることを視覚的に示す
+        「振り返りを完了する」: プライマリボタン（青, flex-1 で広く）
+          → 主要アクションであることを強調し、ユーザーの目線を誘導する
+
+      justify-end: ボタンエリアを右寄せにする
+        → 「続ける/完了」を右端に置く慣習的な UI パターン（フォームの流れと合致する）
+
+      gap-4: ボタン間の余白 16px
+        → gap-3(12px) から gap-4(16px) に変更。
+          モバイルでの誤タップを防ぐため、ボタン間の距離を十分に確保する。
+    %>
+    <div class="flex justify-end items-center gap-4 pt-2">
+
+      <%#
+        キャンセルボタン（セカンダリ）
+        link_to でリンクとして実装（フォーム送信ではなくページ遷移）
+
+        px-5 py-3: ボタンとして十分なクリック領域（Apple 推奨の 44px 以上のタップ領域）
+        border border-gray-300: 枠線を付けることでボタンらしく見せる
+          → 背景色だけだとリンクとの区別がつきにくいため
+        bg-white: 白背景（グレー系でありながら border で存在感を出す）
+        text-gray-700: グレーテキスト
+          【コントラスト確認】
+          text-gray-700 (#374151) on bg-white (#ffffff) = 10.7:1 → AAA基準クリア
+        hover:bg-gray-50: ホバー時にごく薄いグレー（インタラクティブを示す）
+        rounded-xl: フォームカードと同じ角丸
+        transition-colors: 色変化を滑らかに
+
+        【レビュー指摘による追加】
+        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400:
+          キーボードのTabキーでフォーカスしたときにグレーのリングを表示する。
+          マウス操作では表示されない（focus:outline-none で標準のアウトラインを消し、
+          focus:ring でカスタムリングに置き換える）。
+          キーボード操作ユーザーへのアクセシビリティ必須対応。
+      %>
       <%= link_to "キャンセル",
           weekly_reflections_path,
-          class: "flex-1 py-3 px-4 bg-gray-100 text-gray-700 text-sm font-semibold
-                  rounded-xl hover:bg-gray-200 transition text-center" %>
+          class: "px-5 py-3 bg-white border border-gray-300 text-gray-700 text-sm font-semibold
+                  rounded-xl hover:bg-gray-50 transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" %>
+
+      <%#
+        振り返りを完了するボタン（プライマリ）
+        flex-1: 残りの幅を全て使う（キャンセルより広く、目立つ）
+        py-3 px-4: 十分なクリック領域
+        bg-blue-600 text-white: 青背景・白文字（主要アクション）
+          【コントラスト確認】
+          text-white (#ffffff) on bg-blue-600 (#2563eb) = 4.9:1 → AA基準クリア
+        hover:bg-blue-700: ホバー時に一段濃い青
+        rounded-xl: カードと同じ角丸
+        transition-colors: 色変化を滑らかに
+        cursor-pointer: カーソルをポインターに（submit ボタンのデフォルト動作）
+
+        【レビュー指摘による追加】
+        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500:
+          キーボードのTabキーでフォーカスしたときに青いリングを表示する。
+          キャンセルがグレーリング、完了が青リングと色を変えることで
+          キーボード操作でもどちらのボタンにいるか一目でわかる。
+        data-form-submit-target="button": コントローラーから参照できるようにする
+        data-loading-text="送信中...": 送信後に表示するテキスト
+      %>
       <%= f.submit "振り返りを完了する",
           class: "flex-1 py-3 px-4 bg-blue-600 text-white text-sm font-semibold
-                  rounded-xl hover:bg-blue-700 transition cursor-pointer" %>
+                  rounded-xl hover:bg-blue-700 transition-colors cursor-pointer
+                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500",
+          data: {
+            "form-submit-target": "button",
+            "loading-text": "送信中..."
+          } %>
     </div>
 
   <% end %>

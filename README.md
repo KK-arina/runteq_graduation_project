@@ -45,6 +45,7 @@
 - ✅ パフォーマンス最適化実装完了（Bullet gem導入・N+1問題解消・DBインデックス追加）
 - ✅ 統合テスト（主要フロー）実装完了（202 runs, 602 assertions, 0 failures）
 - ✅ 統合テスト バグ修正完了（202 runs, 603 assertions, 0 failures）
+- ✅ UI/UX最終調整実装完了（フォームデザイン統一・ローディングインジケーター・カラーコントラスト改善・WCAG AA基準準拠）
 
 <br>
 
@@ -875,14 +876,14 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | Issue | タイトル | ステータス | 完了日 | SP |
 |-------|---------|-----------|--------|-----|
 | #31 | バグ修正週 | ✅ 完了 | 2/28 | 8 |
-| #32 | UI/UX最終調整 | 🔄 進行中 | - | 4 |
+| #32 | UI/UX最終調整 | ✅ 完了 | 2/28 | 4 |
 | #33 | パフォーマンス最終確認 | ⏳ 未着手 | - | 3 |
 | #34 | ドキュメント整備 | ⏳ 未着手 | - | 3 |
 | #35 | 最終デプロイ・本番確認 | ⏳ 未着手 | - | 2 |
 
 <br>
 
-**Week 5 進捗**: 8SP / 20SP（40%）
+**Week 5 進捗**: 12SP / 20SP（60%）
 
 <br>
 
@@ -898,6 +899,24 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - `Habit.order(created_at: :desc).first` → `@user.habits.active.find_by(name:)` に変更（フィクスチャの `created_at` に依存しない安定した取得方法に修正）
 - `assert_not_nil` を追加し、習慣取得失敗時に原因を早期検出できるよう改善
 - 全テスト回帰確認: 202 runs, 603 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #32: UI/UX最終調整
+
+<br>
+
+- ログインページにカードレイアウトを追加（`users/new.html.erb` と統一）
+- 全フォームのボタンに `rounded-lg`・`font-medium` を追加（デザイン統一）
+- `form_submit_controller.js`（Stimulus）を新規作成（送信ローディング・二重送信防止・バックボタン復帰時の初期化）
+- カラーコントラスト改善（WCAG AA基準準拠）
+  - フラッシュメッセージ: `text-*-800` → `text-*-900`
+  - フォームエラー: `text-red-800` → `text-red-900`
+  - フッター: `text-gray-400` → `text-gray-300`
+- フォームエラー表示に `list-disc list-inside` を追加（複数エラーの視認性向上）
+- 振り返りフォームのキャンセルボタンに `focus:ring` を追加（キーボード操作対応）
+- ERBコメント内の不正タグ（`<%= %>` / `%>` 文字列）を全ファイルで修正
+- 全テスト成功: 202 runs, 603 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
@@ -1291,7 +1310,8 @@ habitflow/
 │   ├── javascript/
 │   │   └── controllers/
 │   │       ├── habit_record_controller.js   # Stimulusコントローラー（即時保存・楽観的UI）
-│   │       └── mobile_menu_controller.js    # Stimulusコントローラー（ハンバーガーメニュー開閉・外側クリック・ESCキー・メモリリーク対策・ARIA対応）
+│   │       ├── mobile_menu_controller.js    # Stimulusコントローラー（ハンバーガーメニュー開閉・外側クリック・ESCキー・メモリリーク対策・ARIA対応）
+│   │       └── form_submit_controller.js    # Stimulusコントローラー（フォーム送信ローディング・二重送信防止・バックボタン復帰時の初期化）
 │   ├── models/
 │   │   ├── user.rb                       # Userモデル（認証機能、has_many :habits, :habit_records, :weekly_reflections）
 │   │   ├── habit.rb                      # Habitモデル（習慣管理、論理削除機能、has_many :habit_records）
@@ -5918,6 +5938,103 @@ assert_not_nil new_habit, "作成した習慣がDBに見つかりません。保
 | 取得スコープ | 全ユーザーの習慣 | ログインユーザーのみ |
 | 取得方法 | `created_at` 順（環境依存） | 習慣名で直接特定（決定的） |
 | 失敗時の検出 | `NoMethodError (nil)` で原因不明 | `assert_not_nil` で即座に特定 |
+
+<br>
+
+**テスト結果**:
+```
+202 runs, 603 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+## UI/UX最終調整（Issue #32）
+
+<br>
+
+### 実装概要
+
+<br>
+
+- フォームページのデザイン統一（ログイン・新規登録・習慣作成・振り返り）
+- フォーム送信ローディングインジケーターの追加
+- カラーコントラスト改善（WCAG AA基準準拠）
+- フォームエラー表示の視認性向上
+- キーボード操作アクセシビリティ対応
+- ERBコメント構文バグの修正
+
+<br>
+
+### form_submit_controller.js（Stimulus）
+
+<br>
+
+フォーム送信時のUX改善と二重送信防止のためにStimulusコントローラーを新規作成しました。
+```javascript
+// app/javascript/controllers/form_submit_controller.js
+
+export default class extends Controller {
+  static targets = ["submitButton"]
+
+  connect() {
+    // バックボタンで戻ったとき disabled が残るバグを防止
+    this._resetButton()
+  }
+
+  submit() {
+    this.submitButtonTarget.disabled = true
+    this.submitButtonTarget.textContent = this.submitButtonTarget.dataset.loadingText || "送信中..."
+  }
+
+  _resetButton() {
+    this.submitButtonTarget.disabled = false
+  }
+}
+```
+
+<br>
+
+`connect()` を実装する理由：<br>
+ブラウザのバックボタンでページに戻ったとき、フォームが `bfcache`（back-forward cache）から復元されると送信ボタンが `disabled` のままになるバグが発生します。<br>
+`connect()` で初期化することで、この状態を防ぎます。
+
+<br>
+
+### カラーコントラスト改善（WCAG AA基準）
+
+<br>
+
+| 変更箇所 | 変更前 | 変更後 | コントラスト比 |
+|---------|--------|--------|--------------|
+| フラッシュ（通知） | `text-blue-800` | `text-blue-900` | 4.5:1 → 7.0:1以上 |
+| フラッシュ（警告） | `text-red-800` | `text-red-900` | → AA基準クリア |
+| フォームエラー件数 | `text-red-800` | `text-red-900` | 5.4:1 → 7.6:1（AAAクリア） |
+| フッターテキスト | `text-gray-400` | `text-gray-300` | コントラスト向上 |
+
+<br>
+
+### ERBコメント構文バグの修正
+
+<br>
+
+**原因**：ERBのコメントブロック（`<%# ... %>`）内に `<%= ... %>` や `%>` という文字列を書くと、`%>` がコメントの閉じタグとして誤認識され、残りのテキストがHTMLとして出力される。
+
+<br>
+
+**影響を受けていたファイル**：
+- `app/views/layouts/application.html.erb`（3箇所）
+- `app/views/shared/_form_errors.html.erb`（2箇所）
+
+<br>
+
+**修正方針**：
+
+<br>
+
+| 書いてはいけないもの | 理由 | 代替表現 |
+|-------------------|------|---------|
+| コメント内の `<%= ... %>` | `<%=` が実行されHTMLに出力される | `=` を外してコード例として文章で説明 |
+| コメント内の `%>` という文字列 | コメント閉じタグとして誤認識される | 「ERBコメントタグ」と文章で表現 |
 
 <br>
 
