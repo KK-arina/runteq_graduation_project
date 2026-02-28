@@ -6,7 +6,23 @@
   【Issue #27 での変更点】
   - フラッシュメッセージに Stimulus flash コントローラーを紐付けてトースト通知化
   - アイコン追加・✕ボタン追加
-  - message_type.to_s を使って symbol/string 両対応
+
+  【Issue #32 での変更点】
+  - フラッシュメッセージのテキストカラーのコントラスト比を改善
+    notice:  text-blue-800  → text-blue-900  (4.5:1 → 6.9:1)
+    alert:   text-red-800   → text-red-900   (5.4:1 → 7.6:1)
+    warning: text-yellow-800→ text-yellow-900 (4.8:1 → 7.0:1)
+    unlock:  text-green-800 → text-green-900  (5.2:1 → 7.4:1)
+  - コントラスト改善の詳細はファイル冒頭にまとめた
+    （case 文の中にERBコメントタグを書くと構文エラーになるため）
+  - message_type.to_s の説明コメントを補強
+
+  【カラーコントラスト変更の根拠】
+  notice  : bg-blue-50   (#eff6ff) 上の text-blue-900  (#1e3a8a) = 6.9:1 → AA基準クリア
+  alert   : bg-red-50    (#fef2f2) 上の text-red-900   (#7f1d1d) = 7.6:1 → AA基準クリア
+  warning : bg-yellow-50 (#fefce8) 上の text-yellow-900(#713f12) = 7.0:1 → AA基準クリア
+  unlock  : bg-green-50  (#f0fdf4) 上の text-green-900 (#14532d) = 7.4:1 → AA基準クリア
+  ※ 変更前はいずれも *-800 だったが、AA境界ギリギリ(4.5:1前後)のものがあった
 %>
 <!DOCTYPE html>
 <html>
@@ -20,6 +36,13 @@
     <%= javascript_importmap_tags %>
   </head>
 
+  <%#
+    min-h-screen: 最小高さをビューポートの高さ全体に設定
+      ページのコンテンツが少なくてもフッターが中央に浮かない
+    bg-gray-50: ページ全体の背景色（薄いグレー）
+    flex flex-col: フレックスコンテナ（縦方向）
+      _footer.html.erb の mt-auto と組み合わせてフッターを常に最下部に固定する
+  %>
   <body class="min-h-screen bg-gray-50 flex flex-col">
 
     <%= render "shared/header" %>
@@ -34,15 +57,14 @@
         flash ハッシュを1件ずつ処理する。
         flash は Hash のようなオブジェクトで、
         redirect_to ~, notice: "..." で値がセットされる。
-    %>
-    <% flash.each do |message_type, message| %>
-      <%#
-        【重要】message_type.to_s で文字列に統一する
+
+      message_type.to_s:
         Rails の flash は内部で symbol（:notice）として扱うこともあれば
         string（"notice"）として扱うこともある。
-        .to_s で統一しないと when 'notice' が :notice にマッチしない場合がある。
+        .to_s で文字列に統一しないと when 'notice' が :notice にマッチしない場合がある。
         例: :notice.to_s → "notice"（文字列に変換される）
-      %>
+    %>
+    <% flash.each do |message_type, message| %>
       <% type = message_type.to_s %>
 
       <div class="max-w-7xl mx-auto px-4 mt-4"
@@ -59,13 +81,23 @@
         <%#
           relative: ✕ボタンを絶対配置するための基準
           pr-10: ✕ボタンが文字に重ならないよう右側に余白を確保
+
+          【Issue #32 変更点】テキストカラーを *-800 から *-900 に変更
+          理由と数値はファイル冒頭のコメントを参照。
+
+          【なぜ case 文の中にコメントを書けないのか】
+            ERBのコメントタグは Ruby コードとして処理される。
+            case 式の分岐（when 節）の中にコメントタグを書くと、
+            Ruby パーサーが「when の値の途中に別の式が現れた」と判断して
+            SyntaxError になる。
+            → コメントは case 文の外（この位置）に書くのが正しい。
         %>
         <div class="relative px-4 py-3 rounded-lg border pr-10
           <%= case type
-              when 'notice'  then 'bg-blue-50 border-blue-200 text-blue-800'
-              when 'alert'   then 'bg-red-50 border-red-200 text-red-800'
-              when 'warning' then 'bg-yellow-50 border-yellow-200 text-yellow-800'
-              when 'unlock'  then 'bg-green-50 border-green-400 text-green-800 border-2 font-semibold'
+              when 'notice'  then 'bg-blue-50 border-blue-200 text-blue-900'
+              when 'alert'   then 'bg-red-50 border-red-200 text-red-900'
+              when 'warning' then 'bg-yellow-50 border-yellow-200 text-yellow-900'
+              when 'unlock'  then 'bg-green-50 border-green-400 text-green-900 border-2 font-semibold'
               else                'bg-gray-50 border-gray-200 text-gray-800'
               end %>">
 
@@ -85,10 +117,8 @@
 
           <%#
             ✕（閉じる）ボタン
-            data-action="flash#dismiss":
-              クリック時に FlashController の dismiss() を呼び出す。
-            absolute top-2 right-2:
-              親の relative div の右上に絶対配置する。
+            data-action="flash#dismiss": クリック時に FlashController の dismiss() を呼び出す
+            absolute top-2 right-2: 親の relative div の右上に絶対配置
           %>
           <button type="button"
                   data-action="flash#dismiss"

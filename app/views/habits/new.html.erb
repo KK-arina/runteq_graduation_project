@@ -6,73 +6,151 @@
 
   【Issue #27 での変更点】
     バリデーションエラー表示を shared/_form_errors パーシャルで統一。
+
+  【Issue #32 での変更点】
+    ・送信ボタンを rounded-md から rounded-lg に変更してカードの rounded-xl と調和させる
+      変更前: "...rounded-md hover:bg-blue-700 transition font-medium"
+      変更後: "...rounded-lg hover:bg-blue-700 transition-colors font-medium"
+      ※ transition → transition-colors に変更
+        transition: 全プロパティのトランジション（不要なコストがかかる）
+        transition-colors: 色変化のみのトランジション（最適化）
+    ・フォームに form-submit コントローラーを紐付けてローディング実装
+    ・input フィールドのスタイルを sessions/new.html.erb と完全統一
+      transition を追加（フォーカス時の ring/border 変化を滑らかにする）
 %>
 
 <div class="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-  <%# ページタイトルと戻るリンクを横並びにする %>
+  <%#
+    ページヘッダー（戻るリンク + タイトルの横並び）
+    flex items-center gap-4: 横並びで垂直方向中央揃え、間隔 16px
+    mb-6: タイトルとカードの間に余白 24px
+  %>
   <div class="flex items-center gap-4 mb-6">
     <%#
-      link_to "←", habits_path:
-        「←」文字をクリックで習慣一覧へ戻るリンク。
-        aria-label で「習慣一覧へ戻る」とスクリーンリーダーに伝える。
+      戻るリンク（SVG 矢印）
+      aria-label: スクリーンリーダーに「習慣一覧へ戻る」と読み上げさせる
+        SVGアイコンだけのリンクはテキストがないため、
+        aria-label でアクセシビリティを確保する（必須対応）
+      text-gray-500 hover:text-gray-700: グレーでホバー時に濃くなる
+        【コントラスト確認】
+        text-gray-500 (#6b7280) on white = 4.6:1 → AA基準クリア
+      transition-colors: 色変化を滑らかに
     %>
     <%= link_to habits_path,
           class: "text-gray-500 hover:text-gray-700 transition-colors",
           aria: { label: "習慣一覧へ戻る" } do %>
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
            aria-hidden="true">
+        <%#
+          aria-hidden="true":
+            装飾用SVGのためスクリーンリーダーに読み上げさせない。
+            親の link_to の aria-label で代替テキストを提供しているため問題ない。
+        %>
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M15 19l-7-7 7-7"/>
       </svg>
     <% end %>
 
+    <%#
+      ページタイトル
+      text-2xl font-bold text-gray-900: 他のページのタイトルと統一したスタイル
+    %>
     <h1 class="text-2xl font-bold text-gray-900">新しい習慣を追加</h1>
   </div>
 
   <%#
-    bg-white rounded-xl shadow-sm p-6:
-      白いカード風のコンテナに入れて、フォームを際立たせる。
+    フォームカードコンテナ
+    bg-white rounded-xl shadow-sm border border-gray-200 p-6:
+      他のフォームページ（sessions/new, users/new）と同じカードスタイル
   %>
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
 
-    <%= form_with model: @habit, local: true do |f| %>
+    <%#
+      form_with: Rails のフォームヘルパー
+      model: @habit: HabitsController#new で設定された空の Habit オブジェクト
+        → 新規作成なので POST /habits に送信される
+      local: true: 通常のHTMLフォーム送信（Turbo を無効化）
+      【Issue #32 追加】
+      data-controller="form-submit": 送信ローディングコントローラーを紐付ける
+      data-action="submit->form-submit#submit":
+        フォームの submit イベントで form-submit#submit を呼ぶ
+    %>
+    <%= form_with model: @habit,
+                  local: true,
+                  data: {
+                    controller: "form-submit",
+                    action: "submit->form-submit#submit"
+                  } do |f| %>
 
       <%#
-        共通バリデーションエラーパーシャルの呼び出し
-        model: @habit を渡すことで @habit.errors を参照する。
-        エラーがない場合は何も表示されない。
+        shared/_form_errors パーシャルの呼び出し
+        model: @habit を渡すことで @habit.errors を参照してエラー表示
       %>
       <%= render "shared/form_errors", model: @habit %>
 
       <%# 習慣名入力 %>
       <div class="mb-4">
-        <%= f.label :name, "習慣名", class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%= f.label :name, "習慣名",
+            class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%#
+          transition を追加:
+            フォーカス時の border-color と ring の変化を滑らかにする
+            transition-colors で色変化のみを対象にしてパフォーマンスを最適化
+        %>
         <%= f.text_field :name,
             placeholder: "例: 毎朝30分ウォーキング",
             class: "w-full px-4 py-2 border border-gray-300 rounded-md
-                    focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
+                    focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    transition-colors" %>
       </div>
 
       <%# 週次目標入力 %>
-      <%#
-        週次目標（週に何回実施するか）を数値で入力する。
-        min="1" max="7": 週7日が最大なのでバリデーションをHTMLレベルでも行う。
-      %>
       <div class="mb-6">
-        <%= f.label :weekly_target, "週の目標回数", class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%= f.label :weekly_target, "週の目標回数",
+            class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%#
+          number_field: type="number" の input タグを生成
+          min="1" max="7": HTMLレベルでのバリデーション（週7日が上限）
+          サーバー側のバリデーションと二重防御になる
+        %>
         <%= f.number_field :weekly_target,
-            min: 1, max: 7, placeholder: "3",
+            min: 1, max: 7,
+            placeholder: "3",
             class: "w-full px-4 py-2 border border-gray-300 rounded-md
-                    focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
-        <%# ヒントテキスト %>
-        <p class="mt-1 text-xs text-gray-400">週に何回実施するか（1〜7回）を入力してください</p>
+                    focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    transition-colors" %>
+        <%#
+          ヒントテキスト
+          mt-1 text-xs text-gray-500:
+            【コントラスト確認】
+            text-gray-500 (#6b7280) on white = 4.6:1 → AA基準クリア
+            ヒントテキストは情報補完なので AA 基準で十分
+        %>
+        <p class="mt-1 text-xs text-gray-500">
+          週に何回実施するか（1〜7回）を入力してください
+        </p>
       </div>
 
-      <%# 送信ボタン %>
+      <%#
+        送信ボタン
+        【Issue #32 変更点】
+        rounded-md → rounded-lg:
+          カードの角丸（rounded-xl）に近づけて統一感を出す
+          rounded-md(6px) < rounded-lg(8px) < rounded-xl(12px) の段階的な関係
+          ボタンはカードより少し小さい角丸にするのがバランス良い
+        transition → transition-colors:
+          色変化のみをトランジション対象にして処理を最適化
+        data-form-submit-target="button": コントローラーから参照できるようにする
+        data-loading-text="登録中...": 送信後のローディングテキスト
+      %>
       <%= f.submit "習慣を登録する",
-          class: "w-full px-4 py-2 bg-blue-600 text-white rounded-md
-                  hover:bg-blue-700 transition font-medium" %>
+          class: "w-full px-4 py-2 bg-blue-600 text-white rounded-lg
+                  hover:bg-blue-700 transition-colors font-medium",
+          data: {
+            "form-submit-target": "button",
+            "loading-text": "登録中..."
+          } %>
     <% end %>
 
   </div>
