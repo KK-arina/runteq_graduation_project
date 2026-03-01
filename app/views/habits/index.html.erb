@@ -1,4 +1,5 @@
-<%# app/views/habits/index.html.erb %>
+<%# app/views/habits/index.html.erb の先頭（最初の行）に追加 %>
+<% content_for :title, "習慣管理 | HabitFlow" %>
 <%#
   ═══════════════════════════════════════════════════════════════════
   【このファイルの役割】
@@ -169,17 +170,9 @@
           </div>
 
           <%# 今週の進捗バー %>
-          <%#
-            mt-auto: カードの高さが異なる場合でも、進捗バーを常にカード下部に揃える
-                     flex flex-col の親要素と組み合わせることで機能する
-          %>
           <div class="px-4 pb-4 mt-auto">
             <div class="flex justify-between items-center mb-1">
               <span class="text-xs text-gray-500">今週の進捗</span>
-              <%#
-                達成率テキスト
-                whitespace-nowrap: 「3/7日（43%）」のような文字列が途中で改行されないようにする
-              %>
               <span class="text-xs font-bold whitespace-nowrap
                            <%= stats[:rate] >= 80 ? 'text-green-600' : stats[:rate] >= 50 ? 'text-blue-600' : 'text-red-500' %>">
                 <%= stats[:completed_count] %>/<%= habit.weekly_target %>日
@@ -187,10 +180,42 @@
               </span>
             </div>
             <%#
-              プログレスバー
+              プログレスバーのコンテナ
               overflow-hidden: バーが角丸の外にはみ出ないようにする
             %>
-            <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
+                 <%#
+                   role="progressbar":
+                     【Issue #33 追加】
+                     この div がプログレスバーであることをスクリーンリーダーに伝える。
+                     role="progressbar" を設定することで支援技術が
+                     「進捗状況を示す要素」として認識できる。
+
+                   aria-valuenow="[stats[:rate]]":
+                     【Issue #33 追加】
+                     現在の進捗値（数値）をスクリーンリーダーに伝える。
+                     例: aria-valuenow="80" → 「80」と読み上げる。
+
+                   aria-valuemin="0":
+                     【Issue #33 追加】
+                     プログレスバーの最小値（0%）を示す。
+                     スクリーンリーダーが「0から100のうち80」と把握できる。
+
+                   aria-valuemax="100":
+                     【Issue #33 追加】
+                     プログレスバーの最大値（100%）を示す。
+
+                   aria-label="[habit.name] の今週の達成率":
+                     【Issue #33 追加】
+                     「何のプログレスバーか」をスクリーンリーダーに伝える。
+                     aria-valuenow と組み合わせて
+                     「読書 の今週の達成率、80」のように読み上げられる。
+                 %>
+                 role="progressbar"
+                 aria-valuenow="<%= stats[:rate] %>"
+                 aria-valuemin="0"
+                 aria-valuemax="100"
+                 aria-label="<%= habit.name %> の今週の達成率">
               <div class="h-2 rounded-full transition-all duration-300
                           <%= stats[:rate] >= 80 ? 'bg-green-500' : stats[:rate] >= 50 ? 'bg-blue-400' : 'bg-red-400' %>"
                    style="width: <%= stats[:rate] %>%">

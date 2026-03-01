@@ -46,6 +46,7 @@
 - ✅ 統合テスト（主要フロー）実装完了（202 runs, 602 assertions, 0 failures）
 - ✅ 統合テスト バグ修正完了（202 runs, 603 assertions, 0 failures）
 - ✅ UI/UX最終調整実装完了（フォームデザイン統一・ローディングインジケーター・カラーコントラスト改善・WCAG AA基準準拠）
+- ✅ アクセシビリティ対応実装完了（WCAG 2.1 AA基準準拠・スキップリンク・スクリーンリーダー対応・キーボードナビゲーション・フォーカス可視化）
 
 <br>
 
@@ -877,13 +878,13 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 |-------|---------|-----------|--------|-----|
 | #31 | バグ修正週 | ✅ 完了 | 2/28 | 8 |
 | #32 | UI/UX最終調整 | ✅ 完了 | 2/28 | 4 |
-| #33 | パフォーマンス最終確認 | ⏳ 未着手 | - | 3 |
+| #33 | アクセシビリティ対応 | ✅ 完了 | 3/1 | 3 |
 | #34 | ドキュメント整備 | ⏳ 未着手 | - | 3 |
 | #35 | 最終デプロイ・本番確認 | ⏳ 未着手 | - | 2 |
 
 <br>
 
-**Week 5 進捗**: 12SP / 20SP（60%）
+**Week 5 進捗**: 15SP / 20SP（75%）
 
 <br>
 
@@ -917,6 +918,29 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - 振り返りフォームのキャンセルボタンに `focus:ring` を追加（キーボード操作対応）
 - ERBコメント内の不正タグ（`<%= %>` / `%>` 文字列）を全ファイルで修正
 - 全テスト成功: 202 runs, 603 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #33: アクセシビリティ対応
+
+<br>
+
+- `<html lang="ja">` 追加（スクリーンリーダーの日本語読み上げ・WCAG 2.1 達成基準 3.1.1）
+- スキップリンク実装（`sr-only` + `focus:not-sr-only`・キーボードユーザーのナビ迂回・WCAG 2.4.1）
+- `<main id="main-content" tabindex="-1">` 追加（スキップリンクのジャンプ先・Tab フォーカス受け取り）
+- `<title>` を `content_for :title` で動的化（ページごとの固有タイトル・WCAG 2.4.2）
+- フラッシュ通知に `aria-live="polite"` 追加（動的コンテンツをスクリーンリーダーが自動読み上げ・WCAG 4.1.3）
+- `<nav aria-label="メインナビゲーション">` でナビゲーションをランドマーク化・PC用モバイル用リンクに `aria-current="page"` 追加
+- 全インタラクティブ要素に `focus:ring-2 focus:ring-blue-500` 追加（WCAG 2.4.7）
+- チェックボックスに `<label for="...">` 関連付け・`aria-describedby` で達成状態バッジを補足説明に設定（WCAG 1.3.1）
+- 進捗バーに `role="progressbar"` + `aria-valuenow` / `aria-valuemin` / `aria-valuemax` + `aria-label` 追加
+- 絵文字・装飾アイコンに `aria-hidden="true"` 追加（不要な読み上げを排除）
+- `<header role="banner">` → `<header>` に修正（冗長 ARIA の排除・HTML5 ネイティブセマンティクス優先）
+- `:focus-visible` CSS フォールバックを `application.css` に追加（Safari 旧バージョン対応）
+- ERBコメントブロック内の `%>` 混入によるテキスト漏れを全ファイルで修正
+- `WeeklyReflectionFlowTest` の `order(created_at: :desc).first` → `find_by(week_start_date:)` に修正（fixtures の created_at 依存を排除・Issue #31 と同じ対処）
+- `show.html.erb` 176行目のERBコメント未閉じ（`%>` 欠落）による `ActionView::SyntaxErrorInTemplate` を修正
+- 全テスト成功: 202 runs, 604 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
@@ -1296,7 +1320,7 @@ habitflow/
 ├── app/
 │   ├── assets/
 │   │   └── stylesheets/
-│   │       └── application.css              # カスタムCSS（.arrow-divider 疑似要素：モバイル↓/PC→の矢印切り替え）
+│   │       └── application.css              # カスタムCSS（.arrow-divider 疑似要素：モバイル↓/PC→の矢印切り替え・:focus-visible フォールバック）
 │   ├── controllers/
 │   │   ├── application_controller.rb    # ヘルパーメソッド（current_user, logged_in?, require_login, locked?, require_unlocked, render_error_page）※turbo_stream対応済み
 │   │   ├── dashboards_controller.rb     # ダッシュボード（index）今週の達成率・今日のチェックリスト
@@ -1323,9 +1347,9 @@ habitflow/
 │       │   ├── _habit_record.html.erb        # チェックボックス付き習慣記録カード（Turbo Streamターゲット）
 │       │   └── _habit_record_error.html.erb  # エラー時の差し替えパーシャル
 │       ├── layouts/
-│       │   └── application.html.erb      # 全ページ共通レイアウト（ヘッダー・フッター・フラッシュ）
+│       │   └── application.html.erb      # 全ページ共通レイアウト（ヘッダー・フッター・フラッシュ・スキップリンク・lang="ja"・動的title・aria-live）
 │       ├── shared/
-│       │   ├── _header.html.erb          # 共通ヘッダー（ログイン状態で表示切替・Issue #26でハンバーガーメニュー追加）
+│       │   ├── _header.html.erb          # 共通ヘッダー（ログイン状態で表示切替・Issue #26でハンバーガーメニュー追加・Issue #33でARIAランドマーク・aria-current・フォーカスリング追加）
 │       │   ├── _footer.html.erb          # 共通フッター（全ページ）
 │       │   └── _form_errors.html.erb     # バリデーションエラー共通パーシャル（全フォームで使用）
 │       ├── habits/
@@ -6041,6 +6065,175 @@ export default class extends Controller {
 **テスト結果**:
 ```
 202 runs, 603 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+## アクセシビリティ対応（Issue #33）
+
+<br>
+
+### 対応方針
+
+<br>
+
+WCAG 2.1 AA 基準の主要達成基準をカバーすることを目標に実装しました。<br>
+スクリーンリーダー（VoiceOver / NVDA）・キーボードのみの操作を想定した設計です。
+
+<br>
+
+### 実装した WCAG 達成基準
+
+<br>
+
+| 達成基準 | レベル | 実装内容 |
+|---------|--------|---------|
+| 3.1.1 ページの言語 | A | `<html lang="ja">` を追加 |
+| 2.4.2 ページタイトル | A | `content_for :title` で各ページに固有タイトルを設定 |
+| 2.4.1 ブロックスキップ | A | スキップリンクを追加（Tab フォーカス時のみ表示） |
+| 1.3.1 情報と関係性 | A | `<label>`・`role`・`aria-*` 属性で構造を明示 |
+| 2.4.7 フォーカスの可視化 | AA | 全インタラクティブ要素に `focus:ring` を追加 |
+| 4.1.3 ステータスメッセージ | AA | フラッシュ通知に `aria-live="polite"` を追加 |
+
+<br>
+
+### WAI-ARIA 設計の原則
+
+<br>
+
+**ネイティブセマンティクス優先**：<br>
+HTML5 要素が持つ暗黙のロールを尊重し、冗長な ARIA 属性は付けません。
+
+<br>
+
+| 誤った実装（冗長） | 正しい実装 | 理由 |
+|-----------------|-----------|------|
+| `<header role="banner">` | `<header>` | ページ最上位の `<header>` は自動的に `role="banner"` |
+| `<nav role="navigation">` | `<nav>` | `<nav>` は自動的に `role="navigation"` |
+| テキストリンクに `aria-label` | `aria-label` なし | テキスト自体がラベルになるため追加すると不一致が生じる |
+
+<br>
+
+### ERBコメント構文バグ（Issue #32・#33 共通）
+
+<br>
+
+**原因**：ERBのコメントブロック（`<%#` で開始し `%>` で終了）の内部に `%>` という文字列が含まれると、<br>
+そこでコメントが強制終了し、残りのテキストが HTML としてブラウザに出力されます。<br>
+コメントブロックの `%>` を書き忘れると `ActionView::SyntaxErrorInTemplate` が発生します。
+
+<br>
+
+**Issue #1〜#33 で発生したERB関連バグの一覧**：
+
+<br>
+
+| Issue | ファイル | 問題 | 修正 |
+|-------|---------|------|------|
+| #32 | `layouts/application.html.erb` | コメント内に `<% content_for ... %>` を記述 → `%>` でコメント終了・テキスト漏れ | ERBタグを除去し文章で説明 |
+| #32 | `shared/_header.html.erb` | コメント内に `<%# ... %>` という文字列を記述 → `%>` でコメント終了 | `%>` を含まない表現に変更 |
+| #33 | `habit_records/_habit_record.html.erb` | コメント内の `=====...===== %>` の末尾 `%>` がコメント終了と誤認識 | 末尾の `%>` を削除し次行に `%>` を追加 |
+| #33 | `habit_records/_habit_record.html.erb` | コメント内に `<%= habit.id %>` を記述 → `%>` でコメント終了・テキスト漏れ | `[habit.id]` 形式に変更 |
+| #33 | `habits/index.html.erb` | コメント内に `aria-valuenow="<%= stats[:rate] %>"` を記述 | `[stats[:rate]]` 形式に変更 |
+| #33 | `weekly_reflections/show.html.erb` | コメント内に `<%= summary.habit_name %>` を記述 | `[summary.habit_name]` 形式に変更 |
+| #33 | `weekly_reflections/show.html.erb` | コメントブロックの `%>` 閉じ忘れ → `ActionView::SyntaxErrorInTemplate` | `%>` を追加して閉じる |
+
+<br>
+
+**今後このバグを防ぐためのルール**：
+
+```
+# NG: コメントブロック内に %> を含む文字列を書く
+<%#
+  <%= habit.name %> のように書く  ← %> でコメントが終了してしまう
+%>
+
+# NG: コメントブロックの %> を書き忘れる
+<%#
+  説明文...
+← %> がないと次の行以降もコメント扱いになりSyntaxErrorが発生
+
+# OK: %> を含まない表現に置き換える
+<%#
+  habit.name のように書く
+%>
+
+# OK: 1行コメントを使う（%> は閉じタグとして機能するため安全）
+<%# habit.name を出力する %>
+<%= habit.name %>
+```
+
+<br>
+
+**コミット前の検出コマンド**（ERBコメント構文バグを全ファイルで検索）：
+```bash
+python3 << 'EOF'
+import glob
+
+files = glob.glob('app/views/**/*.erb', recursive=True)
+problems_found = False
+
+for filepath in sorted(files):
+    with open(filepath, 'r') as f:
+        lines = f.readlines()
+    in_comment = False
+    for i, line in enumerate(lines, 1):
+        s = line.strip()
+        if s == '<%#':
+            in_comment = True
+        if in_comment and s == '%>':
+            in_comment = False
+            continue
+        if in_comment and '%>' in line and not s.startswith('<%#'):
+            print(f"⚠ {filepath}:{i}: {s}")
+            problems_found = True
+
+if not problems_found:
+    print('✅ 全ファイル問題なし')
+EOF
+```
+
+<br>
+
+### テストの安定化（Issue #31・#33 共通）
+
+<br>
+
+**問題**：`Model.order(created_at: :desc).first` でレコードを取得すると、<br>
+fixtures の `created_at` はRailsが自動設定するため実行環境によって順序が変わり、<br>
+テスト内で作成したレコードではなく fixtures のレコードが返されることがあります。
+
+<br>
+
+**Issue #31・#33 で発生した箇所と修正**：
+
+<br>
+
+| Issue | ファイル | 修正前 | 修正後 |
+|-------|---------|--------|--------|
+| #31 | `habit_full_flow_test.rb` | `Habit.order(created_at: :desc).first` | `@user.habits.active.find_by(name: "...")` |
+| #33 | `weekly_reflection_flow_test.rb` | `WeeklyReflection.order(created_at: :desc).first` | `@user.weekly_reflections.find_by(week_start_date: Date.new(2026, 2, 23))` |
+
+<br>
+
+**今後このバグを防ぐためのルール**：<br>
+統合テストでレコードを取得する際は `order(created_at: :desc).first` を使わず、<br>
+名前・日付・ユーザースコープなど **値で直接特定** してください。<br>
+また `assert_not_nil` を必ずセットで追加し、取得失敗時に原因を早期検出できるようにします。
+```ruby
+# NG: fixtures の created_at に依存する不安定な取得
+record = Model.order(created_at: :desc).first
+
+# OK: 値で直接特定する安定した取得
+record = @user.weekly_reflections.find_by(week_start_date: Date.new(2026, 2, 23))
+assert_not_nil record, "対象レコードがDBに見つかりません"
+```
+
+<br>
+
+**テスト結果**:
+```
+202 runs, 604 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>

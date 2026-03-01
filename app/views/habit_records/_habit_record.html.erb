@@ -14,14 +14,47 @@
     habits/index.html.erb の習慣カードdiv（habit_record_XX）と
     IDが重複していたため、チェック後にTurboがカード全体を
     パーシャルの中身で上書きしてしまっていた。
-    ============================================================= %>
+
+    【Issue #33 での変更点（アクセシビリティ対応）】
+    ① チェックボックスに <label> タグを関連付ける
+       理由: <input type="checkbox"> 単体では、スクリーンリーダーが
+             「チェックボックス」とだけ読み上げ、何のチェックボックスか伝わらない。
+             <label> を関連付けることで「読書、チェックボックス、未チェック」のように
+             習慣名を含めて読み上げてくれる。
+
+             関連付けの方法（2種類）:
+             方法A: for 属性と id 属性で紐付ける（今回採用）
+               <label for="habit_checkbox_1">読書</label>
+               <input type="checkbox" id="habit_checkbox_1">
+             方法B: <label> の中に <input> を入れる（ネスト型）
+               <label><input type="checkbox"> 読書</label>
+
+             今回は Turbo Stream でチェックボックス部分だけを置換するため
+             方法A（for/id 属性による明示的な関連付け）を採用する。
+
+    ② aria-describedby で達成状態をスクリーンリーダーに伝える
+       理由: チェックボックスの状態（✓ 完了 / 未完了）を音声で伝えるため。
+             「読書、チェックボックス、チェック済み」という基本情報に加えて、
+             「完了」という視覚的なバッジの内容も読み上げてもらえる。
+
+    ③ ローディングアイコンの aria-label を追加
+       理由: SVGのアニメーションアイコンは視覚的には「処理中」と分かるが、
+             スクリーンリーダーには伝わらない。
+             aria-label="保存中" を追加することで音声でも状態が伝わる。
+    =============================================================
+%>
 
 <% record     = habit_record || HabitRecord.new(completed: false) %>
 <% create_url = habit_habit_records_path(habit) %>
 <% update_url = record.persisted? ? habit_habit_record_path(habit, record) : "" %>
 <% record_id  = record.persisted? ? record.id : 0 %>
 
-<%# Turbo Stream の置換ターゲット（IDを habit_record_row_XX に変更） %>
+<%#
+  habit_record_row_XX:
+    Turbo Stream の置換ターゲット。
+    コントローラーが `turbo_stream.replace "habit_record_row_#{habit.id}"` で
+    このdivの中身を更新する。
+%>
 <div id="habit_record_row_<%= habit.id %>"
      class="flex items-center gap-3 py-3">
 
@@ -31,29 +64,125 @@
        data-habit-record-update-url-value="<%= update_url %>"
        data-habit-record-record-id-value="<%= record_id %>">
 
+    <%#
+      チェックボックス
+      id="habit_checkbox_[ habit.id ]":
+        【Issue #33 追加】
+        <label> タグの for 属性と紐付けるための一意なIDを付与する。
+        habit.id を使うことで、複数の習慣が一覧表示されても各IDが重複しない。
+        例: id="habit_checkbox_1", id="habit_checkbox_2" など
+
+        なぜ id が必要か:
+          <label for="habit_checkbox_1"> と書くことで、
+          ラベルをクリックするとチェックボックスにフォーカスが当たるようになる。
+          また、スクリーンリーダーがチェックボックスを読み上げる際に
+          ラベルのテキスト（習慣名）を一緒に読み上げてくれる。
+
+      aria-describedby="habit_status_[ habit.id ]":
+        【Issue #33 追加】
+        チェックボックスの補足説明として、id="habit_status_XX" の要素を指定する。
+        スクリーンリーダーが「読書、チェックボックス、チェック済み、完了」のように
+        ラベルに続いてステータスも読み上げてくれる。
+        下の span（✓ 完了 / 未完了のバッジ）と連携する。
+    %>
     <input type="checkbox"
-           class="w-5 h-5 rounded accent-blue-600 cursor-pointer flex-shrink-0"
+           id="habit_checkbox_<%= habit.id %>"
+           class="w-5 h-5 rounded accent-blue-600 cursor-pointer flex-shrink-0
+                  focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+           <%#
+             focus:ring-2 focus:ring-blue-500 focus:ring-offset-1:
+               【Issue #33 追加】
+               キーボードで Tab を押してチェックボックスにフォーカスが当たったとき、
+               青いリングを表示してフォーカス位置を示す。
+               accent-blue-600 はチェック時の色のみを変えるため、
+               フォーカスリングは別途 focus:ring で設定する必要がある。
+           %>
            data-habit-record-target="checkbox"
            data-action="change->habit-record#toggle"
+           aria-describedby="habit_status_<%= habit.id %>"
            <%= record.completed ? "checked" : "" %>>
 
-    <span class="text-sm flex-1 <%= record.completed ? 'line-through text-gray-400' : 'text-gray-700' %>">
-      <%= habit.name %>
-    </span>
+    <%#
+      <label> タグ（チェックボックスと習慣名を紐付ける）
+      【Issue #33 追加】
+      for="habit_checkbox_[ habit.id ]":
+        上の <input> の id と一致させることで関連付けが成立する。
+        この <label> をクリックすると、対応する <input> にフォーカスが当たる。
+        また、スクリーンリーダーがチェックボックスを読む際に
+        このラベルのテキスト（習慣名）を読み上げてくれる。
 
+        変更前: <span class="text-sm flex-1 ...">[ habit.name ]</span>
+        変更後: <label for="habit_checkbox_..."> に変更
+          → 視覚的な見た目は同じだが、チェックボックスとの関連が明確になる。
+          → ラベルをクリックしてもチェックが切り替わるようになる（UX向上）。
+
+      cursor-pointer: ラベルにカーソルを乗せたときポインターにして
+                      クリックできることを示す。
+    %>
+    <label for="habit_checkbox_<%= habit.id %>"
+           class="text-sm flex-1 cursor-pointer
+                  <%= record.completed ? 'line-through text-gray-400' : 'text-gray-700' %>">
+      <%= habit.name %>
+    </label>
+
+    <%#
+      達成状態バッジ
+      id="habit_status_[ habit.id ]":
+        【Issue #33 追加】
+        上のチェックボックスの aria-describedby と紐付けるためのID。
+        スクリーンリーダーがチェックボックスを読み上げる際に、
+        この span の内容も一緒に読み上げてくれる。
+
+      aria-hidden:
+        完了バッジが表示されている場合は aria-describedby で内容が伝わるため、
+        スクリーンリーダーに二重に読み上げさせないよう aria-hidden は設定しない。
+        ただし、未完了で span が空の場合はそのまま（特に何も設定しない）。
+    %>
     <% if record.completed %>
-      <span class="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">
+      <span id="habit_status_<%= habit.id %>"
+            class="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">
         ✓ 完了
       </span>
+    <% else %>
+      <%#
+        未完了の場合も id を持つ空の span を置いておく。
+        理由: aria-describedby で参照しているIDが DOM に存在しないと
+              一部のスクリーンリーダーがエラーを出す場合があるため。
+              sr-only で視覚的に非表示にしつつ、スクリーンリーダーには読める状態にする。
+      %>
+      <span id="habit_status_<%= habit.id %>" class="sr-only">未完了</span>
     <% end %>
 
+    <%#
+      ローディングアイコン
+      aria-label="保存中":
+        【Issue #33 追加】
+        SVGのスピナーアイコンはスクリーンリーダーには見えない。
+        aria-label="保存中" を追加することで、保存処理中であることを音声で伝える。
+        role="status" と組み合わせることで「状態通知」として認識される。
+
+      role="status":
+        【Issue #33 追加】
+        "status" ロールは aria-live="polite" と同等の意味を持つ。
+        要素が表示されたとき（hidden が外れたとき）に
+        スクリーンリーダーが自動で読み上げてくれる。
+    %>
     <div data-habit-record-target="loading"
-        hidden
-        class="flex-shrink-0">
+         hidden
+         role="status"
+         aria-label="保存中"
+         class="flex-shrink-0">
       <svg class="animate-spin h-4 w-4 text-blue-500"
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24">
+           xmlns="http://www.w3.org/2000/svg"
+           fill="none"
+           viewBox="0 0 24 24"
+           aria-hidden="true">
+        <%#
+          aria-hidden="true":
+            SVG内の要素はスクリーンリーダーに読ませない。
+            親の div に aria-label="保存中" を設定しているため、
+            SVG の詳細（circle, path）を読み上げる必要はない。
+        %>
         <circle class="opacity-25"
                 cx="12" cy="12" r="10"
                 stroke="currentColor"

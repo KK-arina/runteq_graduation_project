@@ -85,7 +85,9 @@ class WeeklyReflectionFlowTest < ActionDispatch::IntegrationTest
       assert_redirected_to weekly_reflections_path
 
       # 保存された振り返りを取得します
-      reflection = WeeklyReflection.order(created_at: :desc).first
+      week_start = Date.new(2026, 2, 23) # travel_toで固定した週の月曜
+      reflection = @user.weekly_reflections.find_by(week_start_date: week_start)
+      assert_not_nil reflection, "2026-02-23週の振り返りがDBに見つかりません"
 
       # ── Step 4: WeeklyReflectionHabitSummary（スナップショット）が
       #            作成されていることを確認 ─────────────────────────
