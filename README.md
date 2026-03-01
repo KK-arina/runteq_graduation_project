@@ -47,6 +47,7 @@
 - ✅ 統合テスト バグ修正完了（202 runs, 603 assertions, 0 failures）
 - ✅ UI/UX最終調整実装完了（フォームデザイン統一・ローディングインジケーター・カラーコントラスト改善・WCAG AA基準準拠）
 - ✅ アクセシビリティ対応実装完了（WCAG 2.1 AA基準準拠・スキップリンク・スクリーンリーダー対応・キーボードナビゲーション・フォーカス可視化）
+- ✅ seeds.rb 整備完了（デモ用サンプルデータ・本番誤実行防止ガード実装済み）
 
 <br>
 
@@ -878,13 +879,14 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 |-------|---------|-----------|--------|-----|
 | #31 | バグ修正週 | ✅ 完了 | 2/28 | 8 |
 | #32 | UI/UX最終調整 | ✅ 完了 | 2/28 | 4 |
-| #33 | アクセシビリティ対応 | ✅ 完了 | 3/1 | 3 |
-| #34 | ドキュメント整備 | ⏳ 未着手 | - | 3 |
-| #35 | 最終デプロイ・本番確認 | ⏳ 未着手 | - | 2 |
+| #33 | アクセシビリティ対応 | ✅ 完了 | 3/1 | 2 |
+| #34 | seeds.rb の充実 | ✅ 完了 | 3/1 | 2 |
+| #35 | ログ設定 | ⏳ 未着手 | - | 2 |
+| #36 | 最終デプロイ・本番確認 | ⏳ 未着手 | - | 2 |
 
 <br>
 
-**Week 5 進捗**: 15SP / 20SP（75%）
+**Week 5 進捗**: 16SP / 20SP（80%）
 
 <br>
 
@@ -940,6 +942,24 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - ERBコメントブロック内の `%>` 混入によるテキスト漏れを全ファイルで修正
 - `WeeklyReflectionFlowTest` の `order(created_at: :desc).first` → `find_by(week_start_date:)` に修正（fixtures の created_at 依存を排除・Issue #31 と同じ対処）
 - `show.html.erb` 176行目のERBコメント未閉じ（`%>` 欠落）による `ActionView::SyntaxErrorInTemplate` を修正
+- 全テスト成功: 202 runs, 604 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #34: seeds.rb の充実
+
+<br>
+
+- 本番環境誤実行防止ガードを追加（`Rails.env.production?` で `abort`）
+- 外部キー制約を考慮した削除順序（子→親）で全データをリセット（冪等性確保）
+- デモユーザー作成（test@example.com / password）
+- 有効な習慣6個 + 論理削除済み1個を作成（実際の運用を模した構成）
+- 過去3週分のリアルな習慣記録データを作成（168件・習慣ごとに異なる達成率パターン）
+- 完了済み週次振り返り2件 + 未完了1件（PDCAロック状態のデモ用）を作成
+- `WeeklyReflectionHabitSummary` スナップショット12件を作成
+- スナップショット作成 → `complete!` の順序をコントローラーの動作フローに統一
+- 日曜日はロックバナーが表示されない仕様（`locked?` の月曜AM4:00条件）をコメントに明記
+- ロック解除されない場合の脱出コマンドをコメントとサマリーに追記（DX改善）
 - 全テスト成功: 202 runs, 604 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
@@ -1381,7 +1401,7 @@ habitflow/
 │   │   ├── YYYYMMDDHHMMSS_add_completed_at_to_weekly_reflections.rb # completed_atカラム追加（振り返り完了日時の記録）
 │   │   └── YYYYMMDDHHMMSS_add_performance_indexes.rb # パフォーマンス最適化インデックス（weekly_reflections 3カラム複合インデックス・CONCURRENTLY）
 │   ├── schema.rb                              # データベーススキーマ
-│   └── seeds.rb                               # サンプルデータ（2ユーザー、計10件の習慣）
+│   └── seeds.rb                               # デモ用サンプルデータ（本番誤実行防止ガード・デモユーザー・習慣6個・過去3週分の記録168件・週次振り返り3件・スナップショット12件）
 ├── docs/
 │   ├── er-diagram-mvp.md                 # ER図（Mermaid形式）
 │   ├── database-schema-mvp.md            # テーブル定義書
@@ -6228,6 +6248,138 @@ record = Model.order(created_at: :desc).first
 record = @user.weekly_reflections.find_by(week_start_date: Date.new(2026, 2, 23))
 assert_not_nil record, "対象レコードがDBに見つかりません"
 ```
+
+<br>
+
+**テスト結果**:
+```
+202 runs, 604 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+## seeds.rb の充実（Issue #34）
+
+<br>
+
+### 設計方針
+
+<br>
+
+開発・レビュー時に「アプリの全機能を一発で体験できる」状態を作るためのサンプルデータ生成スクリプトです。<br>
+**冪等性**（何度実行しても同じ結果になること）と**本番安全性**を最優先に設計しています。
+
+<br>
+
+### 本番環境誤実行防止ガード
+```ruby
+# db/seeds.rb の先頭に配置
+if Rails.env.production?
+  abort("🚫 本番環境では db:seed を実行できません。")
+end
+```
+
+<br>
+
+Render 等の本番環境でうっかり `db:seed` を実行してもデータを破壊しない安全装置です。
+
+<br>
+
+### 冪等性の保証（全削除 → 再作成）
+```ruby
+# 外部キー制約を考慮した削除順序（子→親）
+WeeklyReflectionHabitSummary.destroy_all
+HabitRecord.destroy_all
+WeeklyReflection.destroy_all
+Habit.destroy_all
+User.destroy_all
+```
+
+<br>
+
+削除順序を「子テーブルから親テーブルへ」にすることで外部キー制約違反を防いでいます。<br>
+`find_or_create_by!` による二重作成防止と合わせて、何度実行しても同じ結果になります。
+
+<br>
+
+### 作成されるデモデータ
+
+<br>
+
+| 種別 | 件数 | 内容 |
+|------|------|------|
+| ユーザー | 1名 | test@example.com / password |
+| 有効な習慣 | 6個 | 読書・筋トレ・瞑想・英語学習・ジョギング・日記 |
+| 論理削除済み習慣 | 1個 | 習慣一覧に非表示であることを確認できる |
+| 習慣記録 | 168件 | 過去3週分・習慣ごとに異なるリアルな達成率パターン |
+| 週次振り返り（完了済み） | 2件 | 3週間前・先々週 |
+| 週次振り返り（未完了） | 1件 | 先週分・PDCAロック状態のデモ用 |
+| スナップショット | 12件 | WeeklyReflectionHabitSummary |
+
+<br>
+
+### スナップショット作成順序の修正
+```ruby
+# 修正前（コントローラーの動作と順序が異なっていた）
+reflection.complete!
+WeeklyReflectionHabitSummary.create_all_for_reflection!(reflection)
+
+# 修正後（コントローラーの動作フローと統一）
+WeeklyReflectionHabitSummary.create_all_for_reflection!(reflection)
+reflection.complete!
+```
+
+<br>
+
+実際のアプリ（`weekly_reflections_controller.rb`）では「スナップショット作成 → complete!」の順序で処理されます。<br>
+seeds.rb もこの順序に統一することで、テストデータがアプリの実際の動作を正確に再現します。
+
+<br>
+
+### 時間依存ロジックに関する注意書き
+
+<br>
+
+`locked?` は「月曜AM4:00以降」のみ `true` を返す仕様のため、<br>
+日曜日に `db:seed` を実行してもロックバナーは表示されません。<br>
+実行完了サマリーに脱出コマンドを表示することで、実行者が迷わず自己解決できる設計にしています。
+
+<br>
+```
+💡 ロックバナーが表示されない場合:
+  今日が日曜の場合は仕様上バナーは表示されません。
+  翌月曜 AM4:00 以降にアクセスすると自動的に表示されます。
+  すぐに確認したい場合は以下のコマンドを実行してください:
+  docker compose exec web bin/rails runner \
+    "WeeklyReflection.find_by(week_start_date: '先週月曜').complete!"
+```
+
+<br>
+
+### 今後 seeds.rb を修正する際の注意点
+
+<br>
+
+**① db:seed 実行前に手動操作をしていた場合**<br>
+ブラウザで手動作成した今週の振り返りは `db:seed` のリセットで削除されます。<br>
+しかし `db:seed` 実行後に先週分の振り返りが振り返り一覧に表示されない場合は、<br>
+以下のコマンドで先週分を直接完了させてください：<br>
+```bash
+docker compose exec web bin/rails runner \
+  "WeeklyReflection.find_by(week_start_date: '先週月曜日の日付').complete!"
+```
+
+<br>
+
+**② リアルな達成率パターンを維持する**<br>
+今週の記録を全て `true` にすると「全習慣100%達成」になり非現実的なデモになります。<br>
+英語学習の水曜スキップ・ジョギングの月曜のみなど、生活感のあるパターンを維持してください。
+
+<br>
+
+**③ 削除順序を守る**<br>
+テーブルを追加した場合は `destroy_all` の削除順序（子→親）も更新してください。<br>
+外部キー制約違反で `db:seed` が途中で止まるバグの原因になります。
 
 <br>
 
