@@ -48,6 +48,7 @@
 - ✅ UI/UX最終調整実装完了（フォームデザイン統一・ローディングインジケーター・カラーコントラスト改善・WCAG AA基準準拠）
 - ✅ アクセシビリティ対応実装完了（WCAG 2.1 AA基準準拠・スキップリンク・スクリーンリーダー対応・キーボードナビゲーション・フォーカス可視化）
 - ✅ seeds.rb 整備完了（デモ用サンプルデータ・本番誤実行防止ガード実装済み）
+- ✅ 本番環境ログ設定最適化完了（STDOUT出力・log_level :info・request_idタグ・機密情報フィルタリング）
 
 <br>
 
@@ -881,12 +882,12 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 | #32 | UI/UX最終調整 | ✅ 完了 | 2/28 | 4 |
 | #33 | アクセシビリティ対応 | ✅ 完了 | 3/1 | 2 |
 | #34 | seeds.rb の充実 | ✅ 完了 | 3/1 | 2 |
-| #35 | ログ設定 | ⏳ 未着手 | - | 2 |
+| #35 | ログ設定 | ✅ 完了 | 3/1 | 2 |
 | #36 | 最終デプロイ・本番確認 | ⏳ 未着手 | - | 2 |
 
 <br>
 
-**Week 5 進捗**: 16SP / 20SP（80%）
+**Week 5 進捗**: 18SP / 20SP（90%）
 
 <br>
 
@@ -960,6 +961,20 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - スナップショット作成 → `complete!` の順序をコントローラーの動作フローに統一
 - 日曜日はロックバナーが表示されない仕様（`locked?` の月曜AM4:00条件）をコメントに明記
 - ロック解除されない場合の脱出コマンドをコメントとサマリーに追記（DX改善）
+- 全テスト成功: 202 runs, 604 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+#### ✅ Issue #35: ログ設定
+
+<br>
+
+- `production.rb` のlogger設定を Rails公式推奨パターン（`ENV["RAILS_LOG_TO_STDOUT"]`による条件分岐）に変更
+- `config.log_level = :info` で本番ログを最適化（SQLクエリを除外しアクセスログ・エラーのみ記録）
+- `config.log_tags = [ :request_id ]` で各ログ行にリクエストIDを付与（障害調査の追跡性向上）
+- `filter_parameters.rb` との連携確認（`:passw`, `:email`, `:token` 等が `[FILTERED]` に置換されること）
+- `docs/logging_and_backup.md` を新規作成（Renderログ確認手順・エラー調査手順・バックアップ手順）
+- Render無料プランの制限（90日自動削除・自動バックアップなし）をドキュメントに明記
 - 全テスト成功: 202 runs, 604 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
@@ -1405,7 +1420,9 @@ habitflow/
 ├── docs/
 │   ├── er-diagram-mvp.md                 # ER図（Mermaid形式）
 │   ├── database-schema-mvp.md            # テーブル定義書
-│   └── production-check-issue-7.md       # Issue #7 本番環境確認レポート
+│   ├── production-check-issue-7.md       # Issue #7 本番環境確認レポート（本番での認証機能動作確認）
+│   ├── test-summary-issue-9.md           # Issue #9 認証機能テストサマリー（20 runs, 59 assertions, 0 failures）
+│   └── logging_and_backup.md             # Issue #35 本番ログ確認・バックアップ運用手順書（Renderログ確認手順・エラー調査手順・DB手動バックアップ手順・Render無料プラン90日削除の注意）
 ├── test/
 │   ├── models/
 │   │   ├── user_test.rb                  # Userモデルテスト（13テストケース）
@@ -6380,6 +6397,132 @@ docker compose exec web bin/rails runner \
 **③ 削除順序を守る**<br>
 テーブルを追加した場合は `destroy_all` の削除順序（子→親）も更新してください。<br>
 外部キー制約違反で `db:seed` が途中で止まるバグの原因になります。
+
+<br>
+
+**テスト結果**:
+```
+202 runs, 604 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+## 本番環境ログ設定（Issue #35）
+
+<br>
+
+### 設定概要
+
+<br>
+
+本番環境のログ設定を Rails公式推奨パターンに最適化し、Renderのダッシュボードで確認できる状態を整備しました。<br>
+合わせてエラー調査・バックアップ手順をドキュメント化しました。
+
+<br>
+
+### ログ設定の実装（production.rb）
+```ruby
+# config/environments/production.rb
+
+# 1. ログレベル: :info（アクセスログ＋エラーのみ記録。:debugはSQL全出力でNG）
+config.log_level = :info
+
+# 2. STDOUT出力（Render は標準出力を収集してダッシュボードに表示する仕組みのため）
+#    ENV["RAILS_LOG_TO_STDOUT"] による条件分岐が Rails 公式推奨パターン
+#    render.yaml で RAILS_LOG_TO_STDOUT=true を設定することで有効化される
+#    将来 AWS 等に移行する際も環境変数を設定するだけで対応可能（コード変更不要）
+if ENV["RAILS_LOG_TO_STDOUT"].present?
+  logger           = ActiveSupport::Logger.new(STDOUT)
+  logger.formatter = config.log_formatter  # Rails 標準のログ形式を維持
+  config.logger    = ActiveSupport::TaggedLogging.new(logger)  # request_id タグ付けを有効化
+end
+
+# 3. request_id タグ（同一リクエストのログを [abc123ef] で追跡可能にする）
+config.log_tags = [ :request_id ]
+```
+
+<br>
+
+**なぜ `ENV["RAILS_LOG_TO_STDOUT"]` で条件分岐するのか：**<br>
+環境変数で制御することで「本番環境でのみ STDOUT ロガーを有効化」できます。<br>
+開発環境（Docker）では `RAILS_LOG_TO_STDOUT` が未設定のため STDOUT には出力されませんが、これは正常な動作です。<br>
+
+<br>
+
+### 機密情報のフィルタリング（filter_parameters.rb）
+
+<br>
+
+`config/initializers/filter_parameters.rb` で設定されたカラムはログに `[FILTERED]` と表示されます。<br>
+```
+[abc123ef] Parameters: {"user"=>{"email"=>"[FILTERED]", "password"=>"[FILTERED]"}}
+```
+
+エンジニアでもユーザーのパスワードをログから見ることはできません。<br>
+
+<br>
+
+### Render でのログ確認方法
+
+<br>
+
+1. [https://dashboard.render.com](https://dashboard.render.com) にログイン<br>
+2. `habitflow-web` を選択<br>
+3. 上部タブの `Logs` をクリック<br>
+4. 検索ボックスで `ERROR` / `500` / `[リクエストID]` で絞り込み<br>
+
+詳細な確認手順・エラー調査手順・バックアップ手順は `docs/logging_and_backup.md` を参照してください。<br>
+
+<br>
+
+### データベースバックアップ（Render 無料プランの制限）
+
+<br>
+
+| 項目 | 内容 |
+|------|------|
+| 自動バックアップ | **なし**（無料プラン） |
+| データ保持期間 | インスタンス存続中 |
+| 有効期限 | 作成から **90日で自動削除** |
+
+> ⚠️ **本番運用・ユーザーデータを扱う場合は必ず有料プランへ移行してください。**<br>
+> 無料プランは学習・検証目的のみ推奨します。<br>
+
+<br>
+
+### Issue #35 で得た教訓：ログ設定のベストプラクティス
+
+<br>
+
+**① logger 設定は ENV 条件分岐で書く（直書きNG）**<br>
+```ruby
+# NG: 常に STDOUT に直書きする（環境変数による制御ができない）
+config.logger = ActiveSupport::Logger.new(STDOUT)
+               .tap  { |l| l.formatter = ::Logger::Formatter.new }
+               .then { |l| ActiveSupport::TaggedLogging.new(l) }
+
+# OK: 環境変数で条件分岐する（Rails公式推奨パターン）
+if ENV["RAILS_LOG_TO_STDOUT"].present?
+  logger           = ActiveSupport::Logger.new(STDOUT)
+  logger.formatter = config.log_formatter
+  config.logger    = ActiveSupport::TaggedLogging.new(logger)
+end
+```
+
+<br>
+
+**② 開発環境でログが表示されなくても正常**<br>
+
+開発環境（Docker）は `RAILS_LOG_TO_STDOUT` が未設定なので STDOUT ロガーが有効化されません。<br>
+`bin/rails runner "Rails.logger.info '...' "` を実行してもターミナルに表示されないのは正常な挙動です。<br>
+本番環境（Render）では `render.yaml` の `RAILS_LOG_TO_STDOUT=true` により自動で有効化されます。<br>
+
+<br>
+
+**③ config.log_formatter を使う**<br>
+
+`::Logger::Formatter.new` の代わりに `config.log_formatter` を使うことで、<br>
+Rails が標準で持つフォーマッター（タイムスタンプ・ログレベル・メッセージ）を維持できます。<br>
 
 <br>
 

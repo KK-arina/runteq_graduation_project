@@ -51,28 +51,86 @@ Rails.application.configure do
   config.force_ssl = true
 
   # ============================================================
-  # ログ設定
+  # ログ設定（Issue #35: 本番環境最適化）
   # ============================================================
 
-  # log_level: :info
-  #   本番環境では :debug より軽い :info レベルにする。
-  #   :debug にするとすべての SQL クエリが記録されてログが膨大になる。
-  #   :info は「アクセスログ＋エラー＋重要なイベント」だけを記録する。
+  # ------------------------------------------------------------
+  # 1. ログレベルの設定
+  # ------------------------------------------------------------
+  # :info を採用する理由：
+  #
+  # 本番環境では以下の情報を記録すれば十分：
+  # - リクエスト開始（Started GET "/dashboard"）
+  # - コントローラー処理（Processing by DashboardsController#index）
+  # - レスポンス終了（Completed 200 OK in 45ms）
+  # - エラー情報（ERROR -- : ActiveRecord::RecordNotFound）
+  #
+  # :debug にすると全 SQL 文が出力されログが爆発的に増え、
+  # ストレージを圧迫しパフォーマンスが低下するため
+  # 本番環境では :info がベストプラクティス。
+  #
+  # ログレベルの種類（詳細度の低い順）:
+  # :debug → 全情報（SQL含む）。開発向け。
+  # :info  → アクセスログ＋エラー。本番向け。← HabitFlow はここ
+  # :warn  → 警告とエラーのみ。
+  # :error → エラーのみ。
+  # :fatal → 致命的エラーのみ。
   config.log_level = :info
 
-  # logger: ActiveSupport::TaggedLogging
-  #   Render などの PaaS は標準出力（STDOUT）のログを収集する仕組みになっている。
-  #   STDOUT に出力しないとログが Render のダッシュボードに表示されない。
-  #   TaggedLogging: ログに request_id などのタグを追加できるようにする。
-  config.logger = ActiveSupport::Logger.new(STDOUT)
-    .tap  { |logger| logger.formatter = ::Logger::Formatter.new }
-    .then { |logger| ActiveSupport::TaggedLogging.new(logger) }
+  # ------------------------------------------------------------
+  # 2. STDOUT 出力設定（Render 対応）
+  # ------------------------------------------------------------
+  # なぜ STDOUT（標準出力）に出力するのか？:
+  # Render のようなクラウド環境（PaaS）は「コンテナの標準出力」を
+  # 自動で収集してダッシュボードに表示する仕組みになっている。
+  # コンテナ内のファイルにログを書いても、コンテナ再起動で消えてしまうため
+  # ファイル出力は使わない。STDOUT への出力が PaaS のベストプラクティス。
+  #
+  # なぜ ENV["RAILS_LOG_TO_STDOUT"] で条件分岐するのか？:
+  # render.yaml で RAILS_LOG_TO_STDOUT=true を設定することで
+  # Render 環境でのみ STDOUT ロガーを有効にできる。
+  # 将来、別のホスティング環境（AWS等）に移行する際も
+  # この環境変数を設定するだけで対応できる。
+  # コードを書き換えずに環境ごとの挙動を切り替えられるのが利点。
+  #
+  # なぜ TaggedLogging を使うのか？:
+  # 複数のユーザーが同時にアクセスした際、どの行が誰のリクエストなのか
+  # 判別できるように「リクエスト ID タグ」を付けるためのラッパー。
+  # log_tags の :request_id と組み合わせることで機能する。
+  if ENV["RAILS_LOG_TO_STDOUT"].present?
+    # STDOUT へ書き出すロガーを作成
+    logger           = ActiveSupport::Logger.new(STDOUT)
 
-  # log_tags: [ :request_id ]
-  #   各ログ行の先頭に「リクエストID」を付与する。
-  #   同じリクエストに関するログをまとめて追跡できるようになる。
-  #   例: [abc123] Started GET "/dashboard"
+    # ログの形式（タイムスタンプ・重要度・メッセージ）を Rails 標準形式に設定
+    # config.log_formatter は Rails がデフォルトで持つフォーマッターを返す
+    logger.formatter = config.log_formatter
+
+    # タグ付け機能（log_tags）を有効化してロガーを確定
+    config.logger    = ActiveSupport::TaggedLogging.new(logger)
+  end
+
+  # ------------------------------------------------------------
+  # 3. リクエスト ID タグの付与
+  # ------------------------------------------------------------
+  # 各ログ行の先頭に [abc123ef] のようなリクエスト ID を付与する。
+  #
+  # これにより、特定のユーザーでエラーが起きた際に
+  # そのリクエスト ID でログを絞り込んで一連の流れを追跡できる:
+  # [abc123ef] Started POST "/habits"
+  # [abc123ef] Processing by HabitsController#create as HTML
+  # [abc123ef] ERROR -- : ActiveRecord::RecordInvalid
+  # [abc123ef] Completed 422 Unprocessable Entity in 15ms
+  #
+  # TaggedLogging（上の logger 設定）が有効なときのみ機能する。
   config.log_tags = [ :request_id ]
+
+  # ------------------------------------------------------------
+  # 4. 機密情報の保護（参照）
+  # ------------------------------------------------------------
+  # パスワード・メールアドレス・トークンなどの機密情報は
+  # config/initializers/filter_parameters.rb で設定されており、
+  # ログ上では自動的に [FILTERED] に置換される。
+  # エンジニアでもユーザーのパスワードをログから見ることはできない。
 
   # ============================================================
   # Issue #28: セキュリティレスポンスヘッダーの追加設定
