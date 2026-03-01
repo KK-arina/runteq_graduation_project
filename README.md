@@ -6652,7 +6652,7 @@ end
 ### 本番デプロイ時の動作フロー
 
 <br>
-```<br>
+
 1. GitHub main ブランチへのプッシュ<br>
 2. Render が変更を自動検知<br>
 3. Docker イメージをビルド（Dockerfile のマルチステージビルド）<br>
@@ -6663,7 +6663,6 @@ end
 5. startCommand 実行:<br>
    bin/rails db:migrate && exec bin/rails server -b 0.0.0.0<br>
 6. Puma がリクエスト受付開始（Rails が PID 1）<br>
-```
 
 <br>
 
