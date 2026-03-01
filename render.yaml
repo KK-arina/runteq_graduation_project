@@ -96,7 +96,7 @@ services:
     #     すべてのネットワークインターフェースでリクエストを受け付ける設定。
     #     これがないと Render のロードバランサーからアクセスできない
     #     （デフォルトの localhost では外部からの接続が拒否されてしまう）。
-    startCommand: bin/rails db:migrate && exec bin/rails server -b 0.0.0.0
+    startCommand: bin/rails db:migrate && if [ "$SEED_IN_PRODUCTION" = "true" ]; then bin/rails db:seed; fi && exec bin/rails server -b 0.0.0.0
 
     # ──────────────────────────────────────────────────────────────
     # 環境変数の設定
