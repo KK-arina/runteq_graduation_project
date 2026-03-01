@@ -1,4 +1,5 @@
-<%# app/views/dashboards/index.html.erb %>
+<%# app/views/dashboards/index.html.erb の先頭（最初の行）に追加 %>
+<% content_for :title, "ダッシュボード | HabitFlow" %>
 <%#
   ═══════════════════════════════════════════════════════════════════
   【このファイルの役割】
@@ -65,7 +66,27 @@
           <span class="text-sm text-gray-600">全体達成率</span>
           <span class="text-sm font-bold text-blue-600"><%= @overall_rate %>%</span>
         </div>
-        <div class="h-3 bg-gray-200 rounded-full overflow-hidden">
+        <div class="h-3 bg-gray-200 rounded-full overflow-hidden"
+             <%#
+               role="progressbar":
+                 【Issue #33 追加】
+                 プログレスバーであることをスクリーンリーダーに伝える。
+
+               aria-valuenow / aria-valuemin / aria-valuemax:
+                 【Issue #33 追加】
+                 現在値・最小値・最大値を数値で伝える。
+                 スクリーンリーダーが「0から100のうち現在80」と認識できる。
+
+               aria-label="全体の習慣達成率":
+                 【Issue #33 追加】
+                 何のプログレスバーかを伝える。
+                 複数の進捗バーがある場合、区別できるよう各バーに個別のラベルを付ける。
+             %>
+             role="progressbar"
+             aria-valuenow="<%= @overall_rate %>"
+             aria-valuemin="0"
+             aria-valuemax="100"
+             aria-label="全体の習慣達成率">
           <div class="h-3 rounded-full transition-all duration-300
                       <%= @overall_rate >= 80 ? 'bg-green-500' : @overall_rate >= 50 ? 'bg-blue-500' : 'bg-red-400' %>"
                style="width: <%= @overall_rate %>%">
@@ -107,7 +128,19 @@
               （<%= stats[:rate] %>%）
             </span>
           </div>
-          <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+          <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
+               <%#
+                 role="progressbar" / aria-valuenow / aria-valuemin / aria-valuemax:
+                   【Issue #33 追加】
+                   全体達成率と同じ理由で追加する。
+                   各習慣の進捗バーごとに aria-label で習慣名を含めることで
+                   複数バーを区別できる。
+               %>
+               role="progressbar"
+               aria-valuenow="<%= stats[:rate] %>"
+               aria-valuemin="0"
+               aria-valuemax="100"
+               aria-label="<%= habit.name %> の今週の達成率">
             <div class="h-2 rounded-full transition-all duration-300
                         <%= stats[:rate] >= 80 ? 'bg-green-500' : stats[:rate] >= 50 ? 'bg-blue-400' : 'bg-red-400' %>"
                  style="width: <%= stats[:rate] %>%">

@@ -110,7 +110,21 @@
       width: style 属性で動的に幅を指定
       [value, 100].min ... 100を超えないようにクランプ（CSS幅が100%を超えるとはみ出るため）
     %>
-    <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+    <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden"
+         <%#
+           role="progressbar" / aria-valuenow / aria-valuemin / aria-valuemax:
+             【Issue #33 追加】
+             プログレスバーの役割・現在値・範囲をスクリーンリーダーに伝える。
+
+           aria-label="総合達成率":
+             【Issue #33 追加】
+             このプログレスバーが「総合達成率」を示すことを伝える。
+         %>
+         role="progressbar"
+         aria-valuenow="<%= [@overall_achievement_rate, 100].min %>"
+         aria-valuemin="0"
+         aria-valuemax="100"
+         aria-label="総合達成率">
       <div class="h-4 rounded-full transition-all duration-500
         <%= @overall_achievement_rate >= 100 ? 'bg-green-500' :
             @overall_achievement_rate >= 70  ? 'bg-blue-500' :
@@ -155,7 +169,8 @@
 
               <%# 習慣名（スナップショット）
                   habit_name: 振り返り登録時点の習慣名を保存したカラム
-                  後から習慣名を変更しても、ここには当時の名前が表示される %>
+                  後から習慣名を変更しても、ここには当時の名前が表示される
+              %>
               <div class="flex items-center gap-2">
                 <% if summary.achievement_rate >= 100 %>
                   <span class="text-green-500 text-lg">✅</span>
@@ -193,7 +208,22 @@
             <%# 個別習慣のプログレスバー
                 [@overall... , 100].min ... 100を超えないようにクランプ
             %>
-            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden"
+                 <%#
+                   role="progressbar" / aria-valuenow / aria-valuemin / aria-valuemax:
+                     【Issue #33 追加】
+                     習慣ごとのプログレスバーに役割・値を設定する。
+                     habit_name はスナップショット（振り返り時点の習慣名）。
+
+                   aria-label="[summary.habit_name] の達成率":
+                     【Issue #33 追加】
+                     習慣名を含めることで複数バーを区別できる。
+                 %>
+                 role="progressbar"
+                 aria-valuenow="<%= [summary.achievement_rate, 100].min %>"
+                 aria-valuemin="0"
+                 aria-valuemax="100"
+                 aria-label="<%= summary.habit_name %> の達成率">
               <div class="h-2 rounded-full transition-all duration-500
                 <%= summary.achievement_rate >= 100 ? 'bg-green-500' :
                     summary.achievement_rate >= 70  ? 'bg-blue-500' :

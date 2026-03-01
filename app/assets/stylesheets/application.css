@@ -55,3 +55,80 @@
     content: "→";
   }
 }
+
+/*
+  ============================================================
+  キーボードフォーカススタイルの補強 Issue #33 で追加
+  ============================================================
+
+  【なぜ必要か】
+  Tailwind CSS の focus:ring はマウスでクリックしたときにも
+  フォーカスリングが表示されてしまう場合がある。
+  :focus-visible は「キーボード操作やその他の操作でフォーカスが移ったとき」のみ
+  スタイルを適用するCSSの疑似クラス。
+  マウスでクリックしたときは適用されない。
+
+  これにより:
+    キーボード操作ユーザー → フォーカスリングが表示されて操作位置がわかる
+    マウス操作ユーザー    → フォーカスリングが表示されずスッキリした見た目になる
+
+  【:focus-visible が必要な背景】
+  ブラウザのデフォルト（outline: auto）は見た目が統一されておらず、
+  デザインと合わない場合がある。
+  Tailwind では focus:outline-none でデフォルトを消し、
+  focus:ring でカスタムリングに置き換えるのが一般的だが、
+  「マウスクリック時にも表示される」という問題がある。
+  :focus-visible を使うとこの問題を解決できる。
+
+  【a タグ（リンク）のフォーカス補強】
+  Tailwind の focus:ring がついていないリンクのフォーカスを補強する。
+  全リンクに青いアウトラインを表示し、キーボードナビゲーションを明確にする。
+  outline-offset: 2px でアウトラインが文字に重ならないように余白を設ける。
+
+  【button タグのフォーカス補強】
+  form内のsubmitボタンなど Tailwind の focus:ring が
+  設定されていないボタンのフォーカスを補強する。
+
+  【:focus-visible の対応ブラウザ】
+  Chrome 86+, Firefox 85+, Safari 15.4+ で対応済み（2024年時点でほぼ全ブラウザ対応）。
+  ============================================================
+*/
+
+/*
+  a タグのキーボードフォーカス補強
+  Tailwind の focus:ring が設定済みのリンクには重複するが、
+  設定漏れのリンクへのフォールバックとして機能する。
+  !important を使うのではなく、specificity（詳細度）の低いセレクタにすることで
+  Tailwind クラスが優先されるようにする。
+*/
+a:focus-visible {
+  outline: 2px solid #3b82f6; /* Tailwind の blue-500 相当 */
+  outline-offset: 2px;
+  border-radius: 4px; /* 角丸でデザインに馴染む */
+}
+
+/*
+  button タグのキーボードフォーカス補強
+  Tailwind の focus:ring が設定済みのボタンには重複するが、
+  設定漏れのボタンへのフォールバックとして機能する。
+*/
+button:focus-visible {
+  outline: 2px solid #3b82f6; /* Tailwind の blue-500 相当 */
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/*
+  input / select / textarea のキーボードフォーカス補強
+  Tailwind の focus:ring-2 focus:ring-blue-500 が設定されているフィールドには
+  重複するが、フォールバックとして機能する。
+  特に focus:outline-none が設定されているフィールドで、
+  かつ focus:ring が漏れている場合に有効。
+*/
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #3b82f6; /* Tailwind の blue-500 相当 */
+  outline-offset: 0px; /* input は内枠に密着させる */
+  border-radius: 4px;
+}

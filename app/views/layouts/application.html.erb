@@ -14,7 +14,6 @@
     warning: text-yellow-800→ text-yellow-900 (4.8:1 → 7.0:1)
     unlock:  text-green-800 → text-green-900  (5.2:1 → 7.4:1)
   - コントラスト改善の詳細はファイル冒頭にまとめた
-    （case 文の中にERBコメントタグを書くと構文エラーになるため）
   - message_type.to_s の説明コメントを補強
 
   【カラーコントラスト変更の根拠】
@@ -23,11 +22,69 @@
   warning : bg-yellow-50 (#fefce8) 上の text-yellow-900(#713f12) = 7.0:1 → AA基準クリア
   unlock  : bg-green-50  (#f0fdf4) 上の text-green-900 (#14532d) = 7.4:1 → AA基準クリア
   ※ 変更前はいずれも *-800 だったが、AA境界ギリギリ(4.5:1前後)のものがあった
+
+  【Issue #33 での変更点（アクセシビリティ対応）】
+  ① <html lang="ja"> を追加
+     理由: スクリーンリーダーはこの属性を見て「日本語で読み上げる」と判断する。
+           指定がないと英語のまま読み上げてしまい、音声が不自然になる。
+           WCAG 2.1 の達成基準 3.1.1（ページの言語）で要求されている。
+
+  ② スキップリンクを追加
+     理由: キーボード操作ユーザーがページを開くたびに
+           ナビゲーションのリンクをすべて Tab で通過しなくても
+           すぐにメインコンテンツに飛べるようにするため。
+           視覚的にはふだん見えないが、Tab キーを押すと画面上部に現れる。
+           WCAG 2.1 の達成基準 2.4.1（ブロックスキップ）で要求されている。
+
+  ③ <main id="main-content"> を追加
+     理由: スキップリンクの遷移先として id が必要。
+           また <main> タグ自体がランドマーク（ページ構造の目印）として
+           スクリーンリーダーに「ここがメインコンテンツ」と伝える役割を持つ。
+
+  ④ <title> を動的にする（content_for :title 対応）
+     理由: 各ページで固有のタイトルが設定できるようにする。
+           スクリーンリーダーはページ読み込み時にまず <title> を読み上げるため、
+           「HabitFlow」だけでなく「ダッシュボード | HabitFlow」のように
+           ページの内容が分かるタイトルにすることで操作性が向上する。
+           WCAG 2.1 の達成基準 2.4.2（ページタイトル）で要求されている。
 %>
 <!DOCTYPE html>
-<html>
+<%#
+  lang="ja":
+    【Issue #33 追加】
+    この HTML ページが日本語で書かれていることをブラウザと
+    スクリーンリーダーに伝える属性。
+    VoiceOver（Mac）や NVDA（Windows）などのスクリーンリーダーは
+    この属性を見て日本語音声エンジンを使って読み上げる。
+    指定しないと英語エンジンで読み上げられ、音声が不自然になる。
+    例: lang="ja" なし → "ダッシュボード" が英語発音で読まれる
+    例: lang="ja" あり → "ダッシュボード" が日本語音声で正しく読まれる
+%>
+<html lang="ja">
   <head>
-    <title>HabitFlow</title>
+    <%#
+      <title> を動的にする（content_for :title 対応）
+      【Issue #33 追加・変更】
+      変更前: <title>HabitFlow</title>（全ページ同じタイトル）
+      変更後: ページごとに異なるタイトルを設定できるようにする
+
+      content_for(:title):
+        各ビュー（dashboards/index.html.erb など）で
+        content_for :title, "ダッシュボード | HabitFlow" と書くと
+        その文字列がここに挿入される。
+
+      || "HabitFlow":
+        content_for :title が設定されていないページ（設定漏れのページ）では
+        デフォルト値として "HabitFlow" を使う。
+        || は Ruby の「左辺が nil または false なら右辺を使う」演算子。
+
+      なぜタイトルをページごとに変えるか:
+        スクリーンリーダーはページ読み込み時にまず <title> を読み上げる。
+        「HabitFlow」だけでは「どのページにいるか」がわからない。
+        「ダッシュボード | HabitFlow」なら「ダッシュボードページにいる」とわかる。
+        WCAG 2.1 の達成基準 2.4.2（ページタイトル）で要求されている。
+    %>
+    <title><%= content_for(:title) || "HabitFlow" %></title>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
@@ -44,6 +101,46 @@
       _footer.html.erb の mt-auto と組み合わせてフッターを常に最下部に固定する
   %>
   <body class="min-h-screen bg-gray-50 flex flex-col">
+
+    <%#
+      ════════════════════════════════════════════════════
+      スキップリンク
+      【Issue #33 追加】
+      ════════════════════════════════════════════════════
+
+      「スキップリンク」とは何か:
+        キーボードのみで操作するユーザー（視覚障害者、運動障害者など）向けの
+        ナビゲーション補助リンク。
+        ページを開くたびにヘッダーのすべてのリンクを Tab で通過しなくても
+        「メインコンテンツへスキップ」をクリックすることで
+        直接 <main id="main-content"> に飛べる。
+
+      なぜ普段は見えないのか:
+        sr-only クラスは要素を視覚的に隠すが、スクリーンリーダーには見える。
+        focus:not-sr-only は「フォーカスされたときだけ視覚的に表示する」。
+        キーボードで Tab を押すと画面上部にボタンが現れる仕組み。
+
+      href="#main-content":
+        クリック（または Enter キー）すると id="main-content" を持つ要素に
+        ページがスクロールし、フォーカスがその要素に移動する。
+
+      Tailwind クラスの説明:
+        sr-only: スクリーンリーダー専用（視覚的に非表示・支援技術には読める）
+        focus:not-sr-only: フォーカス時だけ視覚的に表示する
+        focus:fixed: フォーカス時に fixed 配置にする
+        focus:top-4 focus:left-4: 画面左上に表示する
+        focus:z-50: 他の要素より前面に表示する（z-index: 50）
+        focus:px-4 focus:py-2: フォーカス時に内側余白を付ける
+        focus:bg-blue-600 focus:text-white: 青背景・白文字（目立つように）
+        focus:rounded: 角を丸くする
+        focus:shadow-lg: 影を付けて浮いて見えるようにする
+    %>
+    <a href="#main-content"
+       class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4
+              focus:z-50 focus:px-4 focus:py-2 focus:bg-blue-600 focus:text-white
+              focus:rounded focus:shadow-lg focus:text-sm focus:font-medium">
+      メインコンテンツへスキップ
+    </a>
 
     <%= render "shared/header" %>
 
@@ -76,7 +173,25 @@
                                            when 'warning' then 5000
                                            else 4000
                                            end %>"
-           role="alert">
+           role="alert"
+           <%#
+             aria-live="polite":
+               【Issue #33 追加】
+               動的に挿入されるコンテンツをスクリーンリーダーに読み上げさせるための属性。
+
+               なぜ必要か:
+                 フラッシュメッセージはページ遷移後にJavaScriptで表示される動的コンテンツ。
+                 スクリーンリーダーは最初のページ読み込み時にしかDOMを読まないため、
+                 後から追加された要素は自動では読み上げない。
+                 aria-live="polite" を指定すると、ユーザーの現在の操作が終わった後に
+                 自動で読み上げてくれる。
+
+               "polite" vs "assertive":
+                 polite   = 現在の読み上げが終わってから通知する（穏やか）
+                 assertive = 即座に割り込んで通知する（緊急）
+                 フラッシュメッセージは緊急でないので polite が適切。
+           %>
+           aria-live="polite">
 
         <%#
           relative: ✕ボタンを絶対配置するための基準
@@ -103,7 +218,13 @@
 
           <div class="flex items-start gap-2">
             <%# メッセージタイプ別アイコン %>
-            <span class="flex-shrink-0">
+            <%#
+              aria-hidden="true":
+                絵文字アイコンはスクリーンリーダーに読み上げさせない。
+                「チェックマーク絵文字」と読み上げられてもユーザーには伝わらないため。
+                メッセージ本文（message）が内容を伝えるので、アイコンは装飾として扱う。
+            %>
+            <span class="flex-shrink-0" aria-hidden="true">
               <%= case type
                   when 'notice'  then '✅'
                   when 'alert'   then '❌'
@@ -123,8 +244,26 @@
           <button type="button"
                   data-action="flash#dismiss"
                   class="absolute top-2 right-2 p-1 rounded
-                         opacity-60 hover:opacity-100 transition-opacity"
-                  aria-label="閉じる">
+                         opacity-60 hover:opacity-100 transition-opacity
+                         focus:outline-none focus:ring-2 focus:ring-offset-1
+                         focus:ring-current"
+                  <%#
+                    focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-current:
+                      【Issue #33 追加】
+                      キーボードで Tab キーを押してこのボタンにフォーカスが当たったとき、
+                      青いリングを表示してフォーカス位置を明確にする。
+                      focus:ring-current は「現在のテキスト色でリングを表示する」。
+                      notice なら青、alert なら赤のリングになり、
+                      通知の種類に合った色でフォーカスが示される。
+                  %>
+                  aria-label="通知を閉じる">
+                  <%#
+                    aria-label="通知を閉じる":
+                      【Issue #33 変更】"閉じる" → "通知を閉じる" に変更。
+                      「閉じる」だけでは何を閉じるのか不明確。
+                      「通知を閉じる」にすることでスクリーンリーダーのユーザーが
+                      どのボタンかを理解しやすくなる。
+                  %>
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                  aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -136,7 +275,34 @@
       </div>
     <% end %>
 
-    <main class="flex-1">
+    <%#
+      <main id="main-content">:
+        【Issue #33 追加・変更】
+        変更前: <main class="flex-1">
+        変更後: <main id="main-content" class="flex-1">
+
+        id="main-content":
+          スキップリンク（href="#main-content"）のジャンプ先として必要。
+          Tab キー→ Enter でスキップリンクを実行すると、
+          フォーカスがこの <main> 要素に移動する。
+
+        <main> タグ自体の役割（ランドマーク）:
+          HTML5 の <main> タグはランドマークロール "main" を持つ。
+          スクリーンリーダーは「M キー」などのショートカットで
+          ランドマーク間を移動できる。
+          <main> があることで「ここからがメインコンテンツ」と
+          スクリーンリーダーのユーザーが素早く把握できる。
+
+        tabindex="-1":
+          スキップリンクがジャンプしてきたとき、
+          <main> 要素にキーボードフォーカスが当たるようにするために必要。
+          tabindex="-1" は「Tab キーの通常のフォーカス順序には含めないが、
+          JavaScriptや#リンクからフォーカスを当てることはできる」という意味。
+          これがないと、スキップリンクで見た目上はジャンプするが
+          フォーカスは元の位置に留まり、次に Tab を押すと
+          スキップしたはずのナビゲーションに戻ってしまう。
+    %>
+    <main id="main-content" class="flex-1" tabindex="-1">
       <%= yield %>
     </main>
 

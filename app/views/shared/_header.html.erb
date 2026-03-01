@@ -20,112 +20,185 @@
   ・Stimulus コントローラー（mobile-menu）の紐付け
   ・ARIA属性によるアクセシビリティ対応
 
+  【Issue #33 での変更点（アクセシビリティ対応）】
+  ① ナビゲーションを <nav> タグで囲み aria-label を追加
+     理由: <nav> タグは HTML5 のランドマーク要素。
+           "navigation" ランドマークとして認識され、
+           スクリーンリーダーユーザーが "N キー" でナビゲーションに素早くジャンプできる。
+           1ページに複数の <nav> がある場合、aria-label で区別する。
+
+  ② PC用・モバイル用ナビリンクに aria-current を追加
+     理由: スクリーンリーダーのユーザーが「現在どのページにいるか」を
+           音声で確認できるようにするため。
+           aria-current="page" が設定されたリンクは
+           「現在のページ、ダッシュボード」のように読み上げられる。
+
+  ③ ナビリンク・ボタンにフォーカスリングを追加
+     理由: キーボードのTabキーで移動したとき、どの要素にフォーカスがあるか
+           視覚的に分かるようにするため。WCAG 2.4.7（フォーカスの可視化）対応。
+
+  ④ ユーザー名表示に aria-hidden="true" を追加
+     理由: ログアウトボタンの aria-label にユーザー名を含めているため、
+           「〇〇 さん」のspan を重複して読み上げないようにする。
+
+  ⑤ ログアウトボタンに aria-label を追加
+     理由: 「ログアウト」だけでは「誰のアカウントからか」が不明。
+           ユーザー名を含めることで「自分のアカウント操作」と明確に伝わる。
+
+  ⑥ <header> の role="banner" は記述しない
+     理由: HTML5仕様では、ページ最上位に置かれた <header> は
+           自動的に role="banner" として認識されるため、
+           明示的に書くと「冗長なARIA」になる。
+           WAI-ARIA仕様の「ネイティブセマンティクスを優先する」原則に従う。
+
+  【ERBコメントの制約（重要）】
+  ERBコメントタグは Ruby コードとして処理される。
+  link_to や button_to の引数リストの途中（カンマの後など）に
+  コメントを書くと SyntaxError になる。
+  → コメントは必ずメソッド呼び出しの「外」（前か後）に書くこと。
+
   【Tailwind CSS ブレークポイント】
   プレフィックスなし → 全サイズ（モバイル含む）に適用
   md:xxx            → 画面幅 768px 以上に適用
   これを「モバイルファースト」と呼ぶ
 %>
 
-<%#
-  data-controller="mobile-menu":
-    このヘッダー全体を Stimulus の mobile-menu コントローラーに紐付ける。
-    app/javascript/controllers/mobile_menu_controller.js が動作する。
-%>
 <header class="bg-gray-50 border-b border-gray-200"
         data-controller="mobile-menu">
 
-  <%#
-    max-w-7xl             : 最大幅 1280px（Issue #24と同じ）
-    mx-auto               : 左右マージン自動で中央揃え
-    px-4 sm:px-6 lg:px-8 : レスポンシブなパディング（Issue #24と同じ）
-    py-4                  : 上下パディング 16px（Issue #24と同じ）
-  %>
   <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-
-    <%#
-      flex            : フレックスボックスで横並びレイアウト
-      justify-between : 左端（ロゴ）と右端（ナビ）に振り分ける
-      items-center    : 縦方向を中央揃え
-    %>
     <div class="flex justify-between items-center">
 
-      <%# ── ロゴ（全画面サイズで表示・Issue #24と同じ） ── %>
+      <%# ── ロゴ（全画面サイズで表示） ── %>
+      <%#
+        ロゴリンクに aria-label は不要:
+          「HabitFlow」というテキストが既に存在するリンクに
+          aria-label を追加すると、スクリーンリーダーは
+          テキスト（HabitFlow）を無視して aria-label だけを読む。
+          視覚表示（HabitFlow）と読み上げ内容が一致しなくなるため
+          aria-label は設定しない。
+          テキストリンクはそのテキスト自体がラベルになる。
+      %>
       <div class="text-2xl font-bold text-blue-600">
         <%= link_to "HabitFlow", root_path,
             class: "hover:text-blue-700 transition-colors" %>
       </div>
 
-      <%# ── PC用ナビゲーション（md以上で表示） ── %>
       <%#
-        【Issue #26 で変更した唯一の箇所】
-        変更前: class="flex items-center space-x-4"
-        変更後: class="hidden md:flex items-center space-x-4"
-          hidden  を追加: モバイルでは非表示（display:none）
-          md:flex を追加: 768px以上でフレックス表示に切り替わる
-        PC表示は Issue #24 と完全一致、モバイルでだけ非表示になる
+        ── PC用ナビゲーション（md以上で表示） ──
+
+        <nav> タグで囲む（Issue #33 追加）:
+          <nav> タグは HTML5 のランドマーク要素。
+          "navigation" ランドマークとして認識され、
+          スクリーンリーダーユーザーが "N キー" でナビゲーションに
+          素早くジャンプできる。
+
+        aria-label="メインナビゲーション"（Issue #33 追加）:
+          1ページに複数の <nav> がある場合（PC用・モバイル用など）、
+          どのナビゲーションかをスクリーンリーダーに伝えるために必要。
+          "メインナビゲーション" と読み上げられ、他のナビと区別できる。
       %>
-      <div class="hidden md:flex items-center space-x-4">
+      <nav class="hidden md:flex items-center space-x-4"
+           aria-label="メインナビゲーション">
         <% if logged_in? %>
 
-          <%# ダッシュボードリンク（Issue #24と同じ） %>
+          <%#
+            ダッシュボードリンク
+
+            aria-current（Issue #33 追加）:
+              現在表示しているページのリンクに aria-current="page" を設定する。
+              スクリーンリーダーが「現在のページ、ダッシュボード」と読み上げるため、
+              ユーザーは「今どのページにいるか」を音声で確認できる。
+
+              controller_name == 'dashboards':
+                Rails の controller_name ヘルパーで現在のコントローラー名を取得。
+                ダッシュボードページでは "dashboards" が返る。
+                条件が真のとき "page"、偽のとき false を返す。
+                false のときは aria-current 属性自体が HTML に出力されない
+                （「aria-current="false"」という不正な状態にならない）。
+
+            focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded（Issue #33 追加）:
+              キーボードで Tab を押してリンクにフォーカスが当たったとき、
+              青いリングを表示してフォーカス位置を示す。
+              ブラウザのデフォルトのアウトラインより見やすいカスタムスタイル。
+
+            【注意】コメントは link_to の「外」（前か後）に書く。
+              link_to の引数リストの途中にコメントを入れると
+              ERBパーサーが SyntaxError を起こす。
+          %>
           <%= link_to "ダッシュボード", dashboard_path,
               class: "text-gray-600 hover:text-gray-900 px-3 py-2
-                      text-sm font-medium transition-colors" %>
+                      text-sm font-medium transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
+              aria: { current: controller_name == 'dashboards' ? 'page' : false } %>
 
-          <%# 習慣一覧リンク（Issue #24と同じ） %>
           <%= link_to "習慣一覧", habits_path,
               class: "text-gray-600 hover:text-gray-900 px-3 py-2
-                      text-sm font-medium transition-colors" %>
+                      text-sm font-medium transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
+              aria: { current: controller_name == 'habits' ? 'page' : false } %>
 
-          <%# 振り返りリンク（Issue #21で追加・Issue #24と同じ） %>
           <%= link_to "振り返り", weekly_reflections_path,
               class: "text-gray-600 hover:text-gray-900 px-3 py-2
-                      text-sm font-medium transition-colors" %>
+                      text-sm font-medium transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
+              aria: { current: controller_name == 'weekly_reflections' ? 'page' : false } %>
 
-          <%# ユーザー名表示（Issue #24と同じ） %>
-          <span class="text-gray-700 text-sm font-medium">
+          <%#
+            ユーザー名表示
+            aria-hidden="true"（Issue #33 追加）:
+              「〇〇 さん」という表示はスクリーンリーダーに読み上げさせない。
+              ログアウトボタンの aria-label に「〇〇 さんのアカウントからログアウト」と
+              含めているため、ここで重複して読み上げると冗長になる。
+          %>
+          <span class="text-gray-700 text-sm font-medium" aria-hidden="true">
             <%= current_user.name %> さん
           </span>
 
           <%#
-            ログアウトボタン（Issue #24と同じ）
-            button_to    : フォームとして DELETE リクエストを送る Rails ヘルパー
-            method:delete: DELETE /logout にリクエストを送る
-            turbo_confirm: クリック時に確認ダイアログを表示する
+            ログアウトボタン
+            aria-label（Issue #33 追加）:
+              「ログアウト」だけでは「誰が」「どこから」ログアウトするか不明。
+              ユーザー名を含めることで「自分のアカウント操作」と明確に伝わる。
+              ユーザー名表示（上の span）は aria-hidden にしているため、
+              ここで補足情報として含める。
+
+            focus:ring-offset-1:
+              ボタンは背景色があるため、リングとボタンの間に
+              1px の隙間（offset）を設けて見やすくする。
           %>
           <%= button_to "ログアウト", logout_path,
               method: :delete,
               class: "px-4 py-2 text-sm font-medium text-gray-700 bg-white
                       border border-gray-300 rounded-md hover:bg-gray-50
-                      transition-colors",
+                      transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1",
+              aria: { label: "#{current_user.name} さんのアカウントからログアウト" },
               data: { turbo_confirm: "ログアウトしますか？" } %>
 
         <% else %>
 
-          <%# 未ログイン時（Issue #24と同じ） %>
           <%= link_to "ログイン", login_path,
               class: "text-gray-600 hover:text-gray-900 px-3 py-2
-                      text-sm font-medium transition-colors" %>
+                      text-sm font-medium transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded" %>
 
           <%= link_to "新規登録", new_user_path,
               class: "px-4 py-2 text-sm font-medium text-white bg-blue-600
-                      rounded-md hover:bg-blue-700 transition-colors" %>
+                      rounded-md hover:bg-blue-700 transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" %>
 
         <% end %>
-      </div>
+      </nav>
 
       <%# ── ハンバーガーメニューボタン（モバイルのみ表示）── %>
       <%#
         md:hidden:
           画面幅 768px 以上では非表示にする。
-          PCでは上の PC 用ナビが表示されるのでこのボタンは不要。
 
-        data-action="click->mobile-menu#toggle":
-          クリック時に mobile-menu コントローラーの toggle() を呼び出す。
-
-        data-mobile-menu-target="button":
-          コントローラーから this.buttonTarget でこの要素を参照する。
-          aria-expanded の値を動的に更新するために必要。
+        focus:outline-none focus:ring-2 focus:ring-blue-500（Issue #33 追加）:
+          モバイルのハンバーガーボタンもキーボードフォーカス時に
+          青いリングを表示するように統一する。
 
         aria-expanded="false":
           メニューが開いているか閉じているかをスクリーンリーダーに伝える。
@@ -133,8 +206,7 @@
 
         aria-controls="mobile-menu":
           「このボタンは id='mobile-menu' の要素を制御している」ことを
-          スクリーンリーダーに伝える ARIA 属性。
-          支援技術がどのボタンがどのメニューを操作するかを正確に把握できる。
+          スクリーンリーダーに伝える。
 
         aria-label="メニューを開く":
           SVGアイコンだけのボタンにはテキストがないため必須のアクセシビリティ対応。
@@ -142,7 +214,8 @@
       <button type="button"
               class="md:hidden inline-flex items-center justify-center p-2
                      rounded-md text-gray-600 hover:text-gray-900 hover:bg-gray-100
-                     transition-colors"
+                     transition-colors
+                     focus:outline-none focus:ring-2 focus:ring-blue-500"
               data-action="click->mobile-menu#toggle"
               data-mobile-menu-target="button"
               aria-expanded="false"
@@ -150,11 +223,9 @@
               aria-label="メニューを開く">
 
         <%#
-          ハンバーガーアイコン（三本線）
-          data-mobile-menu-target="openIcon":
-            メニューが閉じているときに表示するアイコン。
           aria-hidden="true":
             装飾用SVGのためスクリーンリーダーに読み上げさせない。
+            親の button の aria-label で代替テキストを提供しているため問題ない。
         %>
         <svg data-mobile-menu-target="openIcon"
              class="w-6 h-6"
@@ -164,12 +235,6 @@
                 d="M4 6h16M4 12h16M4 18h16"/>
         </svg>
 
-        <%#
-          閉じるアイコン（×印）
-          data-mobile-menu-target="closeIcon":
-            メニューが開いているときに表示するアイコン。
-          hidden: 初期状態では非表示。
-        %>
         <svg data-mobile-menu-target="closeIcon"
              class="w-6 h-6 hidden"
              fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -179,29 +244,26 @@
         </svg>
       </button>
 
-    </div><%# end flex justify-between %>
+    </div>
 
-    <%# ── モバイル用ドロップダウンメニュー ── %>
     <%#
+      ── モバイル用ドロップダウンメニュー ──
+
+      <nav> タグで囲む（Issue #33 追加）:
+        PC用と同様に <nav> タグでナビゲーションランドマークにする。
+
+      aria-label="モバイルナビゲーション"（Issue #33 追加）:
+        PC用が "メインナビゲーション" なのでモバイル用は別名にする。
+        同じ名前だと2つの <nav> が区別できない。
+
       id="mobile-menu":
         ハンバーガーボタンの aria-controls="mobile-menu" と対応する識別子。
         スクリーンリーダーが「このボタンがこのメニューを制御している」と認識できる。
-
-      hidden:
-        初期状態では非表示（display:none）。
-        Stimulus の _openMenu()/_closeMenu() が
-        hidden クラスの付け外しで表示/非表示を制御する。
-
-      md:hidden:
-        画面幅 768px 以上では常に非表示。
-        PCでは上の PC 用ナビが表示されるためこのメニューは不要。
-
-      data-mobile-menu-target="menu":
-        コントローラーから this.menuTarget でこの要素を参照する。
     %>
-    <div id="mobile-menu"
+    <nav id="mobile-menu"
          class="hidden md:hidden"
-         data-mobile-menu-target="menu">
+         data-mobile-menu-target="menu"
+         aria-label="モバイルナビゲーション">
 
       <div class="pt-2 pb-3 border-t border-gray-200 space-y-1">
 
@@ -209,87 +271,71 @@
 
           <%#
             モバイルメニューの各リンク
-            block: ブロック要素にして幅いっぱいに広げる（タップしやすくする）
-            py-2 : 上下パディング 8px（タップ領域を十分に確保する）
+
+            aria-current（Issue #33 追加）:
+              PC用ナビと同じ理由で現在ページを示す。
+
+            focus:ring-inset（Issue #33 追加）:
+              モバイルメニューはブロック要素（幅いっぱい）なので
+              ring を内側に表示すると隣接要素との干渉を防げる。
+
+            【注意】コメントは link_to の「外」に書く。
           %>
           <%= link_to "ダッシュボード", dashboard_path,
               class: "block px-3 py-2 rounded-md text-sm font-medium
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
-                      transition-colors" %>
+                      transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
+              aria: { current: controller_name == 'dashboards' ? 'page' : false } %>
 
           <%= link_to "習慣一覧", habits_path,
               class: "block px-3 py-2 rounded-md text-sm font-medium
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
-                      transition-colors" %>
+                      transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
+              aria: { current: controller_name == 'habits' ? 'page' : false } %>
 
           <%= link_to "振り返り", weekly_reflections_path,
               class: "block px-3 py-2 rounded-md text-sm font-medium
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
-                      transition-colors" %>
+                      transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
+              aria: { current: controller_name == 'weekly_reflections' ? 'page' : false } %>
 
           <div class="border-t border-gray-200 mt-1 pt-1">
-            <%# ユーザー名表示 %>
-            <p class="px-3 py-2 text-sm text-gray-700 font-medium">
+            <%# aria-hidden="true": ユーザー名はログアウトボタンのaria-labelで伝えるため非表示 %>
+            <p class="px-3 py-2 text-sm text-gray-700 font-medium" aria-hidden="true">
               <%= current_user.name %> さん
             </p>
 
-            <%#
-              ログアウトボタン（モバイル用）
-              w-full   : 幅いっぱいに広げてタップしやすくする
-              text-left: テキストを左揃えにする
-            %>
             <%= button_to "ログアウト", logout_path,
                 method: :delete,
                 class: "w-full text-left px-3 py-2 rounded-md text-sm font-medium
                         text-gray-700 hover:text-gray-900 hover:bg-gray-100
-                        transition-colors",
+                        transition-colors
+                        focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
+                aria: { label: "#{current_user.name} さんのアカウントからログアウト" },
                 data: { turbo_confirm: "ログアウトしますか？" } %>
           </div>
 
         <% else %>
 
-          <%#
-            未ログイン時のモバイルメニュー（Issue #26 で調整）
-
-            【ログインリンク】
-            block      : ブロック要素にして幅いっぱいに広げる
-            w-full     : 幅を親要素いっぱいに広げて新規登録と幅を統一する
-            text-center: テキストを中央揃えにする
-            py-4       : 上下パディングを大きめに設定する
-                         Apple の UI ガイドラインでは最小タップ領域は 44px 以上を推奨。
-                         py-4 = 上下 16px × 2 + テキスト高さ ≒ 44px以上を確保できる。
-            text-base  : フォントサイズ 16px。
-                         モバイルでは text-sm(14px) より text-base(16px) の方が
-                         視認性・タップしやすさが向上する。
-            border border-gray-300: 枠線を付けてボタンらしく見せる
-            rounded-md : 角を丸くする
-            focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500:
-                         キーボードのTabキーでフォーカスしたときだけ
-                         青い枠線を表示する。マウス操作時は表示されない。
-                         視覚障害者やキーボード操作ユーザーへのアクセシビリティ対応。
-
-            【新規登録リンク】
-            mt-2       : ログインボタンとの間に 8px の余白を作る
-            bg-blue-600: 青背景で「主要アクション」であることを視覚的に示す
-            text-white : 白文字で青背景に合わせる
-            その他はログインと同じ理由
-          %>
           <%= link_to "ログイン", login_path,
               class: "block w-full text-center px-3 py-4 rounded-md text-base font-medium
                       text-gray-700 border border-gray-300 hover:bg-gray-50
-                      focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500
+                      focus:outline-none focus:ring-2 focus:ring-blue-500
                       transition-colors" %>
 
           <%= link_to "新規登録", new_user_path,
               class: "block w-full text-center px-3 py-4 rounded-md text-base font-medium
                       text-white bg-blue-600 hover:bg-blue-700
-                      focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500
+                      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500
                       transition-colors mt-2" %>
 
         <% end %>
 
       </div>
-    </div><%# end モバイルドロップダウン %>
+    </nav>
 
-  </div><%# end max-w-7xl %>
+  </div>
 </header>
