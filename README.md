@@ -52,6 +52,8 @@
 - ✅ 本番デプロイ最終設定完了（render.yaml に startCommand 追加・db:migrate 自動実行・exec による Graceful Shutdown 対応）
 - ✅ 本番DB へのデモデータ投入完了（SEED_IN_PRODUCTION フラグ方式・test@example.com / password でログイン可能）
 - ✅ 全機能の本番動作確認完了（202 runs, 604 assertions, 0 failures）
+- ✅ Issue #37 本番環境最終動作確認完了（221 runs, 648 assertions, 0 failures）
+- ✅ タイムゾーン設定（JST）追加・本番ロック時刻ズレ重大バグ修正完了
 
 <br>
 
@@ -998,6 +1000,145 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 
 <br>
 
+### Week 6（3/1〜）: 本番環境最終動作確認
+
+<br>
+
+| Issue | タイトル | ステータス | 完了日 | SP |
+|-------|---------|-----------|--------|-----|
+| #37 | 本番環境最終動作確認 | ✅ 完了 | 3/4 | 4 |
+| #38 | READMEとドキュメント整備 | 🔲 未着手 | - | 3 |
+| #39 | 最終動作確認チェックリスト | 🔲 未着手 | - | 3 |
+| #40 | MVPレビュー準備 | 🔲 未着手 | - | 2 |
+| #41 | 最終バグ修正バッファ | 🔲 未着手 | - | 6 |
+| #42 | 最終調整とレビュー依頼提出準備 | 🔲 未着手 | - | 2 |
+
+<br>
+
+**Week 6 進捗**: 4SP / 20SP（20%）
+
+<br>
+
+**Week 6 目標**: 20SP・3月31日中にレビュー依頼提出
+
+<br>
+
+#### ✅ Issue #37: 本番環境最終動作確認
+
+<br>
+
+- `test/integration/production_final_check_test.rb` を新規作成（19テストケース）
+- ユーザー登録・ログイン・ログアウト・習慣管理・ダッシュボード・週次振り返り・PDCAロック・エラーハンドリングを網羅
+- AM4:00ちょうどの境界値テストを追加（月曜AM4:00でロック発動することを検証）
+- `docs/production_check_issue_37.md` を新規作成（本番環境手動確認チェックリスト9項目）
+- **重大バグ修正**: `config.time_zone = "Tokyo"` / `config.active_record.default_timezone = :local` を追加
+  - 未設定のままだとRailsがUTCで動作し、本番環境でロック時刻が9時間ズレる致命的バグが発生する
+- 全テスト成功: 221 runs, 648 assertions, 0 failures, 0 errors, 0 skips
+
+<br>
+
+---
+
+<br>
+
+## 🏆 Issue #1〜#37 を通じて得た主要な教訓
+
+<br>
+
+### タイムゾーン・時間依存ロジック
+
+<br>
+
+- **`config.time_zone` は必ず最初に設定する**（Issue #37）
+  - 未設定のままだとRailsはUTCで動作し、本番環境で時刻ロジックが9時間ズレる
+  - `config.active_record.default_timezone = :local` も合わせて設定する
+- **`Time.current` / `Date.current` を使う**（Issue #14）
+  - `Time.now` / `Date.today` はサーバーのローカル時刻を返しタイムゾーン非対応
+- **`travel_to` のスコープに注意する**（Issue #30）
+  - `travel_to` の外で `Date.current` を計算すると `travel_to` の効果が当たらない
+
+<br>
+
+### テスト設計
+
+<br>
+
+- **`order(created_at: :desc).first` は使わない**（Issue #31, #33）
+  - fixturesの `created_at` はRailsが自動設定するため順序が不安定
+  - `find_by(name:)` や `find_by(week_start_date:)` で値を直接特定する
+  - `assert_not_nil` を必ずセットで追加して早期検出できるようにする
+- **テストの期待値は実装に合わせる**（Issue #37）
+  - `render :new, status: :unprocessable_entity` の実装なら `assert_response :unprocessable_entity`
+  - `:success` を期待していてもアプリが422を返すなら422が正しい
+- **fixtures と動的データの干渉を防ぐ**（Issue #17, #29）
+  - `setup` で `@habit.habit_records.destroy_all` などデータをリセットする
+  - 未完了データが必要なテストはテストコード内で動的に作成する
+
+<br>
+
+### ERBコメント構文バグ
+
+<br>
+
+- **ERBコメントブロック（`<%#`〜`%>`）内に `%>` を含む文字列を書かない**（Issue #32, #33）
+  - `%>` がコメントの閉じタグと誤認識されテキストがHTMLとして出力される
+  - `<%= habit.id %>` → `[habit.id]` のように `%>` を含まない表現に置き換える
+- **ERBコメントの閉じタグ `%>` を忘れない**
+  - `ActionView::SyntaxErrorInTemplate` が発生する
+
+<br>
+
+### N+1問題対策
+
+<br>
+
+- **ループ内でDBアクセスするメソッドを呼ばない**（Issue #16, #29）
+  - コントローラーで `.group(:habit_id).count` による一括集計を行う
+  - ビューには `@habit_stats[habit.id]` のようにハッシュで渡す
+- **`find_by` → `exists?` で最適化する**（Issue #29）
+  - 存在確認だけなら `SELECT 1 LIMIT 1` で十分（ActiveRecordオブジェクト生成なし）
+
+<br>
+
+### セキュリティ設計
+
+<br>
+
+- **必ず `current_user` スコープでデータを取得する**（全Issue）
+  - `Habit.find(params[:id])` ではなく `current_user.habits.find(params[:id])`
+  - これだけで他ユーザーデータへの不正アクセスを防げる
+- **`before_action` でサーバー側もブロックする**（Issue #24）
+  - ビューのボタン無効化だけではURL直打ちで突破できる
+  - `before_action :require_unlocked` のようにコントローラーでも必ず制御する
+
+<br>
+
+### 本番デプロイ設計
+
+<br>
+
+- **`exec` を必ず付ける**（Issue #36）
+  - `exec bin/rails server` でRailsがPID 1になりGraceful Shutdownが機能する
+- **`db:migrate` を `startCommand` に含める**（Issue #36）
+  - デプロイと同時に自動適用。`migrate` は冪等なので毎回実行しても安全
+- **seeds.rb には環境変数フラグ方式の本番ガードを入れる**（Issue #34, #36）
+  - `Rails.env.production? && ENV["SEED_IN_PRODUCTION"].blank? → abort` の二重ロック
+
+<br>
+
+### データ設計
+
+<br>
+
+- **スナップショット設計でデータ不変性を保証する**（Issue #20）
+  - 振り返り時点の習慣名・目標値をコピー保存する
+  - 後から習慣名を変更しても過去の振り返りが正しく表示される
+- **外部キー制約は `on_delete:` を明示する**（Issue #14）
+  - 削除時の挙動（CASCADE / NULLIFY）を設計段階で決定する
+  - `habit_id` はスナップショット保護のため `NULLIFY`、`user_id` は `CASCADE`
+
+<br>
+
 ---
 
 <br>
@@ -1441,7 +1582,8 @@ habitflow/
 │   ├── database-schema-mvp.md            # テーブル定義書
 │   ├── production-check-issue-7.md       # Issue #7 本番環境確認レポート（本番での認証機能動作確認）
 │   ├── test-summary-issue-9.md           # Issue #9 認証機能テストサマリー（20 runs, 59 assertions, 0 failures）
-│   └── logging_and_backup.md             # Issue #35 本番ログ確認・バックアップ運用手順書（Renderログ確認手順・エラー調査手順・DB手動バックアップ手順・Render無料プラン90日削除の注意）
+│   ├── logging_and_backup.md             # Issue #35 本番ログ確認・バックアップ運用手順書（Renderログ確認手順・エラー調査手順・DB手動バックアップ手順・Render無料プラン90日削除の注意）
+│   └── production_check_issue_37.md  # Issue #37 本番環境手動確認チェックリスト（9項目: ユーザー管理・習慣管理・ダッシュボード・週次振り返り・PDCAロック・モバイル・パフォーマンス・エラーハンドリング・本番ログ確認）
 ├── test/
 │   ├── models/
 │   │   ├── user_test.rb                  # Userモデルテスト（13テストケース）
@@ -1467,7 +1609,8 @@ habitflow/
 │   │   ├── habit_full_flow_test.rb            # 【Issue #31修正】習慣E2Eフロー統合テスト（作成→日次記録→進捗確認・習慣取得をfind_byに安定化）
 │   │   ├── weekly_reflection_flow_test.rb     # 週次振り返りE2Eフロー統合テスト（一覧→新規作成→保存→詳細確認・スナップショット作成確認）Issue #30
 │   │   ├── pdca_lock_flow_test.rb             # PDCAロックE2Eフロー統合テスト（ロック発動→解除→習慣作成・初週ユーザー確認・travel_to完全固定日付）Issue #30
-│   │   └── error_cases_test.rb               # エラーケース統合テスト（404・認可・バリデーション422・他ユーザーデータアクセス防止）Issue #30
+│   │   ├── error_cases_test.rb               # エラーケース統合テスト（404・認可・バリデーション422・他ユーザーデータアクセス防止）Issue #30
+│   │   └── production_final_check_test.rb # Issue #37 本番環境最終動作確認テスト（19テストケース・AM4:00境界値・PDCAロック・エラーハンドリング）
 │   ├── controllers/
 │   │   ├── dashboards_controller_test.rb      # DashboardsControllerテスト（3テストケース）Issue #18
 │   │   ├── weekly_reflections_controller_test.rb # WeeklyReflectionsControllerテスト（show/index/new/create・認可・境界値・ロック解除）Issue #21/#22/#23/#25
@@ -1482,6 +1625,7 @@ habitflow/
 ├── bin/
 │   └── docker-entrypoint                     # コンテナ起動時の初期化スクリプト（本番環境での db:prepare 自動実行・SEED_IN_PRODUCTION フラグによる条件付き db:seed・exec による PID 1 保証）
 ├── config/
+│   ├── application.rb               # アプリ設定（セッションCookie・タイムゾーン設定: config.time_zone = "Tokyo" / config.active_record.default_timezone = :local）
 │   ├── database.yml                      # DB接続設定
 │   ├── initializers/
 │   │   └── content_security_policy.rb   # CSP設定（nonce方式・script_src/style_src/img_src等）
@@ -6705,6 +6849,143 @@ end
 **⑥ Render 無料プランの制約を把握しておく**<br>
 Shell 機能は有料プラン（Starter 以上）限定です。<br>
 本番 DB への直接操作が必要な場合は entrypoint 経由またはデプロイフックで対応してください。<br>
+
+<br>
+
+## 本番環境最終動作確認（Issue #37）
+
+<br>
+
+### タイムゾーン設定（重大バグ修正）
+
+<br>
+
+**問題の本質**:
+
+<br>
+
+`config/application.rb` に `config.time_zone` が未設定だったため、Rails がUTCで動作していました。<br>
+このアプリは「AM4:00を日付の区切り」「月曜AM4:00でロック発動」という時間依存ロジックを持っています。<br>
+本番環境（Render）はUTCで動くため、この設定がないと以下の重大バグが発生します：
+
+<br>
+
+- 月曜AM4:00（JST）= 日曜PM19:00（UTC）→ ロックが9時間ズレて発動
+- `travel_to Time.zone.local(...)` がJSTではなくUTCとして解釈される
+- テストと本番環境で異なる時刻ロジックが適用される
+
+<br>
+
+**修正内容**:
+```ruby
+# config/application.rb
+
+config.time_zone = "Tokyo"
+config.active_record.default_timezone = :local
+```
+
+<br>
+
+| 設定項目 | 内容 | 理由 |
+|---------|------|------|
+| `config.time_zone = "Tokyo"` | `Time.zone.now` / `Time.current` が常にJST（UTC+9）で動作 | AM4:00判定・週の区切りをJST基準に統一 |
+| `config.active_record.default_timezone = :local` | DBへの日時の読み書きにJSTを使用 | タイムゾーン変換の複雑さを排除し整合性を保証 |
+
+<br>
+
+**教訓: 時間依存ロジックを持つアプリは必ずタイムゾーンを明示する**
+
+<br>
+
+`time_zone` を設定しない場合、`Time.zone` はサーバーのデフォルト（多くの場合UTC）になります。<br>
+「月曜AM4:00」「週の区切り」のような時間依存ロジックは、タイムゾーンを固定しないと必ず壊れます。<br>
+本番環境がUTCで動く場合、9時間のズレは「機能として致命的なバグ」です。<br>
+Rails アプリ立ち上げ時に最初に設定するべき項目の1つです。
+
+<br>
+
+### テスト設計（production_final_check_test.rb）
+
+<br>
+
+**テストカバレッジ（19テストケース）**:
+
+<br>
+
+| カテゴリ | テスト数 | 主な検証内容 |
+|---------|---------|------------|
+| ユーザー管理 | 4 | 新規登録・正常ログイン・誤パスワード拒否（422）・ログアウト |
+| 習慣管理 | 3 | 習慣作成・論理削除・未ログイン時アクセス拒否 |
+| ダッシュボード | 3 | 正常表示・習慣0件・習慣10件 |
+| 週次振り返り | 3 | 作成・一覧表示・詳細表示 |
+| PDCAロック | 4 | ロック中作成拒否・AM3:59ロックなし・AM4:00ちょうどロックあり・振り返り完了でロック解除 |
+| エラーハンドリング | 2 | 404・他ユーザー習慣削除拒否 |
+
+<br>
+
+**AM4:00境界値テストの設計**:
+```ruby
+# AM4:00ちょうどはロックが発動する（=ではなく<で判定されるため）
+test "月曜AM4:00ちょうどでロックが発動すること" do
+  travel_to Time.zone.local(2026, 3, 9, 4, 0, 0) do
+    # today_for_record: now(4:00) < boundary(4:00) → false → 2026-03-09（月曜）
+    # beginning_of_week → 2026-03-09、- 1.week → 2026-03-02 が前週
+    @user.weekly_reflections.create!(
+      week_start_date: Date.new(2026, 3, 2),
+      ...
+    )
+    ...
+    assert_no_difference "Habit.count" do
+      post habits_path, params: { habit: { name: "境界値テスト習慣" } }
+    end
+  end
+end
+```
+
+<br>
+
+**week_start_date の計算根拠（タイムゾーン設定後の正しい計算）**:
+
+<br>
+
+`travel_to Time.zone.local(2026, 3, 9, 10, 0, 0)` のとき：
+
+<br>
+
+1. `today_for_record` → 2026-03-09 JST（月曜）
+2. `.beginning_of_week(:monday)` → 2026-03-09
+3. `- 1.week` → **2026-03-02**（これが `locked?` の検索対象）
+
+<br>
+
+`config.time_zone = "Tokyo"` 設定後は `Time.zone.local(...)` がJSTとして解釈されるため、この計算が正確に機能します。
+
+<br>
+
+### 本番環境手動確認チェックリスト（production_check_issue_37.md）
+
+<br>
+
+**9つの確認セクション**:
+
+<br>
+
+1. ユーザー管理（新規登録・ログイン・デモアカウント）
+2. 習慣管理（作成・削除・日次記録即時保存）
+3. ダッシュボード表示
+4. 週次振り返り（作成・詳細）
+5. PDCAロック（発動・解除）
+6. モバイル表示（iPhone SE / 14 Pro Max）
+7. パフォーマンス（Render無料プランはスリープ後の初回アクセスに注意。2回目以降を基準にする）
+8. エラーハンドリング（404）
+9. **本番環境ログ確認（Render）**: 500系エラー・N+1警告・環境不一致・マイグレーション確認
+
+<br>
+
+**テスト結果**:
+```
+221 runs, 648 assertions, 0 failures, 0 errors, 0 skips
+```
 
 <br>
 ```
