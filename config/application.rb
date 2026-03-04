@@ -20,6 +20,32 @@ module RunteqGraduationProject
     # Initialize configuration defaults for originally generated Rails version.
     config.load_defaults 7.2
 
+    # ============================================================
+    # タイムゾーン設定（Issue #37 で追加）
+    # ============================================================
+    # 【なぜタイムゾーン設定が必要なのか】
+    # このアプリは「AM4:00を日付の区切り」「月曜AM4:00でロック発動」という
+    # 時間依存ロジックを持っている。
+    # タイムゾーンを固定しないと以下の重大バグが発生する：
+    #
+    #   - 本番環境（Render）はUTCで動く
+    #   - config.time_zone 未設定だと Time.zone もUTCになる
+    #   - 「月曜AM4:00（JST）」がUTCでは「日曜PM19:00」になる
+    #   - ロック判定・振り返り期間がすべて9時間ズレる
+    #
+    # 【config.time_zone = "Tokyo"】
+    #   Time.zone.now や Time.current が常にJST（UTC+9）で動くようになる。
+    #   travel_to Time.zone.local(...) もJSTとして解釈されるため、
+    #   テストと本番環境で同じ時刻ロジックが適用される。
+    #
+    # 【config.active_record.default_timezone = :local】
+    #   DBへの日時の読み書き時に「:local（= config.time_zoneで設定したJST）」
+    #   を使うよう指定する。
+    #   :utc（デフォルト）のままだと、DBにはUTCで保存されるが
+    #   config.time_zone との変換が複雑になりバグの温床になる。
+    config.time_zone = "Tokyo"
+    config.active_record.default_timezone = :local
+
     # lib ディレクトリ以下のファイルを自動読み込みの対象にする（assetsとtasksは除外）。
     config.autoload_lib(ignore: %w[assets tasks])
 
