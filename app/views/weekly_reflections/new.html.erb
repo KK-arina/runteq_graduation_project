@@ -129,6 +129,8 @@
         フォームの submit イベントで form-submit#submit を呼ぶ
   ========================================== %>
   <%= form_with model: @weekly_reflection,
+                url: weekly_reflections_path,
+                method: :post,
                 local: true,
                 class: "space-y-6",
                 data: {
