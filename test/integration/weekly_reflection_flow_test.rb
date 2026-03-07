@@ -142,7 +142,7 @@ class WeeklyReflectionFlowTest < ActionDispatch::IntegrationTest
       # WeeklyReflectionsController#new の条件:
       # if @weekly_reflection.persisted? && @weekly_reflection.is_locked?
       get new_weekly_reflection_path
-      assert_redirected_to weekly_reflection_path(existing_reflection)
+      assert_redirected_to weekly_reflections_path
     end
   end
 

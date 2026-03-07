@@ -128,7 +128,7 @@ class WeeklyReflectionsControllerTest < ActionDispatch::IntegrationTest
       existing = @user.weekly_reflections
                       .for_week(WeeklyReflection.current_week_start_date)
                       .completed.first
-      assert_redirected_to weekly_reflection_path(existing)
+      assert_redirected_to weekly_reflections_path
     end
   end
 
@@ -166,18 +166,12 @@ class WeeklyReflectionsControllerTest < ActionDispatch::IntegrationTest
 
       locked_user.reload
 
-      # 今週の振り返りが作成・完了されていることを確認する
-      current_week_start = WeeklyReflection.current_week_start_date
-      new_reflection = locked_user.weekly_reflections
-                                  .find_by(week_start_date: current_week_start)
-      assert_not_nil new_reflection, "今週の振り返りレコードが作成されること"
-      assert new_reflection.completed?, "今週の振り返りは completed? が true になること"
-
-      # 前週の振り返り（pending_reflection）も complete! されてロックが解除されること
-      last_week_start = current_week_start - 7.days
+      last_week_start = WeeklyReflection.current_week_start_date - 7.days
       last_week_reflection = locked_user.weekly_reflections
                                         .find_by(week_start_date: last_week_start)
       assert_not_nil last_week_reflection, "前週の振り返りレコードが存在すること"
+      assert last_week_reflection.completed?, "前週の振り返りは completed? が true になること"
+      assert_not locked_user.locked?, "振り返り完了後はロックが解除されること"
       assert last_week_reflection.completed?,
              "前週の振り返りも completed? が true になること（ロック解除）"
       assert_not last_week_reflection.pending?,

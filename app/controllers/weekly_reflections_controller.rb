@@ -66,10 +66,11 @@ class WeeklyReflectionsController < ApplicationController
   # GET /weekly_reflections/new
   # ---------------------------------------------------------------
   def new
-    @weekly_reflection = WeeklyReflection.find_or_build_for_current_week(current_user)
+    @weekly_reflection = find_pending_last_week_reflection ||
+                        WeeklyReflection.find_or_build_for_current_week(current_user)
 
-    if @weekly_reflection.persisted? && @weekly_reflection.is_locked?
-      redirect_to @weekly_reflection, notice: "今週の振り返りは既に完了しています。"
+    if @weekly_reflection.persisted? && @weekly_reflection.completed?
+      redirect_to weekly_reflections_path, notice: "振り返りは既に完了しています。"
       return
     end
 
@@ -89,10 +90,11 @@ class WeeklyReflectionsController < ApplicationController
   # POST /weekly_reflections
   # ---------------------------------------------------------------
   def create
-    @weekly_reflection = WeeklyReflection.find_or_build_for_current_week(current_user)
+    @weekly_reflection = find_pending_last_week_reflection ||
+                        WeeklyReflection.find_or_build_for_current_week(current_user)
 
-    if @weekly_reflection.persisted? && @weekly_reflection.is_locked?
-      redirect_to @weekly_reflection, notice: "今週の振り返りは既に完了しています。"
+    if @weekly_reflection.persisted? && @weekly_reflection.completed?
+      redirect_to weekly_reflections_path, notice: "振り返りは既に完了しています。"
       return
     end
 
@@ -170,6 +172,17 @@ class WeeklyReflectionsController < ApplicationController
 
   def weekly_reflection_params
     params.require(:weekly_reflection).permit(:reflection_comment)
+  end
+
+  # 未完了の先週振り返りを取得する
+  # ロック中のデモシナリオで先週分を優先表示するために使用
+  def find_pending_last_week_reflection
+    current_week = WeeklyReflection.current_week_start_date
+    last_week    = current_week - 7.days
+
+    current_user.weekly_reflections
+                .pending
+                .find_by(week_start_date: last_week)
   end
 
   # ============================================================

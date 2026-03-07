@@ -146,13 +146,17 @@ class PdcaLockFlowTest < ActionDispatch::IntegrationTest
       # 今週の振り返りを作成します（fixtures と重複しない週）
       # travel_to で固定した時刻が「次の月曜日 AM4:01」なので、
       # 今週は「現在の月曜日〜日曜日」の範囲になります
-      assert_difference("WeeklyReflection.count", 1) do
-        post weekly_reflections_path, params: {
-          weekly_reflection: {
-            reflection_comment: "ロック解除のための振り返り"
-          }
-        }
-      end
+      last_week_start = WeeklyReflection.current_week_start_date - 7.days
+      last_week_reflection = @user.weekly_reflections
+                                  .find_by(week_start_date: last_week_start)
+      assert_not last_week_reflection.completed?, "投稿前は先週振り返りが未完了であること"
+
+      post weekly_reflections_path, params: {
+        weekly_reflection: { reflection_comment: "ロック解除のための振り返り" }
+      }
+
+      last_week_reflection.reload
+      assert last_week_reflection.completed?, "投稿後は先週振り返りが完了していること"
 
       # WeeklyReflectionsController#create の中で was_locked = true の場合
       # last_week の振り返りにも complete! を呼んでロックを解除します

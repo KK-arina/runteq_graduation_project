@@ -388,8 +388,8 @@ reflection_2w.complete!
 puts "    ✓ 先々週の振り返りを完了済みにしました（completed_at: #{reflection_2w.completed_at}）"
 puts ""
 
-# ── 先週の振り返り（完了済み）────────────────────────────────
-puts "  先週の振り返りを作成しています（完了済み）..."
+# ── 先週の振り返り（未完了状態・ロック状態のデモ）────────────
+puts "  先週の振り返りを作成しています（未完了・ロック状態のデモ）..."
 
 reflection_last_week = WeeklyReflection.create!(
   user:            demo_user,
@@ -397,11 +397,8 @@ reflection_last_week = WeeklyReflection.create!(
   week_end_date:   last_week_sunday
 )
 WeeklyReflectionHabitSummary.create_all_for_reflection!(reflection_last_week)
-reflection_last_week.update!(
-  reflection_comment: "習慣の継続は順調。来週は読書時間を増やしたい。"
-)
-reflection_last_week.complete!
-puts "    ✓ 先週の振り返りを完了済みにしました（completed_at: #{reflection_last_week.completed_at}）"
+puts "    ✓ 先週の振り返りを未完了状態で作成しました"
+puts "    ⚠️  月曜 AM4:00 以降にアクセスするとロック警告バナーが表示されます"
 puts ""
 
 # ==============================================================================
