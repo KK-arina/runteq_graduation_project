@@ -1066,6 +1066,10 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
   - `Time.now` / `Date.today` はサーバーのローカル時刻を返しタイムゾーン非対応
 - **`travel_to` のスコープに注意する**（Issue #30）
   - `travel_to` の外で `Date.current` を計算すると `travel_to` の効果が当たらない
+- **Rails の form_with は persisted? でHTTPメソッドを自動決定する**（Issue #37）
+  - `persisted? = true` のレコードを `form_with model:` に渡すと自動で `PATCH` になる
+  - routes に `update` がない設計の場合は `url:` と `method: :post` を明示する
+  - ログの `PATCH /xxx → ErrorsController#not_found → 404` はこのパターンのサイン
 
 <br>
 
@@ -1146,6 +1150,12 @@ MVPを3〜6ヶ月使い込んだ後、実際に困った課題に基づいて以
 - **外部キー制約は `on_delete:` を明示する**（Issue #14）
   - 削除時の挙動（CASCADE / NULLIFY）を設計段階で決定する
   - `habit_id` はスナップショット保護のため `NULLIFY`、`user_id` は `CASCADE`
+- **マイグレーションは冪等に書く**（Issue #37）
+  - `add_index` には `if_not_exists: true` を付けることで「すでに存在する場合はスキップ」になる
+  - DB と Rails の schema 状態が乖離しているとき（手動操作・db:reset途中停止など）でも安全に実行できる
+- **nil安全なメソッド呼び出しを徹底する**（Issue #37）
+  - `email.downcase` は `email` が nil のとき `NoMethodError` になる
+  - `email.to_s.downcase` または `email&.downcase` で nil を安全に処理する
 
 <br>
 
