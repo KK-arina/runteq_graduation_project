@@ -98,6 +98,8 @@ class User < ApplicationRecord
     #   → 4時間前の時刻を計算することで AM4:00 を「1日の始まり」として扱う
     # .monday?
     #   → 月曜日なら true を返す（ActiveSupport::TimeWithZone のメソッド）
+    # adjusted_time.monday? によって
+    # 「月曜4:00〜火曜3:59」の間だけロック判定が行われる
     adjusted_time = Time.current - 4.hours
     return false unless adjusted_time.monday?
 
@@ -139,6 +141,6 @@ class User < ApplicationRecord
   #   「このオブジェクトの email を更新する」という意味を明示するために
   #   self.email = と書く必要がある。
   def downcase_email
-    self.email = email.downcase
+    self.email = email.to_s.downcase
   end
 end
