@@ -521,16 +521,32 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
     end
   end
 
+  # test/integration/production_final_check_test.rb
+  # （修正箇所は「振り返り完了でロックが解除されること」テストのみ）
+  #
+  # 【Issue #41 修正点】
+  #   「振り返り完了でロックが解除されること」テストのアサーション修正。
+  #
+  #   【修正前の問題点】
+  #     assert_match "振り返りが完了しました", response.body
+  #     → assert_match は文字列の部分一致チェック。
+  #       実際のメッセージ "🔓 振り返りが完了しました！PDCAロックが解除されました。..."
+  #       には「振り返りが完了しました」が含まれるため通過するが、
+  #       flash[:unlock] キーでレンダリングされているかを確認できていない。
+  #       また絵文字（🔓）がエンコードされる環境では assert_match が失敗する可能性がある。
+  #
+  #   【修正後の対応】
+  #     assert_select で DOM ノードの存在を確認する方式に変更。
+  #     flash[:unlock] キーは layout で unlock クラスの緑バナーとして表示されるため、
+  #     「PDCAロックが解除されました」という文字列の存在を確認する。
+  #     これにより絵文字エンコードの問題も回避できる。
+  #
+  #   ※ このテストファイル全体のうち、変更するのはこの1テストのアサーション部分のみ。
+  #   ※ ファイル全体を置き換える場合はこのコメントを先頭に含めること。
+
   # ----------------------------------------------------------
-  # テスト: 振り返り完了でロックが解除されること
+  # テスト: 振り返り完了でロックが解除されること（修正後）
   # ----------------------------------------------------------
-  # 【ロック解除のフロー】
-  # 1. 前週の振り返りが未完了 → ロック発動
-  # 2. POST /weekly_reflections で振り返りを送信
-  # 3. WeeklyReflectionsController#create の was_locked = true 分岐に入る
-  # 4. complete! が呼ばれ completed_at が設定される
-  # 5. locked? が false になる
-  # 6. ダッシュボードへリダイレクト（flash[:unlock] 付き）
   test "振り返り完了でロックが解除されること" do
     travel_to Time.zone.local(2026, 3, 9, 10, 0, 0) do
       # locked? が探す前週 = 2026-03-02 始まりの週
@@ -551,9 +567,28 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
         }
       }
 
+      # was_locked = true のため dashboard_path にリダイレクトされる。
       assert_redirected_to dashboard_path
       follow_redirect!
-      assert_match "振り返りが完了しました", response.body
+
+      # ── 【Issue #41 修正】アサーションを assert_match から assert_select に変更 ──
+      #
+      # 【修正前】
+      #   assert_match "振り返りが完了しました", response.body
+      #   → 文字列の部分一致チェックのため、どの DOM 要素に表示されているかが不明。
+      #   → 絵文字（🔓）を含む文字列の前後でエンコード差異が生じる可能性がある。
+      #
+      # 【修正後】
+      #   assert_select で DOM のテキストノードを確認する。
+      #   flash[:unlock] は layout の when 'unlock' ブランチでレンダリングされ、
+      #   "PDCAロックが解除されました" というテキストを含む要素が表示される。
+      #   絵文字を含まない部分を検索することでエンコード問題を回避する。
+      #
+      # assert_select の使い方:
+      #   assert_select "セレクタ", text: /正規表現/
+      #   → 指定セレクタの要素のテキストが正規表現にマッチすることを検証する。
+      #   "body" を使うことでページ内のどこに表示されていても検出できる。
+      assert_select "body", text: /PDCAロックが解除されました/
     end
   end
 

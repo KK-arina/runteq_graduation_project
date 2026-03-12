@@ -240,4 +240,69 @@ class ErrorCasesTest < ActionDispatch::IntegrationTest
       assert_select "form"  # 振り返りフォームが再表示されていること
     end
   end
+
+  # ============================================================
+  # テスト10: 別の習慣のrecord_idを指定してPATCHしても404になること（Issue #41 追加）
+  # ============================================================
+  #
+  # 【なぜこのテストが必要か？】
+  # HabitRecordsController#update に追加したクロス習慣アクセス検証の動作確認。
+  # URLの :habit_id と @habit_record.habit_id が不一致のとき 404 が返ることを確認する。
+  #
+  # 【レビュー反映: fixture不整合の修正】
+  # 修正前:
+  #   HabitRecord.create!(user: @user, habit: @other_habit, ...)
+  #   → @other_habit は users(:two) の習慣のため、
+  #     habit.user_id（users(:two).id）と record.user_id（users(:one).id）が
+  #     一致しない。DBの外部キー整合性が崩れる可能性がある。
+  #
+  # 修正後:
+  #   @user 自身が所有する「別の習慣」を新規作成してテストに使う。
+  #   これにより habit.user_id と record.user_id が同一ユーザーになり、
+  #   DB整合性を保ちながら「同一ユーザーの別習慣へのクロスアクセス」を正確に再現できる。
+  test "別の習慣のrecord_idを指定してPATCHしても404になること" do
+    travel_to Time.zone.local(2026, 3, 11, 10, 0, 0) do
+      log_in_as(@user)
+
+      # 【修正点】@user 自身が持つ「別の習慣」を新規作成する。
+      # @other_habit（users(:two) の習慣）をそのまま使うと、
+      # habit の所有者が users(:two) なのに記録の user が users(:one) になり、
+      # DB整合性が崩れるためテストデータとして不適切。
+      # Habit.create! で @user に紐づいた習慣を別途作成することで
+      # 「同一ユーザーが複数の習慣を持つ」という自然なシナリオで
+      # クロスアクセスを再現できる。
+      another_habit = Habit.create!(
+        user:          @user,    # @user（users(:one)）自身の習慣として作成
+        name:          "クロスアクセステスト用習慣",
+        weekly_target: 3
+      )
+
+      # another_habit に属する今日の記録を作成する（クロスアクセスの対象）。
+      # user: @user, habit: another_habit → 整合性が保たれている。
+      record_for_another_habit = HabitRecord.create!(
+        user:        @user,
+        habit:       another_habit,
+        record_date: HabitRecord.today_for_record,
+        completed:   false
+      )
+
+      # 攻撃シミュレーション:
+      # 「@habit（習慣Aの URL）」に「another_habit のレコードID」を指定して PATCH する。
+      # URL: PATCH /habits/:habit_id/habit_records/:id
+      #   :habit_id = @habit.id        （habits(:habit_one) の習慣）
+      #   :id       = record_for_another_habit.id（別の習慣 another_habit のレコード）
+      patch habit_habit_record_path(@habit, record_for_another_habit),
+            params:  { completed: "1" },
+            headers: { "Accept" => "text/vnd.turbo-stream.html" }
+
+      # habit_records_controller.rb の unless @habit_record.habit_id == @habit.id
+      # の検証により 404 が返ることを確認する。
+      assert_response :not_found
+
+      # レコードの completed が false のまま（書き換えられていない）ことを確認する。
+      record_for_another_habit.reload
+      assert_not record_for_another_habit.completed,
+        "クロス習慣アクセスによって別習慣のレコードが更新されていないこと"
+    end
+  end
 end
