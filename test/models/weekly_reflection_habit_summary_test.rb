@@ -43,13 +43,13 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
   test 'habit_nameがなければ無効であること' do
     @summary.habit_name = nil
     assert_not @summary.valid?
-    assert_includes @summary.errors[:habit_name], "can't be blank"
+    assert @summary.errors.added?(:habit_name, :blank)
   end
 
   test 'habit_nameが51文字以上なら無効であること' do
     @summary.habit_name = 'a' * 51
     assert_not @summary.valid?
-    assert_includes @summary.errors[:habit_name], 'is too long (maximum is 50 characters)'
+    assert @summary.errors.added?(:habit_name, :too_long, count: 50)
   end
 
   test 'habit_nameが50文字ならば有効であること' do
@@ -61,7 +61,7 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
   test 'weekly_targetがなければ無効であること' do
     @summary.weekly_target = nil
     assert_not @summary.valid?
-    assert_includes @summary.errors[:weekly_target], "can't be blank"
+    assert @summary.errors.added?(:weekly_target, :blank)
   end
 
   test 'weekly_targetが0なら無効であること' do

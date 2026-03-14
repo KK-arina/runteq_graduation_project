@@ -1,0 +1,32 @@
+ja:
+  activerecord:
+    errors:
+      models:
+        user:
+          attributes:
+            name:
+              blank: "を入力してください"
+              too_long: "は%{count}文字以内で入力してください"
+            email:
+              blank: "を入力してください"
+              invalid: "の形式が正しくありません"
+              taken: "は現在使用できません。別のメールアドレスをお試しください"
+              too_long: "は%{count}文字以内で入力してください"
+            password:
+              blank: "を入力してください"
+              too_short: "は%{count}文字以上で入力してください"
+        habit_record:
+          attributes:
+            record_date:
+              blank: "を入力してください"
+              taken: "はすでに記録されています"
+            completed:
+              inclusion: "は一覧にありません"
+        weekly_reflection_habit_summary:
+          attributes:
+            habit_name:
+              blank: "を入力してください"
+              too_long: "は%{count}文字以内で入力してください"
+            weekly_target:
+              blank: "を入力してください"
+              not_a_number: "は数値で入力してください"
