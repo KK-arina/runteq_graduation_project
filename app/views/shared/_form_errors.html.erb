@@ -11,14 +11,13 @@
 
   【Issue #32 での変更点】
     エラー件数ラベルのテキストカラーを text-red-800 → text-red-900 に変更。
-    変更理由:
-      text-red-800 (#991b1b) on bg-red-50 (#fef2f2) のコントラスト比は 5.4:1
-      text-red-900 (#7f1d1d) on bg-red-50 (#fef2f2) のコントラスト比は 7.6:1
-      より高コントラストにすることで視認性が向上する。
-
     エラーメッセージのリストに list-disc list-inside を追加。
-    変更理由:
-      箇条書きの視覚的な区切りがなく、複数エラーが並んだときに読みづらかった。
+
+  【I18n対応】
+    full_messages は「属性名 + スペース + メッセージ」を自動連結するため
+    日本語では不自然なスペースが入る（例:「パスワード は〜」）。
+    errors.each + error.full_message を使うことで
+    ja.yml で定義した完全なメッセージをそのまま表示できる。
 %>
 
 <%#
@@ -27,73 +26,32 @@
     エラーがなければこのパーシャル全体が何も表示しない。
 %>
 <% if model.errors.any? %>
-
-  <%#
-    エラー表示コンテナ
-    mb-6: 下マージン 24px（コンテナとフォームフィールドの間の余白）
-    bg-red-50: 薄い赤背景（エラーの存在を色で示す）
-    border border-red-200: 薄い赤のボーダー
-    border-l-4 border-l-red-500: 左側だけ太い赤のボーダー（エラーの強調）
-    rounded-r-lg: 右側のみ角丸（左ボーダーがあるので左は直角のままにする）
-    p-4: 内側パディング 16px
-    role="alert":
-      WAI-ARIA の属性。スクリーンリーダーにこの要素が「警告」であることを伝える。
-      ユーザーがフォームを送信したとき、スクリーンリーダーが自動的に読み上げる。
-  %>
   <div class="mb-6 bg-red-50 border border-red-200 border-l-4 border-l-red-500 rounded-r-lg p-4"
        role="alert">
 
-    <%#
-      エラー件数の見出し
-      flex items-center gap-2: アイコンとテキストを横並びに
-    %>
     <div class="flex items-center gap-2 mb-3">
-      <%#
-        エラーアイコン（SVG）
-        w-4 h-4: 16px × 16px
-        text-red-600: 赤色
-          【コントラスト確認】
-          text-red-600 (#dc2626) on bg-red-50 (#fef2f2) = 4.5:1 → AA基準クリア
-        flex-shrink-0: テキストが長くてもアイコンが縮まない
-        aria-hidden="true": 装飾用SVGのためスクリーンリーダーに読み上げさせない
-      %>
       <svg class="w-4 h-4 text-red-600 flex-shrink-0"
            fill="none" stroke="currentColor" viewBox="0 0 24 24"
            aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
       </svg>
-
-      <%#
-        エラー件数テキスト
-        text-red-900: 濃い赤
-          【コントラスト確認】
-          text-red-900 (#7f1d1d) on bg-red-50 (#fef2f2) = 7.6:1 → AAA基準クリア
-          【Issue #32 変更点】text-red-800 → text-red-900 に変更（コントラスト向上）
-        font-bold text-sm: 太字 14px
-      %>
       <h3 class="text-red-900 font-bold text-sm">
         <%= model.errors.count %> 件の入力エラーがあります
       </h3>
     </div>
 
     <%#
-      エラーメッセージリスト
-      【Issue #32 変更点】list-disc list-inside を追加
-        list-disc: 箇条書きの「・」（黒丸）を表示する
-        list-inside: 「・」をテキストの内側に配置する（左揃えが崩れない）
-      space-y-1: リストアイテム間の余白 4px
+      errors.each + error.full_message を使う理由:
+        Rails は「属性名 + スペース + メッセージ」を自動連結する。
+        日本語では「パスワード は〜」のように不自然なスペースが入るため
+        error.full_message メソッドを使うことで
+        ja.yml に定義したメッセージをそのまま表示できる。
     %>
     <ul class="space-y-1 list-disc list-inside">
-      <% model.errors.full_messages.each do |message| %>
-        <%#
-          エラーメッセージの1件ごと
-          text-sm text-red-700: 14px の赤テキスト
-            【コントラスト確認】
-            text-red-700 (#b91c1c) on bg-red-50 (#fef2f2) = 5.3:1 → AA基準クリア
-        %>
+      <% model.errors.each do |error| %>
         <li class="text-sm text-red-700">
-          <%= message %>
+          <%= error.full_message %>
         </li>
       <% end %>
     </ul>
