@@ -720,6 +720,8 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 | Strong Parameters | `params.permit()` で許可するパラメータを明示 |
 | セッション管理 | `httponly: true` / `secure: true`（本番）/ `same_site: :lax` |
 | 認可制御 | `current_user.habits.find` で他ユーザーのデータへのアクセスを遮断 |
+| エラーメッセージ設計 | I18n（`ja.yml`）でメッセージを管理。重複メール時は存在を推測されにくい文言に変更 |
+| メールバリデーション | 最大255文字制限・DB レベルの UNIQUE 制約で二重防御 |
 
 <br>
 
@@ -821,7 +823,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-221 runs, 648 assertions, 0 failures, 0 errors, 0 skips
+233 runs, 668 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
