@@ -774,7 +774,7 @@ gem の追加・変更・設定ファイルの変更後は必ず `docker compose
 | 技術 | 用途 | ISSUE | 状態 |
 |:---|:---|:---|:---:|
 | Neon Serverless Postgres | 永続無料 DB（Render 内蔵 DB の90日削除回避） | #A-2 | ✅ 完了 |
-| GoodJob 4.x | バックグラウンドジョブ（AI分析・通知・ストリーク計算） | #A-3 ✅ 完了 |
+| GoodJob 4.x | バックグラウンドジョブ（AI分析・通知・ストリーク計算） | #A-3 | ✅ 完了 |
 | Resend | メール送信（パスワードリセット・週次レポート） | #A-4 | ⬜ 未着手 |
 | OmniAuth Google/LINE | ソーシャルログイン | #F-1 / #F-2 | ⬜ 未着手 |
 | LINE Messaging API | プッシュ通知 | #G-1 | ⬜ 未着手 |
