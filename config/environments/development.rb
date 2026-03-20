@@ -95,4 +95,20 @@ Rails.application.configure do
     Bullet.rails_logger  = true   # ターミナルのRailsログに警告を出力
     Bullet.add_footer    = true   # 画面下部にN+1警告を小さく表示
   end
+
+  # ============================================================
+  # Issue #A-3: 開発環境の GoodJob execution_mode 設定
+  # ============================================================
+  #
+  # 【なぜ :async にするのか】
+  # :async モード: Rails の Web プロセス内でバックグラウンドスレッドを起動して
+  #               ジョブを実行する。Docker 1台で Web と Worker が同居するイメージ。
+  #
+  # :external モード: 別プロセス（bundle exec good_job start）が必要。
+  #                  本番（Render Worker サービス）向けの設定。
+  #
+  # 開発環境で :external を使うと、Worker を別途起動しない限り
+  # ジョブが「Queued」のまま実行されない（ダッシュボードで確認できた症状）。
+  # :async にすることで docker compose up だけで即座にジョブが実行される。
+  config.good_job.execution_mode = :async
 end
