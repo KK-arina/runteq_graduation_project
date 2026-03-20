@@ -30,7 +30,7 @@
 
 class WeeklyReflectionsController < ApplicationController
   before_action :require_login
-  before_action :set_weekly_reflection, only: [:show]
+  before_action :set_weekly_reflection, only: [ :show ]
 
   # ---------------------------------------------------------------
   # index アクション
@@ -265,14 +265,14 @@ class WeeklyReflectionsController < ApplicationController
       # （バリデーションで1以上が保証されているが念のため）
       rate = if habit.weekly_target.zero?
                0
-             else
+      else
                # .to_f: 整数同士の割り算で小数が切り捨てられるのを防ぐ
                # .clamp(0, 100): 目標超過時でも100%を上限にする
                # .floor: 小数点以下を切り捨てて整数にする（表示用）
                ((completed_count.to_f / habit.weekly_target) * 100)
                  .clamp(0, 100)
                  .floor
-             end
+      end
 
       # { habit_id => { rate:, completed_count: } } の形でハッシュに追加
       hash[habit.id] = { rate: rate, completed_count: completed_count }

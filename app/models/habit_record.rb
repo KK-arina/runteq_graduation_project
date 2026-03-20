@@ -32,12 +32,12 @@ class HabitRecord < ApplicationRecord
   # テストの期待値: errors[:record_date] に "has already been taken" が入る
   validates :record_date,
             uniqueness: {
-              scope: [:user_id, :habit_id]
+              scope: [ :user_id, :habit_id ]
             }
 
   # Rails デフォルトメッセージを使う（カスタムメッセージなし）
   # テストの期待値: errors[:completed] に "is not included in the list" が入る
-  validates :completed, inclusion: { in: [true, false] }
+  validates :completed, inclusion: { in: [ true, false ] }
 
   # ---------------------------------------------------------------------------
   # スコープ

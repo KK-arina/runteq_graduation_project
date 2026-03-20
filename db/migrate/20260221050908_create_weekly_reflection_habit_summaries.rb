@@ -3,7 +3,6 @@
 class CreateWeeklyReflectionHabitSummaries < ActiveRecord::Migration[7.2]
   def change
     create_table :weekly_reflection_habit_summaries do |t|
-
       # どの「週次振り返り」に属するか
       # null: false → 振り返り本体がないサマリーは存在を許しません
       # on_delete: :cascade → 振り返り本体が消えたら、このサマリーも一緒に消去します
@@ -45,7 +44,7 @@ class CreateWeeklyReflectionHabitSummaries < ActiveRecord::Migration[7.2]
     # 同じ振り返りに同じ習慣が重複保存されないようにUNIQUE制約をかけます
     # name を短縮しているのは PostgreSQL の識別子制限（63文字）を超えないためです
     add_index :weekly_reflection_habit_summaries,
-              [:weekly_reflection_id, :habit_id],
+              [ :weekly_reflection_id, :habit_id ],
               unique: true,
               name: 'idx_wr_habit_summaries_on_wr_id_and_habit_id'
   end

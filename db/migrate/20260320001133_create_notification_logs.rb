@@ -34,7 +34,6 @@
 class CreateNotificationLogs < ActiveRecord::Migration[7.2]
   def change
     create_table :notification_logs do |t|
-
       # ─────────────────────────────────────────────────────────────────────
       # user_id: 通知を送ったユーザー（外部キー）
       # ─────────────────────────────────────────────────────────────────────
@@ -133,14 +132,14 @@ class CreateNotificationLogs < ActiveRecord::Migration[7.2]
     # 「このユーザーの通知履歴を新しい順に取得する」クエリを高速化
     # 設定ページの「通知履歴」表示や、1日の送信回数チェックに使用
     add_index :notification_logs,
-              [:user_id, :created_at],
+              [ :user_id, :created_at ],
               name: 'index_notification_logs_on_user_id_and_created_at'
 
     # INDEX 2: (target_type, target_id)
     # 「このタスクに関連する通知履歴を取得する」クエリを高速化
     # ポリモーフィック関連の検索（WHERE target_type='Task' AND target_id=123）に使用
     add_index :notification_logs,
-              [:target_type, :target_id],
+              [ :target_type, :target_id ],
               name: 'index_notification_logs_on_target_type_and_target_id'
   end
 end

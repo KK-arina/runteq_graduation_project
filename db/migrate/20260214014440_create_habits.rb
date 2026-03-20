@@ -31,7 +31,7 @@ class CreateHabits < ActiveRecord::Migration[7.2]
 
     # インデックス作成
     # 注: user_id のインデックスは t.references で自動作成されるため不要
-    
+
     # 論理削除された習慣を除外する検索を高速化
     # WHERE deleted_at IS NULL の条件で頻繁に検索するため
     add_index :habits, :deleted_at
@@ -39,6 +39,6 @@ class CreateHabits < ActiveRecord::Migration[7.2]
     # user_idとdeleted_atの複合インデックス
     # 「特定ユーザーの有効な習慣のみ取得」という検索が最も頻繁に行われるため
     # ダッシュボード表示などで使用
-    add_index :habits, [:user_id, :deleted_at]
+    add_index :habits, [ :user_id, :deleted_at ]
   end
 end

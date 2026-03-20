@@ -51,6 +51,9 @@ flowchart LR
 [![Docker](https://img.shields.io/badge/Docker-対応済み-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
 [![DB Migration](https://img.shields.io/badge/A--1_DBマイグレーション-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-1-db-migrations)
 [![本リリース進捗](https://img.shields.io/badge/本リリース進捗-1%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![DB Migration](https://img.shields.io/badge/A--1_DBマイグレーション-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-1-db-migrations)
+[![本番デプロイ](https://img.shields.io/badge/A--2_本番デプロイ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-2-production-deploy)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-2%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -69,15 +72,22 @@ flowchart LR
 | 項目 | 内容 |
 |:---|:---|
 | ホスティング | Render（無料プラン） |
-| データベース | PostgreSQL 16 |
+| データベース | Neon Serverless PostgreSQL 16（永続・無料） |
 | デプロイ | GitHub の `main` ブランチへの Push で自動実行 |
+| Web サーバー | Puma（Worker: 2 / Thread: 3 / Cluster mode） |
 
 <br>
 
-> ⚠️ **Render 無料プランのスリープについて**
-> 15分間アクセスがないとサービスがスリープします。
+> ⚠️ **Render 無料プランのスリープについて**<br>
+> 15分間アクセスがないとサービスがスリープします。<br>
 > 初回アクセス時は起動まで **約30〜60秒** かかる場合があります。
-> スリープ対策として Google Apps Script（10分おきにアクセス）を設定しています。
+
+<br>
+
+> 📌 **Neon を採用した理由**<br>
+> Render 内蔵の無料 PostgreSQL は作成から **90日で自動削除** される制限がある。<br>
+> Neon Serverless Postgres は永続的な無料プランを提供しており、長期運用に最適。<br>
+> また Render と同じ Singapore リージョンに配置することで Web ↔ DB 間のレイテンシを最小化している。
 
 <br>
 
@@ -111,6 +121,7 @@ flowchart LR
 | ISSUE | タイトル | 完了日 | ブランチ |
 |:---|:---|:---:|:---|
 | #A-1 | 本リリース用DBマイグレーション（全差分） | 2026-03-20 | feature/A-1-db-migrations |
+| #A-2 | 本番環境デプロイ（Render + Neon PostgreSQL） | 2026-03-20 | feature/A-2-production-deploy |
 
 <br>
 
@@ -337,6 +348,55 @@ HabitFlow は「なぜ習慣が続かないのか」の**真の原因**を究明
 
 <br>
 
+### #A-2: 本番環境デプロイ（Render + Neon PostgreSQL）
+
+<br>
+
+**ブランチ:** `feature/A-2-production-deploy`<br>
+**完了日:** 2026-03-20<br>
+**本番URL:** https://habitflow-web.onrender.com
+
+<br>
+
+#### 採用構成
+
+<br>
+
+| 役割 | サービス | 理由 |
+|:---|:---|:---|
+| Web サービス | Render（無料プラン） | GitHub 連携で自動デプロイ・クレカ不要 |
+| データベース | Neon Serverless PostgreSQL 16 | 永続無料・Render 内蔵 DB の90日削除問題を回避 |
+| リージョン | Singapore（両サービス統一） | Web ↔ DB 間のレイテンシを最小化 |
+
+<br>
+
+#### 主な設定内容
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `render.yaml` | Neon 対応に全面書き換え・puma 直接起動・GoodJob Worker 準備（コメントアウト） |
+| `config/puma.rb` | Worker 設定・`on_worker_boot`・`Integer()` 型安全変換を追加 |
+| `bin/docker-entrypoint` | `db:prepare` → `db:migrate` に変更（Neon は CREATE DATABASE 権限なし） |
+
+<br>
+
+#### 環境変数設定（Render）
+
+<br>
+
+| Key | 管理方法 | 用途 |
+|:---|:---|:---|
+| `RAILS_ENV` | render.yaml に記載 | 本番環境モード指定 |
+| `DATABASE_URL` | Render ダッシュボードで手動設定 | Neon 接続文字列 |
+| `RAILS_MASTER_KEY` | Render ダッシュボードで手動設定 | credentials 復号キー |
+| `RAILS_LOG_TO_STDOUT` | render.yaml に記載 | Render Logs タブへの出力 |
+| `RAILS_SERVE_STATIC_FILES` | render.yaml に記載 | CSS/JS の直接配信 |
+| `WEB_CONCURRENCY` | render.yaml に記載 | Puma Worker 数（2） |
+
+<br>
+
 ---
 
 <br>
@@ -454,6 +514,46 @@ LINE 通知をタップした際にアプリ内の特定画面へ直接遷移で
 
 <br>
 
+### 6. `db:prepare` ではなく `db:migrate` を使う理由
+
+<br>
+
+Neon などのマネージド PostgreSQL では「DB 作成権限（`CREATE DATABASE`）」がユーザーに付与されていない。<br>
+`db:prepare` は「DB が存在しなければ作成 → マイグレーション実行」という処理のため、<br>
+CREATE DATABASE ステップで権限エラーが発生し `exit 1` → デプロイ失敗ループになる。<br>
+`db:migrate` は既存 DB に対してマイグレーションのみ実行するため、マネージド DB で正しく動作する。<br>
+何度実行しても適用済みはスキップされるため安全（冪等性あり）。
+
+```ruby
+# ❌ Neon ではエラーになる（CREATE DATABASE 権限なし）
+DISABLE_DATABASE_ENVIRONMENT_CHECK=1 ./bin/rails db:prepare
+
+# ✅ Neon で正しく動作する（既存 DB へのマイグレーションのみ）
+./bin/rails db:migrate
+```
+
+<br>
+
+### 7. `exec` による Graceful Shutdown の実現
+
+<br>
+
+`startCommand` や `docker-entrypoint` の最後で `exec` を使って Puma を起動している。<br>
+`exec` を使わない場合、シェル（PID 1）→ Puma（PID 2）という親子関係になり、<br>
+Render の停止シグナル（SIGTERM）がシェルに届いても Puma に転送されず強制終了（SIGKILL）される。<br>
+`exec` を使うと Puma が PID 1 になり SIGTERM を直接受け取れるため、<br>
+処理中のリクエストを完了してから終了する Graceful Shutdown が機能する。
+
+```bash
+# ❌ exec なし：シェルが PID 1 のまま → SIGTERM が Puma に届かない
+bundle exec puma -C config/puma.rb
+
+# ✅ exec あり：Puma が PID 1 になる → Graceful Shutdown が機能する
+exec bundle exec puma -C config/puma.rb
+```
+
+<br>
+
 ---
 
 <br>
@@ -480,16 +580,17 @@ LINE 通知をタップした際にアプリ内の特定画面へ直接遷移で
 
 <br>
 
-| 技術 | 用途 | ISSUE |
-|:---|:---|:---|
-| GoodJob | バックグラウンドジョブ（AI分析・通知・ストリーク計算） | #A-3 |
-| Resend | メール送信（パスワードリセット・週次レポート） | #A-4 |
-| OmniAuth Google/LINE | ソーシャルログイン | #F-1 / #F-2 |
-| LINE Messaging API | プッシュ通知 | #G-1 |
-| Gemini API / Groq | AI分析（PMVV・週次振り返り） | #D-2 / #D-4 |
-| Solid Cache | Redis不要のキャッシュ（Render構成最適化） | #I-6 |
-| Sentry | エラー監視・本番ログ | #I-5 |
-| acts_as_list | 習慣の並び替え | #B-6 |
+| 技術 | 用途 | ISSUE | 状態 |
+|:---|:---|:---|:---:|
+| Neon Serverless Postgres | 永続無料 DB（Render 内蔵 DB の90日削除回避） | #A-2 | ✅ 完了 |
+| GoodJob | バックグラウンドジョブ（AI分析・通知・ストリーク計算） | #A-3 | ⬜ 未着手 |
+| Resend | メール送信（パスワードリセット・週次レポート） | #A-4 | ⬜ 未着手 |
+| OmniAuth Google/LINE | ソーシャルログイン | #F-1 / #F-2 | ⬜ 未着手 |
+| LINE Messaging API | プッシュ通知 | #G-1 | ⬜ 未着手 |
+| Gemini API / Groq | AI分析（PMVV・週次振り返り） | #D-2 / #D-4 | ⬜ 未着手 |
+| Solid Cache | Redis不要のキャッシュ（Render構成最適化） | #I-6 | ⬜ 未着手 |
+| Sentry | エラー監視・本番ログ | #I-5 | ⬜ 未着手 |
+| acts_as_list | 習慣の並び替え | #B-6 | ⬜ 未着手 |
 
 <br>
 
@@ -513,7 +614,8 @@ LINE 通知をタップした際にアプリ内の特定画面へ直接遷移で
 | 技術 | 用途 |
 |:---|:---|
 | Docker / Docker Compose | ローカル開発環境の統一 |
-| Render（無料プラン） | 本番環境ホスティング |
+| Render（無料プラン） | 本番環境ホスティング（Web Service） |
+| Neon Serverless PostgreSQL | 本番環境データベース（永続無料） |
 | GitHub | バージョン管理・自動デプロイトリガー |
 
 <br>
@@ -867,10 +969,11 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 
 | 制限 | 内容 | 対策 |
 |:---|:---|:---|
-| Render 無料プランのスリープ | 15分間アクセスがないと起動に30〜60秒かかる | Google Apps Script で10分おきに ping を送信 |
-| Render 無料 DB の有効期限 | PostgreSQL インスタンスが作成から **90日で自動削除** される | レビュー期間内に確認を完了する |
-| 自動バックアップなし | Render 無料プランにはDB自動バックアップがない | 本番移行時は有料プランへ移行する |
-| メール送信機能なし | パスワードリセットには Action Mailer の設定が必要 | MVP 後に実装予定 |
+| Render 無料プランのスリープ | 15分間アクセスがないと起動に30〜60秒かかる | スリープ仕様として許容（ポートフォリオ用途） |
+| Neon 無料プランの制限 | コンピュートリソースに上限あり（通常の用途では十分） | ユーザー増加時は有料プランへ移行 |
+| 自動バックアップなし | Neon 無料プランには自動バックアップがない | 本番移行時は有料プランへ移行する |
+| GoodJob Worker 未稼働 | #A-3 完了まで非同期処理が動作しない | #A-3 で render.yaml の Worker 設定を有効化予定 |
+| メール送信機能なし | パスワードリセットには Resend の設定が必要 | #A-4 で実装予定 |
 
 <br>
 
@@ -1245,6 +1348,47 @@ PRを作成する際のタイトルと本文です。
 **タイトル：**
 ```
 feat: #A-1 本リリース用DBマイグレーション全差分を追加
+
+<br>
+
+### マネージド DB では `db:migrate` を使う
+
+<br>
+
+Neon・RDS・PlanetScale などのマネージド DB は「DB 作成権限（`CREATE DATABASE`）」が付与されていない。<br>
+`db:prepare`（DB 作成 + マイグレーション）ではなく `db:migrate`（マイグレーションのみ）を使うこと。<br>
+`bin/docker-entrypoint` でこの設定を誤ると `exit 1` → デプロイ失敗ループになる（#A-2 で発見）。
+
+<br>
+
+### `exec` を使わないと Graceful Shutdown が機能しない
+
+<br>
+
+`startCommand` や `docker-entrypoint` の最後で Puma を起動する際は必ず `exec` を付ける。<br>
+`exec` なしだとシェルが PID 1 のまま残り、Render の SIGTERM が Puma に届かず強制終了される。<br>
+`exec bundle exec puma -C config/puma.rb` と書くことで Puma が PID 1 になり正常に Graceful Shutdown できる。
+
+<br>
+
+### Render の環境変数と render.yaml の重複に注意
+
+<br>
+
+`render.yaml` に `sync: false` で定義した環境変数は Render ダッシュボードで手動設定する。<br>
+`render.yaml` で `value:` を設定した環境変数は自動でセットされる。<br>
+両方で同じ Key を設定すると「Duplicate keys are not allowed」エラーになる。<br>
+`DATABASE_URL` を `sync: false` にしているにもかかわらず手動で追加すると重複するため注意（#A-2 で発生）。
+
+<br>
+
+### Puma の `on_worker_boot` は Worker 数が 1 以上のときに必須
+
+<br>
+
+マルチプロセスモード（`WEB_CONCURRENCY >= 1`）では、fork によって DB コネクションが複数 Worker で共有される。<br>
+`on_worker_boot` で `ActiveRecord::Base.establish_connection` を呼ぶことで各 Worker が独立したコネクションを確立し直す。<br>
+これがないと断続的な「DB コネクションが壊れた」エラーが発生する（特に高負荷時）。
 
 <br>
 

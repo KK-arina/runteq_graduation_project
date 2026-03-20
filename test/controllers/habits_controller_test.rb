@@ -21,7 +21,6 @@
 require "test_helper"
 
 class HabitsControllerTest < ActionDispatch::IntegrationTest
-
   setup do
     # fixtures からテスト用ユーザーを取得する
     @user = users(:one)

@@ -27,7 +27,6 @@
 class CreateHabitExcludedDays < ActiveRecord::Migration[7.2]
   def change
     create_table :habit_excluded_days do |t|
-
       # ─────────────────────────────────────────────────────────────────────
       # habit_id: どの習慣の除外曜日か（外部キー）
       # ─────────────────────────────────────────────────────────────────────
@@ -58,7 +57,7 @@ class CreateHabitExcludedDays < ActiveRecord::Migration[7.2]
     # 例: 「筋トレ」の土曜除外が2回登録されることを防ぐ
     # unique: true → 重複を DB レベルで禁止する（アプリ側バリデーションの保険）
     add_index :habit_excluded_days,
-              [:habit_id, :day_of_week],
+              [ :habit_id, :day_of_week ],
               unique: true,
               name: 'index_habit_excluded_days_on_habit_id_and_day_of_week'
   end

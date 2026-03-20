@@ -24,7 +24,6 @@
 class CreatePushSubscriptions < ActiveRecord::Migration[7.2]
   def change
     create_table :push_subscriptions do |t|
-
       # ─────────────────────────────────────────────────────────────────────
       # user_id: この購読情報を持つユーザー（外部キー）
       # ─────────────────────────────────────────────────────────────────────
