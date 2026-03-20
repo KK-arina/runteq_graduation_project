@@ -194,4 +194,15 @@ Rails.application.configure do
       "Referrer-Policy"          => "strict-origin-when-cross-origin"
     }
   )
+
+  # ============================================================
+  # Issue #A-3: 本番環境の GoodJob execution_mode 設定
+  # ============================================================
+  #
+  # 【なぜ :external にするのか】
+  # 本番環境（Render）では Web サービスと Worker サービスを分離して運用する。
+  # :external モードにより、Web プロセスはジョブをキューに積むだけになり、
+  # Render の Worker サービス（bundle exec good_job start）が実行を担当する。
+  # これにより Web サーバーの応答速度を確保しつつ、バックグラウンド処理ができる。
+  config.good_job.execution_mode = :external
 end

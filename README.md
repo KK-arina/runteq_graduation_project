@@ -50,10 +50,9 @@ flowchart LR
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/Docker-対応済み-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
 [![DB Migration](https://img.shields.io/badge/A--1_DBマイグレーション-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-1-db-migrations)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-1%2F67_ISSUE-f59e0b?style=flat-square)]()
-[![DB Migration](https://img.shields.io/badge/A--1_DBマイグレーション-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-1-db-migrations)
+[![GoodJob](https://img.shields.io/badge/A--3_GoodJob導入-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-3-good-job)
 [![本番デプロイ](https://img.shields.io/badge/A--2_本番デプロイ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-2-production-deploy)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-2%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-3%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -122,6 +121,7 @@ flowchart LR
 |:---|:---|:---:|:---|
 | #A-1 | 本リリース用DBマイグレーション（全差分） | 2026-03-20 | feature/A-1-db-migrations |
 | #A-2 | 本番環境デプロイ（Render + Neon PostgreSQL） | 2026-03-20 | feature/A-2-production-deploy |
+| #A-3 | GoodJob 導入・非同期処理基盤構築 | 2026-03-20 | feature/A-3-good-job |
 
 <br>
 
@@ -397,6 +397,136 @@ HabitFlow は「なぜ習慣が続かないのか」の**真の原因**を究明
 
 <br>
 
+### #A-3: GoodJob 導入・非同期処理基盤構築
+
+<br>
+
+**ブランチ:** `feature/A-3-good-job`<br>
+**完了日:** 2026-03-20<br>
+**概要:** Redis 不要の非同期ジョブ処理エンジン GoodJob を導入し、<br>
+AI 分析・通知・ストリーク計算等のバックグラウンド処理基盤を構築。<br>
+
+<br>
+
+#### 技術選定の理由
+
+<br>
+
+| 技術 | 採用理由 |
+|:---|:---|
+| GoodJob | PostgreSQL のみで動作。Redis 不要のため Render 無料プランと相性が良い |
+| Sidekiq (不採用) | 高性能だが Redis が必要。Render 無料プランではコスト増になる |
+
+<br>
+
+#### GoodJob の設定
+
+<br>
+
+| 設定項目 | 値 | 理由 |
+|:---|:---|:---|
+| `execution_mode` (development) | `:async` | Web プロセス内でスレッド実行。Docker 1台で完結 |
+| `execution_mode` (production) | `:external` | Render の Worker サービスが別プロセスで実行 |
+| `max_threads` | `3` | Web(6) + Worker(3) = 9 コネクション。Neon 無料プラン上限以内 |
+| `poll_interval` | `30秒` | DB への SELECT 頻度と遅延のバランス点 |
+| `cleanup_preserved_jobs_before_seconds_ago` | `86400秒（24時間）` | Neon 無料プランの容量制限に対応 |
+
+<br>
+
+#### cron ジョブ一覧（JST 基準）
+
+<br>
+
+| ジョブクラス | cron (UTC) | JST 実行時刻 | 役割 |
+|:---|:---:|:---:|:---|
+| `StreakCalculationJob` | `5 19 * * *` | 毎日 AM4:05 | ストリーク計算（#B-3 で本実装） |
+| `DailyNotificationCountResetJob` | `5 15 * * *` | 毎日 00:05 | 通知カウントリセット |
+| `MonthlyAiCountResetJob` | `0 15 * * *` | 毎日 00:00 | 月初のみ AI 使用回数リセット |
+| `GoodJob::CleanupJobsJob` | `0 18 * * *` | 毎日 03:00 | 完了済みジョブ削除 |
+
+<br>
+
+月次リセットは cron 式を毎日実行にして、ジョブ内で `Time.current.day == 1` をチェックする方式を採用。<br>
+UTC 変換による cron 式の複雑化を避けるための設計。
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `Gemfile` | `gem "good_job"` 追加（4.x 系・バージョン固定なし） |
+| `Gemfile` | `gem "minitest", "~> 5.1"` 追加（GoodJob が 6.x を引き込む問題を防止） |
+| `config/application.rb` | `config.active_job.queue_adapter = :good_job` 追加 |
+| `config/initializers/good_job.rb` | 新規作成（`Rails.application.configure` 形式・cron 4件） |
+| `config/environments/development.rb` | `execution_mode = :async` 追加 |
+| `config/environments/production.rb` | `execution_mode = :external` 追加 |
+| `config/environments/test.rb` | `queue_adapter = :test` 追加 |
+| `config/routes.rb` | GoodJob ダッシュボードを catch-all より前にマウント |
+| `render.yaml` | Worker サービスを有効化（`--max-threads=3` を明示） |
+| `app/jobs/application_job.rb` | `retry_on` / `discard_on` を追加 |
+| `app/jobs/streak_calculation_job.rb` | 新規作成（#B-3 で本実装予定） |
+| `app/jobs/daily_notification_count_reset_job.rb` | 新規作成 |
+| `app/jobs/monthly_ai_count_reset_job.rb` | 新規作成 |
+| `app/jobs/hello_good_job.rb` | 動作確認用（確認後削除可） |
+| `db/migrate/YYYYMMDDHHMMSS_create_good_jobs.rb` | GoodJob 4.x 用テーブル5種を作成 |
+
+<br>
+
+#### 作成された DB テーブル
+
+<br>
+
+| テーブル名 | 役割 |
+|:---|:---|
+| `good_jobs` | ジョブキュー本体 |
+| `good_job_batches` | バッチ処理管理 |
+| `good_job_executions` | 実行履歴 |
+| `good_job_processes` | Worker プロセス管理 |
+| `good_job_settings` | GoodJob 内部設定 |
+
+<br>
+
+#### GoodJob ダッシュボード
+
+<br>
+
+| 環境 | URL | 認証 |
+|:---|:---|:---|
+| development | `http://localhost:3000/good_job` | なし |
+| production | `https://habitflow-web.onrender.com/good_job` | Basic 認証（環境変数設定時のみ公開） |
+
+<br>
+
+本番環境での公開には Render ダッシュボードで以下の環境変数を設定する。<br>
+```
+GOOD_JOB_LOGIN=（任意のユーザー名）
+GOOD_JOB_PASSWORD=（強力なパスワード）
+```
+
+<br>
+
+#### Render Worker サービス設定
+
+<br>
+```yaml
+- type: worker
+  name: habitflow-worker
+  runtime: docker
+  region: singapore
+  plan: free
+  startCommand: bundle exec good_job start --max-threads=3
+```
+
+<br>
+
+`--max-threads=3` を明示する理由:<br>
+GoodJob のデフォルトスレッド数は 5。明示しないと Neon 無料プランの DB コネクション上限を超えるリスクがある。
+
+<br>
+
 ---
 
 <br>
@@ -554,6 +684,67 @@ exec bundle exec puma -C config/puma.rb
 
 <br>
 
+### 8. GoodJob のバージョン問題と解決アプローチ（#A-3）
+
+<br>
+
+**① バージョン体系の罠**
+
+<br>
+
+GoodJob はバージョンによって設定 API と DB スキーマが大きく変わる。<br>
+
+| バージョン | 状態 |
+|:---|:---|
+| 3.3.x | Rails 7.2 の新 API（`enqueue_after_transaction_commit?`）に未対応 |
+| 3.30.1 | 3.x 系の最終安定版 |
+| 3.99.x | 4.x への移行版。DB スキーマが変わる |
+| 4.x | Rails 7.2 / 8.x 正式対応。最新設計 ← 採用 |
+
+<br>
+
+最終的に GoodJob 4.x（最新版・バージョン固定なし）を採用。<br>
+`good_job:install` で 4.x 用の完全なスキーマを新規生成することで解決。
+
+<br>
+
+**② 設定 API の変遷**
+
+<br>
+
+GoodJob 4.x では `GoodJob.configure { |c| ... }` ブロックが廃止されている。<br>
+`Rails.application.configure do ... end` ブロック内に `config.good_job.*` 形式で設定する。<br>
+これが 4.x で動作する公式推奨の書き方。
+
+<br>
+
+**③ catch-all ルートと GoodJob ダッシュボードの順序問題**
+
+<br>
+
+Rails のルーティングは上から順に評価される。<br>
+`match "*path", to: "errors#not_found", via: :all`（catch-all）が先にあると<br>
+`/good_job` も 404 になってしまう。<br>
+GoodJob のマウントを catch-all より前に記述することで解決。
+
+<br>
+
+**④ `docker compose restart` vs `docker compose up --build` の違い**
+
+<br>
+
+| コマンド | 挙動 |
+|:---|:---|
+| `docker compose restart` | コンテナ再起動のみ。コードの変更は反映されない |
+| `docker compose up --build` | Docker イメージを再ビルド。`bundle install` が再実行される |
+
+<br>
+
+`execution_mode` 等の設定変更は `--build` なしでは反映されない。<br>
+gem の追加・変更・設定ファイルの変更後は必ず `docker compose up --build` を実行すること。
+
+<br>
+
 ---
 
 <br>
@@ -583,7 +774,7 @@ exec bundle exec puma -C config/puma.rb
 | 技術 | 用途 | ISSUE | 状態 |
 |:---|:---|:---|:---:|
 | Neon Serverless Postgres | 永続無料 DB（Render 内蔵 DB の90日削除回避） | #A-2 | ✅ 完了 |
-| GoodJob | バックグラウンドジョブ（AI分析・通知・ストリーク計算） | #A-3 | ⬜ 未着手 |
+| GoodJob 4.x | バックグラウンドジョブ（AI分析・通知・ストリーク計算） | #A-3 ✅ 完了 |
 | Resend | メール送信（パスワードリセット・週次レポート） | #A-4 | ⬜ 未着手 |
 | OmniAuth Google/LINE | ソーシャルログイン | #F-1 / #F-2 | ⬜ 未着手 |
 | LINE Messaging API | プッシュ通知 | #G-1 | ⬜ 未着手 |
@@ -1042,6 +1233,12 @@ habitflow/
 │   │   ├── habit_record_controller.js     # チェックボックス即時保存（楽観的 UI）
 │   │   ├── mobile_menu_controller.js      # ハンバーガーメニュー開閉
 │   │   └── form_submit_controller.js      # フォーム送信ローディング・二重送信防止
+│   ├── jobs/
+│   │   ├── application_job.rb                          # 変更: retry_on / discard_on 追加（#A-3）
+│   │   ├── streak_calculation_job.rb                   # #A-3: ストリーク計算（#B-3で本実装）
+│   │   ├── daily_notification_count_reset_job.rb       # #A-3: 日次通知カウントリセット
+│   │   ├── monthly_ai_count_reset_job.rb               # #A-3: 月次AI使用回数リセット
+│   │   └── hello_good_job.rb                           # #A-3: 動作確認用（確認後削除可）
 │   └── views/
 │       ├── dashboards/                    # ダッシュボード画面
 │       ├── habits/                        # 習慣一覧・新規作成画面
@@ -1069,7 +1266,9 @@ habitflow/
 │   │   ├── YYYYMMDDHHMMSS_add_foreign_key_to_ai_analyses_for_user_purpose.rb  # #A-1: 外部キー追加
 │   │   ├── YYYYMMDDHHMMSS_add_is_latest_to_ai_analyses.rb  # #A-1: is_latestフラグ・UNIQUE再設計
 │   │   ├── YYYYMMDDHHMMSS_add_indexes_to_notification_logs.rb  # #A-1: インデックス3種追加
-│   │   └── YYYYMMDDHHMMSS_change_token_to_digest_in_password_reset_tokens.rb  # #A-1: token_digest化
+│   │   ├── YYYYMMDDHHMMSS_change_token_to_digest_in_password_reset_tokens.rb  # #A-1: token_digest化
+│   │   ├── YYYYMMDDHHMMSS_remove_extraneous_finished_at_index.rb  # #A-3: GoodJob update（不要インデックス削除）
+│   │   └── YYYYMMDDHHMMSS_create_good_jobs.rb                      # #A-3: GoodJob 4.x 用テーブル5種作成
 │   ├── schema.rb                          # 現在のDBスキーマ（自動生成）
 │   └── seeds.rb                           # デモ用サンプルデータ
 ├── docs/
@@ -1090,13 +1289,14 @@ habitflow/
 │   ├── application.rb                     # アプリ設定（タイムゾーン・セッション）
 │   ├── routes.rb                          # ルーティング定義
 │   ├── initializers/
-│   │   └── content_security_policy.rb     # CSP 設定（nonce 方式）
+│   │   ├── content_security_policy.rb     # CSP 設定（nonce 方式）
+│   │   └── good_job.rb              # #A-3: GoodJob設定（cron 4件・max_threads等）
 │   └── environments/
 │       └── production.rb                  # 本番環境設定（セキュリティヘッダー）
 ├── Dockerfile                             # 本番用 Docker イメージ（マルチステージビルド）
 ├── Dockerfile.dev                         # 開発用 Docker イメージ
 ├── docker-compose.yml                     # Docker Compose 設定
-├── render.yaml                            # Render デプロイ設定（IaC）
+├── render.yaml                            # 変更: Worker サービス有効化（#A-3）
 └── Gemfile                                # Gem 依存関係
 ```
 
@@ -1389,6 +1589,36 @@ Neon・RDS・PlanetScale などのマネージド DB は「DB 作成権限（`CR
 マルチプロセスモード（`WEB_CONCURRENCY >= 1`）では、fork によって DB コネクションが複数 Worker で共有される。<br>
 `on_worker_boot` で `ActiveRecord::Base.establish_connection` を呼ぶことで各 Worker が独立したコネクションを確立し直す。<br>
 これがないと断続的な「DB コネクションが壊れた」エラーが発生する（特に高負荷時）。
+
+<br>
+
+### GoodJob のバージョンアップはスキーマも一緒に更新する
+
+<br>
+
+GoodJob は 3.x → 4.x でテーブル構成が大きく変わる（3.x: 2テーブル → 4.x: 5テーブル）。<br>
+`good_job:update` はバージョンアップ用だが、前提テーブルが存在しないとマイグレーションが失敗する。<br>
+古いテーブルを削除してから `good_job:install` を再実行するのが最もクリーンな移行方法。
+
+<br>
+
+### `:async` と `:external` の使い分けを環境ごとに明示する
+
+<br>
+
+GoodJob の `execution_mode` は `config/initializers/` で一括設定せず、<br>
+`config/environments/development.rb` と `config/environments/production.rb` に分けて記述する。<br>
+一括設定では環境判定ロジックが initializer に混入し、テストや CI での挙動が読みにくくなる。<br>
+環境ファイルに分離することで「この環境ではこの設定」が明確になり、意図しない動作を防げる。
+```
+
+---
+
+## GitHub PR・コミット用コメント
+
+**PR タイトル:**
+```
+feat: #A-3 GoodJob 導入・非同期処理基盤構築 + README 更新
 
 <br>
 

@@ -64,4 +64,39 @@ Rails.application.configure do
 
   # Raise error when a before_action's only/except options reference missing actions.
   config.action_controller.raise_on_missing_callback_actions = true
+
+  # ============================================================
+  # Issue #A-3: テスト環境の GoodJob 設定
+  # ============================================================
+  #
+  # 【なぜ :test にするのか】
+  #
+  # Rails の ActiveJob には以下のアダプターモードがある:
+  #
+  # :async   → 非同期スレッドで実行。サーバー再起動でジョブが消える。開発向け。
+  # :inline  → perform_later を呼んだ瞬間に同期実行。即時副作用が発生する。
+  # :test    → ジョブを「実行せずキューに積むだけ」にする。テスト向け。← これを採用
+  # :good_job → PostgreSQL 経由で非同期実行。開発・本番向け。
+  #
+  # 【:test を採用する理由】
+  #
+  # :inline は「perform_later を呼んだ瞬間に処理が走る」ため、
+  # テスト中に意図しない副作用（メール送信・DB更新）が発生しやすい。
+  # 特に複数ジョブが連鎖する場合にテストが不安定になる。
+  #
+  # :test は「積まれたことの確認」と「意図的な実行」を分離できる:
+  #
+  #   # ジョブが積まれたことだけを確認するテスト
+  #   assert_enqueued_with(job: MonthlyAiCountResetJob) do
+  #     UserSetting.trigger_reset
+  #   end
+  #
+  #   # 明示的にジョブを実行してから結果を確認するテスト
+  #   perform_enqueued_jobs do
+  #     MonthlyAiCountResetJob.perform_later
+  #   end
+  #   assert_equal 0, UserSetting.first.ai_analysis_count
+  #
+  # この「積む」と「動かす」の分離がテストの安定性を大幅に向上させる。
+  config.active_job.queue_adapter = :test
 end

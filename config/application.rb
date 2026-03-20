@@ -95,5 +95,34 @@ module RunteqGraduationProject
                          expire_after: 14.days
 
     config.i18n.default_locale = :ja
+
+    # ============================================================
+    # Issue #A-3: GoodJob の ActiveJob アダプター設定
+    # ============================================================
+    #
+    # 【ActiveJob とは何か】
+    # Rails には「ActiveJob」という非同期処理の統一インターフェースがある。
+    # コードは常に perform_later を呼ぶだけでよく、
+    # 「どのエンジンで動かすか（Sidekiq/GoodJob等）」はここで切り替える。
+    # これにより将来バックエンドを変更しても
+    # アプリケーションコード（ジョブクラス）を書き直さずに済む。
+    #
+    # 【:good_job を指定する意味】
+    # :good_job を指定すると、SomeJob.perform_later が呼ばれた際に
+    # GoodJob が管理する good_jobs テーブル（PostgreSQL）にジョブが登録される。
+    # GoodJob の Worker プロセスがそのテーブルを監視し、ジョブを順番に実行する。
+    #
+    # 【他の選択肢との比較】
+    # :async        → インメモリで即時実行。サーバー再起動でジョブが消える。開発向け。
+    # :inline       → 同期実行（perform_later が perform_now になる）。テスト向け。
+    # :sidekiq      → Sidekiq + Redis が必要。高トラフィック向け。
+    # :good_job     → PostgreSQL のみ。Redis 不要。HabitFlow に最適。← これを選択
+    #
+    # 【なぜ application.rb（全環境共通）に書くのか】
+    # - development: Docker 上で GoodJob を使って実際の動作を確認できる
+    # - test:        後で config/environments/test.rb で :test adapter に上書きする
+    # - production:  本番でも GoodJob が使われる
+    # 全環境で一貫してGoodJobを使うことで「開発と本番の動作差異」をなくす。
+    config.active_job.queue_adapter = :good_job
   end
 end
