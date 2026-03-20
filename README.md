@@ -572,7 +572,7 @@ exec bundle exec puma -C config/puma.rb
 | Ruby on Rails | 7.2.3 | Web フレームワーク |
 | PostgreSQL | 16 | データベース |
 | bcrypt | 3.1.7 | パスワードハッシュ化 |
-| Puma | 5.0以上 | Web サーバー |
+| Puma | 7.1.0（~> 7.0） | Web サーバー |
 
 <br>
 
