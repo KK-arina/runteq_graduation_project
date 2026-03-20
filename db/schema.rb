@@ -10,9 +10,44 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_14_044509) do
+ActiveRecord::Schema[7.2].define(version: 2026_03_20_002120) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
+
+  create_table "ai_analyses", force: :cascade do |t|
+    t.bigint "weekly_reflection_id"
+    t.bigint "user_purpose_id"
+    t.integer "analysis_type", default: 0, null: false
+    t.jsonb "input_snapshot"
+    t.text "analysis_comment"
+    t.text "improvement_suggestions"
+    t.text "root_cause"
+    t.text "coaching_message"
+    t.jsonb "actions_json"
+    t.boolean "crisis_detected", default: false, null: false
+    t.string "prompt_version"
+    t.string "model_name"
+    t.jsonb "metadata"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.boolean "is_latest", default: true, null: false
+    t.index ["analysis_type"], name: "index_ai_analyses_on_analysis_type"
+    t.index ["is_latest"], name: "index_ai_analyses_on_is_latest_true", where: "(is_latest = true)"
+    t.index ["user_purpose_id", "analysis_type"], name: "index_ai_analyses_latest_purpose_type_unique", unique: true, where: "((user_purpose_id IS NOT NULL) AND (is_latest = true))"
+    t.index ["user_purpose_id"], name: "index_ai_analyses_on_user_purpose_id"
+    t.index ["user_purpose_id"], name: "index_ai_analyses_on_user_purpose_id_fk"
+    t.index ["weekly_reflection_id"], name: "index_ai_analyses_latest_weekly_reflection_unique", unique: true, where: "((weekly_reflection_id IS NOT NULL) AND (is_latest = true))"
+    t.index ["weekly_reflection_id"], name: "index_ai_analyses_on_weekly_reflection_id"
+  end
+
+  create_table "habit_excluded_days", force: :cascade do |t|
+    t.bigint "habit_id", null: false
+    t.integer "day_of_week", null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["habit_id", "day_of_week"], name: "index_habit_excluded_days_on_habit_id_and_day_of_week", unique: true
+    t.index ["habit_id"], name: "index_habit_excluded_days_on_habit_id"
+  end
 
   create_table "habit_records", force: :cascade do |t|
     t.bigint "user_id", null: false
@@ -21,9 +56,29 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_14_044509) do
     t.boolean "completed", default: false, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.decimal "numeric_value", precision: 10, scale: 2
+    t.text "memo"
+    t.boolean "is_manual_input", default: false
+    t.datetime "deleted_at"
+    t.index ["habit_id", "deleted_at", "record_date"], name: "index_habit_records_on_habit_deleted_date"
     t.index ["habit_id"], name: "index_habit_records_on_habit_id"
     t.index ["user_id", "habit_id", "record_date"], name: "index_habit_records_on_user_habit_date", unique: true
+    t.index ["user_id", "record_date"], name: "index_habit_records_on_user_id_and_record_date"
     t.index ["user_id"], name: "index_habit_records_on_user_id"
+  end
+
+  create_table "habit_templates", force: :cascade do |t|
+    t.string "name", null: false
+    t.integer "measurement_type", default: 0, null: false
+    t.string "default_unit"
+    t.integer "default_weekly_target", default: 5, null: false
+    t.integer "category", default: 4, null: false
+    t.text "description"
+    t.integer "sort_order"
+    t.boolean "is_active", default: true, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["is_active", "sort_order"], name: "index_habit_templates_on_is_active_and_sort_order"
   end
 
   create_table "habits", force: :cascade do |t|
@@ -33,9 +88,128 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_14_044509) do
     t.datetime "deleted_at"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "unit"
+    t.integer "measurement_type", default: 0, null: false
+    t.integer "current_streak", default: 0, null: false
+    t.integer "longest_streak", default: 0, null: false
+    t.datetime "last_streak_calculated_at"
+    t.boolean "allow_rest_mode", default: true, null: false
+    t.datetime "archived_at"
+    t.string "color"
+    t.string "icon"
+    t.integer "position"
     t.index ["deleted_at"], name: "index_habits_on_deleted_at"
+    t.index ["user_id", "archived_at"], name: "index_habits_on_user_id_and_archived_at"
     t.index ["user_id", "deleted_at"], name: "index_habits_on_user_id_and_deleted_at"
+    t.index ["user_id", "position"], name: "index_habits_on_user_id_and_position"
     t.index ["user_id"], name: "index_habits_on_user_id"
+  end
+
+  create_table "notification_logs", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.integer "notification_type", null: false
+    t.integer "channel", null: false
+    t.string "target_type"
+    t.bigint "target_id"
+    t.string "deep_link_url"
+    t.integer "status", default: 0, null: false
+    t.text "error_message"
+    t.integer "retry_count", default: 0, null: false
+    t.jsonb "metadata"
+    t.datetime "delivered_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["channel"], name: "index_notification_logs_on_channel"
+    t.index ["notification_type"], name: "index_notification_logs_on_notification_type"
+    t.index ["status"], name: "index_notification_logs_on_status_not_success", where: "(status <> 0)"
+    t.index ["target_type", "target_id"], name: "index_notification_logs_on_target_type_and_target_id"
+    t.index ["user_id", "created_at"], name: "index_notification_logs_on_user_id_and_created_at"
+    t.index ["user_id"], name: "index_notification_logs_on_user_id"
+  end
+
+  create_table "password_reset_tokens", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.datetime "expires_at", null: false
+    t.boolean "is_used", default: false, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.string "token_digest", null: false
+    t.index ["token_digest"], name: "index_password_reset_tokens_on_token_digest_unique", unique: true
+    t.index ["user_id"], name: "index_password_reset_tokens_on_user_id"
+    t.index ["user_id"], name: "index_password_reset_tokens_on_user_id_unique", unique: true
+  end
+
+  create_table "push_subscriptions", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.text "endpoint"
+    t.string "p256dh"
+    t.string "auth"
+    t.string "device_name"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_push_subscriptions_on_user_id"
+  end
+
+  create_table "tasks", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.bigint "habit_id"
+    t.string "title", null: false
+    t.integer "priority", default: 1, null: false
+    t.integer "task_type", default: 0, null: false
+    t.integer "status", default: 0, null: false
+    t.date "due_date"
+    t.decimal "estimated_hours", precision: 5, scale: 1
+    t.datetime "scheduled_at"
+    t.boolean "alarm_enabled", default: false, null: false
+    t.integer "alarm_minutes_before"
+    t.datetime "completed_at"
+    t.boolean "ai_generated", default: false, null: false
+    t.datetime "deleted_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["alarm_enabled", "scheduled_at"], name: "index_tasks_on_alarm_enabled_and_scheduled_at"
+    t.index ["user_id", "alarm_enabled"], name: "index_tasks_on_user_id_and_alarm_enabled"
+    t.index ["user_id", "scheduled_at"], name: "index_tasks_on_user_id_and_scheduled_at"
+    t.index ["user_id", "status", "due_date"], name: "index_tasks_on_user_id_and_status_and_due_date"
+    t.index ["user_id"], name: "index_tasks_on_user_id"
+  end
+
+  create_table "user_purposes", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.text "purpose"
+    t.text "mission"
+    t.text "vision"
+    t.text "value"
+    t.text "current_situation"
+    t.integer "version", default: 1, null: false
+    t.boolean "is_active", default: true, null: false
+    t.integer "analysis_state", default: 0, null: false
+    t.text "last_error_message"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id", "is_active"], name: "index_user_purposes_on_user_id_and_is_active"
+    t.index ["user_id"], name: "index_user_purposes_on_user_id"
+  end
+
+  create_table "user_settings", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.string "time_zone", default: "Asia/Tokyo"
+    t.boolean "notification_enabled", default: true, null: false
+    t.boolean "line_notification_enabled", default: false, null: false
+    t.boolean "email_notification_enabled", default: true, null: false
+    t.integer "daily_notification_limit", default: 5, null: false
+    t.integer "daily_notification_count", default: 0, null: false
+    t.datetime "notification_count_reset_at"
+    t.datetime "last_notification_sent_at"
+    t.boolean "weekly_report_enabled", default: true, null: false
+    t.datetime "rest_mode_until"
+    t.string "rest_mode_reason"
+    t.integer "ai_analysis_count", default: 0, null: false
+    t.integer "ai_analysis_monthly_limit", default: 10, null: false
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["user_id"], name: "index_user_settings_on_user_id"
+    t.index ["user_id"], name: "index_user_settings_on_user_id_unique", unique: true
   end
 
   create_table "users", force: :cascade do |t|
@@ -44,7 +218,12 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_14_044509) do
     t.string "password_digest", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.string "provider", default: "email"
+    t.string "uid"
+    t.string "line_user_id"
+    t.datetime "first_login_at"
     t.index ["email"], name: "index_users_on_email", unique: true
+    t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
   end
 
   create_table "weekly_reflection_habit_summaries", force: :cascade do |t|
@@ -70,14 +249,30 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_14_044509) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "completed_at"
+    t.integer "year"
+    t.integer "week_number"
+    t.integer "mood"
+    t.text "direct_reason"
+    t.text "background_situation"
     t.index ["user_id", "week_start_date", "completed_at"], name: "idx_weekly_reflections_user_week_completed", where: "(completed_at IS NOT NULL)"
     t.index ["user_id", "week_start_date"], name: "index_weekly_reflections_on_user_id_and_week_start_date", unique: true
+    t.index ["user_id", "year", "week_number"], name: "index_weekly_reflections_on_user_year_week", unique: true
     t.index ["user_id"], name: "index_weekly_reflections_on_user_id"
   end
 
+  add_foreign_key "ai_analyses", "user_purposes", on_delete: :cascade
+  add_foreign_key "ai_analyses", "weekly_reflections", on_delete: :cascade
+  add_foreign_key "habit_excluded_days", "habits", on_delete: :cascade
   add_foreign_key "habit_records", "habits", on_delete: :cascade
   add_foreign_key "habit_records", "users", on_delete: :cascade
   add_foreign_key "habits", "users"
+  add_foreign_key "notification_logs", "users", on_delete: :cascade
+  add_foreign_key "password_reset_tokens", "users", on_delete: :cascade
+  add_foreign_key "push_subscriptions", "users", on_delete: :cascade
+  add_foreign_key "tasks", "habits", on_delete: :nullify
+  add_foreign_key "tasks", "users", on_delete: :cascade
+  add_foreign_key "user_purposes", "users", on_delete: :cascade
+  add_foreign_key "user_settings", "users", on_delete: :cascade
   add_foreign_key "weekly_reflection_habit_summaries", "habits", on_delete: :nullify
   add_foreign_key "weekly_reflection_habit_summaries", "weekly_reflections", on_delete: :cascade
   add_foreign_key "weekly_reflections", "users", on_delete: :cascade
