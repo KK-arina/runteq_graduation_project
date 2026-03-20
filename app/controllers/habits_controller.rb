@@ -29,7 +29,6 @@
 #   将来的には ApplicationController か concern に切り出すことを推奨する。
 
 class HabitsController < ApplicationController
-
   # ============================================================
   # before_action（アクション実行前に必ず呼ばれる処理）
   # ============================================================
@@ -42,11 +41,11 @@ class HabitsController < ApplicationController
   # require_unlocked: create と destroy の前にロック状態をチェック。
   # only: [:create, :destroy] で対象アクションを限定している。
   # index や new はロック中でも表示できる（閲覧はOK、書き込みはNG）。
-  before_action :require_unlocked, only: [:create, :destroy]
+  before_action :require_unlocked, only: [ :create, :destroy ]
 
   # set_habit: destroy の前に @habit を取得する。
   # only: [:destroy] で destroy アクションのみを対象にしている。
-  before_action :set_habit, only: [:destroy]
+  before_action :set_habit, only: [ :destroy ]
 
   # ============================================================
   # GET /habits
@@ -233,14 +232,14 @@ class HabitsController < ApplicationController
       # ゼロ除算ガード: weekly_target は validates で1以上が保証されているが念のため。
       rate = if habit.weekly_target.zero?
                0
-             else
+      else
                # .to_f: 整数同士の割り算では小数が切り捨てられる（3/7 → 0）ため float に変換。
                # .clamp(0, 100): 目標を超過しても 100% を上限とする。
                # .floor: 小数点以下を切り捨て（42.8 → 42）。
                ((completed_count.to_f / habit.weekly_target) * 100)
                  .clamp(0, 100)
                  .floor
-             end
+      end
 
       # { habit_id => { rate:, completed_count: } } の形でハッシュに積み上げる。
       hash[habit.id] = { rate: rate, completed_count: completed_count }

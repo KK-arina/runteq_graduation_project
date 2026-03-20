@@ -1,44 +1,91 @@
 #!/bin/bash
 # ==================== エントリーポイントスクリプト ====================
-# このスクリプトはDockerコンテナ起動時に最初に実行されます
-# データベースの準備やサーバーPIDファイルの削除などを行います
-
-# set -e: エラーが発生したらスクリプトを即座に終了
+# このスクリプトはDockerコンテナ起動時に最初に実行されます。
+# データベースの準備やサーバーPIDファイルの削除などを行います。
+#
+# set -e: いずれかのコマンドがエラー（終了コード 0 以外）を返した場合、
+# スクリプトを即座に終了する安全設定。
+# これにより「DBマイグレーション失敗なのにサーバーが起動する」状態を防ぐ。
 set -e
 
 # ==================== サーバーPIDファイルの削除 ====================
-# Railsサーバーの再起動時に「A server is already running」エラーを防ぐ
-# tmp/pids/server.pid: 前回のプロセスIDが残っている場合に削除
+# Rails サーバーは起動時に tmp/pids/server.pid にプロセス ID を記録する。
+# コンテナが強制終了した場合、このファイルが残り
+# 「A server is already running. Check tmp/pids/server.pid.」エラーが発生する。
+# 起動前に削除することで確実にサーバーを起動できる。
 rm -f /rails/tmp/pids/server.pid
 
 # ==================== jemalloc の有効化 ====================
-# jemalloc: メモリ使用量を削減し、レイテンシを改善するメモリアロケータ
-# LD_PRELOAD: 共有ライブラリを優先的に読み込む環境変数
+# jemalloc: 標準の malloc より効率的なメモリアロケータ。
+# Rails アプリのメモリ使用量を削減し、レスポンスのレイテンシを改善する。
+#
+# LD_PRELOAD: 他の共有ライブラリより先に指定ライブラリを読み込む環境変数。
+# これにより Ruby の標準 malloc を jemalloc で置き換える。
+#
+# [ -z "${LD_PRELOAD+x}" ]: LD_PRELOAD が未設定の場合のみ実行する。
+# すでに設定されている場合は上書きしない（他の設定を壊さないため）。
+#
+# [ -f /usr/lib/*/libjemalloc.so.2 ]: jemalloc がインストールされているか確認。
+# Dockerfile で libjemalloc2 をインストール済みのため通常は存在する。
 if [ -z "${LD_PRELOAD+x}" ] && [ -f /usr/lib/*/libjemalloc.so.2 ]; then
   export LD_PRELOAD="$(echo /usr/lib/*/libjemalloc.so.2)"
 fi
 
 # ==================== 本番環境のみ: データベース準備 ====================
-# RAILS_ENV=productionの場合のみ実行
+# RAILS_ENV=production の場合のみ実行する。
+# 開発環境（Docker Compose）では docker-compose.yml の command で管理するため不要。
 if [ "$RAILS_ENV" = "production" ]; then
   echo "Production environment detected"
-  echo "DATABASE_URL is set: ${DATABASE_URL:+yes}"
 
+  # DATABASE_URL の設定確認
+  # Neon の接続文字列が正しく Render 環境変数に設定されているか検証する。
+  # 未設定の場合はサーバー起動前にエラーを出して停止する（起動後のエラーより分かりやすい）。
+  echo "DATABASE_URL is set: ${DATABASE_URL:+yes}"
   if [ -z "$DATABASE_URL" ]; then
     echo "ERROR: DATABASE_URL is not set!"
     exit 1
   fi
 
+  # ------------------------------------------------------------------
+  # db:migrate を使う理由（db:prepare を使わない理由）
+  # ------------------------------------------------------------------
+  # db:prepare = 「DBが存在しなければ作成 → マイグレーション実行」
+  # db:migrate  = 「未実行のマイグレーションのみ実行」
+  #
+  # Neon（外部マネージドDB）ではDBが最初から存在しており、
+  # かつ「CREATE DATABASE」権限がユーザーに付与されていない。
+  # そのため db:prepare の「DB作成」ステップで権限エラーが発生し
+  # exit 1 → デプロイ失敗のループになる。
+  #
+  # db:migrate は既存DBに対してマイグレーションのみ実行するため
+  # Neon・RDS・PlanetScale などのマネージドDBで正しく動作する。
+  # 何度実行しても適用済みはスキップされるため安全（冪等性あり）。
   echo "Running database migrations..."
-  DISABLE_DATABASE_ENVIRONMENT_CHECK=1 ./bin/rails db:prepare
+  ./bin/rails db:migrate
 
   # ==================== デモデータ投入（条件付き） ====================
-  # SEED_IN_PRODUCTION=true の場合のみ実行
-  # Render の Environment Variables で一時的に設定→確認後に削除する運用
+  # SEED_IN_PRODUCTION=true の場合のみ db:seed を実行する。
+  # 通常デプロイでは seed は実行しない（本番データを上書きするリスクがある）。
+  #
+  # 【デモデータ投入手順】
+  # Render ダッシュボード → habitflow-web → Shell タブで実行:
+  #   SEED_IN_PRODUCTION=true bin/rails db:seed
+  #
+  # ⚠️ 実行すると既存データが削除されるため、本物のユーザーデータがある場合は実行しない。
   if [ "$SEED_IN_PRODUCTION" = "true" ]; then
     echo "SEED_IN_PRODUCTION=true detected. Running db:seed..."
     ./bin/rails db:seed
   fi
 fi
 
+# ==================== メインプロセスの起動 ====================
+# exec: 現在のシェルプロセスを指定コマンドで「置き換える」。
+# exec を使うことで Rails/Puma が PID 1 になり、
+# Render からの SIGTERM（停止シグナル）を直接受け取れる。
+# これにより処理中のリクエストを完了してから終了する Graceful Shutdown が機能する。
+#
+# "$@": このスクリプトに渡された引数をそのまま実行する。
+# render.yaml の startCommand で指定した
+# 「bundle exec rails db:migrate && exec bundle exec puma -C config/puma.rb」
+# の後半「exec bundle exec puma -C config/puma.rb」がここで実行される。
 exec "$@"

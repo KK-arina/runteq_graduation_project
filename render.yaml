@@ -1,239 +1,262 @@
 # ==============================================================================
-# render.yaml
+# render.yaml - インフラ構成定義ファイル（Infrastructure as Code）
 # ==============================================================================
 #
 # 【このファイルの役割】
-# Render.com がアプリケーションをどのように起動・デプロイするかを定義します。
-# render.yaml を Git リポジトリに含めることで「コードとしてインフラを管理」
-# （Infrastructure as Code）できます。
-# mainブランチへのpushが自動デプロイのトリガーになります。
+# Render.com がアプリをどのように起動・デプロイするかをコードで定義するファイル。
+# このファイルを Git で管理することで「インフラの設定をコードとして記録・再現」
+# できる（Infrastructure as Code / IaC と呼ぶ）。
+# main ブランチへの push が自動デプロイのトリガーになる。
+#
+# 【採用構成の理由】
+# Render 内蔵 PostgreSQL（free プラン）は「作成から90日で自動削除」される。
+# ポートフォリオは長期運用が前提のため、以下の永続無料構成を採用する:
+#   Web サービス  → Render（無料 Web Service）
+#   データベース  → Neon Serverless Postgres（永続無料）
+#
+# 【render.yaml の適用タイミング】
+# Render のダッシュボードから「New Blueprint」を選択すると、
+# このファイルが自動で読み込まれてサービスが作成される。
 #
 # 【参考ドキュメント】
 # https://render.com/docs/infrastructure-as-code
 # ==============================================================================
 
-# ==============================================================================
-# データベースの定義
-# ==============================================================================
-databases:
-  - name: habitflow-db
-    # plan: 料金プラン
-    # free = 無料プラン（90日間でDBが自動削除される制限あり）
-    # 講師レビュー期間中は free で問題ないが、長期運用する場合は有料プランを検討
-    plan: free
-    # region: データベースを配置するリージョン（地域）
-    # oregon = アメリカ西海岸（オレゴン州）
-    # Webサービスと同じリージョンにすることで通信遅延を最小化できる
-    region: oregon
-
-# ==============================================================================
-# Webサービスの定義
-# ==============================================================================
 services:
+  # ============================================================================
+  # [1] Web サービス（Rails アプリ本体）
+  # ============================================================================
   - type: web
+
     # name: Render ダッシュボード上で表示されるサービス名
     name: habitflow-web
-    # runtime: 実行環境
-    # docker を指定すると、リポジトリ内の Dockerfile を使ってコンテナをビルドする
+
+    # runtime: docker を指定すると、プロジェクトの Dockerfile を使ってビルドする。
+    # Ruby のバージョン管理も Dockerfile で行うため、この設定が最も確実。
     runtime: docker
-    # region: Webサービスを配置するリージョン
-    # データベースと同じ oregon を指定（同リージョン間の通信は高速）
-    region: oregon
-    # plan: 料金プラン（free = 無料プラン）
+
+    # region: サーバーを配置するリージョン（地域）
+    # singapore を選ぶと日本からのアクセスが最も速い。
+    # ⚠️ Neon の DB も必ず同じ「ap-southeast-1（Singapore）」リージョンを選ぶこと。
+    # Web ↔ DB 間が同じリージョンにあると通信遅延（レイテンシ）が最小になる。
+    region: singapore
+
+    # plan: 料金プラン
+    # free = 無料プラン（15分間アクセスがないとスリープする）。
+    # スリープ中の初回アクセスは起動に30〜60秒かかる。
+    # ポートフォリオ・卒業制作では問題なし。
+    # 常時稼働が必要になったら $7/月の有料プランへ変更する。
     plan: free
-    # branch: デプロイ対象の Git ブランチ
-    # main ブランチへの push が自動デプロイのトリガーになる
+
+    # branch: 自動デプロイを行う Git ブランチ
+    # main ブランチへの push が自動デプロイのトリガーになる。
     branch: main
+
     # dockerfilePath: 使用する Dockerfile のパス
-    # 本番用の Dockerfile（マルチステージビルド対応）を指定
     dockerfilePath: ./Dockerfile
-    # dockerContext: Docker ビルドのコンテキスト（プロジェクトルート）
+
+    # dockerContext: Docker ビルド時のコンテキストディレクトリ
+    # . = プロジェクトルート全体をコンテキストとして使用する。
     dockerContext: .
 
-    # ──────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
+    # buildCommand: コンテナのビルド時に実行するコマンド
+    # --------------------------------------------------------------------------
+    #
+    # 【なぜ明示的に書くのか】
+    # Dockerfile だけに依存すると、将来 CI/CD 環境を変更したときに
+    # 「Dockerfile のどのステップが何をしているか」が分かりにくくなる。
+    # buildCommand に明示することで「ビルド時の処理」が一目で分かる設計にする。
+    #
+    # 【各コマンドの解説】
+    # bundle install
+    #   Gemfile.lock に記載されたすべての gem をインストールする。
+    #   Gemfile.lock があるため「全開発者・本番環境で同じバージョン」が保証される。
+    #
+    # bundle exec rails assets:precompile
+    #   CSS・JavaScript を本番用に最適化（圧縮・結合）してビルドする。
+    #   Tailwind CSS のビルドもここで実行される（tailwindcss-rails が自動実行）。
+    #   SECRET_KEY_BASE_DUMMY=1 は Dockerfile 内で設定済みのため不要。
+    #
+    # bundle exec rails assets:clean
+    #   古いバージョンのアセットファイルを削除する。
+    #   デプロイを繰り返すとアセットが溜まっていくのを防ぐ。
+    buildCommand: |
+      bundle install
+      bundle exec rails assets:precompile
+      bundle exec rails assets:clean
+
+    # --------------------------------------------------------------------------
     # startCommand: コンテナ起動時に実行するコマンド
-    # ──────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
     #
-    # 【なぜ startCommand が必要なのか】
-    # Dockerfile の CMD に "rails server" だけを書くと、
-    # デプロイのたびにマイグレーションが自動実行されない。
-    # startCommand でマイグレーション → サーバー起動の順番を明示することで、
-    # 「コードと DB スキーマの整合性」を毎回のデプロイで保証できる。
+    # 【なぜ buildCommand でなく startCommand でマイグレーションを実行するのか】
+    # ビルド時点（buildCommand）では DATABASE_URL 環境変数が参照できず
+    # DB に接続できないため、マイグレーションはビルド後の起動時に実行する。
     #
-    # 【startCommand は Dockerfile の CMD を上書きする】
-    # Docker の仕組み上、render.yaml の startCommand は
-    # Dockerfile の CMD より優先される。
-    # Dockerfile の ENTRYPOINT（docker-entrypoint）は引き続き実行される。
+    # 【各コマンドの解説】
     #
-    # 【コマンドの解説】
-    #
-    # bin/rails db:migrate
-    #   未実行のマイグレーションファイルを本番 DB に適用する。
-    #   schema_migrations テーブルで実行済みかどうかを管理しており、
-    #   適用済みのものはスキップされるため、何度実行しても安全（冪等性あり）。
+    # bundle exec rails db:migrate
+    #   未実行のマイグレーションファイルを本番 DB（Neon）に適用する。
+    #   schema_migrations テーブルで「実行済みか」を管理しており、
+    #   適用済みはスキップされるため何度実行しても安全（冪等性あり）。
+    #   マイグレーション失敗時はここで処理が止まり、Render がデプロイ失敗として通知する。
     #
     # &&
-    #   前のコマンドが成功（終了コード 0）した場合のみ次を実行する演算子。
+    #   前のコマンドが成功（終了コード 0）した場合のみ次のコマンドを実行する演算子。
     #   マイグレーション失敗時にサーバーが起動しないようにする安全弁。
-    #   もしマイグレーションでエラーが起きたら、ここで処理が止まり
-    #   Render がデプロイ失敗として通知してくれる。
     #
-    # exec bin/rails server -b 0.0.0.0
-    #   exec とは：現在のシェルプロセスを Rails プロセスで「置き換える」コマンド。
+    # exec bundle exec puma -C config/puma.rb
+    #   ⚠️ 「rails server」ではなく「puma」を直接起動する理由:
+    #   rails server は開発向けのラッパーコマンドで、
+    #   config/puma.rb の設定（worker 数・スレッド数）が反映されないことがある。
+    #   puma を直接起動することで config/puma.rb の全設定が確実に適用される。
     #
-    #   exec を使わない場合の問題：
-    #     シェル（PID 1）→ Rails（PID 2）という親子関係になる。
-    #     Render が停止シグナル（SIGTERM）を送ると PID 1 のシェルに届くが、
-    #     シェルは Rails に転送しないため Rails が強制終了（SIGKILL）される。
-    #     その結果、処理中のリクエストが中断される（Graceful Shutdown 不可）。
+    #   exec を使う理由:
+    #   exec は「現在のシェルプロセスを Puma プロセスで置き換える」コマンド。
+    #   exec なし → シェル(PID 1) → Puma(PID 2) という親子関係になる。
+    #             Render の停止シグナル(SIGTERM)がシェルに届いても
+    #             Puma に転送されず強制終了(SIGKILL)される。
+    #   exec あり → Puma が PID 1 になり SIGTERM を直接受け取れる。
+    #             処理中のリクエストを完了してから終了できる（Graceful Shutdown）。
     #
-    #   exec を使った場合：
-    #     シェルが Rails プロセスに置き換わり、Rails が PID 1 になる。
-    #     Render の SIGTERM が直接 Rails に届くため正常に終了処理ができる
-    #     （Graceful Shutdown 可能）。
-    #
-    #   -b 0.0.0.0
-    #     すべてのネットワークインターフェースでリクエストを受け付ける設定。
-    #     これがないと Render のロードバランサーからアクセスできない
-    #     （デフォルトの localhost では外部からの接続が拒否されてしまう）。
-    startCommand: bin/rails db:migrate && if [ "$SEED_IN_PRODUCTION" = "true" ]; then bin/rails db:seed; fi && exec bin/rails server -b 0.0.0.0
+    #   -C config/puma.rb:
+    #   config/puma.rb の設定ファイルを指定して Puma を起動する。
+    #   worker 数・スレッド数・on_worker_boot などの設定がすべて適用される。
+    startCommand: bundle exec rails db:migrate && exec bundle exec puma -C config/puma.rb
 
-    # ──────────────────────────────────────────────────────────────
-    # 環境変数の設定
-    # ──────────────────────────────────────────────────────────────
+    # --------------------------------------------------------------------------
+    # 環境変数の設定（envVars）
+    # --------------------------------------------------------------------------
     envVars:
-      # RAILS_ENV: Rails の実行環境
-      # production = 本番環境（キャッシュ有効・デバッグ無効・最適化 ON）
+      # -----------------------------------------------------------------------
+      # RAILS_ENV: Rails の実行環境を指定する
+      # -----------------------------------------------------------------------
+      # production = 本番環境（キャッシュ有効・デバッグ無効・最適化 ON）。
+      # この設定がないと development モードで動いてしまい、
+      # ソースコードがレスポンスに含まれるなどセキュリティリスクがある。
       - key: RAILS_ENV
         value: production
 
-      # RAILS_MASTER_KEY: config/credentials.yml.enc を復号するためのキー
-      # このキーがないと暗号化された設定ファイルが読めずアプリが起動しない。
-      # sync: false → Git にはコミットせず、Render ダッシュボードから手動で設定する。
-      # 【設定場所】Render ダッシュボード → habitflow-web → Environment →
-      #             Add Environment Variable → key: RAILS_MASTER_KEY
-      # 【値の確認】ローカルの config/master.key ファイルの中身をコピーする
+      # -----------------------------------------------------------------------
+      # RAILS_MASTER_KEY: 暗号化された設定ファイルを復号するためのキー
+      # -----------------------------------------------------------------------
+      # config/credentials.yml.enc を復号するために必要。
+      # このキーがないとアプリ起動時にエラーで落ちる。
+      #
+      # sync: false の意味:
+      #   この環境変数の「値」を render.yaml には書かず、
+      #   Render ダッシュボードで手動設定することを示す。
+      #   秘密鍵を Git にコミットしないためのセキュリティ設計。
+      #
+      # 【設定手順】
+      # 1. Render ダッシュボード → habitflow-web → Environment タブを開く
+      # 2. 「Add Environment Variable」をクリック
+      # 3. Key: RAILS_MASTER_KEY
+      # 4. Value: ローカルの config/master.key ファイルの中身をコピーして貼り付ける
+      #    （確認コマンド: cat config/master.key）
       - key: RAILS_MASTER_KEY
         sync: false
 
-      # DATABASE_URL: PostgreSQL の接続 URL
-      # fromDatabase を使うと上で定義した habitflow-db の接続情報を自動取得する。
-      # property: connectionString → "postgresql://user:pass@host:port/dbname" 形式で取得
-      # これにより config/database.yml の `url: ENV['DATABASE_URL']` が機能する。
+      # -----------------------------------------------------------------------
+      # DATABASE_URL: Neon PostgreSQL への接続文字列
+      # -----------------------------------------------------------------------
+      # 形式: postgresql://[user]:[password]@[host]/[dbname]?sslmode=require
+      # パスワードが含まれるため、Render ダッシュボードで手動設定する。
+      #
+      # 【設定手順】
+      # 1. neon.tech → プロジェクト → 「Connect」ボタンをクリック
+      # 2. 「Connection string」をコピー（postgresql://... の形式）
+      # 3. Render ダッシュボード → habitflow-web → Environment タブ
+      # 4. Key: DATABASE_URL / Value: コピーした接続文字列を貼り付ける
+      #
+      # 【なぜ Neon を使うのか】
+      # Render 内蔵の無料 PostgreSQL は作成から90日で自動削除される。
+      # Neon は永続的な無料プランがあり、長期運用に最適。
       - key: DATABASE_URL
-        fromDatabase:
-          name: habitflow-db
-          property: connectionString
+        sync: false
 
+      # -----------------------------------------------------------------------
       # RAILS_LOG_TO_STDOUT: ログを標準出力（STDOUT）に出力する設定
-      # Render はコンテナの標準出力を自動収集してダッシュボードに表示する。
-      # ファイルに書くとコンテナ再起動でログが消えるため STDOUT への出力が推奨。
-      # config/environments/production.rb の if ENV["RAILS_LOG_TO_STDOUT"].present?
-      # の条件分岐を true にするために必要。
+      # -----------------------------------------------------------------------
+      # Render はコンテナの標準出力を自動収集してダッシュボードの「Logs」タブに表示する。
+      # コンテナ内ファイルへのログ書き込みはコンテナ再起動で消えてしまうため、
+      # STDOUT への出力が PaaS（Render等）の正しいやり方。
+      #
+      # config/environments/production.rb の以下の条件分岐を true にする:
+      # if ENV["RAILS_LOG_TO_STDOUT"].present?
+      #   logger = ActiveSupport::Logger.new(STDOUT)
+      # end
       - key: RAILS_LOG_TO_STDOUT
         value: "true"
 
+      # -----------------------------------------------------------------------
       # RAILS_SERVE_STATIC_FILES: Rails が静的ファイルを直接配信する設定
-      # 通常は Nginx などのリバースプロキシが CSS・JS・画像を配信するが、
-      # Render 無料プランでは Nginx を別途立てないため Rails に直接配信させる。
-      # これがないとページの CSS が全く適用されない状態になる。
-      # config/environments/production.rb の
+      # -----------------------------------------------------------------------
+      # 通常、CSS・JS・画像は Nginx などのリバースプロキシが配信する。
+      # Render の無料プランでは Nginx を別途立てないため Rails 自身に配信させる。
+      # この設定がないとページに CSS が全く適用されない状態になる。
+      #
+      # config/environments/production.rb の以下を true にする:
       # config.public_file_server.enabled = ENV["RAILS_SERVE_STATIC_FILES"].present?
-      # を true にするために必要。
       - key: RAILS_SERVE_STATIC_FILES
         value: "true"
-```
 
----
+      # -----------------------------------------------------------------------
+      # WEB_CONCURRENCY: 本番環境での Puma Worker（プロセス）数
+      # -----------------------------------------------------------------------
+      # Worker を複数起動すると真の並列処理ができる（マルチプロセス）。
+      # Render 無料プランは RAM 512MB のため、Worker 数を制限する必要がある。
+      #   Worker 1 あたりのメモリ消費: 約 150〜200MB
+      #   Worker 2 × 200MB = 400MB < 512MB → 安全な上限
+      #   Worker 3 以上は Out of Memory（OOM）になるリスクがある。
+      # config/puma.rb の workers ENV.fetch("WEB_CONCURRENCY", 0) がこの値を参照する。
+      - key: WEB_CONCURRENCY
+        value: "2"
 
-## Step 5: 本番 seeds 実行手順
-
-デプロイ完了後、Render の Shell から実行します。
-```
-【Render Shell でのデモデータ投入手順】
-
-1. Render ダッシュボード → habitflow-web → 「Shell」タブを開く
-2. 以下のコマンドを実行する:
-
-   SEED_IN_PRODUCTION=true bin/rails db:seed
-
-3. 出力を確認する（✓ マークが並んで正常終了すること）
-
-4. 最後に以下が表示されれば成功:
-   ✅ Seeds 実行完了！
-   🔑 ログイン情報:
-   メールアドレス: test@example.com
-   パスワード:     password
-```
-
----
-
-## Step 6: 本番環境での全機能動作確認チェックリスト
-
-本番URL（https://habitflow-web.onrender.com）で以下を確認します：
-```
-【本番環境 動作確認チェックリスト】
-
-■ 未ログイン状態
-  □ ランディングページ（/）が正常に表示される
-  □ CSS・画像が正しく読み込まれている
-  □ 「ログイン」「今すぐ始める」ボタンが表示される
-
-■ 認証機能
-  □ 新規ユーザー登録ができる
-  □ ログインができる（test@example.com / password）
-  □ ログアウトができる
-  □ 未ログイン時にダッシュボードへアクセスするとログイン画面にリダイレクトされる
-
-■ ダッシュボード（/dashboard）
-  □ 今週の達成率プログレスバーが表示される
-  □ 今日の習慣チェックリストが表示される
-  □ チェックボックスをクリックすると即時保存される（ページリロード不要）
-  □ ロック警告バナーが表示される（月曜AM4:00以降）
-
-■ 習慣管理（/habits）
-  □ 6個の習慣が一覧表示される（論理削除済みの1個は非表示）
-  □ 今週の進捗率プログレスバーが表示される
-  □ ロック中は「新しい習慣を追加」ボタンが非活性
-
-■ 週次振り返り（/weekly_reflections）
-  □ 過去2件の完了済み振り返りが一覧表示される
-  □ 詳細ページが正常に表示される
-  □ 先週の振り返り入力フォームが開ける
-  □ 振り返りを完了するとロックが解除される
-
-■ セキュリティ
-  □ HTTP でアクセスすると HTTPS にリダイレクトされる
-  □ 他のユーザーの習慣にアクセスしようとすると 404 になる
-
-■ エラーハンドリング
-  □ 存在しない URL（/hogehoge）にアクセスすると 404 ページが表示される
-```
-
----
-
-## 作業の全体フロー まとめ
-```
-【Issue #36 作業フロー】
-
-1. git checkout -b feature/issue-36-production-deploy
-
-2. db/seeds.rb を修正（環境変数フラグ方式のガードに変更）
-
-3. render.yaml を修正（startCommand を追加）
-
-4. ローカルでテスト
-   → bin/rails test（全202テストがパス）
-   → bin/rails db:seed（ローカルで正常動作確認）
-   → RAILS_ENV=production bin/rails db:seed（ガードでabortされること確認）
-
-5. コミット → プッシュ → PR → main にマージ
-
-6. Render が自動デプロイ（約3〜5分待つ）
-   → デプロイログに「bin/rails db:migrate」の実行ログが出ること確認
-
-7. Render Shell で SEED_IN_PRODUCTION=true bin/rails db:seed
-
-8. 本番URLで全機能動作確認チェックリストを実施
-
-9. Issue #36 をクローズ
+  # ============================================================================
+  # [2] Worker サービス（GoodJob 非同期処理）
+  # ============================================================================
+  #
+  # 【重要: #A-3 完了後に有効化すること】
+  # GoodJob gem は #A-3（GoodJob 導入・基本設定）で Gemfile に追加する。
+  # gem が追加されるまでこの Worker を有効にするとビルドエラーになる。
+  # #A-3 完了後に以下のコメントアウトを外してデプロイすること。
+  #
+  # 【なぜ Worker が必要なのか】
+  # GoodJob がないと以下の機能が動作しない:
+  #   - AI 分析ジョブ（PMVV・週次振り返り分析）
+  #   - LINE 通知送信
+  #   - CSV エクスポート（バックグラウンド生成）
+  #   - ストリーク計算バッチ
+  #   - AI 使用回数の月次リセット
+  # perform_later / deliver_later を呼び出しても実行されない状態になる。
+  #
+  # 【Worker と Web の違い】
+  # Web サービス: HTTP リクエストを受け付けてレスポンスを返す（ユーザー向け）
+  # Worker サービス: キューに積まれたジョブを順番に処理する（バックグラウンド処理）
+  #
+  # #A-3 完了後、以下のコメントアウトを外す:
+  #
+  # - type: worker
+  #   name: habitflow-worker
+  #   runtime: docker
+  #   region: singapore
+  #   plan: free
+  #   dockerfilePath: ./Dockerfile
+  #   dockerContext: .
+  #
+  #   # good_job start: GoodJob のワーカープロセスを起動する。
+  #   # データベースのジョブキューを監視し、ジョブが追加されると自動で実行する。
+  #   startCommand: bundle exec good_job start
+  #
+  #   envVars:
+  #     # Worker も Web と同じ DB・認証情報が必要
+  #     - key: RAILS_ENV
+  #       value: production
+  #     - key: DATABASE_URL
+  #       sync: false
+  #     - key: RAILS_MASTER_KEY
+  #       sync: false
+  #     - key: RAILS_LOG_TO_STDOUT
+  #       value: "true"

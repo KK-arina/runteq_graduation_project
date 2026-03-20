@@ -253,13 +253,13 @@ puts "  3週間前（#{three_weeks_ago_monday} 〜 #{three_weeks_ago_sunday}）�
 
   habits.each_with_index do |habit, index|
     completed = case index
-                when 0 then day_of_week != 6
-                when 1 then day_of_week.between?(1, 5)
-                when 2 then true
-                when 3 then day_of_week.between?(1, 5) && day_of_week != 3
-                when 4 then [1, 3, 5].include?(day_of_week)
-                when 5 then day_of_week.between?(1, 5)
-                end
+    when 0 then day_of_week != 6
+    when 1 then day_of_week.between?(1, 5)
+    when 2 then true
+    when 3 then day_of_week.between?(1, 5) && day_of_week != 3
+    when 4 then [ 1, 3, 5 ].include?(day_of_week)
+    when 5 then day_of_week.between?(1, 5)
+    end
     create_record.call(habit, date, completed)
   end
 end
@@ -274,13 +274,13 @@ puts "  先々週（#{two_weeks_ago_monday} 〜 #{two_weeks_ago_sunday}）の記
 
   habits.each_with_index do |habit, index|
     completed = case index
-                when 0 then [1, 2, 4, 5].include?(day_of_week)
-                when 1 then [1, 3, 5].include?(day_of_week)
-                when 2 then day_of_week != 0
-                when 3 then [1, 2, 4].include?(day_of_week)
-                when 4 then [1, 5].include?(day_of_week)
-                when 5 then [1, 2, 3, 4].include?(day_of_week)
-                end
+    when 0 then [ 1, 2, 4, 5 ].include?(day_of_week)
+    when 1 then [ 1, 3, 5 ].include?(day_of_week)
+    when 2 then day_of_week != 0
+    when 3 then [ 1, 2, 4 ].include?(day_of_week)
+    when 4 then [ 1, 5 ].include?(day_of_week)
+    when 5 then [ 1, 2, 3, 4 ].include?(day_of_week)
+    end
     create_record.call(habit, date, completed)
   end
 end
@@ -295,13 +295,13 @@ puts "  先週（#{last_week_monday} 〜 #{last_week_sunday}）の記録..."
 
   habits.each_with_index do |habit, index|
     completed = case index
-                when 0 then [1, 2, 3, 4].include?(day_of_week)
-                when 1 then [1, 2].include?(day_of_week)
-                when 2 then [1, 2, 3, 4, 5].include?(day_of_week)
-                when 3 then [1, 3, 5].include?(day_of_week)
-                when 4 then day_of_week == 1
-                when 5 then [1, 2, 3].include?(day_of_week)
-                end
+    when 0 then [ 1, 2, 3, 4 ].include?(day_of_week)
+    when 1 then [ 1, 2 ].include?(day_of_week)
+    when 2 then [ 1, 2, 3, 4, 5 ].include?(day_of_week)
+    when 3 then [ 1, 3, 5 ].include?(day_of_week)
+    when 4 then day_of_week == 1
+    when 5 then [ 1, 2, 3 ].include?(day_of_week)
+    end
     create_record.call(habit, date, completed)
   end
 end
@@ -318,13 +318,13 @@ days_elapsed = (fixed_today - this_week_monday).to_i
 
   habits.each_with_index do |habit, index|
     completed = case index
-                when 0 then true
-                when 1 then day_of_week.between?(1, 5)
-                when 2 then true
-                when 3 then [1, 2, 4].include?(day_of_week)
-                when 4 then day_of_week == 1
-                when 5 then true
-                end
+    when 0 then true
+    when 1 then day_of_week.between?(1, 5)
+    when 2 then true
+    when 3 then [ 1, 2, 4 ].include?(day_of_week)
+    when 4 then day_of_week == 1
+    when 5 then true
+    end
     create_record.call(habit, date, completed)
   end
 end

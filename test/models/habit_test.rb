@@ -7,7 +7,6 @@
 require "test_helper"
 
 class HabitTest < ActiveSupport::TestCase
-
   setup do
     @user = users(:one)
     @habit = @user.habits.create!(name: "テスト習慣", weekly_target: 7)

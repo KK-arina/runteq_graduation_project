@@ -22,7 +22,6 @@
 
 class AddColumnsToHabits < ActiveRecord::Migration[7.2]
   def change
-
     # ─────────────────────────────────────────────────────────────────────────
     # unit: 数値型習慣の単位
     # ─────────────────────────────────────────────────────────────────────────
@@ -124,14 +123,14 @@ class AddColumnsToHabits < ActiveRecord::Migration[7.2]
     # 「特定ユーザーのアーカイブ済み習慣一覧を取得する」クエリを高速化
     # WHERE user_id = ? AND archived_at IS NOT NULL のような検索に使用
     add_index :habits,
-              [:user_id, :archived_at],
+              [ :user_id, :archived_at ],
               name: 'index_habits_on_user_id_and_archived_at'
 
     # (user_id, position) の複合インデックス
     # acts_as_list による表示順の並び替えクエリを高速化
     # ORDER BY position の検索で user_id を先頭にすることで効率的に絞り込める
     add_index :habits,
-              [:user_id, :position],
+              [ :user_id, :position ],
               name: 'index_habits_on_user_id_and_position'
   end
 end

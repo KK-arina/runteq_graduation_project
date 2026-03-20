@@ -104,7 +104,7 @@ class AddPerformanceIndexes < ActiveRecord::Migration[7.2]
     #   → 書き込み時のインデックス更新コストが下がる
     #   → インデックスのメモリ使用量が減る
     add_index :weekly_reflections,
-              [:user_id, :week_start_date, :completed_at],
+              [ :user_id, :week_start_date, :completed_at ],
               where: "completed_at IS NOT NULL",
               name: "idx_weekly_reflections_user_week_completed",
               algorithm: :concurrently

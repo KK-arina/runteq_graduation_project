@@ -59,7 +59,7 @@ class WeeklyReflectionHabitSummary < ApplicationRecord
   validates :habit_id,
             uniqueness: {
               scope: :weekly_reflection_id,
-              message: 'は既にこの振り返りに含まれています'
+              message: "は既にこの振り返りに含まれています"
             },
             allow_nil: true
 
@@ -69,7 +69,7 @@ class WeeklyReflectionHabitSummary < ApplicationRecord
 
   scope :by_achievement, -> { order(achievement_rate: :desc) }
   scope :completed,      -> { where(achievement_rate: 100) }
-  scope :incomplete,     -> { where('achievement_rate < ?', 100) }
+  scope :incomplete,     -> { where("achievement_rate < ?", 100) }
 
   # ============================================================
   # クラスメソッド
@@ -126,7 +126,7 @@ class WeeklyReflectionHabitSummary < ApplicationRecord
   # %% は % を文字として出力するためのエスケープです。
   # ────────────────────────────────────────────────────────────
   def achievement_rate_text
-    format('%.2f%%', achievement_rate)
+    format("%.2f%%", achievement_rate)
   end
 
   # 達成済みかどうか（達成率が100%以上）

@@ -78,7 +78,7 @@ class AddIsLatestToAiAnalyses < ActiveRecord::Migration[7.2]
     # UNIQUE 制約②: 同じ PMVV × 分析タイプの「最新」分析は1件だけ
     # (user_purpose_id, analysis_type) の中で is_latest = true は1件のみ
     add_index :ai_analyses,
-              [:user_purpose_id, :analysis_type],
+              [ :user_purpose_id, :analysis_type ],
               unique: true,
               where: 'user_purpose_id IS NOT NULL AND is_latest = true',
               name: 'index_ai_analyses_latest_purpose_type_unique'

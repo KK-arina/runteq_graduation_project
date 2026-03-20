@@ -1,34 +1,125 @@
-# This configuration file will be evaluated by Puma. The top-level methods that
-# are invoked here are part of Puma's configuration DSL. For more information
-# about methods provided by the DSL, see https://puma.io/puma/Puma/DSL.html.
+# ==============================================================================
+# config/puma.rb - Webサーバー（Puma）設定ファイル
+# ==============================================================================
+#
+# 【このファイルの役割】
+# Rails を動かす Web サーバー「Puma」の動作設定を定義するファイル。
+# スレッド数・Worker 数・ポートなどを環境ごとに最適化する。
+#
+# 【Puma の動作モデル】
+# Puma は「マルチプロセス × マルチスレッド」で動作できる。
+#
+# Worker（プロセス）:
+#   独立したメモリ空間を持つ処理単位。
+#   複数の Worker を起動すると真の並列処理（マルチプロセス）ができる。
+#   ただし Worker ごとにメモリを消費するため、
+#   Render 無料プラン（512MB RAM）では 2 が上限の目安。
+#
+# Thread（スレッド）:
+#   1つの Worker 内で並列処理する単位。
+#   メモリを共有するため Worker より軽量に並列処理ができる。
+#   Rails は DB 接続など IO 待ちが多いため、
+#   スレッドを増やすと IO 待ち中に別のリクエストを処理できて効率が上がる。
+#   ただし CRuby の GVL（Global VM Lock）により
+#   CPU 処理は同時に 1 スレッドしか実行できない制約がある。
+#
+# 【Render 無料プランでの推奨構成】
+# Worker: 2（WEB_CONCURRENCY=2 を環境変数で設定）
+# Thread: 3（RAILS_MAX_THREADS のデフォルト値）
+# 合計 DB コネクション数: Worker 2 × Thread 3 = 最大 6 コネクション
+# Neon 無料プランのコネクション上限（通常 10〜20）に対して安全な範囲。
+# ==============================================================================
 
-# Puma starts a configurable number of processes (workers) and each process
-# serves each request in a thread from an internal thread pool.
+# ==============================================================================
+# スレッド数の設定
+# ==============================================================================
 #
-# The ideal number of threads per worker depends both on how much time the
-# application spends waiting for IO operations and on how much you wish to
-# to prioritize throughput over latency.
+# RAILS_MAX_THREADS 環境変数でスレッド数を制御する。
+# デフォルト値は 3（Render 無料プランのメモリとコネクション数を考慮した値）。
 #
-# As a rule of thumb, increasing the number of threads will increase how much
-# traffic a given process can handle (throughput), but due to CRuby's
-# Global VM Lock (GVL) it has diminishing returns and will degrade the
-# response time (latency) of the application.
+# max_threads_count: 1 Worker が同時に処理できる最大リクエスト数
+# min_threads_count: Worker 起動時に確保する最小スレッド数
 #
-# The default is set to 3 threads as it's deemed a decent compromise between
-# throughput and latency for the average Rails application.
-#
-# Any libraries that use a connection pool or another resource pool should
-# be configured to provide at least as many connections as the number of
-# threads. This includes Active Record's `pool` parameter in `database.yml`.
-threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
-threads threads_count, threads_count
+# 最小と最大を同じ値にする理由:
+#   起動時から最大スレッド数を確保することで、
+#   負荷が突然増えたときのスレッド生成コストをなくし安定性を向上させる。
+max_threads_count = ENV.fetch("RAILS_MAX_THREADS", 3)
+min_threads_count = ENV.fetch("RAILS_MIN_THREADS") { max_threads_count }
+threads min_threads_count, max_threads_count
 
-# Specifies the `port` that Puma will listen on to receive requests; default is 3000.
+# ==============================================================================
+# ポートの設定
+# ==============================================================================
+#
+# Render は「PORT」環境変数を自動で設定する。
+# この設定により Render が指定したポートで Puma がリクエストを受け付ける。
+# ローカル開発環境では PORT が設定されていないため、デフォルトの 3000 を使用する。
 port ENV.fetch("PORT", 3000)
 
-# Allow puma to be restarted by `bin/rails restart` command.
+# ==============================================================================
+# Worker（プロセス）数の設定
+# ==============================================================================
+#
+# WEB_CONCURRENCY 環境変数で Worker 数を制御する。
+# render.yaml で WEB_CONCURRENCY=2 を設定しているため、
+# 本番環境では 2 Worker で動作する。
+#
+# ローカル開発環境では WEB_CONCURRENCY を設定しないため 0（Single モード）になる。
+# Single モード（Worker = 0）の利点:
+#   - コードの hot-reload が正常に動作する
+#   - デバッガー（binding.break 等）が正常に動作する
+#   - メモリ消費が少なく開発に適している
+#
+# Integer() を使う理由:
+#   ENV.fetch は文字列を返すため、Integer() で整数に変換する。
+#   変換できない値（例: "abc"）の場合は ArgumentError を発生させて
+#   誤った設定でサーバーが起動するのを防ぐ。
+worker_count = Integer(ENV.fetch("WEB_CONCURRENCY", 0))
+
+# Worker 数が 1 以上の場合のみマルチプロセスモードを有効にする
+if worker_count > 1
+  # workers: Puma が起動する Worker（プロセス）の数を設定する
+  workers worker_count
+
+  # ----------------------------------------------------------------
+  # on_worker_boot: 各 Worker が起動したときに実行するコールバック
+  # ----------------------------------------------------------------
+  #
+  # なぜ必要か:
+  #   マルチプロセスモードでは、Puma は最初に 1 つの親プロセスを起動し、
+  #   その後 fork（プロセスの複製）で Worker プロセスを生成する。
+  #   fork 時に親プロセスの DB コネクションも引き継がれるが、
+  #   この「引き継がれたコネクション」は複数 Worker で共有されてしまう。
+  #   共有されたコネクションを使うと「接続が壊れた」エラーが断続的に発生する。
+  #
+  # establish_connection を呼ぶ理由:
+  #   各 Worker が独立した新しい DB コネクションを確立し直すことで、
+  #   コネクションの競合問題を防ぐ。
+  #
+  # defined?(ActiveRecord) で条件分岐する理由:
+  #   将来的に ActiveRecord を使わない Worker タスクを追加した場合に
+  #   エラーが発生しないよう、ActiveRecord が読み込まれているか確認してから実行する。
+  on_worker_boot do
+    ActiveRecord::Base.establish_connection if defined?(ActiveRecord)
+  end
+end
+
+# ==============================================================================
+# Puma の再起動設定（tmp_restart プラグイン）
+# ==============================================================================
+#
+# `bin/rails restart` コマンドで Puma を再起動できるようにするプラグイン。
+# tmp/restart.txt ファイルの更新時刻を監視し、更新されると自動で再起動する。
+# 主に開発環境で設定ファイルを変更した後に使用する（本番でも害はない）。
 plugin :tmp_restart
 
-# Specify the PID file. Defaults to tmp/pids/server.pid in development.
-# In other environments, only set the PID file if requested.
+# ==============================================================================
+# PID ファイルの設定
+# ==============================================================================
+#
+# PIDFILE 環境変数が設定されている場合のみ PID ファイルを作成する。
+# PID ファイル: Puma のプロセス ID（PID）を記録するファイル。
+# systemd などのプロセス管理ツールが Puma を制御する際に使用する。
+# Render では PIDFILE を設定しないため、この行は実質的にスキップされる。
+# ローカルや別環境でのデプロイ時の互換性のために残しておく。
 pidfile ENV["PIDFILE"] if ENV["PIDFILE"]

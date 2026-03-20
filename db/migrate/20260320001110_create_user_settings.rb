@@ -18,7 +18,6 @@
 class CreateUserSettings < ActiveRecord::Migration[7.2]
   def change
     create_table :user_settings do |t|
-
       # ─────────────────────────────────────────────────────────────────────
       # user_id: どのユーザーの設定か（外部キー）
       # ─────────────────────────────────────────────────────────────────────

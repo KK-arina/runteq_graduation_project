@@ -20,7 +20,6 @@
 class CreateHabitTemplates < ActiveRecord::Migration[7.2]
   def change
     create_table :habit_templates do |t|
-
       # ─────────────────────────────────────────────────────────────────────
       # name: テンプレート名
       # ─────────────────────────────────────────────────────────────────────
@@ -93,7 +92,7 @@ class CreateHabitTemplates < ActiveRecord::Migration[7.2]
     # 「公開中のテンプレートを表示順で取得する」クエリを高速化
     # WHERE is_active = true ORDER BY sort_order ASC のクエリに使用
     add_index :habit_templates,
-              [:is_active, :sort_order],
+              [ :is_active, :sort_order ],
               name: 'index_habit_templates_on_is_active_and_sort_order'
   end
 end

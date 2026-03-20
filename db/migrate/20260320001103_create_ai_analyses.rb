@@ -25,7 +25,6 @@
 class CreateAiAnalyses < ActiveRecord::Migration[7.2]
   def change
     create_table :ai_analyses do |t|
-
       # ─────────────────────────────────────────────────────────────────────
       # weekly_reflection_id: 関連する週次振り返り（オプション）
       # ─────────────────────────────────────────────────────────────────────
@@ -186,7 +185,7 @@ class CreateAiAnalyses < ActiveRecord::Migration[7.2]
     # UNIQUE 制約 2: (user_purpose_id, analysis_type)
     # 同じ PMVV に対して同じ分析種別が重複して作成されることを防ぐ
     add_index :ai_analyses,
-              [:user_purpose_id, :analysis_type],
+              [ :user_purpose_id, :analysis_type ],
               unique: true,
               where: 'user_purpose_id IS NOT NULL',
               name: 'index_ai_analyses_on_purpose_and_type_unique'

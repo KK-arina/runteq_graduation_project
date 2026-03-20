@@ -21,7 +21,6 @@
 
 class AddColumnsToWeeklyReflections < ActiveRecord::Migration[7.2]
   def change
-
     # ─────────────────────────────────────────────────────────────────────────
     # year: 対象年
     # ─────────────────────────────────────────────────────────────────────────
@@ -74,7 +73,7 @@ class AddColumnsToWeeklyReflections < ActiveRecord::Migration[7.2]
     # 既存の (user_id, week_start_date) の UNIQUE 制約と二重の保護になる
     # 両方あることで「日付」と「週番号」どちらの方法で検索しても一意性を保証できる
     add_index :weekly_reflections,
-              [:user_id, :year, :week_number],
+              [ :user_id, :year, :week_number ],
               unique: true,
               name: 'index_weekly_reflections_on_user_year_week'
   end

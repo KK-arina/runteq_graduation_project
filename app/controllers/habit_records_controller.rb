@@ -28,7 +28,6 @@
 #     一致しない場合は 404 を返して処理を中断する。
 
 class HabitRecordsController < ApplicationController
-
   # すべてのアクションの前にログインチェックを行う。
   # require_login は ApplicationController で定義されている。
   # ログインしていない場合はログインページにリダイレクトされる。

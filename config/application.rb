@@ -93,7 +93,7 @@ module RunteqGraduationProject
                          httponly: true,
                          same_site: :lax,
                          expire_after: 14.days
-  
+
     config.i18n.default_locale = :ja
   end
 end

@@ -23,7 +23,6 @@
 require "test_helper"
 
 class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
-
   # ============================================================
   # setup: 各テストの前に共通データを作成する
   # ============================================================
@@ -64,7 +63,6 @@ class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
   # 一覧にリダイレクトされることを確認する。
   test "他のユーザーの週次振り返り詳細にアクセスできないこと" do
     travel_to Time.zone.local(2026, 3, 4, 10, 0, 0) do
-
       # 別ユーザーとその振り返りを作成する
       other_user = User.create!(
         name:                  "他ユーザー振り返り",
@@ -367,7 +365,6 @@ class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
   # このテストでは「前週完了済み → ロックなし」を正しく検証する。
   test "前週の振り返りが完了済みなら火曜日もロックが発動しないこと" do
     travel_to Time.zone.local(2026, 3, 10, 10, 0, 0) do  # 2026-03-10 は火曜日
-
       # 前週の振り返りを「完了済み」で作成する
       # completed_at に値がある = 完了済み = ロック解除状態
       #
@@ -402,5 +399,4 @@ class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
       assert_redirected_to habits_path
     end
   end
-
 end

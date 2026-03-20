@@ -1,4 +1,5 @@
 # frozen_string_literal: true
+
 # test/integration/habit_record_instant_save_test.rb
 # =============================================================
 # 習慣記録の即時保存機能（Turbo Stream）の統合テスト

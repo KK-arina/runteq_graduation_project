@@ -29,7 +29,7 @@ class CreateHabitRecords < ActiveRecord::Migration[7.2]
       # - date 型                    → 日付のみを保存（時刻は保存しない）
       # - null: false                → record_date は必須（NULL不可）
       # - default: なし              → デフォルト値は設定しない（アプリ側で制御）
-      # 
+      #
       # 【重要】AM 4:00 基準の日付計算ロジック
       # - 例: 2024/1/1 AM 3:59 → 2023/12/31 として記録
       # - 例: 2024/1/1 AM 4:00 → 2024/1/1 として記録
@@ -43,7 +43,7 @@ class CreateHabitRecords < ActiveRecord::Migration[7.2]
       # - boolean 型                 → true（完了） / false（未完了）のいずれか
       # - null: false                → completed は必須（NULL不可）
       # - default: false             → デフォルトは未完了
-      # 
+      #
       # 【MVP範囲】
       # - チェック型習慣のみ実装
       # - 数値型習慣（value カラム）はMVP後に追加予定
@@ -64,21 +64,21 @@ class CreateHabitRecords < ActiveRecord::Migration[7.2]
     # ========================================================================
     # - 目的: 同じユーザーが同じ習慣を同じ日に複数回記録できないようにする
     # - 制約: (user_id, habit_id, record_date) の組み合わせがユニーク
-    # 
+    #
     # 【具体例】
     # - OK: user_id=1, habit_id=1, record_date='2024-01-01'
     # - NG: user_id=1, habit_id=1, record_date='2024-01-01' ← 既に存在するためエラー
     # - OK: user_id=1, habit_id=1, record_date='2024-01-02' ← 日付が異なるためOK
     # - OK: user_id=1, habit_id=2, record_date='2024-01-01' ← 習慣が異なるためOK
-    # 
+    #
     # 【パフォーマンス最適化】
     # - unique: true → インデックス作成時にUNIQUE制約も同時に設定
     # - name: 'index_habit_records_on_user_habit_date' → インデックス名を明示的に指定
     # - 複合インデックスの左端（user_id）は単体検索にも利用可能
     # ========================================================================
-    add_index :habit_records, 
-              [:user_id, :habit_id, :record_date], 
-              unique: true, 
+    add_index :habit_records,
+              [ :user_id, :habit_id, :record_date ],
+              unique: true,
               name: 'index_habit_records_on_user_habit_date'
   end
 end

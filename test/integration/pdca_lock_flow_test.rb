@@ -96,7 +96,6 @@ class PdcaLockFlowTest < ActionDispatch::IntegrationTest
     # travel_to: テスト中の「現在時刻」を 2026-03-09（月）AM4:01 に完全固定します
     # これにより Date.current / Time.current が全てこの時刻を返します
     travel_to Time.zone.local(2026, 3, 9, 4, 1, 0) do
-
       # 前週の振り返りを「未完了」で作成 → ロック発動の原因
       create_last_week_reflection(completed: false)
 
@@ -199,7 +198,6 @@ class PdcaLockFlowTest < ActionDispatch::IntegrationTest
   test "初週ユーザーは前週振り返りがなくてもロックされないこと" do
     # 2026-03-16（月）AM4:01 に完全固定します
     travel_to Time.zone.local(2026, 3, 16, 4, 1, 0) do
-
       # 前週の振り返りを作成しない（= 初週ユーザーの状態）
 
       log_in_as(@user)

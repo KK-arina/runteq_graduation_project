@@ -28,7 +28,6 @@
 class CreateTasks < ActiveRecord::Migration[7.2]
   def change
     create_table :tasks do |t|
-
       # ─────────────────────────────────────────────────────────────────────
       # user_id: このタスクを所有するユーザー（外部キー）
       # ─────────────────────────────────────────────────────────────────────
@@ -156,28 +155,28 @@ class CreateTasks < ActiveRecord::Migration[7.2]
     # GoodJob が「アラームが有効で、特定時刻に通知すべきタスク」を検索するためのインデックス
     # WHERE alarm_enabled = true AND scheduled_at <= ? のクエリに使用
     add_index :tasks,
-              [:alarm_enabled, :scheduled_at],
+              [ :alarm_enabled, :scheduled_at ],
               name: 'index_tasks_on_alarm_enabled_and_scheduled_at'
 
     # INDEX 2: (user_id, alarm_enabled)
     # 「このユーザーのアラーム設定済みタスク一覧」を取得するためのインデックス
     # WHERE user_id = ? AND alarm_enabled = true のクエリに使用
     add_index :tasks,
-              [:user_id, :alarm_enabled],
+              [ :user_id, :alarm_enabled ],
               name: 'index_tasks_on_user_id_and_alarm_enabled'
 
     # INDEX 3: (user_id, status, due_date)
     # タスク一覧画面で「このユーザーの未完了タスクを期限順で表示」するためのインデックス
     # WHERE user_id = ? AND status = 0 ORDER BY due_date ASC のクエリに使用
     add_index :tasks,
-              [:user_id, :status, :due_date],
+              [ :user_id, :status, :due_date ],
               name: 'index_tasks_on_user_id_and_status_and_due_date'
 
     # INDEX 4: (user_id, scheduled_at)
     # 「このユーザーの今週の予定タスク一覧」を取得するためのインデックス
     # WHERE user_id = ? AND scheduled_at BETWEEN ? AND ? のクエリに使用
     add_index :tasks,
-              [:user_id, :scheduled_at],
+              [ :user_id, :scheduled_at ],
               name: 'index_tasks_on_user_id_and_scheduled_at'
   end
 end

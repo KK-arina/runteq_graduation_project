@@ -95,7 +95,6 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
     # 水曜AM10:00は月曜AM4:00を過ぎているが、前週レコードが存在しないため
     # ロックは発動しない（ApplicationController#locked? の Step3 でreturn false）。
     travel_to Time.zone.local(2026, 3, 4, 10, 0, 0) do
-
       # assert_difference の使い方：
       # assert_difference "User.count", 1 do ... end
       # ↓

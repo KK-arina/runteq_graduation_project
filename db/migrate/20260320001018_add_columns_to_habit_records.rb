@@ -17,7 +17,6 @@
 
 class AddColumnsToHabitRecords < ActiveRecord::Migration[7.2]
   def change
-
     # ─────────────────────────────────────────────────────────────────────────
     # numeric_value: 数値型習慣の実績値
     # ─────────────────────────────────────────────────────────────────────────
@@ -75,14 +74,14 @@ class AddColumnsToHabitRecords < ActiveRecord::Migration[7.2]
     # 「特定習慣の有効な記録を日付順に取得する」クエリを高速化
     # WHERE habit_id = ? AND deleted_at IS NULL の絞り込みに使用
     add_index :habit_records,
-              [:habit_id, :deleted_at, :record_date],
+              [ :habit_id, :deleted_at, :record_date ],
               name: 'index_habit_records_on_habit_deleted_date'
 
     # (user_id, record_date) の複合インデックス
     # ダッシュボードの「今日の記録一覧」取得クエリを高速化
     # WHERE user_id = ? AND record_date = ? のような検索に使用
     add_index :habit_records,
-              [:user_id, :record_date],
+              [ :user_id, :record_date ],
               name: 'index_habit_records_on_user_id_and_record_date'
   end
 end

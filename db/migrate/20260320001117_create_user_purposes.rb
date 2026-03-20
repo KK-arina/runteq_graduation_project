@@ -26,7 +26,6 @@
 class CreateUserPurposes < ActiveRecord::Migration[7.2]
   def change
     create_table :user_purposes do |t|
-
       # ─────────────────────────────────────────────────────────────────────
       # user_id: このPMVVを所有するユーザー（外部キー）
       # ─────────────────────────────────────────────────────────────────────
@@ -108,7 +107,7 @@ class CreateUserPurposes < ActiveRecord::Migration[7.2]
     # WHERE user_id = ? AND is_active = true の検索に使用
     # これが最も頻繁に実行されるクエリのため、インデックスが重要
     add_index :user_purposes,
-              [:user_id, :is_active],
+              [ :user_id, :is_active ],
               name: 'index_user_purposes_on_user_id_and_is_active'
   end
 end

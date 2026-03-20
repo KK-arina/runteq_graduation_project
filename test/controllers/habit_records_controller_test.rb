@@ -44,7 +44,7 @@ class HabitRecordsControllerTest < ActionDispatch::IntegrationTest
     assert_response :success
 
     record = HabitRecord.last
-    assert     record.completed,                            "completed が true になること"
+    assert record.completed,                            "completed が true になること"
     assert_equal @user.id,  record.user_id,                "ログインユーザーに紐づくこと"
     assert_equal @habit.id, record.habit_id,               "対象習慣に紐づくこと"
     assert_equal HabitRecord.today_for_record, record.record_date, "AM4:00基準の日付になること"

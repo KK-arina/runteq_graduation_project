@@ -25,7 +25,6 @@
 class CreatePasswordResetTokens < ActiveRecord::Migration[7.2]
   def change
     create_table :password_reset_tokens do |t|
-
       # ─────────────────────────────────────────────────────────────────────
       # user_id: このトークンを発行したユーザー（外部キー）
       # ─────────────────────────────────────────────────────────────────────

@@ -30,7 +30,6 @@
 
 class AddColumnsToUsers < ActiveRecord::Migration[7.2]
   def change
-
     # ─────────────────────────────────────────────────────────────────────────
     # provider カラムを追加
     # ─────────────────────────────────────────────────────────────────────────
@@ -80,7 +79,7 @@ class AddColumnsToUsers < ActiveRecord::Migration[7.2]
     # name: 明示的に名前をつける理由は PostgreSQL のインデックス名の上限が63文字のため
     #   自動生成名が長くなる場合に備えてショートネームを使う
     add_index :users,
-              [:provider, :uid],
+              [ :provider, :uid ],
               unique: true,
               name: 'index_users_on_provider_and_uid'
   end

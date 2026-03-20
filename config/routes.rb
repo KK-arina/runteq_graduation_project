@@ -37,12 +37,12 @@ Rails.application.routes.draw do
   # ---------------------------------------------------------------
   # resources :users, only: [:new, :create]
   # ---------------------------------------------------------------
-  resources :users, only: [:new, :create]
+  resources :users, only: [ :new, :create ]
 
   # ---------------------------------------------------------------
   # resource :session
   # ---------------------------------------------------------------
-  resource :session, only: [:new, :create, :destroy]
+  resource :session, only: [ :new, :create, :destroy ]
 
   get    "/login",  to: "sessions#new",     as: :login
   post   "/login",  to: "sessions#create"
@@ -56,17 +56,17 @@ Rails.application.routes.draw do
   # ---------------------------------------------------------------
   # resources :habits
   # ---------------------------------------------------------------
-  resources :habits, only: [:index, :new, :create, :destroy] do
+  resources :habits, only: [ :index, :new, :create, :destroy ] do
     member do
       patch :toggle_record
     end
-    resources :habit_records, only: [:create, :update]
+    resources :habit_records, only: [ :create, :update ]
   end
 
   # ---------------------------------------------------------------
   # resources :weekly_reflections
   # ---------------------------------------------------------------
-  resources :weekly_reflections, only: [:index, :new, :create, :show]
+  resources :weekly_reflections, only: [ :index, :new, :create, :show ]
 
   # ---------------------------------------------------------------
   # Issue #27: catch-all ルート（必ず最後に記述する）
