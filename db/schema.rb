@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_20_064238) do
+ActiveRecord::Schema[7.2].define(version: 2026_03_22_074140) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -212,6 +212,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_20_064238) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.index ["channel"], name: "index_notification_logs_on_channel"
+    t.index ["deep_link_url"], name: "index_notification_logs_on_deep_link_url"
     t.index ["notification_type"], name: "index_notification_logs_on_notification_type"
     t.index ["status"], name: "index_notification_logs_on_status_not_success", where: "(status <> 0)"
     t.index ["target_type", "target_id"], name: "index_notification_logs_on_target_type_and_target_id"
@@ -262,6 +263,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_20_064238) do
     t.index ["alarm_enabled", "scheduled_at"], name: "index_tasks_on_alarm_enabled_and_scheduled_at"
     t.index ["user_id", "alarm_enabled"], name: "index_tasks_on_user_id_and_alarm_enabled"
     t.index ["user_id", "scheduled_at"], name: "index_tasks_on_user_id_and_scheduled_at"
+    t.index ["user_id", "status", "deleted_at", "due_date"], name: "idx_tasks_active_tasks", where: "(deleted_at IS NULL)"
     t.index ["user_id", "status", "due_date"], name: "index_tasks_on_user_id_and_status_and_due_date"
     t.index ["user_id"], name: "index_tasks_on_user_id"
   end
