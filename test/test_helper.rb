@@ -7,6 +7,11 @@
 ENV["RAILS_ENV"] ||= "test"
 require_relative "../config/environment"
 require "rails/test_help"
+require "minitest/mock"   # ← この1行を追加する
+
+# stub を使うために必要。
+# minitest/mock が読み込まれていないと
+# Object#stub が定義されないため NoMethodError になる。
 
 # =============================================================
 # TestLoginHelper モジュール
