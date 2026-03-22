@@ -53,8 +53,10 @@ flowchart LR
 [![GoodJob](https://img.shields.io/badge/A--3_GoodJob導入-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-3-good-job)
 [![本番デプロイ](https://img.shields.io/badge/A--2_本番デプロイ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-2-production-deploy)
 [![Resend](https://img.shields.io/badge/A--4_Resendメール設定-完了-10b981?style=flat-square)](https://github.com/KK-arina/runteq_graduation_project/tree/feature/A-4-resend-mailer)
+[![A-5 habit_templates](https://img.shields.io/badge/A--5_habit__templates-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-5-habit-templates-seed)
 [![DBインデックス監査](https://img.shields.io/badge/A--6_DBインデックス監査-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-6-db-index-audit)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-6%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![DB Transaction](https://img.shields.io/badge/A--7_DBトランザクション設計-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-7-transaction-design)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-7%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -127,6 +129,7 @@ flowchart LR
 | #A-4 | Resend メール送信設定 | 2026-03-22 | feature/A-4-resend-mailer |
 | #A-5 | habit_templates シードデータ・モデル作成 | 2026-03-22 | feature/A-5-habit-templates-seed |
 | #A-6 | DBインデックス監査・最適化 | 2026-03-22 | feature/A-6-db-index-audit |
+| #A-7 | DBトランザクション設計・複数テーブル更新の整合性保証 | 2026-03-22 | feature/A-7-transaction-design |
 
 <br>
 
@@ -773,6 +776,94 @@ WHERE user_id = ? AND status = 0 AND deleted_at IS NULL ORDER BY due_date ASC
 
 <br>
 
+### #A-7: DBトランザクション設計・複数テーブル更新の整合性保証
+
+<br>
+
+**ブランチ:** `feature/A-7-transaction-design`<br>
+**完了日:** 2026-03-22<br>
+**概要:** 複数テーブルを横断する更新処理をトランザクションで保護し、<br>
+部分的な失敗による中途半端なDB状態を防ぐ基盤を構築。<br>
+ビジネスロジックをサービスクラスに集約し、コントローラーを軽量化した。
+
+<br>
+
+#### トランザクション保護対象フロー
+
+<br>
+
+| フロー | 保護対象テーブル | サービスクラス |
+|:---|:---|:---|
+| 振り返り完了 | `weekly_reflections` + `weekly_reflection_habit_summaries` | `WeeklyReflectionCompleteService` |
+| 習慣記録保存 | `habit_records`（将来: + `habits.current_streak`） | `HabitRecordSaveService` |
+| ユーザー退会 | `users` + `password_reset_tokens` + `user_settings` | `UserDestroyService` |
+| AI提案確定（骨格） | `habits` + `tasks`（Issue #D-3〜#D-4 で本実装） | `AiProposalConfirmService` |
+
+<br>
+
+#### ApplicationRecord.with_transaction の設計
+
+```ruby
+# app/models/application_record.rb
+def self.with_transaction(&block)
+  # ブロック内で例外が発生すると Rails が自動ロールバックし例外を再 raise する
+  # rescue はサービスクラス側で書く（with_transaction 内では rescue しない）
+  ActiveRecord::Base.transaction(&block)
+end
+```
+
+<br>
+
+| 設計判断 | 理由 |
+|:---|:---|
+| `with_transaction` 内で `rescue` しない | transaction ブロックの内側で rescue すると例外がロールバック前にキャッチされ、DBが中途半端な状態でコミットされる危険がある |
+| rescue はサービスクラス側に置く | transaction ブロックの外側で rescue することで「ロールバック完了 → エラー通知」の順序が保証される |
+| ネスト禁止 | `with_transaction` の中で `with_transaction` を呼ぶと内側の失敗が外側に伝播しない。`create_all_for_reflection!` 内部の `transaction` は外側に合流するため問題ない |
+
+<br>
+
+#### WeeklyReflection モデルのバグ修正
+
+<br>
+
+`weekly_reflections` テーブルには `UNIQUE(user_id, year, week_number)` 制約があるが、<br>
+`year` / `week_number` が `nil` のまま保存されていた本番バグを `before_validation` で修正。
+
+```ruby
+# app/models/weekly_reflection.rb
+before_validation :set_year_and_week_number
+
+def set_year_and_week_number
+  return unless week_start_date.present?
+  self.year        = week_start_date.cwyear  # ISO週番号ベースの年
+  self.week_number = week_start_date.cweek   # ISO週番号（1〜53）
+end
+```
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `app/models/application_record.rb` | `with_transaction` クラスメソッドを追加 |
+| `app/models/weekly_reflection.rb` | `before_validation :set_year_and_week_number` を追加（バグ修正） |
+| `app/services/weekly_reflection_complete_service.rb` | 新規作成（振り返り完了フロー） |
+| `app/services/habit_record_save_service.rb` | 新規作成（習慣記録フロー） |
+| `app/services/user_destroy_service.rb` | 新規作成（退会処理フロー） |
+| `app/services/ai_proposal_confirm_service.rb` | 新規作成（骨格のみ・Issue #D-3〜#D-4 で本実装） |
+| `app/controllers/weekly_reflections_controller.rb` | `create` アクションをサービスクラスに委譲 |
+| `app/controllers/habit_records_controller.rb` | `create` / `update` アクションをサービスクラスに委譲 |
+| `test/test_helper.rb` | `require "minitest/mock"` を追加（stub 使用に必要） |
+| `test/fixtures/weekly_reflections.yml` | 全 fixture に `year` / `week_number` を追加 |
+| `test/services/application_record_with_transaction_test.rb` | 新規作成（5テスト） |
+| `test/services/weekly_reflection_complete_service_test.rb` | 新規作成（6テスト） |
+| `test/services/habit_record_save_service_test.rb` | 新規作成（3テスト） |
+
+<br>
+
 ---
 
 <br>
@@ -1128,6 +1219,66 @@ WHERE user_id = ? AND status = 0 AND deleted_at IS NULL ORDER BY due_date ASC
 `change` メソッドでは Rails が自動で逆操作（rollback 時の処理）を生成しようとするが、<br>
 `concurrently` で作ったインデックスの削除も `concurrently` で行う必要があり<br>
 自動生成では対応できない。`up/down` を明示することで rollback の挙動を完全にコントロールできる。
+
+<br>
+
+### 13. サービスクラスによるトランザクション境界の集約（#A-7）
+
+<br>
+
+**① rescue の位置がトランザクションの正確さを決める**
+
+<br>
+
+`ActiveRecord::Base.transaction do ... end` のブロック「内側」に `rescue` を書くと、<br>
+例外がロールバックをトリガーする前にキャッチされ、DBが中途半端な状態でコミットされる。<br>
+```ruby
+# ❌ transaction の内側で rescue → ロールバックが発生しない
+ActiveRecord::Base.transaction do
+  save!
+rescue => e
+  { success: false }  # ← ここでキャッチするとロールバックされずコミットされる
+end
+
+# ✅ transaction の外側で rescue → ロールバック完了後にキャッチ
+ActiveRecord::Base.transaction do
+  save!              # ← ここで例外発生 → Rails が自動ロールバック
+end
+rescue => e          # ← ロールバック完了後にここに来る
+{ success: false }
+```
+
+<br>
+
+**② テストでのクラス汚染防止: `stub` の活用**
+
+<br>
+
+テスト内でクラスメソッドやインスタンスメソッドを `define_method` で直接書き換えると、<br>
+`ensure` での復元が不完全な場合に他テストに影響するフレーキーテストが発生する。<br>
+`minitest/mock` の `stub` はブロックを抜けると自動で元に戻るため安全。
+```ruby
+# ❌ define_method + remove_method → 元のメソッドも消えてしまう
+WeeklyReflection.define_method(:complete!) { raise ... }
+ensure
+  WeeklyReflection.remove_method(:complete!)  # 元の実装も削除される
+
+# ✅ stub → ブロックを抜けると自動で元に戻る
+error_lambda = -> { raise ActiveRecord::RecordInvalid, invalid_record }
+reflection.stub(:complete!, error_lambda) do
+  # このブロック内だけ complete! が差し替えられる
+end
+```
+
+<br>
+
+**③ `before_validation` で UNIQUE 制約の前提データを自動セット**
+
+<br>
+
+`before_save` はバリデーション「後」に実行されるため、UNIQUE 制約のバリデーションに間に合わない。<br>
+`year` / `week_number` のような「保存前に必ず値が必要なカラム」は `before_validation` でセットする。<br>
+これにより fixtures を経由した場合でも `year` / `week_number` が正しくセットされる。
 
 <br>
 
@@ -1619,6 +1770,11 @@ habitflow/
 │   │   ├── weekly_reflection.rb           # 週次振り返り・complete! メソッド
 │   │   ├── weekly_reflection_habit_summary.rb # スナップショット・達成率計算
 │   │   └── habit_template.rb                  # #A-5: オンボーディング用習慣テンプレートマスタ
+│   ├── services/
+│   │   ├── weekly_reflection_complete_service.rb  # #A-7: 振り返り完了フロー（1トランザクション）
+│   │   ├── habit_record_save_service.rb            # #A-7: 習慣記録保存フロー（ストリーク更新準備）
+│   │   ├── user_destroy_service.rb                 # #A-7: 退会処理フロー（個人情報匿名化）
+│   │   └── ai_proposal_confirm_service.rb          # #A-7: AI提案確定フロー骨格（#D-3〜#D-4で本実装）
 │   ├── javascript/controllers/
 │   │   ├── habit_record_controller.js     # チェックボックス即時保存（楽観的 UI）
 │   │   ├── mobile_menu_controller.js      # ハンバーガーメニュー開閉
@@ -1684,8 +1840,12 @@ habitflow/
 ├── render.yaml                            # 変更: RESEND_API_KEY追加・Worker設定コメントアウト（#A-4）
 ├── Gemfile                                # 変更: resend・letter_opener gem追加（#A-4）
 └── test/
-    └── db/
-        └── index_audit_test.rb            # #A-6: インデックス・UNIQUE制約の存在確認テスト
+    ├── db/
+    │   └── index_audit_test.rb            # #A-6: インデックス・UNIQUE制約の存在確認テスト
+    └── services/
+        ├── application_record_with_transaction_test.rb  # #A-7: with_transaction の動作確認（5テスト）
+        ├── weekly_reflection_complete_service_test.rb   # #A-7: 振り返り完了フローのトランザクションテスト（6テスト）
+        └── habit_record_save_service_test.rb            # #A-7: 習慣記録フローのテスト（3テスト）
 ```
 
 <br>
@@ -1715,7 +1875,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-244 runs, 682 assertions, 0 failures, 0 errors, 0 skips
+258 runs, 723 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
@@ -1737,6 +1897,9 @@ docker compose exec web bin/rails test
 | `test/integration/error_cases_test.rb` | E2E | 404・認可エラー・他ユーザーアクセス防止 |
 | `test/integration/production_final_check_test.rb` | E2E | 本番環境最終動作確認（19ケース） |
 | `test/db/index_audit_test.rb` | DBインデックス監査 | インデックス・UNIQUE制約の存在確認（#A-6） |
+| `test/services/application_record_with_transaction_test.rb` | サービス | `with_transaction` のロールバック動作確認 |
+| `test/services/weekly_reflection_complete_service_test.rb` | サービス | 振り返り完了フローのトランザクション・ロールバック検証 |
+| `test/services/habit_record_save_service_test.rb` | サービス | 習慣記録保存フローの動作確認 |
 
 <br>
 
@@ -2149,6 +2312,39 @@ N+1問題（クエリが足りない）だけでなく、`includes` で先読み
 「オーバーフェッチ」も `Bullet.unused_eager_loading_enable = true` で検出できる。<br>
 N+1を直すために `includes` を追加しすぎると今度は不要なデータを大量取得する問題が起きる。<br>
 両方向の最適化を `Bullet` で監視することでパフォーマンスを最良の状態に保てる（#A-6 で設定）。
+
+<br>
+
+### トランザクション内の rescue の位置は必ず外側にする（#A-7）
+
+<br>
+
+`ActiveRecord::Base.transaction do ... rescue ... end` と書くと rescue が transaction ブロックの内側になり、<br>
+例外がロールバックをトリガーする前にキャッチされてしまう。DBが中途半端な状態でコミットされる最悪のパターン。<br>
+`with_transaction` のような共通ラッパーを作る場合も rescue は書かず、呼び出し元（サービスクラス）に任せる。
+
+<br>
+
+### テストでクラスを直接書き換えるな。stub を使え（#A-7）
+
+<br>
+
+`WeeklyReflection.define_method(:complete!) { raise ... }` のようにクラスを直接書き換えると、<br>
+`ensure` での `remove_method` が元のメソッドも削除してしまい、他テストで `NoMethodError` が発生するフレーキーテストになる。<br>
+`test_helper.rb` に `require "minitest/mock"` を追加すれば `stub` が使え、<br>
+ブロックを抜けると自動で元に戻るため安全。クラスのグローバル状態を汚染しない。
+
+<br>
+
+### `year` / `week_number` など UNIQUE 制約に使うカラムは `before_validation` でセットする（#A-7）
+
+<br>
+
+`before_save` はバリデーション後に実行されるため、UNIQUE 制約のバリデーションには間に合わない。<br>
+また fixtures はモデルのコールバックを経由しないため、`before_validation` を追加しても<br>
+既存 fixtures には `year: 値` を直接記述する必要がある。<br>
+テストが単体では通るが複数テストをまとめて実行すると落ちる（フレーキー）場合は<br>
+この種の「DB制約の前提データが nil」問題を疑うこと。
 
 <br>
 

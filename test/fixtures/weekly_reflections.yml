@@ -1,35 +1,38 @@
 # test/fixtures/weekly_reflections.yml
 #
 # ============================================================
-# Issue #29: フィクスチャの completed_at を全件見直し
-# ============================================================
+# 【Issue #A-7 で修正】
+# year と week_number を全 fixture に追加する。
+#
 # 【修正理由】
-#   テストの基本前提は「ロック解除状態（ロックされていない）」であること。
-#   completed_at が nil のフィクスチャが users(:one) に紐づく前週の日付に
-#   存在すると、locked? が true になり Habit 系テストが全滅する。
+# fixtures はモデルの before_validation を経由しないため、
+# year/week_number が nil のまま DB に保存される。
+# year/week_number が nil だと UNIQUE 制約(user_id, year, week_number)が
+# 正しく機能せず、テストで予期しないエラーが発生する。
 #
-#   原則: フィクスチャは「完了済み（completed_at あり）」を基本とする。
-#   「未完了」が必要なテストは、テストコード内で動的に作成する（create_last_week_reflection）。
-#
-# 【completed_at の設定ルール】
-#   - 完了済み振り返り → 固定の過去日時を設定
-#   - 未完了の振り返り → テストコード内で動的に作成（フィクスチャには書かない）
-#   - pending_reflection だけ例外的に nil のままにするが、
-#     locked_user（users(:one) とは別ユーザー）に紐づけることで干渉しない
+# 【week_number の計算方法】
+# Date.new(YYYY, MM, DD).cweek で確認できる。
+# 例: Date.new(2026, 1, 5).cweek  => 2
+#     Date.new(2026, 1, 12).cweek => 3
+#     Date.new(2026, 1, 19).cweek => 4
+#     Date.new(2026, 2, 2).cweek  => 6
+#     Date.new(2026, 2, 9).cweek  => 7
+# ============================================================
 
 # ----------------------------------------------------------------
-# for_summary_test: 振り返り詳細テスト用
+# for_summary_test
 # ----------------------------------------------------------------
 for_summary_test:
   user: one
   week_start_date: "2026-01-12"
   week_end_date:   "2026-01-18"
   reflection_comment: "テスト振り返り1"
-  # completed_at を明示的に設定する（nil だと locked? に干渉するリスクがある）
   completed_at: "2026-01-18 15:00:00"
+  year: 2026
+  week_number: 3
 
 # ----------------------------------------------------------------
-# one_habit_one: 習慣スナップショットテスト用
+# one_habit_one
 # ----------------------------------------------------------------
 one_habit_one:
   user: one
@@ -37,9 +40,11 @@ one_habit_one:
   week_end_date:   "2026-01-25"
   reflection_comment: "テスト振り返り2"
   completed_at: "2026-01-25 14:00:00"
+  year: 2026
+  week_number: 4
 
 # ----------------------------------------------------------------
-# two_habit_one: ユーザー2の振り返りテスト用
+# two_habit_one
 # ----------------------------------------------------------------
 two_habit_one:
   user: two
@@ -47,22 +52,23 @@ two_habit_one:
   week_end_date:   "2026-01-25"
   reflection_comment: "ユーザー2の振り返り"
   completed_at: "2026-01-25 16:00:00"
+  year: 2026
+  week_number: 4
 
 # ----------------------------------------------------------------
-# completed_one: habit_summaries フィクスチャが参照する（削除禁止）
+# completed_one（habit_summaries が参照しているため変更禁止）
 # ----------------------------------------------------------------
-# weekly_reflection_habit_summaries.yml の以下が参照している:
-#   - two_habit_one / summary_one / summary_two → weekly_reflection: completed_one
-# このキーを削除すると外部キー違反エラーになるため変更しない。
 completed_one:
   user: one
   week_start_date: "2026-01-05"
   week_end_date:   "2026-01-11"
   reflection_comment: "completed_oneの振り返り"
   completed_at: "2026-01-11 15:00:00"
+  year: 2026
+  week_number: 2
 
 # ----------------------------------------------------------------
-# completed_reflection: 完了済み振り返りテスト用
+# completed_reflection
 # ----------------------------------------------------------------
 completed_reflection:
   user: one
@@ -70,19 +76,17 @@ completed_reflection:
   week_end_date:   "2026-02-08"
   reflection_comment: "完了済みの振り返り"
   completed_at: "2026-02-08 15:00:00"
+  year: 2026
+  week_number: 6
 
 # ----------------------------------------------------------------
-# pending_reflection: 未完了振り返りテスト用（locked_user 専用）
+# pending_reflection（locked_user 専用・completed_at は nil）
 # ----------------------------------------------------------------
-# 【重要】このフィクスチャは必ず locked_user（users(:one) とは別）に
-# 紐づけること。users(:one) に紐づけると Habit 系テストがロックされる。
-#
-# completed_at: ~ は意図的な nil。
-# PdcaLockTest は travel_to + create_last_week_reflection で
-# 動的にデータを作るため、このフィクスチャは complete! の単体テスト専用。
 pending_reflection:
   user: locked_user
   week_start_date: "2026-02-09"
   week_end_date:   "2026-02-15"
   reflection_comment: "未完了の振り返り"
   completed_at: ~
+  year: 2026
+  week_number: 7
