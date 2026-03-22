@@ -438,3 +438,318 @@ puts "💡 ロックバナーが表示されない場合:"
 puts "  今日が日曜の場合は仕様上バナーは表示されません。"
 puts "  翌月曜 AM4:00 以降にアクセスすると自動的に表示されます。"
 puts ""
+
+# ==============================================================================
+# Step 8: habit_templates（習慣テンプレート）のシードデータ作成
+# ==============================================================================
+#
+# 【このステップの役割】
+# オンボーディング（初回ログイン時のガイド画面）で
+# ユーザーが習慣を選びやすいように、カテゴリ別のテンプレートを登録します。
+#
+# 【find_or_initialize_by + assign_attributes + save! を使う理由】
+# find_or_create_by! のブロック方式だと「新規作成時のみ」属性がセットされ、
+# 既存レコードが永遠に更新されません。
+# 例えば description を後から修正しても、本番DBには反映されません。
+#
+# find_or_initialize_by は「あれば取得・なければ新規インスタンス生成」をします。
+# その後 assign_attributes で全属性を上書きし、save! で保存することで
+# 新規作成・既存更新の両方を1つのパターンで安全に処理できます。
+#
+# 【new_record? とは】
+# DBに保存されていない新規インスタンスのとき true を返すメソッドです。
+# find_or_initialize_by の直後に呼ぶことで
+# 「新規作成か・既存更新か」を判定できます。
+#
+# 【検索キーに name + category を使う理由】
+# schema.rb に slug カラムは存在しないため、
+# name と category の複合条件で同一レコードを特定します。
+# 同じ名前でもカテゴリが異なれば別テンプレートとして扱えます。
+# （例: "読書"（health）と "読書（学習）"（study）は別テンプレート）
+#
+# 【カテゴリ分類の方針】
+# health  (健康): 体の健康維持・生活習慣に関する習慣
+# fitness (フィットネス): 運動・体力向上に関する習慣
+# study   (学習): 知識・スキル習得に関する習慣
+# mind    (マインド): 精神的な健康・内省に関する習慣
+
+puts ""
+puts "=" * 60
+puts "📚 habit_templates（習慣テンプレート）を登録しています..."
+puts "=" * 60
+puts ""
+
+# ------------------------------------------------------------------------------
+# テンプレートデータの定義
+# ------------------------------------------------------------------------------
+#
+# 【データをハッシュの配列で定義する理由】
+# データと処理ロジックを分離することで、
+# テンプレートの追加・修正がこの配列の編集だけで完結します。
+# 処理ロジック（each ブロック内）を触らずに済むため、バグが入りにくくなります。
+#
+# 【各キーの説明】
+# name                  : 習慣名（ユーザーに表示される名前）
+# measurement_type      : 測定タイプ（:check_type or :numeric_type）
+# default_unit          : 数値型の単位（チェック型は nil）
+# default_weekly_target : 週の目標回数（1〜7）
+# category              : カテゴリ（:health / :fitness / :study / :mind）
+# description           : テンプレートの説明（オンボーディングで表示）
+# sort_order            : 表示順（数値が小さいほど先に表示）
+
+template_data = [
+  # ============================================================
+  # 健康カテゴリ（health）
+  # 体の健康維持・生活習慣に関する習慣
+  # ============================================================
+  {
+    name:                  "読書",
+    measurement_type:      :check_type,   # やった/やらないで記録
+    default_unit:          nil,           # チェック型なので単位なし
+    default_weekly_target: 7,             # 毎日読書を目標
+    category:              :health,
+    description:           "毎日15分以上の読書で知識と集中力を養います。",
+    sort_order:            10
+  },
+  {
+    name:                  "瞑想",
+    measurement_type:      :check_type,
+    default_unit:          nil,
+    default_weekly_target: 7,
+    category:              :health,
+    description:           "10分間の瞑想でストレスを軽減し、集中力を高めます。",
+    sort_order:            20
+  },
+  {
+    name:                  "睡眠日記",
+    measurement_type:      :check_type,
+    default_unit:          nil,
+    default_weekly_target: 7,
+    category:              :health,
+    description:           "就寝前に睡眠の質を記録して睡眠改善に役立てます。",
+    sort_order:            30
+  },
+  {
+    name:                  "水を飲む",
+    measurement_type:      :numeric_type, # 量（ml）を記録
+    default_unit:          "ml",
+    default_weekly_target: 7,
+    category:              :health,
+    description:           "1日2000ml以上の水分補給で体調を整えます。",
+    sort_order:            40
+  },
+  {
+    name:                  "早起き",
+    measurement_type:      :check_type,
+    default_unit:          nil,
+    default_weekly_target: 5,
+    category:              :health,
+    description:           "毎朝6時起きで朝の時間を有効活用します。",
+    sort_order:            50
+  },
+
+  # ============================================================
+  # フィットネスカテゴリ（fitness）
+  # 運動・体力向上に関する習慣
+  # ============================================================
+  {
+    name:                  "筋トレ",
+    measurement_type:      :check_type,
+    default_unit:          nil,
+    default_weekly_target: 3,             # 休息日を考慮して週3回
+    category:              :fitness,
+    description:           "自重トレーニングや器具を使った筋力アップトレーニングです。",
+    sort_order:            60
+  },
+  {
+    name:                  "ジョギング",
+    measurement_type:      :numeric_type, # 走った時間（分）を記録
+    default_unit:          "分",
+    default_weekly_target: 3,
+    category:              :fitness,
+    description:           "20〜30分のジョギングで心肺機能と体力を高めます。",
+    sort_order:            70
+  },
+  {
+    name:                  "ストレッチ",
+    measurement_type:      :check_type,
+    default_unit:          nil,
+    default_weekly_target: 7,
+    category:              :fitness,
+    description:           "就寝前の10分ストレッチで柔軟性を高め疲労を回復します。",
+    sort_order:            80
+  },
+  {
+    name:                  "ウォーキング",
+    measurement_type:      :numeric_type, # 歩いた時間（分）を記録
+    default_unit:          "分",
+    default_weekly_target: 5,
+    category:              :fitness,
+    description:           "30分のウォーキングで有酸素運動の習慣をつけます。",
+    sort_order:            90
+  },
+  {
+    name:                  "体重記録",
+    measurement_type:      :numeric_type, # 体重（kg）を記録
+    default_unit:          "kg",
+    default_weekly_target: 7,
+    category:              :fitness,
+    description:           "毎朝の体重を記録してダイエットや健康管理に活用します。",
+    sort_order:            100
+  },
+
+  # ============================================================
+  # 学習カテゴリ（study）
+  # 知識・スキル習得に関する習慣
+  # ============================================================
+  {
+    name:                  "英語学習",
+    measurement_type:      :numeric_type, # 学習時間（分）を記録
+    default_unit:          "分",
+    default_weekly_target: 5,
+    category:              :study,
+    description:           "アプリや教材を使った英語学習で語学力を伸ばします。",
+    sort_order:            110
+  },
+  {
+    name:                  "プログラミング学習",
+    measurement_type:      :numeric_type,
+    default_unit:          "分",
+    default_weekly_target: 5,
+    category:              :study,
+    description:           "毎日コードを書いてプログラミングスキルを習得します。",
+    sort_order:            120
+  },
+  {
+    name:                  "読書（学習）",
+    measurement_type:      :numeric_type, # 読んだページ数を記録
+    default_unit:          "ページ",
+    default_weekly_target: 5,
+    category:              :study,
+    description:           "ビジネス書や技術書を読んで専門知識を深めます。",
+    sort_order:            130
+  },
+  {
+    name:                  "オンライン講座",
+    measurement_type:      :numeric_type, # 受講時間（分）を記録
+    default_unit:          "分",
+    default_weekly_target: 3,
+    category:              :study,
+    description:           "動画講座やeラーニングで新しいスキルを習得します。",
+    sort_order:            140
+  },
+
+  # ============================================================
+  # マインドカテゴリ（mind）
+  # 精神的な健康・内省に関する習慣
+  # ============================================================
+  {
+    name:                  "日記",
+    measurement_type:      :check_type,
+    default_unit:          nil,
+    default_weekly_target: 7,
+    category:              :mind,
+    description:           "1日の出来事や感情を記録して自己理解を深めます。",
+    sort_order:            150
+  },
+  {
+    name:                  "感謝リスト",
+    measurement_type:      :check_type,
+    default_unit:          nil,
+    default_weekly_target: 7,
+    category:              :mind,
+    description:           "今日感謝できることを3つ書き出してポジティブな思考を育てます。",
+    sort_order:            160
+  },
+  {
+    name:                  "呼吸法",
+    measurement_type:      :check_type,
+    default_unit:          nil,
+    default_weekly_target: 7,
+    category:              :mind,
+    description:           "深呼吸や腹式呼吸でリラックスしストレスを解消します。",
+    sort_order:            170
+  },
+  {
+    name:                  "デジタルデトックス",
+    measurement_type:      :check_type,
+    default_unit:          nil,
+    default_weekly_target: 7,
+    category:              :mind,
+    description:           "就寝1時間前はスマホをオフにして質の良い睡眠を確保します。",
+    sort_order:            180
+  }
+]
+
+# ------------------------------------------------------------------------------
+# テンプレートデータを DB に登録する
+# ------------------------------------------------------------------------------
+#
+# 【find_or_initialize_by とは】
+# 「条件に一致するレコードがあれば取得し、なければ新規インスタンスを生成する」
+# メソッドです。find_or_create_by と違い、この時点ではまだ DB に保存しません。
+#
+# 【assign_attributes とは】
+# インスタンスに複数の属性をまとめてセットするメソッドです。
+# この時点でもまだ DB に保存しません。
+# save! を呼んで初めて DB に書き込まれます。
+#
+# 【new_record? とは】
+# DB に保存されていない（まだ id がない）インスタンスのとき true を返します。
+# assign_attributes の前に呼ぶことで「新規作成か・既存更新か」を正しく判定できます。
+# assign_attributes の後に呼ぶと、インスタンスの状態が変化している可能性があるため
+# 必ず assign_attributes の前に is_new を確認します。
+
+template_created_count = 0  # 新規作成した件数のカウンター
+template_updated_count  = 0  # 既存を更新した件数のカウンター
+
+template_data.each do |data|
+  # 検索キー: name と category の組み合わせでレコードを特定する
+  template = HabitTemplate.find_or_initialize_by(
+    name:     data[:name],
+    category: data[:category]
+  )
+
+  # assign_attributes の前に new_record? を確認する（重要）
+  # assign_attributes 後は内部状態が変わり正確な判定ができなくなる場合があります
+  is_new = template.new_record?
+
+  # 全属性をセット（新規・既存どちらも上書きする）
+  # これにより description や sort_order を後から変更したとき
+  # db:seed を再実行するだけで本番 DB に反映される
+  template.assign_attributes(
+    measurement_type:      data[:measurement_type],
+    default_unit:          data[:default_unit],
+    default_weekly_target: data[:default_weekly_target],
+    description:           data[:description],
+    sort_order:            data[:sort_order],
+    is_active:             true
+  )
+
+  # save! で DB に保存する（失敗時は例外を発生させて即気づけるようにする）
+  template.save!
+
+  if is_new
+    template_created_count += 1
+    puts "  ✅ [新規] #{template.name}（#{template.category}）"
+  else
+    template_updated_count += 1
+    puts "  🔄 [更新] #{template.name}（#{template.category}）"
+  end
+end
+
+puts ""
+puts "=" * 60
+puts "✅ habit_templates 登録完了！"
+puts "=" * 60
+puts "  新規作成: #{template_created_count} 件"
+puts "  既存更新: #{template_updated_count} 件"
+puts "  合計:     #{HabitTemplate.count} 件"
+puts ""
+
+# カテゴリ別の内訳を表示する
+puts "  📊 カテゴリ別内訳:"
+HabitTemplate.active.group(:category).count.each do |category, count|
+  puts "    #{category}: #{count} 件"
+end
+puts ""
