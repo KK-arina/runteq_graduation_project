@@ -154,3 +154,40 @@ services:
       # WorkerはWebとは別プロセスのため、独自に環境変数が必要。
       - key: RESEND_API_KEY
         sync: false
+
+  # ============================================================
+  # Worker サービス（GoodJob 非同期処理）
+  # ============================================================
+  #
+  # 【コメントアウトの理由】
+  # RenderのBackground WorkerはFreeプランが存在しない（最低$7/月）。
+  # ポートフォリオ用途のため費用をかけない方針。
+  #
+  # 【代替対応】
+  # production.rb の execution_mode を :external から :async に変更。
+  # Webプロセス内でGoodJobのスレッドを起動してジョブを処理する。
+  # Workerを別プロセスで立てなくても非同期処理が動作する。
+  #
+  # 【将来有料プランに移行する場合】
+  # 以下のコメントアウトを解除してmainにプッシュすると
+  # Workerが自動作成される。
+  # - type: worker
+  #   name: habitflow-worker
+  #   runtime: docker
+  #   region: oregon
+  #   plan: starter
+  #   branch: main
+  #   dockerfilePath: ./Dockerfile
+  #   dockerContext: .
+  #   startCommand: bundle exec good_job start --max-threads=3
+  #   envVars:
+  #     - key: RAILS_ENV
+  #       value: production
+  #     - key: DATABASE_URL
+  #       sync: false
+  #     - key: RAILS_MASTER_KEY
+  #       sync: false
+  #     - key: RAILS_LOG_TO_STDOUT
+  #       value: "true"
+  #     - key: RESEND_API_KEY
+  #       sync: false

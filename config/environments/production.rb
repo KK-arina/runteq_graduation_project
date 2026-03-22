@@ -199,13 +199,43 @@ Rails.application.configure do
   # Issue #A-3: 本番環境の GoodJob execution_mode 設定
   # ============================================================
   #
-  # 【なぜ :external にするのか】
-  # 本番環境（Render）では Web サービスと Worker サービスを分離して運用する。
-  # :external モードにより、Web プロセスはジョブをキューに積むだけになり、
-  # Render の Worker サービス（bundle exec good_job start）が実行を担当する。
-  # これにより Web サーバーの応答速度を確保しつつ、バックグラウンド処理ができる。
-  config.good_job.execution_mode = :external
+  # 【:async に変更した理由】
+  # RenderのBackground WorkerはFreeプランが存在しない（最低$7/月）。
+  # ポートフォリオ用途のため費用をかけない方針で
+  # :external（別Workerプロセス必要）から :async（Webプロセス内で実行）に変更。
+  #
+  # 【:async モードの動作】
+  # PumaのWebプロセス内でGoodJobがバックグラウンドスレッドを起動してジョブを処理する。
+  # Workerを別途起動しなくてもジョブが実行される。
+  #
+  # 【:async の注意点・制約】
+  # ① Webが落ちるとジョブも停止するが、GoodJobはPostgreSQLにジョブを保存しているため
+  #   再起動後に自動で再実行される（ジョブは消えない）
+  # ② 重い処理（CSV生成・AI分析）はWebのレスポンス速度に影響する可能性がある
+  # ③ Render Freeプランはリソースが少ないため、スレッド数を制限して暴走を防ぐ
+  #
+  # 【将来有料プランに移行する場合】
+  # execution_mode を :external に戻し、render.yaml の Worker設定を有効化する。
+  config.good_job.execution_mode = :async
 
+  # ============================================================
+  # GoodJob 最大スレッド数の制限
+  # ============================================================
+  #
+  # 【なぜ max_threads を制限するのか】
+  # GoodJob のデフォルトスレッド数は 5。
+  # Render Freeプランは CPU・メモリが限られているため
+  # スレッドを無制限に立てるとアプリ全体が遅くなる・落ちる可能性がある。
+  #
+  # 【2に設定する理由】
+  # Webプロセス: Puma Worker(2) × Thread(3) = 最大6コネクション
+  # GoodJob:     2スレッド × 1コネクション = 最大2コネクション
+  # 合計: 8コネクション → Neon無料プランの上限（10〜20）以内で安全
+  #
+  # 【スレッド数を増やしたい場合】
+  # Neonの接続上限を超えないよう計算してから変更すること
+  config.good_job.max_threads = 2
+  
   # ============================================================
   # Issue #A-4: Action Mailer 本番環境設定（Resend）
   # ============================================================
