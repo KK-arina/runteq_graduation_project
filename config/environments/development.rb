@@ -34,14 +34,40 @@ Rails.application.configure do
   # Store uploaded files on the local file system (see config/storage.yml for options).
   config.active_storage.service = :local
 
-  # Don't care if the mailer can't send.
+  # ============================================================
+  # Issue #A-4: 開発環境のメール設定（letter_opener）
+  # ============================================================
+  #
+  # 【なぜletter_openerを使うのか】
+  # 開発中にResendで実際にメールを送信すると:
+  #   1. 無料枠（月3,000通）を無駄に消費する
+  #   2. 実在するアドレスに誤ってメールが届く危険がある
+  #   3. テストのたびにメールボックスを確認する手間がかかる
+  #
+  # letter_openerを使うと:
+  #   - deliver_now / deliver_later を呼んだとき実際には送信しない
+  #   - 代わりに送信されるはずだったメールをブラウザで自動的に開く
+  #   - 件名・本文・HTMLの見た目を即座に確認できる
+  #   - 開発スピードが大幅に向上する
+  #
+  # 【delivery_method: :letter_opener_web との違い】
+  # :letter_opener     → 送信のたびに新しいブラウザタブが開く
+  # :letter_opener_web → /letter_opener にアクセスして一覧で確認できる
+  # Dockerを使っているため :letter_opener_web の方が便利だが、
+  # シンプルさを優先して :letter_opener を採用。
+
+  # 送信エンジンをletter_openerに設定（実際には送信しない）
+  config.action_mailer.delivery_method = :letter_opener
+
+  # メールURLのドメイン設定（開発環境用）
+  # localhost:3000 でアクセスするため、そのまま指定する
+  config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
+
+  # 送信失敗時にエラーを出さない（開発環境ではletter_openerが常に成功するため不要）
   config.action_mailer.raise_delivery_errors = false
 
-  # Disable caching for Action Mailer templates even if Action Controller
-  # caching is enabled.
+  # メールテンプレートのキャッシュは無効（変更を即座に反映するため）
   config.action_mailer.perform_caching = false
-
-  config.action_mailer.default_url_options = { host: "localhost", port: 3000 }
 
   # Print deprecation notices to the Rails logger.
   config.active_support.deprecation = :log

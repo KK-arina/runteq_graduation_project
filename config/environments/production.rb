@@ -205,4 +205,80 @@ Rails.application.configure do
   # Render の Worker サービス（bundle exec good_job start）が実行を担当する。
   # これにより Web サーバーの応答速度を確保しつつ、バックグラウンド処理ができる。
   config.good_job.execution_mode = :external
+
+  # ============================================================
+  # Issue #A-4: Action Mailer 本番環境設定（Resend）
+  # ============================================================
+  #
+  # 【なぜ本番環境だけに書くのか】
+  # Railsは環境ごとに設定を分けられる。
+  #   development.rb → letter_openerでブラウザプレビュー
+  #   production.rb  → Resendで実際にメール送信
+  # ここに書くことで「本番だけResendを使う」構成が明確になる。
+
+  # ------------------------------------------------------------
+  # 送信エンジンの指定
+  # ------------------------------------------------------------
+  # delivery_method: :resend
+  #   Resend gemが提供する送信方式を使用する。
+  #   SMTPの代わりにResendのHTTP APIを使ってメールを送信する。
+  #   SMTPより高速で、送信結果のトラッキングも容易。
+  config.action_mailer.delivery_method = :resend
+
+  # ------------------------------------------------------------
+  # エラー検知設定
+  # ------------------------------------------------------------
+  # raise_delivery_errors: true
+  #   メール送信に失敗したとき例外（エラー）を発生させる。
+  #
+  #   trueにする理由:
+  #     - 送信失敗をSentryなどのエラー監視ツールで検知できる
+  #     - 「送ったつもりが届いていない」という事故を防げる
+  #     - ユーザーへ「送信に失敗しました」と正しくフィードバックできる
+  #
+  #   falseにするとどうなるか:
+  #     - 送信失敗しても例外が出ないためエラーに気づけない
+  #     - ユーザーがパスワードリセットメールを受け取れず問い合わせが来る
+  config.action_mailer.raise_delivery_errors = true
+
+  # ------------------------------------------------------------
+  # メール内URLのドメイン設定
+  # ------------------------------------------------------------
+  # default_url_options
+  #   パスワードリセットメールなどに含まれるリンクURLを生成する際に使用。
+  #
+  #   【なぜ必要か】
+  #   Railsのメイラーはリクエストのドメインを自動判定できない。
+  #   （メール送信はHTTPリクエストと紐付いていないため）
+  #   このため「どのドメインでURLを組み立てるか」を明示的に指定する必要がある。
+  #
+  #   設定しないとどうなるか:
+  #     例） password_reset_url(token: "abc")
+  #     → "http://localhost/password_reset?token=abc" というURLが生成される（間違い）
+  #     → "https://habitflow.onrender.com/password_reset?token=abc" が正しい
+  config.action_mailer.default_url_options = {
+    host:     "habitflow.onrender.com",
+    protocol: "https"
+  }
+
+  # ------------------------------------------------------------
+  # メール内画像・CSSのアセットホスト設定
+  # ------------------------------------------------------------
+  # asset_host
+  #   メールのHTMLテンプレート内で image_url や stylesheet_url を使うとき、
+  #   絶対URLを生成するためのホストを指定する。
+  #
+  #   【なぜ必要か】
+  #   メールクライアント（Gmail等）はサーバーの相対パス（/assets/logo.png）を
+  #   解決できない。絶対URL（https://habitflow.onrender.com/assets/logo.png）
+  #   が必要なため、ここでホストを指定する。
+  config.action_mailer.asset_host = "https://habitflow.onrender.com"
+
+  # ------------------------------------------------------------
+  # メールのキャッシュ設定
+  # ------------------------------------------------------------
+  # perform_caching: false
+  #   メールのテンプレートはキャッシュしない。
+  #   メールは毎回最新の内容で生成する必要があるため。
+  config.action_mailer.perform_caching = false
 end
