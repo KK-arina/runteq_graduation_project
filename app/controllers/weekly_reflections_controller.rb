@@ -1,34 +1,20 @@
 # app/controllers/weekly_reflections_controller.rb
 #
-# ═══════════════════════════════════════════════════════════════════
-# 【このファイルの役割】
-#   週次振り返り（WeeklyReflection）に関するHTTPリクエストを受け取り、
-#   適切なデータ処理とビュー表示を担当するコントローラー。
-# ═══════════════════════════════════════════════════════════════════
-#
-# 【Issue #A-7 での変更箇所】
-#
-#   create アクションのビジネスロジックを
-#   WeeklyReflectionCompleteService に委譲するように変更。
-#
-#   変更前:
-#     create アクション内に直接 ActiveRecord::Base.transaction を書いていた。
-#     → コントローラーが肥大化していた
-#     → 同じロジックを別の場所から呼び出せなかった
-#
-#   変更後:
-#     WeeklyReflectionCompleteService.new(...).call を呼ぶだけ。
-#     → コントローラーは「受け取り→サービスへ委譲→レスポンス返却」のみ担当
-#     → ビジネスロジックはサービスクラスに集約
-#     → テストがサービス単体で書けるようになった
+# ==============================================================================
+# 【リフレクション手法対応での変更内容】
+#   ① create アクションで params[:reflection_numeric_corrections] を
+#     WeeklyReflectionCompleteService に渡す（corrections: 引数）
+#   ② weekly_reflection_params に :direct_reason / :background_situation /
+#     :next_action を追加
+#   ③ build_habit_stats を B-1 数値型対応版に更新
+# ==============================================================================
 
 class WeeklyReflectionsController < ApplicationController
   before_action :require_login
   before_action :set_weekly_reflection, only: [ :show ]
 
   # ---------------------------------------------------------------
-  # index アクション
-  # GET /weekly_reflections
+  # index
   # ---------------------------------------------------------------
   def index
     @weekly_reflections = current_user.weekly_reflections
@@ -43,8 +29,7 @@ class WeeklyReflectionsController < ApplicationController
   end
 
   # ---------------------------------------------------------------
-  # new アクション
-  # GET /weekly_reflections/new
+  # new
   # ---------------------------------------------------------------
   def new
     @weekly_reflection = find_pending_last_week_reflection ||
@@ -63,8 +48,7 @@ class WeeklyReflectionsController < ApplicationController
   end
 
   # ---------------------------------------------------------------
-  # create アクション（Issue #A-7 で変更）
-  # POST /weekly_reflections
+  # create
   # ---------------------------------------------------------------
   def create
     @weekly_reflection = find_pending_last_week_reflection ||
@@ -76,34 +60,30 @@ class WeeklyReflectionsController < ApplicationController
     end
 
     @weekly_reflection.assign_attributes(weekly_reflection_params)
-
-    # ── Issue #A-7: ロック状態を「保存前に」記録する ──────────────
-    # 【なぜ保存前に記録するのか？】
-    # WeeklyReflectionCompleteService の中で complete! を呼ぶと
-    # locked? が false になってしまう。
-    # サービスを呼ぶ「前」に locked? の値を取っておき、
-    # サービスに渡すことで正確な判断ができる。
     was_locked = current_user.locked?
 
-    # ── Issue #A-7: サービスクラスに委譲 ─────────────────────────
-    # 変更前: このコントローラーに直接 transaction ブロックを書いていた
-    # 変更後: WeeklyReflectionCompleteService に委譲する
+    # ── 変更: corrections を Service に渡す ────────────────────────────────
     #
-    # WeeklyReflectionCompleteService.new(...)
-    # → サービスオブジェクトを生成する（initialize を呼ぶ）
-    # .call
-    # → トランザクションを実行してフローを完了する
-    # → 戻り値: { success: true/false, error: nil/"メッセージ" }
+    # params[:reflection_numeric_corrections] は以下の形式で届く:
+    #   { "habit_1" => "150.0", "habit_3" => "45" }
+    # フォームの name 属性が:
+    #   name="reflection_numeric_corrections[habit_#{habit.id}]"
+    # のように設定されているため、Rails が自動でネストしたハッシュに変換する。
+    #
+    # .permit! は使わず、Service 内で habit_id の妥当性チェックを行う設計にしている。
+    # （Service が自分のユーザーの習慣かどうかを確認するため）
+    #
+    # nil の場合は Service 側で {} に変換されるため、
+    # ここでは presence チェック不要（nil のまま渡す）。
     result = WeeklyReflectionCompleteService.new(
-      reflection: @weekly_reflection,
-      user:       current_user,
-      was_locked: was_locked
+      reflection:  @weekly_reflection,
+      user:        current_user,
+      was_locked:  was_locked,
+      corrections: params[:reflection_numeric_corrections]  # ← 追加
     ).call
+    # ────────────────────────────────────────────────────────────────────────
 
     if result[:success]
-      # current_user.reload
-      # → セッションのキャッシュを使わず、DBから最新の状態を取得する。
-      # → complete! で変化した locked? の判定を正確にするため。
       current_user.reload
 
       if was_locked
@@ -114,8 +94,6 @@ class WeeklyReflectionsController < ApplicationController
                     notice: "今週の振り返りを保存しました！お疲れ様でした🎉"
       end
     else
-      # サービスから失敗が返ってきた場合
-      # result[:error] にはエラーメッセージが入っている
       Rails.logger.error "WeeklyReflectionCompleteService failed: #{result[:error]}"
 
       @habits = current_user.habits.active
@@ -129,8 +107,7 @@ class WeeklyReflectionsController < ApplicationController
   end
 
   # ---------------------------------------------------------------
-  # show アクション
-  # GET /weekly_reflections/:id
+  # show
   # ---------------------------------------------------------------
   def show
     @habit_summaries = @weekly_reflection.habit_summaries
@@ -154,7 +131,12 @@ class WeeklyReflectionsController < ApplicationController
   end
 
   def weekly_reflection_params
-    params.require(:weekly_reflection).permit(:reflection_comment)
+    params.require(:weekly_reflection).permit(
+      :reflection_comment,
+      :direct_reason,
+      :background_situation,
+      :next_action
+    )
   end
 
   def find_pending_last_week_reflection
@@ -170,21 +152,39 @@ class WeeklyReflectionsController < ApplicationController
     week_start = today.beginning_of_week(:monday)
     week_range = week_start..today
 
-    records_count_by_habit = HabitRecord
-      .where(user: user, habit: habits, record_date: week_range, completed: true)
-      .group(:habit_id)
-      .count
+    check_habit_ids   = habits.select(&:check_type?).map(&:id)
+    numeric_habit_ids = habits.select(&:numeric_type?).map(&:id)
+
+    check_counts = if check_habit_ids.any?
+      HabitRecord
+        .where(user: user, habit_id: check_habit_ids, record_date: week_range, completed: true)
+        .group(:habit_id)
+        .count
+    else
+      {}
+    end
+
+    numeric_sums = if numeric_habit_ids.any?
+      HabitRecord
+        .where(user: user, habit_id: numeric_habit_ids, record_date: week_range, deleted_at: nil)
+        .group(:habit_id)
+        .sum(:numeric_value)
+    else
+      {}
+    end
 
     habits.each_with_object({}) do |habit, hash|
-      completed_count = records_count_by_habit[habit.id] || 0
-      rate = if habit.weekly_target.zero?
-               0
-             else
-               ((completed_count.to_f / habit.weekly_target) * 100)
-                 .clamp(0, 100)
-                 .floor
-             end
-      hash[habit.id] = { rate: rate, completed_count: completed_count }
+      if habit.check_type?
+        completed_count = check_counts[habit.id] || 0
+        rate = habit.weekly_target.zero? ? 0 :
+          ((completed_count.to_f / habit.weekly_target) * 100).clamp(0, 100).floor
+        hash[habit.id] = { rate: rate, completed_count: completed_count, numeric_sum: nil }
+      else
+        numeric_sum = (numeric_sums[habit.id] || 0).to_f
+        rate = habit.weekly_target.zero? ? 0 :
+          ((numeric_sum / habit.weekly_target) * 100).clamp(0, 100).floor
+        hash[habit.id] = { rate: rate, completed_count: nil, numeric_sum: numeric_sum }
+      end
     end
   end
 end
