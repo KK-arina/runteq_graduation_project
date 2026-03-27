@@ -1,188 +1,166 @@
 # app/models/habit.rb
 #
-# 【このファイルの役割】
-# Habit（習慣）モデル。
-# ユーザーが登録した習慣データを管理し、週次の進捗率計算ロジックもここに集約する。
-# 「モデルに責務を集約する」設計方針（Fat Model）に従い、
-# コントローラーやビューから計算ロジックを切り離す。
+# ==============================================================================
+# Habit（習慣）モデル（B-1: レビュー修正版）
+# ==============================================================================
+# 【レビュー指摘による修正内容】
+#
+#   ① weekly_target のバリデーションを measurement_type で分岐（重要修正）
+#      修正前: 全習慣で 1〜7 の制限
+#             → 数値型で「150分/週」のような目標が設定できなかった
+#      修正後: チェック型は 1〜7、数値型は 1 以上（上限なし）
+#
+# 【なぜ分岐が必要なのか】
+#   チェック型: 1週間は最大7日 → weekly_target の上限は7が自然
+#   数値型:    「150分/週」「50冊/年換算で週1冊」など、7を超える値が意味を持つ
+#              → 上限を設けると有用な習慣が登録できなくなる
+# ==============================================================================
 
 class Habit < ApplicationRecord
   # ============================================================
-  # アソシエーション（他のモデルとの関連付け）
+  # アソシエーション
   # ============================================================
 
-  # 【belongs_to :user】
-  # 「この習慣はどのユーザーのものか」を定義する。
-  # habits テーブルの user_id カラムで users テーブルと紐付ける。
   belongs_to :user
-
-  # 【has_many :habit_records】
-  # 「この習慣には複数の日次記録がある」を定義する。
-  # dependent: :destroy は「習慣を削除したとき、紐づく記録も一緒に削除する」設定。
-  # ただし今回は論理削除なので、物理削除されるケースは限定的。
   has_many :habit_records, dependent: :destroy
-
-  # app/models/habit.rb の既存コードに追記する箇所
-
-  # ============================================================
-  # アソシエーションの追記（以下の1行を追加する）
-  # ============================================================
-
-  # has_many :weekly_reflection_habit_summaries
-  # → 1つのHabitは複数のHabitSummaryを持つ（複数の振り返りに登場する）
-  # → dependent: :nullify → Habit削除時にサマリーのhabit_idをNULLにする
-  #   スナップショットのデータ（habit_name等）は残すため、destroyではなくnullify
   has_many :weekly_reflection_habit_summaries, dependent: :nullify
 
   # ============================================================
-  # バリデーション（入力値の検証ルール）
+  # Enum 定義
   # ============================================================
 
-  # 【presence: true】  → 空欄（nil / 空文字）を禁止する
-  # 【length: { maximum: 50 }】 → 50文字を超えるとエラーにする
+  # measurement_type の enum
+  # DB には整数（0, 1）で保存されるが、Ruby 上では名前で扱える。
+  # 自動生成されるメソッド例:
+  #   habit.check_type?   → measurement_type == 0 なら true
+  #   habit.numeric_type? → measurement_type == 1 なら true
+  #   Habit.check_type    → measurement_type が 0 の習慣を返すスコープ
+  enum :measurement_type, {
+    check_type:   0,  # チェック型（やった/やらない）
+    numeric_type: 1   # 数値型（分・冊・km などを数値で記録）
+  }
+
+  # ============================================================
+  # バリデーション
+  # ============================================================
+
   validates :name, presence: true, length: { maximum: 50 }
 
-  # 【presence: true】       → 入力必須
-  # 【numericality: { ... }】 → 数値バリデーション
-  #   only_integer: true        → 整数のみ許可（1.5 などは不可）
-  #   greater_than_or_equal_to: 1 → 1以上
-  #   less_than_or_equal_to: 7    → 7以下（週7日が最大）
+  # ── weekly_target のバリデーション（レビュー修正版）──────────────────────
+  #
+  # 【修正前の問題】
+  #   less_than_or_equal_to: 7 という制限がチェック型・数値型に一律に適用されていた。
+  #   数値型で「150分/週」という目標を設定しようとすると弾かれてしまっていた。
+  #
+  # 【修正内容】
+  #   共通バリデーション: 必須・整数・1以上（チェック型・数値型どちらも最低1以上必要）
+  #   チェック型専用:     7以下（週7日が上限）
+  #   数値型は上限なし（カスタムバリデーションで制御しない）
+  #
+  # 【less_than_or_equal_to: 7 を unless で制御する理由】
+  #   if: -> { check_type? } を使うと「チェック型のときだけ7以下」という
+  #   制約を明示できて意図が伝わりやすい。
   validates :weekly_target,
             presence: true,
             numericality: {
               only_integer: true,
               greater_than_or_equal_to: 1,
-              less_than_or_equal_to: 7
+              message: "は1以上の整数を入力してください"
             }
 
+  # チェック型のみ weekly_target の上限を7に制限する
+  validates :weekly_target,
+            numericality: {
+              less_than_or_equal_to: 7,
+              message: "は7以下で設定してください（チェック型は週7日が最大）"
+            },
+            if: -> { check_type? }
+  # ────────────────────────────────────────────────────────────────────────────
+
+  # measurement_type は enum の有効値のみ許可
+  validates :measurement_type, presence: true,
+                                inclusion: {
+                                  in: measurement_types.keys,
+                                  message: "は有効な値を選択してください"
+                                }
+
+  # 数値型では unit（単位）を必須にする
+  # チェック型では unit は不要（nil でOK）
+  validates :unit,
+            presence: {
+              message: "は数値型習慣では入力が必要です"
+            },
+            length: { maximum: 10 },
+            if: -> { numeric_type? }
+
   # ============================================================
-  # スコープ（よく使う検索条件をメソッドのように呼び出せる定義）
+  # スコープ
   # ============================================================
 
-  # 【scope :active】
-  # 論理削除されていない（deleted_at が nil = NULL）習慣だけを返す。
-  # 例: current_user.habits.active → 有効な習慣一覧
+  # active: 論理削除されていない習慣だけを返す
   scope :active, -> { where(deleted_at: nil) }
 
-  # 【scope :deleted】
-  # 論理削除済み（deleted_at に日時が入っている）習慣だけを返す。
+  # deleted: 論理削除済みの習慣だけを返す
   scope :deleted, -> { where.not(deleted_at: nil) }
 
   # ============================================================
-  # インスタンスメソッド（個々の習慣オブジェクトに対して呼べるメソッド）
+  # インスタンスメソッド
   # ============================================================
 
-  # 【soft_delete】
-  # 習慣を「論理削除」するメソッド。
-  # 物理削除（destroy）ではなく deleted_at カラムに現在時刻を記録するだけ。
-  # こうすることで、過去の振り返りデータとの整合性が保たれる。
-  # touch(:deleted_at) は「deleted_at = Time.current を保存する」Rails組み込みメソッド。
   def soft_delete
     touch(:deleted_at)
   end
 
-  # 【active?】
-  # この習慣が有効（削除されていない）かどうかを真偽値で返す。
-  # deleted_at が nil = 削除されていない = true
   def active?
     deleted_at.nil?
   end
 
-  # 【deleted?】
-  # この習慣が論理削除済みかどうかを真偽値で返す。
-  # active? の逆。
   def deleted?
     !active?
   end
 
   # ============================================================
-  # 進捗統計メソッド（Issue #16 で追加）
+  # 進捗統計メソッド
   # ============================================================
 
-  # 【weekly_progress_stats】
-  # 「今週の進捗率（%）」と「今週の完了日数」を同時に返すメソッド。
+  # weekly_progress_stats
+  # 今週の進捗率と詳細を返す。measurement_type によって計算方法を分岐する。
   #
-  # ■ なぜ「rate（%）」と「completed_count（日数）」を一緒に返すのか？
-  #   ビューで「50%」という数値と「3 / 7 日達成」という文字を
-  #   両方表示したいため。
-  #   もし別々のメソッドにすると、DBへの問い合わせが2回になってしまう。
-  #   まとめて1回のDBアクセスで両方取得することで効率化している。
+  # チェック型: 完了日数 / weekly_target × 100
+  # 数値型:    SUM(numeric_value) / weekly_target × 100
   #
-  # 計算式: 今週の完了日数 ÷ weekly_target × 100
-  #
-  # 例: weekly_target = 7, 完了 = 3日 → (3 / 7.0 * 100).floor = 42
-  #
-  # 引数:
-  #   user - 計算対象のユーザー（他ユーザーの記録を混入させないため）
-  #
-  # 戻り値: Hash
-  #   {
-  #     rate:            Integer (0〜100) ← 進捗率（%）
-  #     completed_count: Integer          ← 今週の完了日数
-  #   }
+  # 戻り値 Hash:
+  #   チェック型: { rate: Integer, completed_count: Integer, numeric_sum: nil }
+  #   数値型:    { rate: Integer, completed_count: nil, numeric_sum: Float }
   def weekly_progress_stats(user)
-    # 今週の月曜日〜今日（AM4:00基準）の日付範囲を計算する
     range = current_week_range
+    return { rate: 0, completed_count: 0, numeric_sum: nil } if weekly_target.zero?
 
-    # 今週の完了済み記録を1回のSQLで数える
-    # .count は SQLの COUNT(*) を発行するため、データを全件取得するより高速
-    completed_count = habit_records
-                        .where(user: user)         # このユーザーの記録だけ
-                        .where(record_date: range) # 今週の範囲内
-                        .where(completed: true)    # 完了済み（チェックが入っている）
-                        .count                     # 件数をSQLで数える
-
-    # 【ゼロ除算ガード】
-    # weekly_target は必ず1以上なのでゼロになるはずがないが、
-    # 万が一の場合に備えた安全策（ガード節）。
-    # 0で割ると ZeroDivisionError が発生するため、先に弾いておく。
-    if weekly_target.zero?
-      return { rate: 0, completed_count: completed_count }
+    if check_type?
+      completed_count = habit_records
+                          .where(user: user, record_date: range, completed: true)
+                          .count
+      rate = ((completed_count.to_f / weekly_target) * 100).clamp(0, 100).floor
+      { rate: rate, completed_count: completed_count, numeric_sum: nil }
+    else
+      numeric_sum   = habit_records
+                        .where(user: user, record_date: range, deleted_at: nil)
+                        .sum(:numeric_value)
+      numeric_sum_f = numeric_sum.to_f
+      rate          = ((numeric_sum_f / weekly_target) * 100).clamp(0, 100).floor
+      { rate: rate, completed_count: nil, numeric_sum: numeric_sum_f }
     end
-
-    # 【進捗率の計算】
-    # .to_f → 整数同士の割り算は小数が出ないため（例: 3/7 = 0）、
-    #         浮動小数点数（小数）に変換してから割り算する（3/7.0 = 0.428...）
-    # .clamp(0, 100) → 結果を必ず 0〜100 の範囲に収める（目標超過時の安全装置）
-    # .floor → 小数点以下を切り捨てて整数にする（例: 42.8 → 42）
-    rate = ((completed_count.to_f / weekly_target) * 100)
-             .clamp(0, 100)
-             .floor
-
-    # 進捗率と完了日数を一緒に返す（Rubyのハッシュ形式）
-    {
-      rate: rate,
-      completed_count: completed_count
-    }
   end
 
   # ============================================================
-  # private（外部から直接呼び出されるべきでないメソッド）
+  # private
   # ============================================================
   private
 
-  # 【current_week_range】
-  # AM4:00基準で「今週の月曜日〜今日」の Date の Range を返す。
-  #
-  # ■ AM4:00 基準とは？
-  #   深夜（例: 0:00〜3:59）に作業した場合、それは「前日の記録」として扱う設計。
-  #   HabitRecord.today_for_record と同じロジックを使う。
-  #
-  # ■ beginning_of_week とは？
-  #   Rails の Date / ActiveSupport に組み込まれたメソッド。
-  #   デフォルトは月曜日始まり（:monday）。
-  #   例: Date.new(2026, 2, 19).beginning_of_week → 2026-02-16（月曜日）
-  #
-  # 戻り値: Range<Date>  例: 2026-02-16..2026-02-19
+  # current_week_range: AM4:00基準で「今週の月曜日〜今日」の Range を返す
   def current_week_range
-    # AM4:00 基準で「今日」を取得する
-    # HabitRecord.today_for_record はモデルに定義済みのクラスメソッド
-    today = HabitRecord.today_for_record
-
-    # 今週の月曜日を取得する
+    today      = HabitRecord.today_for_record
     week_start = today.beginning_of_week(:monday)
-
-    # 月曜日〜今日の Date の Range を返す
     week_start..today
   end
 end

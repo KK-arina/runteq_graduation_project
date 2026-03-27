@@ -1,27 +1,28 @@
 <%# app/views/weekly_reflections/new.html.erb %>
 <%#
-  【このファイルの役割】
-  週次振り返り入力ページのビュー。
-  ユーザーが今週の実績を確認しながら振り返りコメントを入力して保存する。
+  ==============================================================================
+  週次振り返り入力ページ（リフレクション手法対応版）
+  ==============================================================================
+  【変更内容】
+    リフレクション手法「なぜ？→ どう？→ からの？」の3要素を
+    振り返りフォームのフィールドに対応させる。
 
-  【使用するインスタンス変数（コントローラーから受け取る）】
-  @weekly_reflection   : WeeklyReflection インスタンス（フォームのモデル）
-  @habits              : 有効な習慣の一覧
-  @habit_stats         : 各習慣の進捗 { habit_id => { rate:, completed_count: } }
-  @achieved_habits     : 達成済み習慣（rate >= 100）の配列
-  @not_achieved_habits : 未達成習慣（rate < 100）の配列
+  【フィールドとDBカラムの対応】
+    フィールド         | DB カラム            | リフレクション項目
+    ──────────────────|──────────────────────|────────────────
+    なぜ？             | direct_reason        | Why（なぜ）
+    どう？             | background_situation | How（どう）※ラベルを変更
+    からの？           | next_action          | Next（からの）※新規追加
+    自由コメント       | reflection_comment   | 自由記述
 
-  【Issue #27 での変更点】
-  バリデーションエラー表示を shared/_form_errors パーシャルに統一。
+  【なぜ background_situation のカラム名を変えないのか】
+    既存マイグレーション不変ルールに従い、カラムのリネームは行わない。
+    View のラベルだけ「どう？（改善策）」に変更することで対応する。
 
-  【Issue #32 での変更点】
-    ① フォームタグに form-submit コントローラーを紐付けてローディングを実装
-    ② ボタンエリアの「キャンセル」と「振り返りを完了する」の視覚的重みを差別化
-       変更前: 両方が flex-1 で同じ幅・同じ重みに見えた
-       変更後:
-         キャンセル → セカンダリボタン（グレー系、幅 auto）
-         完了 → プライマリボタン（青、flex-1 で広く）
-         → 主要アクションに目線が誘導され、誤操作リスクが下がる
+  【B-1 数値型対応（既存）】
+    習慣実績セクションで数値型習慣の補正フィールドを表示する。
+    @habit_stats には { rate:, completed_count:, numeric_sum: } が入る。
+  ==============================================================================
 %>
 
 <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
@@ -30,8 +31,7 @@
       ページヘッダー
   ========================================== %>
   <div class="mb-8">
-    <%= link_to "← 振り返り一覧に戻る",
-        weekly_reflections_path,
+    <%= link_to "← 振り返り一覧に戻る", weekly_reflections_path,
         class: "text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors" %>
     <h1 class="mt-3 text-2xl font-bold text-gray-900">今週を振り返る</h1>
     <p class="mt-1 text-sm text-gray-500">
@@ -42,12 +42,7 @@
 
   <%# ==========================================
       習慣実績セクション
-      【なぜ実績を先に表示するか】
-      「何を書けばいいかわからない」状態を防ぐため、
-      自動集計された今週の実績を目の前に提示する。
-      ユーザーが「できたこと・できなかったこと」を言語化しやすくなる。
   ========================================== %>
-
   <% if @habits.empty? %>
     <div class="mb-8 p-6 bg-gray-50 border border-dashed border-gray-300 rounded-xl text-center">
       <p class="text-gray-500 text-sm">まだ習慣が登録されていません。</p>
@@ -66,12 +61,17 @@
         </h2>
         <div class="space-y-3">
           <% @achieved_habits.each do |habit| %>
-            <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
+            <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
             <div class="bg-white border border-emerald-200 rounded-xl p-4 shadow-sm flex items-center justify-between gap-4">
               <div class="flex-1 min-w-0">
                 <p class="font-semibold text-gray-800 truncate"><%= habit.name %></p>
                 <p class="text-xs text-gray-500 mt-0.5">
-                  <%= stats[:completed_count] %> / <%= habit.weekly_target %> 日達成
+                  <% if habit.check_type? %>
+                    <%= stats[:completed_count] %> / <%= habit.weekly_target %> 日達成
+                  <% else %>
+                    <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %> /
+                    <%= habit.weekly_target %><%= habit.unit.presence || "回" %> 達成
+                  <% end %>
                 </p>
               </div>
               <span class="flex-shrink-0 inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
@@ -92,19 +92,51 @@
         </h2>
         <div class="space-y-3">
           <% @not_achieved_habits.each do |habit| %>
-            <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
+            <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
+
             <div class="bg-white border border-red-200 rounded-xl p-4 shadow-sm">
               <div class="flex items-center justify-between gap-4 mb-2">
                 <p class="font-semibold text-gray-800 truncate"><%= habit.name %></p>
+
                 <span class="flex-shrink-0 text-xs font-bold
                              <%= stats[:rate] >= 50 ? 'text-yellow-600' : 'text-red-600' %>">
-                  <%= stats[:completed_count] %> / <%= habit.weekly_target %> 日 (<%= stats[:rate] %>%)
+                  <% if habit.check_type? %>
+                    <%= stats[:completed_count] %> / <%= habit.weekly_target %> 日 (<%= stats[:rate] %>%)
+                  <% else %>
+                    <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %> /
+                    <%= habit.weekly_target %><%= habit.unit.presence || "回" %>
+                    (<%= stats[:rate] %>%)
+                  <% end %>
                 </span>
               </div>
-              <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+
+              <div class="h-2 bg-gray-200 rounded-full overflow-hidden mb-3">
                 <div class="h-full rounded-full <%= stats[:rate] >= 50 ? 'bg-yellow-400' : 'bg-red-400' %>"
                      style="width: <%= stats[:rate] %>%;"></div>
               </div>
+
+              <%# 数値型: 実績補正フィールド %>
+              <% if habit.numeric_type? %>
+                <div class="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
+                  <label for="correction_<%= habit.id %>"
+                         class="text-xs text-gray-500 flex-shrink-0">
+                    今週の実際の記録を補正:
+                  </label>
+                  <input type="number"
+                         id="correction_<%= habit.id %>"
+                         name="reflection_numeric_corrections[habit_<%= habit.id %>]"
+                         class="w-24 px-2 py-1 text-sm border border-gray-300 rounded-lg
+                                focus:outline-none focus:ring-2 focus:ring-blue-500
+                                text-center"
+                         min="0"
+                         step="any"
+                         value="<%= format("%g", (stats[:numeric_sum] || 0).round(1)) %>"
+                         placeholder="0">
+                  <span class="text-xs text-gray-500 flex-shrink-0">
+                    <%= habit.unit.presence || "回" %>（現在: <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %><%= habit.unit.presence || "回" %>）
+                  </span>
+                </div>
+              <% end %>
             </div>
           <% end %>
         </div>
@@ -114,19 +146,7 @@
   <% end %>
 
   <%# ==========================================
-      振り返りフォーム
-
-      【form_with の書き方について】
-      model: @weekly_reflection だけを渡す。
-      Rails は model の状態（new_record? か persisted? か）を自動判断して
-      「新規なら POST /weekly_reflections」と正しく設定してくれる。
-
-      local: true: Hotwire/Turbo の Ajax 送信を無効化して通常のHTMLフォーム送信にする。
-
-      【Issue #32 追加】
-      data-controller="form-submit": 送信ローディングコントローラーを紐付ける
-      data-action="submit->form-submit#submit":
-        フォームの submit イベントで form-submit#submit を呼ぶ
+      振り返りフォーム（リフレクション3項目対応）
   ========================================== %>
   <%= form_with model: @weekly_reflection,
                 url: weekly_reflections_path,
@@ -138,103 +158,127 @@
                   action: "submit->form-submit#submit"
                 } do |f| %>
 
-    <%# ---- バリデーションエラーの表示 ---- %>
     <%= render "shared/form_errors", model: @weekly_reflection %>
 
-    <%# ---- 振り返りコメント入力欄 ---- %>
-    <div>
-      <%= f.label :reflection_comment, "振り返りコメント",
-          class: "block text-sm font-semibold text-gray-700 mb-1" %>
-      <p class="text-xs text-gray-500 mb-2">
-        今週の気づき・反省・来週への意気込みなどを自由に書いてください（任意、1000文字以内）
-      </p>
+    <%# ────────────────────────────────────────────────────────
+        リフレクション3項目（なぜ？→ どう？→ からの？）
+        ──────────────────────────────────────────────────────── %>
+    <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+      <h3 class="text-sm font-bold text-gray-700">📝 振り返りのポイント</h3>
+
+      <%# ①「なぜ？」direct_reason ────────────────────────────────────────── %>
       <%#
-        text_area: 複数行テキスト入力
-        rows: 6: 表示する行数（ユーザーが一定量のテキストを書きやすい高さ）
-        maxlength: 1000: ブラウザ側での最大文字数制限（サーバー側バリデーションと二重防御）
-        resize-none: ユーザーがリサイズできないようにする
-          リサイズするとレイアウトが崩れる可能性があるため
+        【フィールドの意図】
+          「できなかった直接の理由」を1つ書いてもらう。
+          リフレクション手法の「Why（なぜ）」に対応する。
+          プレースホルダーで「理由を1つ」と誘導することで、
+          漠然とした「忙しかった」ではなく具体的な原因を引き出す。
+
+        【DB カラム】direct_reason（テキスト型、任意）
       %>
+      <div>
+        <%= f.label :direct_reason,
+              class: "block text-sm font-semibold text-gray-700 mb-1" do %>
+          なぜ？<span class="font-normal text-gray-500 ml-1">（直接の原因）</span>
+        <% end %>
+        <p class="text-xs text-gray-500 mb-2">できなかった理由を1つ書いてみましょう</p>
+        <%#
+          data-action で音声入力ボタン（将来実装）との連携を想定。
+          現時点では通常のテキストエリアとして動作する。
+        %>
+        <%= f.text_area :direct_reason,
+            rows: 3,
+            placeholder: "なぜできなかったのか？理由を1つ書いてみましょう（例: 残業が続き、帰宅後に動ける体力が残っていなかった）",
+            maxlength: 1000,
+            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    resize-none transition-colors" %>
+      </div>
+
+      <%# ②「どう？」background_situation ─────────────────────────────────── %>
+      <%#
+        【フィールドの意図】
+          「来週どう改善するか」を具体的に書いてもらう。
+          リフレクション手法の「How（どう）」に対応する。
+          DB カラム名は background_situation（旧: 背景・状況）だが、
+          ラベルを「どうすれば来週は変えられそうですか？」に変更することで
+          改善策として機能させる。
+
+        【DB カラム】background_situation（テキスト型、任意）
+                    ※カラム名変更不可のため旧名のまま使用
+      %>
+      <div>
+        <%= f.label :background_situation,
+              class: "block text-sm font-semibold text-gray-700 mb-1" do %>
+          どう？<span class="font-normal text-gray-500 ml-1">（改善策）</span>
+        <% end %>
+        <p class="text-xs text-gray-500 mb-2">来週どうすれば変えられそうか書いてみましょう</p>
+        <%= f.text_area :background_situation,
+            rows: 3,
+            placeholder: "どうすれば来週は変えられそうですか？（例: 帰宅後ではなく朝に時間を確保する）",
+            maxlength: 1000,
+            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    resize-none transition-colors" %>
+      </div>
+
+      <%# ③「からの？」next_action ─────────────────────────────────────────── %>
+      <%#
+        【フィールドの意図】
+          「この振り返りから他の習慣や行動に活かせること」を書いてもらう。
+          リフレクション手法の「Next（からの）」に対応する。
+          例: 「朝型習慣を筋トレだけでなく読書にも広げる」
+
+        【DB カラム】next_action（テキスト型、任意）
+                    このマイグレーションで新規追加したカラム。
+      %>
+      <div>
+        <%= f.label :next_action,
+              class: "block text-sm font-semibold text-gray-700 mb-1" do %>
+          からの？<span class="font-normal text-gray-500 ml-1">（次への展開）</span>
+        <% end %>
+        <p class="text-xs text-gray-500 mb-2">この振り返りから他の習慣・行動に活かせることは？</p>
+        <%= f.text_area :next_action,
+            rows: 3,
+            placeholder: "この振り返りから他の習慣・行動に活かせることは？（例: 朝の時間を有効活用する仕組みを他の習慣にも広げる）",
+            maxlength: 1000,
+            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    resize-none transition-colors" %>
+      </div>
+    </div>
+    <%# ────────────────────────────────────────────────────────────────────── %>
+
+    <%# 自由コメント（任意）reflection_comment ──────────────────────────────── %>
+    <%#
+      【フィールドの意図】
+        上記3項目に収まらない感想・気づきを自由に書いてもらう。
+        任意入力であることをラベルで明示する。
+
+      【DB カラム】reflection_comment（テキスト型、任意・1000文字以内）
+    %>
+    <div>
+      <%= f.label :reflection_comment, class: "block text-sm font-semibold text-gray-700 mb-1" do %>
+        自由コメント<span class="font-normal text-gray-400 ml-1">（任意）</span>
+      <% end %>
+      <p class="text-xs text-gray-500 mb-2">
+        その他、感じたことを自由に記入してください（1000文字以内）
+      </p>
       <%= f.text_area :reflection_comment,
-          rows: 6,
-          placeholder: "例: 今週は残業が続いて筋トレができなかった。来週は朝に時間を作りたい。",
+          rows: 4,
+          placeholder: "その他、感じたことを自由に記入してください",
           maxlength: 1000,
           class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                   resize-none transition-colors" %>
     </div>
 
-    <%# ---- ボタンエリア ---- %>
-    <%#
-      【Issue #32 変更点】ボタンの視覚的重みを差別化する
-
-      変更前:
-        両ボタンが flex-1 で同じ幅・同じ重みに見えた。
-        ユーザーはどちらが主要アクションかわからず、誤クリックリスクがあった。
-
-      変更後:
-        「キャンセル」: セカンダリボタン（グレー系, width: auto）
-          → 補助的な操作であることを視覚的に示す
-        「振り返りを完了する」: プライマリボタン（青, flex-1 で広く）
-          → 主要アクションであることを強調し、ユーザーの目線を誘導する
-
-      justify-end: ボタンエリアを右寄せにする
-        → 「続ける/完了」を右端に置く慣習的な UI パターン（フォームの流れと合致する）
-
-      gap-4: ボタン間の余白 16px
-        → gap-3(12px) から gap-4(16px) に変更。
-          モバイルでの誤タップを防ぐため、ボタン間の距離を十分に確保する。
-    %>
+    <%# ボタンエリア %>
     <div class="flex justify-end items-center gap-4 pt-2">
-
-      <%#
-        キャンセルボタン（セカンダリ）
-        link_to でリンクとして実装（フォーム送信ではなくページ遷移）
-
-        px-5 py-3: ボタンとして十分なクリック領域（Apple 推奨の 44px 以上のタップ領域）
-        border border-gray-300: 枠線を付けることでボタンらしく見せる
-          → 背景色だけだとリンクとの区別がつきにくいため
-        bg-white: 白背景（グレー系でありながら border で存在感を出す）
-        text-gray-700: グレーテキスト
-          【コントラスト確認】
-          text-gray-700 (#374151) on bg-white (#ffffff) = 10.7:1 → AAA基準クリア
-        hover:bg-gray-50: ホバー時にごく薄いグレー（インタラクティブを示す）
-        rounded-xl: フォームカードと同じ角丸
-        transition-colors: 色変化を滑らかに
-
-        【レビュー指摘による追加】
-        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400:
-          キーボードのTabキーでフォーカスしたときにグレーのリングを表示する。
-          マウス操作では表示されない（focus:outline-none で標準のアウトラインを消し、
-          focus:ring でカスタムリングに置き換える）。
-          キーボード操作ユーザーへのアクセシビリティ必須対応。
-      %>
-      <%= link_to "キャンセル",
-          weekly_reflections_path,
+      <%= link_to "キャンセル", weekly_reflections_path,
           class: "px-5 py-3 bg-white border border-gray-300 text-gray-700 text-sm font-semibold
                   rounded-xl hover:bg-gray-50 transition-colors
                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" %>
-
-      <%#
-        振り返りを完了するボタン（プライマリ）
-        flex-1: 残りの幅を全て使う（キャンセルより広く、目立つ）
-        py-3 px-4: 十分なクリック領域
-        bg-blue-600 text-white: 青背景・白文字（主要アクション）
-          【コントラスト確認】
-          text-white (#ffffff) on bg-blue-600 (#2563eb) = 4.9:1 → AA基準クリア
-        hover:bg-blue-700: ホバー時に一段濃い青
-        rounded-xl: カードと同じ角丸
-        transition-colors: 色変化を滑らかに
-        cursor-pointer: カーソルをポインターに（submit ボタンのデフォルト動作）
-
-        【レビュー指摘による追加】
-        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500:
-          キーボードのTabキーでフォーカスしたときに青いリングを表示する。
-          キャンセルがグレーリング、完了が青リングと色を変えることで
-          キーボード操作でもどちらのボタンにいるか一目でわかる。
-        data-form-submit-target="button": コントローラーから参照できるようにする
-        data-loading-text="送信中...": 送信後に表示するテキスト
-      %>
       <%= f.submit "振り返りを完了する",
           class: "flex-1 py-3 px-4 bg-blue-600 text-white text-sm font-semibold
                   rounded-xl hover:bg-blue-700 transition-colors cursor-pointer

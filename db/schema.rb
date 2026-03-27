@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_22_074140) do
+ActiveRecord::Schema[7.2].define(version: 2026_03_24_000000) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -348,6 +348,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_22_074140) do
     t.integer "mood"
     t.text "direct_reason"
     t.text "background_situation"
+    t.text "next_action"
     t.index ["user_id", "week_start_date", "completed_at"], name: "idx_weekly_reflections_user_week_completed", where: "(completed_at IS NOT NULL)"
     t.index ["user_id", "week_start_date"], name: "index_weekly_reflections_on_user_id_and_week_start_date", unique: true
     t.index ["user_id", "year", "week_number"], name: "index_weekly_reflections_on_user_year_week", unique: true

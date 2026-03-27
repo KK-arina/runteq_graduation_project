@@ -1,25 +1,26 @@
 # app/models/weekly_reflection.rb
 #
-# ファイルパス: app/models/weekly_reflection.rb
+# ==============================================================================
+# WeeklyReflection モデル（リフレクション手法対応）
+# ==============================================================================
+# 【変更内容】
+#   ① next_action カラムのバリデーション追加（1000文字以内、任意）
+#      「からの？（次への展開）」に対応するカラム
 #
-# ============================================================
-# 【このファイルの役割】
-# 週次振り返りを表すモデル。
+# 【カラムと UI の対応表】
+#   DB カラム名          | UIラベル            | リフレクション項目
+#   ────────────────────|─────────────────────|──────────────────
+#   direct_reason        | なぜ？（直接の原因） | Why（なぜ）
+#   background_situation | どう？（改善策）      | How（どう）※ラベルを変更
+#   next_action          | からの？（次への展開）| Next（からの）※新規追加
+#   reflection_comment   | 自由コメント（任意） | 自由記述
 #
-# 【Issue #A-7 での変更箇所】
-# before_validation コールバックを追加。
-#
-# 【追加した理由】
-# weekly_reflections テーブルには以下の UNIQUE 制約がある:
-#   - (user_id, year, week_number)  → index_weekly_reflections_on_user_year_week
-#
-# year と week_number が nil のまま保存されると:
-#   - 複数レコードで (user_id, nil, nil) が重複して UNIQUE 制約違反になる
-#   - 振り返りの重複防止が機能しない
-#
-# before_validation で week_start_date から year と week_number を
-# 自動計算して設定することで、常に正しい値が入るようにする。
-# ============================================================
+# 【background_situation について】
+#   カラム名は「背景・状況」を意味するが、UI の変更に伴い
+#   「どうすれば来週は変えられそうですか？（改善策）」として使う。
+#   カラム名のリネームは既存マイグレーション不変ルールのため行わず、
+#   View のラベルのみ変更することで対応する。
+# ==============================================================================
 
 class WeeklyReflection < ApplicationRecord
   # ============================================================
@@ -32,30 +33,39 @@ class WeeklyReflection < ApplicationRecord
            dependent: :destroy
 
   # ============================================================
-  # コールバック（Issue #A-7 で追加）
+  # コールバック
   # ============================================================
 
   # before_validation :set_year_and_week_number
-  # → バリデーション実行「前」に year と week_number を自動セットする。
-  #
-  # 【なぜ before_save ではなく before_validation なのか？】
-  # before_save はバリデーション「後」に実行される。
-  # UNIQUE制約のバリデーション（validates uniqueness）が
-  # year/week_number を参照する場合、バリデーション前に値が必要なため
-  # before_validation を使う。
-  #
-  # 【なぜ before_create ではなく before_validation なのか？】
-  # before_create は新規作成時のみ実行される。
-  # 更新時にも year/week_number が正しい値を保つよう
-  # before_validation（作成・更新両方）を使う。
+  # バリデーション実行「前」に year と week_number を自動セットする。
+  # week_start_date から ISO 週番号を計算して設定する。
   before_validation :set_year_and_week_number
 
   # ============================================================
   # バリデーション
   # ============================================================
+
   validates :week_start_date, presence: true
   validates :week_end_date,   presence: true
+
+  # reflection_comment: 自由コメント（任意・1000文字以内）
   validates :reflection_comment, length: { maximum: 1000 }
+
+  # direct_reason: なぜ？（直接の原因）任意・1000文字以内
+  validates :direct_reason, length: { maximum: 1000 }
+
+  # background_situation: どう？（改善策）任意・1000文字以内
+  # ※ UI ラベルは「背景・状況」→「どうすれば変えられそうか？」に変更済み
+  validates :background_situation, length: { maximum: 1000 }
+
+  # ── 追加: next_action バリデーション ──────────────────────────────────────
+  #
+  # next_action: からの？（次への展開）任意・1000文字以内
+  # 「この振り返りから他の習慣・行動に活かせることは何か？」を記入する欄。
+  # UI 設計では任意入力のため presence バリデーションは付けない。
+  validates :next_action, length: { maximum: 1000 }
+  # ────────────────────────────────────────────────────────────────────────────
+
   validate :week_end_date_must_be_six_days_after_start
 
   # ============================================================
@@ -70,10 +80,15 @@ class WeeklyReflection < ApplicationRecord
   # クラスメソッド
   # ============================================================
 
+  # current_week_start_date
+  # AM4:00 基準で「今週の月曜日」を返す。
+  # ダッシュボードの日付計算と同じ基準を使うことで一貫性を保つ。
   def self.current_week_start_date
     (Time.current - 4.hours).beginning_of_week(:monday).to_date
   end
 
+  # find_or_build_for_current_week
+  # 今週の振り返りレコードを探して返す。なければ初期値でビルドする。
   def self.find_or_build_for_current_week(user)
     start_date = current_week_start_date
 
@@ -88,18 +103,23 @@ class WeeklyReflection < ApplicationRecord
   # インスタンスメソッド
   # ============================================================
 
+  # completed?: completed_at に時刻が入っているかどうかを返す
   def completed?
     completed_at.present?
   end
 
+  # week_label: 「2026/03/09 - 03/15」形式の文字列を返す（ビューで使用）
   def week_label
     "#{week_start_date.strftime('%Y/%m/%d')} - #{week_end_date.strftime('%m/%d')}"
   end
 
+  # pending?: completed? の逆（未完了かどうか）
   def pending?
     !completed?
   end
 
+  # complete!: 振り返りを完了状態にする（冪等性あり）
+  # completed? が true の場合は何もしない。
   def complete!
     return if completed?
     update!(completed_at: Time.current, is_locked: true)
@@ -110,40 +130,20 @@ class WeeklyReflection < ApplicationRecord
   # ============================================================
   private
 
-  # set_year_and_week_number（Issue #A-7 で追加）
-  # 【役割】
-  # week_start_date から year と week_number を自動計算して設定する。
+  # set_year_and_week_number
+  # week_start_date から ISO 週番号の year・week_number を自動計算する。
+  # UNIQUE 制約 (user_id, year, week_number) のために必要。
   #
-  # 【ISO週番号とは？】
-  # ISO 8601 規格で定義された週番号。
-  # 月曜始まりで、年の最初の木曜日を含む週が第1週となる。
-  # Rails の cweek メソッドが ISO 週番号を返す。
-  # 例: Date.new(2026, 4, 20).cweek → 17
-  #
-  # 【なぜ week_start_date が nil のときスキップするのか？】
-  # week_start_date が nil の場合、cweek を呼ぶと NoMethodError になる。
-  # バリデーションで presence: true をチェックするため、
-  # nil の場合はスキップして他のバリデーションに任せる。
-  #
-  # 【cwyear と cwday について】
-  # Date#cwyear → ISO 週番号ベースの「年」を返す
-  # 例: 2025-12-29 は ISO 週では 2026年第1週なので cwyear = 2026
-  # year カラムには cwyear を使うことで year/week_number の組み合わせが
-  # 正確に一意になる。
+  # cwyear: ISO 週番号ベースの年（12月末〜1月初の境界で正確）
+  # cweek:  ISO 週番号（1〜53）
   def set_year_and_week_number
-    # week_start_date が nil の場合はスキップする
-    # （presence バリデーションが別途エラーを出す）
     return unless week_start_date.present?
-
-    # cwyear: ISO 週番号ベースの年（12月末〜1月初の境界で正確）
-    # cweek:  ISO 週番号（1〜53）
     self.year        = week_start_date.cwyear
     self.week_number = week_start_date.cweek
   end
 
   def week_end_date_must_be_six_days_after_start
     return unless week_start_date.present? && week_end_date.present?
-
     unless week_end_date == week_start_date + 6.days
       errors.add(:week_end_date, "は週の開始日から6日後でなければなりません")
     end

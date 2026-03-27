@@ -1,4 +1,4 @@
-<%# app/views/dashboards/index.html.erb の先頭（最初の行）に追加 %>
+<%# app/views/dashboards/index.html.erb %>
 <% content_for :title, "ダッシュボード | HabitFlow" %>
 <%#
   ═══════════════════════════════════════════════════════════════════
@@ -7,11 +7,20 @@
     @locked が true の場合は警告バナーを表示し、
     習慣チェックリストはロック中でも使用できます。
 
-  【Issue #26 で修正した箇所】
-    1. 習慣名の truncate max-w-xs → max-w-[120px] sm:max-w-xs
-       モバイルで長い習慣名が達成率表示と重なる問題を修正
-    2. クイックリンクグリッドは grid-cols-1 sm:grid-cols-2 で既存対応済み
-    3. ロックバナーのレイアウトをモバイルで縦積みに調整
+  【単位表示の修正内容】
+    修正前: チェック型・数値型どちらも「日」と決め打ちしていた
+            例: 「6/7日（85%）」← 数値型（読書/冊）でも「日」になっていた
+
+    修正後: habit.check_type? で分岐して単位を出し分ける
+            チェック型 → 「3/7日」（completed_count を使う）
+            数値型     → 「6/7冊」（numeric_sum と habit.unit を使う）
+
+  【なぜ分岐が必要なのか】
+    チェック型と数値型では「何を記録するか」が根本的に異なる。
+      チェック型: やった日数を数える → completed_count（0〜7）
+      数値型:     累計値を合計する   → numeric_sum（例: 6.0冊）
+    同じ変数・同じ単位で表示すると誤った情報をユーザーに見せてしまうため、
+    habit の種類に応じて表示を切り替える必要がある。
   ═══════════════════════════════════════════════════════════════════
 %>
 
@@ -23,12 +32,10 @@
   <% if @locked %>
     <div class="mb-6 bg-orange-50 border border-orange-200 border-l-4 border-l-orange-500 rounded-lg p-4">
       <div class="flex items-start gap-3">
-        <%# 警告アイコン（SVG） %>
         <svg class="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
         </svg>
-
         <div class="flex-1">
           <p class="text-sm font-bold text-orange-800">
             ⚠️ 先週の振り返りが未完了のため、一部の操作が制限されています
@@ -67,21 +74,6 @@
           <span class="text-sm font-bold text-blue-600"><%= @overall_rate %>%</span>
         </div>
         <div class="h-3 bg-gray-200 rounded-full overflow-hidden"
-             <%#
-               role="progressbar":
-                 【Issue #33 追加】
-                 プログレスバーであることをスクリーンリーダーに伝える。
-
-               aria-valuenow / aria-valuemin / aria-valuemax:
-                 【Issue #33 追加】
-                 現在値・最小値・最大値を数値で伝える。
-                 スクリーンリーダーが「0から100のうち現在80」と認識できる。
-
-               aria-label="全体の習慣達成率":
-                 【Issue #33 追加】
-                 何のプログレスバーかを伝える。
-                 複数の進捗バーがある場合、区別できるよう各バーに個別のラベルを付ける。
-             %>
              role="progressbar"
              aria-valuenow="<%= @overall_rate %>"
              aria-valuemin="0"
@@ -96,46 +88,59 @@
 
       <%# 習慣ごとの達成率 %>
       <% @habits.each do |habit| %>
-        <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
+        <%#
+          @habit_stats[habit.id] には以下のキーが入っている（dashboards_controller.rb で設定）:
+            チェック型: { rate: 整数, completed_count: 整数, numeric_sum: nil }
+            数値型:     { rate: 整数, completed_count: nil, numeric_sum: 小数 }
+          || {} はデータが存在しない場合に空ハッシュを返す（エラー防止）。
+        %>
+        <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
         <div class="mb-3">
-          <%#
-            習慣名と達成率を横並びにするエリア
-            flex: 横並び
-            justify-between: 左端（習慣名）と右端（達成率）に振り分け
-            items-center: 縦方向中央揃え
-          %>
           <div class="flex justify-between items-center mb-1 gap-2">
             <%#
               習慣名
-              flex-1: 残りのスペースをすべて使う（達成率部分は flex-shrink-0 で固定幅）
-              min-w-0: flex-1 が正しく truncate するために必要
-                       flex アイテムはデフォルトで min-w がコンテンツ幅になり、
-                       truncate が効かないことがある
-              truncate: テキストが長すぎる場合は「...」で省略
+              flex-1 min-w-0 truncate: 長い名前は「...」で省略してレイアウトを守る
             %>
             <span class="text-sm text-gray-700 flex-1 min-w-0 truncate">
               <%= habit.name %>
             </span>
-            <%#
-              達成率テキスト
-              flex-shrink-0: 画面幅が小さくても幅を縮めない（押しつぶされない）
-              ml-2: 習慣名との間に余白
-              text-xs: 12px（小さめのテキスト）
-              whitespace-nowrap: 改行させない（数字と単位が分かれないようにする）
+
+            <%# ── 【修正箇所】単位を habit の種類に応じて切り替える ──────────────
+              修正前: = stats[:completed_count] /= habit.weekly_target 日
+                      → チェック型・数値型どちらも「日」と固定されていた
+                      → 数値型の読書（冊）でも「日」と表示されてしまっていた
+
+              修正後: habit.check_type? で分岐
+                チェック型: completed_count（実施した日数）と「日」を表示
+                            例: 「5/7日（71%）」
+                数値型:     numeric_sum（今週の累計）と habit.unit（登録した単位）を表示
+                            例: 「6.0/7冊（85%）」
+
+              format("%g", ...) とは？
+                小数点以下の不要なゼロを削除するフォーマット指定子。
+                例: format("%g", 6.0) → "6"（末尾の .0 が消える）
+                    format("%g", 6.5) → "6.5"（必要な小数は残る）
+                これにより「6.0冊」ではなく「6冊」と自然な表示になる。
+
+              habit.unit.presence || "回":
+                unit が nil や空文字の場合は「回」をデフォルト単位として使う。
+                presence は nil や "" を nil に統一するメソッド。
             %>
             <span class="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
-              <%= stats[:completed_count] %>/<%= habit.weekly_target %>日
-              （<%= stats[:rate] %>%）
+              <% if habit.check_type? %>
+                <%# チェック型: 実施した日数を表示 %>
+                <%= stats[:completed_count] %>/<%= habit.weekly_target %>日
+                （<%= stats[:rate] %>%）
+              <% else %>
+                <%# 数値型: 今週の累計と登録した単位を表示 %>
+                <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %>/<%= habit.weekly_target %><%= habit.unit.presence || "回" %>
+                （<%= stats[:rate] %>%）
+              <% end %>
             </span>
+            <%# ────────────────────────────────────────────────────────────────── %>
+
           </div>
           <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
-               <%#
-                 role="progressbar" / aria-valuenow / aria-valuemin / aria-valuemax:
-                   【Issue #33 追加】
-                   全体達成率と同じ理由で追加する。
-                   各習慣の進捗バーごとに aria-label で習慣名を含めることで
-                   複数バーを区別できる。
-               %>
                role="progressbar"
                aria-valuenow="<%= stats[:rate] %>"
                aria-valuemin="0"

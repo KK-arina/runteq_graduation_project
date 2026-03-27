@@ -1,10 +1,24 @@
-<%# app/views/weekly_reflections/index.html.erb
+<%# app/views/weekly_reflections/index.html.erb %>
+<%#
   ═══════════════════════════════════════════════════════════════════
   【このファイルの役割】
     週次振り返り一覧ページ。
     ・今週の振り返りボタン（未完了時のみ表示）
     ・今週の習慣達成率サマリー
-    ・過去の完了済み振り返り一覧 ← ここに「詳細を見る」リンクを追加する
+    ・過去の完了済み振り返り一覧
+
+  【単位表示の修正内容】
+    修正前: チェック型・数値型どちらも「回」と決め打ちしていた
+            例: 「6 / 7 回（85%）」← 数値型（読書/冊）でも「回」になっていた
+
+    修正後: habit.check_type? で分岐して単位を出し分ける
+            チェック型 → 「5 / 7 日」（completed_count を使う）
+            数値型     → 「6 / 7 冊」（numeric_sum と habit.unit を使う）
+
+  【なぜ分岐が必要なのか】
+    チェック型と数値型では「何を記録するか」が異なるため、
+    同じ「回」という単位で統一すると誤情報になる。
+    habit の種類に応じて「どの数値」を「どの単位」で表示するか切り替える必要がある。
   ═══════════════════════════════════════════════════════════════════
 %>
 
@@ -20,34 +34,20 @@
 
   <%# ────────────────────────────────────────────────────────────
       今週の振り返りセクション
-      日曜AM4:00以降かつ未完了のときだけ「今週を振り返る」ボタンを表示
       ──────────────────────────────────────────────────────────── %>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-4">今週の状況</h2>
 
-    <%#
-      今週の振り返りが完了済みかどうかで表示を分岐
-      @current_week_reflection.persisted? ... DBに保存済みか？（true = 保存済み）
-      @current_week_reflection.is_locked? ... 完了済みか？（true = ロック済み）
-    %>
     <% if @current_week_reflection.persisted? && @current_week_reflection.is_locked? %>
-      <%# 完了済み：詳細リンクと完了メッセージを表示 %>
       <div class="flex items-center justify-between flex-wrap gap-3">
         <p class="text-green-700 text-sm font-medium">
           ✅ 今週の振り返りは完了しています。
         </p>
-        <%#
-          link_to @current_week_reflection:
-            weekly_reflection_path(@current_week_reflection.id) と同じ意味。
-            Rails はオブジェクトを渡すと自動でパスを解決してくれる（ポリモーフィックルート）。
-        %>
         <%= link_to "詳細を見る →", @current_week_reflection,
               class: "text-sm font-medium text-indigo-600 hover:text-indigo-800 transition-colors" %>
       </div>
 
-    <%# 振り返り期間（日曜AM4:00以降）かどうかで分岐 %>
     <% elsif Time.current >= Time.current.beginning_of_week(:sunday).change(hour: 4) %>
-      <%# 振り返り可能期間：「今週を振り返る」ボタンを表示 %>
       <div class="text-center py-2">
         <p class="text-gray-600 text-sm mb-4">今週の振り返りを記録しましょう。</p>
         <%= link_to "今週を振り返る ✍️", new_weekly_reflection_path,
@@ -55,7 +55,6 @@
       </div>
 
     <% else %>
-      <%# 振り返り期間外（月〜土）：案内メッセージを表示 %>
       <p class="text-gray-500 text-sm">
         週次振り返りは毎週日曜日の午前4時以降に記録できます。
         <br>
@@ -78,17 +77,56 @@
 
       <div class="space-y-3">
         <% @habits.each do |habit| %>
-          <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
+          <%#
+            @habit_stats[habit.id] には以下のキーが入っている（weekly_reflections_controller.rb で設定）:
+              チェック型: { rate: 整数, completed_count: 整数, numeric_sum: nil }
+              数値型:     { rate: 整数, completed_count: nil, numeric_sum: 小数 }
+          %>
+          <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
 
           <div>
             <div class="flex justify-between text-sm mb-1">
+              <%# 習慣名 %>
               <span class="text-gray-700 font-medium"><%= habit.name %></span>
+
+              <%# ── 【修正箇所】単位を habit の種類に応じて切り替える ──────────────
+                修正前: = stats[:completed_count]  / = habit.weekly_target  回
+                        → チェック型・数値型どちらも「回」と固定されていた
+                        → 筋トレ（チェック型）は「日」が正しいが「回」になっていた
+                        → 読書（数値型/冊）も「回」になっていた
+
+                修正後: habit.check_type? で分岐
+                  チェック型: completed_count（実施した日数）と「日」を表示
+                              例: 「5 / 7 日（71%）」
+                  数値型:     numeric_sum（今週の累計）と habit.unit（登録した単位）を表示
+                              例: 「6 / 7 冊（85%）」
+
+                format("%g", ...) とは？
+                  小数点以下の不要なゼロを削除するフォーマット指定子。
+                  例: format("%g", 6.0) → "6"  /  format("%g", 6.5) → "6.5"
+
+                habit.unit.presence || "回":
+                  unit が nil や空文字の場合は「回」をデフォルト単位として使う。
+              %>
               <span class="text-gray-500">
-                <%= stats[:completed_count] %> / <%= habit.weekly_target %> 回
-                (<%= stats[:rate] %>%)
+                <% if habit.check_type? %>
+                  <%# チェック型: 実施した日数を「日」で表示 %>
+                  <%= stats[:completed_count] %> / <%= habit.weekly_target %> 日
+                  (<%= stats[:rate] %>%)
+                <% else %>
+                  <%# 数値型: 今週の累計を登録単位で表示 %>
+                  <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %> / <%= habit.weekly_target %> <%= habit.unit.presence || "回" %>
+                  (<%= stats[:rate] %>%)
+                <% end %>
               </span>
+              <%# ────────────────────────────────────────────────────────────────── %>
             </div>
 
+            <%#
+              プログレスバー
+              stats[:rate].to_i: rate が nil や String の場合も整数に変換してから比較する
+              [stats[:rate].to_i, 100].min: 100% を超えてバーがはみ出さないようにする
+            %>
             <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
               <div class="h-2 rounded-full transition-all duration-500
                 <%= stats[:rate].to_i >= 100 ? 'bg-green-500' :
@@ -110,30 +148,18 @@
     <h2 class="text-lg font-semibold text-gray-800 mb-4">📖 過去の振り返り履歴</h2>
 
     <% if @weekly_reflections.empty? %>
-      <%# 過去の振り返りがない場合の Empty State %>
       <div class="text-center py-8">
         <p class="text-gray-400 text-sm">まだ振り返りがありません。</p>
         <p class="text-gray-400 text-xs mt-1">日曜日の午前4時以降に最初の振り返りができます。</p>
       </div>
 
     <% else %>
-      <%#
-        @weekly_reflections をループして1件ずつカード表示
-        .completed.recent で新しい順に取得済み（コントローラー側でソート済み）
-      %>
       <div class="space-y-3">
         <% @weekly_reflections.each do |reflection| %>
-          <%#
-            link_to reflection:
-              weekly_reflection_path(reflection) の省略形。
-              Rails がオブジェクトから自動的にパスを解決する。
-              → GET /weekly_reflections/:id （show アクション）
-          %>
           <%= link_to reflection,
                 class: "block border border-gray-100 rounded-xl p-4 hover:border-indigo-200 hover:bg-indigo-50 transition-all group" do %>
 
             <div class="flex items-center justify-between flex-wrap gap-2">
-              <%# 対象週の期間表示 %>
               <div>
                 <p class="font-medium text-gray-800 text-sm group-hover:text-indigo-700 transition-colors">
                   <%= reflection.week_start_date.strftime("%Y年%m月%d日") %>
@@ -145,9 +171,7 @@
                 </p>
               </div>
 
-              <%# 習慣数と平均達成率をサマリー表示 %>
               <div class="flex items-center gap-3">
-                <%# habit_summaries の件数と達成率を計算して表示 %>
                 <% summaries = reflection.habit_summaries %>
                 <% avg_rate = summaries.any? ? (summaries.map(&:achievement_rate).sum / summaries.count.to_f).round(1) : 0 %>
 
@@ -162,7 +186,6 @@
                   <%= avg_rate %>%
                 </span>
 
-                <%# 矢印アイコン（「詳細を見る」の視覚的ヒント） %>
                 <svg class="w-4 h-4 text-gray-400 group-hover:text-indigo-500 transition-colors"
                      fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
@@ -170,7 +193,6 @@
               </div>
             </div>
 
-            <%# コメントの冒頭をプレビュー表示（あれば） %>
             <% if reflection.reflection_comment.present? %>
               <p class="mt-2 text-xs text-gray-500 truncate">
                 💬 <%= reflection.reflection_comment.truncate(80) %>

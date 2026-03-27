@@ -1,40 +1,33 @@
-<%# app/views/habits/index.html.erb の先頭（最初の行）に追加 %>
+<%# app/views/habits/index.html.erb %>
 <% content_for :title, "習慣管理 | HabitFlow" %>
 <%#
-  ═══════════════════════════════════════════════════════════════════
-  【このファイルの役割】
-    習慣一覧ページのビューです。
-    @locked が true のときはボタンを非活性（グレーアウト）にします。
-    チェックボックスによる即時保存はロック中でも有効です。
-
-  【Issue #26 での変更点】
-    習慣カードの習慣名（h3タグ）に min-w-0 を追加。
-    flex コンテナ内で長い習慣名が削除ボタンを押しつぶさないよう修正。
-  ═══════════════════════════════════════════════════════════════════
+  ==============================================================================
+  習慣一覧ページ（B-1: 数値型習慣対応）
+  ==============================================================================
+  【B-1 での変更内容】
+    ① 習慣カードの週次進捗表示を measurement_type で切り替える
+       - チェック型: 「3/7日（42%）」形式（従来通り）
+       - 数値型:    「90.0/150分（60%）」形式（B-1 追加）
+    ② 数値型の場合に unit（単位）を表示する
+  ==============================================================================
 %>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
   <%# ============================================================ %>
-  <%# PDCA強制ロック警告バナー（ダッシュボードと同じデザイン） %>
+  <%# PDCA強制ロック警告バナー %>
   <%# ============================================================ %>
   <% if @locked %>
     <div class="mb-6 bg-orange-50 border border-orange-200 border-l-4 border-l-orange-500 rounded-lg p-4">
       <div class="flex items-start gap-3">
-        <%# 警告アイコン（SVG） %>
         <svg class="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
         </svg>
         <div class="flex-1">
-          <p class="text-sm font-bold text-orange-800">
-            ⚠️ ロック中：新規追加・削除はできません
-          </p>
-          <p class="text-xs text-orange-700 mt-1">
-            先週の振り返りを完了すると解除されます。
-          </p>
-          <%= link_to "振り返りページへ →",
-                new_weekly_reflection_path,
+          <p class="text-sm font-bold text-orange-800">⚠️ ロック中：新規追加・削除はできません</p>
+          <p class="text-xs text-orange-700 mt-1">先週の振り返りを完了すると解除されます。</p>
+          <%= link_to "振り返りページへ →", new_weekly_reflection_path,
                 class: "mt-2 inline-block text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded transition-colors" %>
         </div>
       </div>
@@ -42,21 +35,13 @@
   <% end %>
 
   <%# ============================================================ %>
-  <%# ページヘッダー（タイトル＋新規追加ボタン） %>
+  <%# ページヘッダー %>
   <%# ============================================================ %>
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-gray-900">習慣管理</h1>
-
-    <%# ロック中は非活性ボタン、ロック解除中はリンクボタンを表示 %>
     <% if @locked %>
-      <%#
-        disabled 状態のボタン（クリックしても何も起きない）
-        cursor-not-allowed: マウスカーソルを禁止マーク（🚫）にする
-        title 属性: ホバー時にツールチップを表示する
-      %>
-      <span
-        class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-400 cursor-not-allowed"
-        title="先週の振り返りを完了すると追加できます">
+      <span class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-400 cursor-not-allowed"
+            title="先週の振り返りを完了すると追加できます">
         🔒 + 新しい習慣を追加
       </span>
     <% else %>
@@ -71,15 +56,8 @@
   <%# 習慣カード一覧 %>
   <%# ============================================================ %>
   <% if @habits.empty? %>
-    <%# 習慣が0件のときの表示 %>
     <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
       <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
-        <%#
-          元のコードは justify-content-center というクラスが使われていたが、
-          Tailwind CSS では justify-center が正しい記述。
-          justify-content-center は Bootstrap のクラスなので動作しない。
-          Issue #26 で合わせて修正。
-        %>
         <span class="text-3xl">📋</span>
       </div>
       <p class="text-gray-500 mb-4">まだ習慣が登録されていません</p>
@@ -90,65 +68,32 @@
     </div>
 
   <% else %>
-    <%#
-      グリッドレイアウト
-      grid-cols-1  : モバイルは1列（縦積み）
-      md:grid-cols-2: 768px以上は2列
-      lg:grid-cols-3: 1024px以上は3列
-      gap-6        : カード間の余白 24px
-    %>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <% @habits.each do |habit| %>
-        <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0 } %>
+        <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
 
-        <%# 習慣カード %>
         <div id="habit_record_<%= habit.id %>"
              class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col">
 
           <%# ── カードヘッダー（習慣名 + 削除ボタン） ── %>
-          <%#
-            flex: 横並びレイアウト
-            justify-between: 習慣名（左）と削除ボタン（右）を両端に配置
-            items-start: 縦方向を上揃え（習慣名が複数行になっても削除ボタンが上に固定される）
-          %>
           <div class="flex justify-between items-start p-4 pb-2">
-            <%#
-              習慣名（h3タグ）
-              flex-1  : 残りのスペースをすべて使う（削除ボタン以外の幅を占有する）
-              min-w-0 : 【Issue #26 修正点】
-                        flex アイテムはデフォルトで min-width がコンテンツ幅になる。
-                        これにより、習慣名が長いとカード幅を突き破って削除ボタンが
-                        画面外に押し出されてしまう問題が発生する。
-                        min-w-0 を指定すると min-width: 0 になり、
-                        flex アイテムが親の幅を超えないよう制限できる。
-              mr-2    : 削除ボタンとの間に余白（8px）を確保
-              leading-snug: 行間を少し狭めにする（複数行になっても読みやすく）
-            %>
             <h3 class="text-base font-bold text-gray-800 flex-1 min-w-0 mr-2 leading-snug">
               <%= habit.name %>
+              <%# B-1 追加: 数値型バッジ（数値型習慣と分かるように小さなラベルを表示） %>
+              <% if habit.numeric_type? %>
+                <span class="ml-1 text-xs font-normal text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">
+                  数値型
+                </span>
+              <% end %>
             </h3>
 
-            <%# 削除ボタン: ロック中は非活性 %>
             <% if @locked %>
-              <%#
-                ロック中は見た目だけのボタン（クリックしても何も起きない）
-                flex-shrink-0: 習慣名が長くてもこのボタンは縮まない
-                cursor-not-allowed: マウスカーソルを禁止マークにする
-              %>
-              <span
-                class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-300 cursor-not-allowed flex-shrink-0"
-                title="先週の振り返りを完了すると削除できます">
+              <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-300 cursor-not-allowed flex-shrink-0"
+                    title="先週の振り返りを完了すると削除できます">
                 🔒 削除
               </span>
             <% else %>
-              <%#
-                ロック解除中: Turboによる削除リンク
-                data-turbo-method: :delete → Turbo が DELETE リクエストを送る
-                data-turbo-confirm → 削除前に確認ダイアログを表示
-                flex-shrink-0: 習慣名が長くてもこのボタンは縮まない
-              %>
-              <%= link_to "削除",
-                    habit_path(habit),
+              <%= link_to "削除", habit_path(habit),
                     data: {
                       turbo_method: :delete,
                       turbo_confirm: "「#{habit.name}」を削除しますか？\n削除するとこの習慣の記録が非表示になります。"
@@ -157,60 +102,70 @@
             <% end %>
           </div>
 
-          <%# 週次目標の表示 %>
+          <%# 週次目標の表示（B-1: 数値型の場合は単位も表示） %>
           <div class="px-4 pb-2">
-            <span class="text-xs text-gray-400">週次目標: <%= habit.weekly_target %>回</span>
+            <% if habit.check_type? %>
+              <span class="text-xs text-gray-400">週次目標: <%= habit.weekly_target %>回</span>
+            <% else %>
+              <%#
+                数値型の場合は「目標: 150分/週」のように単位付きで表示する。
+                habit.unit には "分"、"冊"、"km" などが入っている。
+                .presence はnilまたは空文字の場合に nil を返す Rails メソッド。
+                nil の場合は「回」を代替表示する。
+              %>
+              <span class="text-xs text-gray-400">
+                週次目標: <%= habit.weekly_target %><%= habit.unit.presence || "回" %>/週
+              </span>
+            <% end %>
           </div>
 
-          <%# 今日のチェックボックス（即時保存 / ロック中でも使用可能） %>
+          <%# 今日のチェックボックス or 数値入力（ロック中でも使用可能） %>
           <div class="px-4 pb-3">
             <%= render "habit_records/habit_record",
                   habit: habit,
                   habit_record: @today_records_hash[habit.id] %>
           </div>
 
-          <%# 今週の進捗バー %>
+          <%# ── 今週の進捗バー（B-1: 数値型対応） ── %>
           <div class="px-4 pb-4 mt-auto">
             <div class="flex justify-between items-center mb-1">
               <span class="text-xs text-gray-500">今週の進捗</span>
-              <span class="text-xs font-bold whitespace-nowrap
-                           <%= stats[:rate] >= 80 ? 'text-green-600' : stats[:rate] >= 50 ? 'text-blue-600' : 'text-red-500' %>">
-                <%= stats[:completed_count] %>/<%= habit.weekly_target %>日
-                （<%= stats[:rate] %>%）
-              </span>
+
+              <%# B-1: 数値型とチェック型で表示形式を切り替える %>
+              <% if habit.check_type? %>
+                <%#
+                  チェック型: 「3/7日（42%）」形式
+                  stats[:completed_count] には今週の完了日数が入っている
+                %>
+                <span class="text-xs font-bold whitespace-nowrap
+                             <%= stats[:rate] >= 80 ? 'text-green-600' : stats[:rate] >= 50 ? 'text-blue-600' : 'text-red-500' %>">
+                  <%= stats[:completed_count] %>/<%= habit.weekly_target %>日
+                  （<%= stats[:rate] %>%）
+                </span>
+              <% else %>
+                <%#
+                  数値型: 「90.0/150分（60%）」形式
+                  stats[:numeric_sum] には今週の合計値（Float）が入っている。
+                  .round(1) で小数点1桁に丸めて表示する（例: 90.55 → 90.6）。
+                  ただし 30.0 のように .0 で終わる場合は整数っぽく見せたいため、
+                  % g フォーマットで「不要な 0 を削除」する。
+                    例: 90.0 → "90", 90.5 → "90.5"
+                %>
+                <% numeric_sum_display = stats[:numeric_sum].nil? ? 0.0 : stats[:numeric_sum] %>
+                <span class="text-xs font-bold whitespace-nowrap
+                             <%= stats[:rate] >= 80 ? 'text-green-600' : stats[:rate] >= 50 ? 'text-blue-600' : 'text-red-500' %>">
+                  <%=
+                    # format("%g", ...) は末尾の余分な0を除去する
+                    # 例: 90.0 → "90", 90.5 → "90.5", 90.50 → "90.5"
+                    format("%g", numeric_sum_display.round(1))
+                  %>/<%= habit.weekly_target %><%= habit.unit.presence || "回" %>
+                  （<%= stats[:rate] %>%）
+                </span>
+              <% end %>
             </div>
-            <%#
-              プログレスバーのコンテナ
-              overflow-hidden: バーが角丸の外にはみ出ないようにする
-            %>
+
+            <%# プログレスバー（チェック型・数値型 共通） %>
             <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
-                 <%#
-                   role="progressbar":
-                     【Issue #33 追加】
-                     この div がプログレスバーであることをスクリーンリーダーに伝える。
-                     role="progressbar" を設定することで支援技術が
-                     「進捗状況を示す要素」として認識できる。
-
-                   aria-valuenow="[stats[:rate]]":
-                     【Issue #33 追加】
-                     現在の進捗値（数値）をスクリーンリーダーに伝える。
-                     例: aria-valuenow="80" → 「80」と読み上げる。
-
-                   aria-valuemin="0":
-                     【Issue #33 追加】
-                     プログレスバーの最小値（0%）を示す。
-                     スクリーンリーダーが「0から100のうち80」と把握できる。
-
-                   aria-valuemax="100":
-                     【Issue #33 追加】
-                     プログレスバーの最大値（100%）を示す。
-
-                   aria-label="[habit.name] の今週の達成率":
-                     【Issue #33 追加】
-                     「何のプログレスバーか」をスクリーンリーダーに伝える。
-                     aria-valuenow と組み合わせて
-                     「読書 の今週の達成率、80」のように読み上げられる。
-                 %>
                  role="progressbar"
                  aria-valuenow="<%= stats[:rate] %>"
                  aria-valuemin="0"
