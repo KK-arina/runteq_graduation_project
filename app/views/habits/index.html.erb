@@ -2,21 +2,19 @@
 <% content_for :title, "習慣管理 | HabitFlow" %>
 <%#
   ==============================================================================
-  習慣一覧ページ（B-1: 数値型習慣対応）
+  習慣一覧ページ（B-2: 除外日表示追加）
   ==============================================================================
-  【B-1 での変更内容】
-    ① 習慣カードの週次進捗表示を measurement_type で切り替える
-       - チェック型: 「3/7日（42%）」形式（従来通り）
-       - 数値型:    「90.0/150分（60%）」形式（B-1 追加）
-    ② 数値型の場合に unit（単位）を表示する
+  【B-2 での変更内容】
+    ① 習慣カードに除外曜日の表示を追加
+       除外日がある場合: 「除外: 土・日」のように曜日名を表示する
+    ② 週次目標の表示でチェック型は effective_weekly_target を使用
+       除外日がある場合: 「5/5日（100%）」のように実施予定日数を分母にする
   ==============================================================================
 %>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-  <%# ============================================================ %>
   <%# PDCA強制ロック警告バナー %>
-  <%# ============================================================ %>
   <% if @locked %>
     <div class="mb-6 bg-orange-50 border border-orange-200 border-l-4 border-l-orange-500 rounded-lg p-4">
       <div class="flex items-start gap-3">
@@ -34,9 +32,7 @@
     </div>
   <% end %>
 
-  <%# ============================================================ %>
   <%# ページヘッダー %>
-  <%# ============================================================ %>
   <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-gray-900">習慣管理</h1>
     <% if @locked %>
@@ -52,9 +48,7 @@
     <% end %>
   </div>
 
-  <%# ============================================================ %>
   <%# 習慣カード一覧 %>
-  <%# ============================================================ %>
   <% if @habits.empty? %>
     <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
       <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
@@ -70,16 +64,33 @@
   <% else %>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <% @habits.each do |habit| %>
-        <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
+        <%#
+          @habit_stats[habit.id] が nil の場合のフォールバック値。
+          【修正内容】
+            修正前: effective_target のフォールバックが habit.weekly_target 固定
+                    → チェック型で除外日がある場合にフォールバック時だけ分母がズレるバグがあった。
+            修正後: habit.check_type? で分岐して正しい値を使う。
+                    チェック型 → habit.effective_weekly_target（除外日考慮後の実施予定日数）
+                    数値型     → habit.weekly_target（絶対数値目標なので除外日は無関係）
+          【なぜ build_habit_stats で計算済みなのに必要か】
+            @habit_stats は build_habit_stats で全習慣分を計算済みのはずだが、
+            万が一 habit.id が存在しない場合（データ不整合等）に備えて
+            安全なフォールバック値を設定しておく。
+        %>
+        <% stats = @habit_stats[habit.id] || {
+             rate:            0,
+             completed_count: 0,
+             numeric_sum:     nil,
+             effective_target: habit.check_type? ? habit.effective_weekly_target : habit.weekly_target
+           } %>
 
         <div id="habit_record_<%= habit.id %>"
              class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col">
 
-          <%# ── カードヘッダー（習慣名 + 削除ボタン） ── %>
+          <%# カードヘッダー（習慣名 + 編集・削除ボタン） %>
           <div class="flex justify-between items-start p-4 pb-2">
             <h3 class="text-base font-bold text-gray-800 flex-1 min-w-0 mr-2 leading-snug">
               <%= habit.name %>
-              <%# B-1 追加: 数値型バッジ（数値型習慣と分かるように小さなラベルを表示） %>
               <% if habit.numeric_type? %>
                 <span class="ml-1 text-xs font-normal text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">
                   数値型
@@ -87,84 +98,97 @@
               <% end %>
             </h3>
 
-            <% if @locked %>
-              <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-300 cursor-not-allowed flex-shrink-0"
-                    title="先週の振り返りを完了すると削除できます">
-                🔒 削除
-              </span>
-            <% else %>
-              <%= link_to "削除", habit_path(habit),
-                    data: {
-                      turbo_method: :delete,
-                      turbo_confirm: "「#{habit.name}」を削除しますか？\n削除するとこの習慣の記録が非表示になります。"
-                    },
-                    class: "text-xs px-2 py-1 rounded bg-red-100 text-red-600 hover:bg-red-200 transition-colors flex-shrink-0" %>
-            <% end %>
+            <div class="flex items-center gap-1 flex-shrink-0">
+              <%# 編集ボタン（ロック中でも編集は可能：記録ではなく設定の変更のため） %>
+              <%#
+                【なぜロック中でも編集できるのか】
+                  PDCA ロックは「習慣の新規追加・削除」を制限するものであり、
+                  既存習慣の設定変更（名前・目標値・除外日）は許可する設計。
+                  require_unlocked は create と destroy のみに適用している。
+              %>
+              <%= link_to "編集", edit_habit_path(habit),
+                    class: "text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors" %>
+
+              <% if @locked %>
+                <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-300 cursor-not-allowed"
+                      title="先週の振り返りを完了すると削除できます">
+                  🔒 削除
+                </span>
+              <% else %>
+                <%= link_to "削除", habit_path(habit),
+                      data: {
+                        turbo_method: :delete,
+                        turbo_confirm: "「#{habit.name}」を削除しますか？\n削除するとこの習慣の記録が非表示になります。"
+                      },
+                      class: "text-xs px-2 py-1 rounded bg-red-100 text-red-600 hover:bg-red-200 transition-colors" %>
+              <% end %>
+            </div>
           </div>
 
-          <%# 週次目標の表示（B-1: 数値型の場合は単位も表示） %>
+          <%# 週次目標と除外日の表示（B-2 更新） %>
           <div class="px-4 pb-2">
             <% if habit.check_type? %>
-              <span class="text-xs text-gray-400">週次目標: <%= habit.weekly_target %>回</span>
-            <% else %>
               <%#
-                数値型の場合は「目標: 150分/週」のように単位付きで表示する。
-                habit.unit には "分"、"冊"、"km" などが入っている。
-                .presence はnilまたは空文字の場合に nil を返す Rails メソッド。
-                nil の場合は「回」を代替表示する。
+                チェック型は effective_weekly_target（除外日考慮後）を表示する。
+                除外日がない場合は weekly_target と同じ値になる。
+                例: 目標5日・除外土日 → 「週次目標: 5回（除外: 土・日）」
               %>
+              <span class="text-xs text-gray-400">
+                週次目標: <%= habit.effective_weekly_target %>回
+              </span>
+            <% else %>
               <span class="text-xs text-gray-400">
                 週次目標: <%= habit.weekly_target %><%= habit.unit.presence || "回" %>/週
               </span>
             <% end %>
+
+            <%# 除外日の表示（B-2 追加） %>
+            <%# 除外日が設定されている場合のみ「除外: 土・日」のように表示する %>
+            <% excluded_numbers = habit.excluded_day_numbers %>
+            <% if excluded_numbers.any? %>
+              <%#
+                excluded_numbers.map { |n| HabitExcludedDay::DAY_NAMES[n] }.join("・")
+                  → [6, 0].map { |n| DAY_NAMES[n] } → ["土", "日"] → "土・日"
+              %>
+              <span class="ml-2 text-xs text-orange-500">
+                除外: <%= excluded_numbers.map { |n| HabitExcludedDay::DAY_NAMES[n] }.join("・") %>
+              </span>
+            <% end %>
           </div>
 
-          <%# 今日のチェックボックス or 数値入力（ロック中でも使用可能） %>
+          <%# 今日のチェックボックス or 数値入力 %>
           <div class="px-4 pb-3">
             <%= render "habit_records/habit_record",
                   habit: habit,
                   habit_record: @today_records_hash[habit.id] %>
           </div>
 
-          <%# ── 今週の進捗バー（B-1: 数値型対応） ── %>
+          <%# 今週の進捗バー（B-2: effective_target 対応） %>
           <div class="px-4 pb-4 mt-auto">
             <div class="flex justify-between items-center mb-1">
               <span class="text-xs text-gray-500">今週の進捗</span>
 
-              <%# B-1: 数値型とチェック型で表示形式を切り替える %>
               <% if habit.check_type? %>
                 <%#
-                  チェック型: 「3/7日（42%）」形式
-                  stats[:completed_count] には今週の完了日数が入っている
+                  チェック型: 分母を effective_target（除外日考慮後）に変更。
+                  stats[:effective_target] には build_habit_stats で計算した
+                  effective_weekly_target の値が入っている。
                 %>
                 <span class="text-xs font-bold whitespace-nowrap
                              <%= stats[:rate] >= 80 ? 'text-green-600' : stats[:rate] >= 50 ? 'text-blue-600' : 'text-red-500' %>">
-                  <%= stats[:completed_count] %>/<%= habit.weekly_target %>日
+                  <%= stats[:completed_count] %>/<%= stats[:effective_target] %>日
                   （<%= stats[:rate] %>%）
                 </span>
               <% else %>
-                <%#
-                  数値型: 「90.0/150分（60%）」形式
-                  stats[:numeric_sum] には今週の合計値（Float）が入っている。
-                  .round(1) で小数点1桁に丸めて表示する（例: 90.55 → 90.6）。
-                  ただし 30.0 のように .0 で終わる場合は整数っぽく見せたいため、
-                  % g フォーマットで「不要な 0 を削除」する。
-                    例: 90.0 → "90", 90.5 → "90.5"
-                %>
                 <% numeric_sum_display = stats[:numeric_sum].nil? ? 0.0 : stats[:numeric_sum] %>
                 <span class="text-xs font-bold whitespace-nowrap
                              <%= stats[:rate] >= 80 ? 'text-green-600' : stats[:rate] >= 50 ? 'text-blue-600' : 'text-red-500' %>">
-                  <%=
-                    # format("%g", ...) は末尾の余分な0を除去する
-                    # 例: 90.0 → "90", 90.5 → "90.5", 90.50 → "90.5"
-                    format("%g", numeric_sum_display.round(1))
-                  %>/<%= habit.weekly_target %><%= habit.unit.presence || "回" %>
+                  <%= format("%g", numeric_sum_display.round(1)) %>/<%= habit.weekly_target %><%= habit.unit.presence || "回" %>
                   （<%= stats[:rate] %>%）
                 </span>
               <% end %>
             </div>
 
-            <%# プログレスバー（チェック型・数値型 共通） %>
             <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
                  role="progressbar"
                  aria-valuenow="<%= stats[:rate] %>"
@@ -178,7 +202,7 @@
             </div>
           </div>
 
-        </div><%# end 習慣カード %>
+        </div>
       <% end %>
     </div>
   <% end %>

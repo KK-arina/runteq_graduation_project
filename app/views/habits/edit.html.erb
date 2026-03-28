@@ -1,0 +1,180 @@
+<%# app/views/habits/edit.html.erb %>
+<% content_for :title, "習慣を編集 | HabitFlow" %>
+<%#
+  ==============================================================================
+  習慣編集ページ（B-2: 除外日設定の編集対応）
+  ==============================================================================
+  【new.html.erb との違い】
+    ① フォームの method が PATCH になる（Rails が form_with model: で自動判定）
+    ② 除外日チェックボックスの初期状態が「既存設定」から復元される
+       new では params から復元していたが、
+       edit では @habit.excluded_day_numbers から復元する。
+
+  【なぜ edit で @habit.excluded_day_numbers から復元するのか】
+    新規作成時はまだ DB にデータがないため params を使う。
+    編集時はすでに DB に除外日が保存されているため
+    @habit.excluded_day_numbers（DB の値）をデフォルト値として使う。
+    ただしバリデーションエラー後の再表示時は params を優先する。
+  ==============================================================================
+%>
+
+<div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <%# 戻るリンク %>
+  <div class="mb-6">
+    <%= link_to "← 習慣管理に戻る", habits_path,
+          class: "text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors" %>
+  </div>
+
+  <h1 class="text-2xl font-bold text-gray-900 mb-6">習慣を編集</h1>
+
+  <%# バリデーションエラーの表示 %>
+  <%= render "shared/form_errors", model: @habit %>
+
+  <%#
+    form_with model: @habit で PATCH メソッドが自動的に設定される。
+    【理由】
+      @habit が persisted?（DB に保存済み）のとき、
+      Rails は自動的に PATCH メソッドと /habits/:id の URL を設定する。
+      new のときは POST と /habits の URL が設定される。
+      この自動判定により new と edit でほぼ同じコードが使える。
+  %>
+  <%= form_with model: @habit,
+                local: true,
+                class: "space-y-6",
+                data: { controller: "habit-form" } do |f| %>
+
+    <%# 習慣名 %>
+    <div>
+      <%= f.label :name, "習慣名",
+            class: "block text-sm font-semibold text-gray-700 mb-1" %>
+      <%= f.text_field :name,
+            placeholder: "例: 読書、筋トレ、英語学習",
+            maxlength: 50,
+            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    transition-colors" %>
+    </div>
+
+    <%# measurement_type（編集時は変更不可） %>
+    <%#
+      測定タイプは過去の habit_records のデータ型に影響するため変更不可にする。
+      【理由】
+        チェック型 → 数値型に変更すると、過去の completed=true のレコードが
+        numeric_value を持たない状態になり整合性が壊れる。
+        表示のみ（readonly）にして変更できないようにする。
+    %>
+    <div>
+      <label class="block text-sm font-semibold text-gray-700 mb-1">記録タイプ</label>
+      <div class="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm text-gray-500">
+        <%= @habit.check_type? ? "☑️ チェック型（やった/やらない）" : "🔢 数値型（#{@habit.unit}で記録）" %>
+        <span class="ml-2 text-xs text-gray-400">※ 過去データの整合性のため変更できません</span>
+      </div>
+      <%# hidden field で measurement_type の値を送信する %>
+      <%= f.hidden_field :measurement_type %>
+    </div>
+
+    <%# unit（数値型のときのみ表示） %>
+    <% if @habit.numeric_type? %>
+      <div>
+        <%= f.label :unit, "単位",
+              class: "block text-sm font-semibold text-gray-700 mb-1" %>
+        <%= f.text_field :unit,
+              placeholder: "例: 分、冊、km",
+              maxlength: 10,
+              class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                      transition-colors" %>
+      </div>
+    <% end %>
+
+    <%# 週次目標値 %>
+    <div>
+      <%= f.label :weekly_target, "週次目標値",
+            class: "block text-sm font-semibold text-gray-700 mb-1" %>
+      <p class="text-xs text-gray-500 mb-2">
+        1週間の目標を設定してください
+        <%= @habit.check_type? ? "（1〜7回）" : "（単位: 1以上の数値）" %>
+      </p>
+      <%= f.number_field :weekly_target,
+            min: 1,
+            max: @habit.check_type? ? 7 : nil,
+            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    transition-colors" %>
+    </div>
+
+    <%# 除外する曜日 %>
+    <%#
+      【edit と new の違い】
+        new:  selected_days = Array(params[:excluded_day_numbers]).map(&:to_i)
+              → まだ DB にデータがないため params から復元する
+        edit: 通常表示は @habit.excluded_day_numbers（DB の値）を使う
+              バリデーションエラー後は params を優先する（ユーザーの入力を保持）
+
+      【なぜ params.key? で判定するのか】
+        バリデーションエラーで再表示されるときは params に送信データが残っている。
+        通常の編集表示（GET）のときは params に excluded_day_numbers がない。
+        params.key?(:excluded_day_numbers) で「フォーム送信後かどうか」を判定できる。
+    %>
+    <div>
+      <label class="block text-sm font-semibold text-gray-700 mb-1">
+        除外する曜日
+      </label>
+      <p class="text-xs text-gray-500 mb-3">
+        実施しない曜日を選択してください（達成率の計算から除外されます）
+      </p>
+
+      <%#
+        selected_days の決定ロジック:
+          バリデーションエラー後（params に excluded_day_numbers が存在する場合）
+            → params の値を使う（ユーザーの最後の入力を保持する）
+          通常の編集表示（GET リクエスト）
+            → @habit.excluded_day_numbers（DB の現在値）を使う
+      %>
+      <% selected_days = if params.key?(:excluded_day_numbers)
+                           Array(params[:excluded_day_numbers]).map(&:to_i)
+                         else
+                           @habit.excluded_day_numbers
+                         end %>
+
+      <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">
+        <% HabitExcludedDay::DAY_NAMES_FULL.each do |day_number, day_name| %>
+          <label class="flex flex-col items-center gap-1.5 p-2 border-2 rounded-lg cursor-pointer
+                        transition-colors hover:border-blue-300 hover:bg-blue-50
+                        has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50
+                        focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1">
+            <%#
+              selected_days.include?(day_number) でチェック状態を決定する。
+              edit 時は @habit.excluded_day_numbers（DB の値）が入っているため
+              既存の除外日設定がチェック済み状態で表示される。
+            %>
+            <%= check_box_tag "excluded_day_numbers[]", day_number,
+                  selected_days.include?(day_number),
+                  id: "excluded_day_#{day_number}",
+                  class: "sr-only" %>
+            <span class="text-xs font-bold text-gray-600"><%= day_name %></span>
+          </label>
+        <% end %>
+      </div>
+
+      <p class="text-xs text-gray-400 mt-2">
+        ※ 例: 土日を除外すると週5日が最大達成日数になります
+      </p>
+    </div>
+
+    <%# ボタンエリア %>
+    <div class="flex justify-end items-center gap-4 pt-2">
+      <%= link_to "キャンセル", habits_path,
+            class: "px-5 py-3 bg-white border border-gray-300 text-gray-700 text-sm font-semibold
+                    rounded-xl hover:bg-gray-50 transition-colors
+                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" %>
+      <%= f.submit "更新する",
+            class: "flex-1 py-3 px-4 bg-blue-600 text-white text-sm font-semibold
+                    rounded-xl hover:bg-blue-700 transition-colors cursor-pointer
+                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500" %>
+    </div>
+
+  <% end %>
+
+</div>

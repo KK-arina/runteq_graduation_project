@@ -56,10 +56,12 @@ Rails.application.routes.draw do
   # ---------------------------------------------------------------
   # resources :habits
   # ---------------------------------------------------------------
-  resources :habits, only: [ :index, :new, :create, :destroy ] do
-    member do
-      patch :toggle_record
-    end
+  resources :habits, only: [ :index, :new, :create, :edit, :update, :destroy ] do
+    # edit と update を追加（B-2: 除外日の変更に対応するため）
+    # 【理由】
+    #   習慣を作成した後に除外日を変更したいケースが必ずある。
+    #   例: 最初は除外日なしで作成 → 後から土日を除外したい。
+    #   edit/update がないと作成時しか設定できず実用性が低い。
     resources :habit_records, only: [ :create, :update ]
   end
 
