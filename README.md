@@ -57,7 +57,8 @@ flowchart LR
 [![DBインデックス監査](https://img.shields.io/badge/A--6_DBインデックス監査-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-6-db-index-audit)
 [![DB Transaction](https://img.shields.io/badge/A--7_DBトランザクション設計-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-7-transaction-design)
 [![B-1 数値型習慣](https://img.shields.io/badge/B--1_数値型習慣-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-1-numeric-habit)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-8%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![B-2 除外日設定](https://img.shields.io/badge/B--2_除外日設定-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-2-habit-excluded-days)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-9%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -105,7 +106,7 @@ flowchart LR
 
 | Week | テーマ | ISSUE | SP | 状態 |
 |:---|:---|:---:|:---:|:---:|
-| Week A | DB・インフラ基盤 | #A-1〜#A-7 | 24 | 🟡 進行中 |
+| Week A | DB・インフラ基盤 | #A-1〜#A-7 | 24 | ✅ 完了 |
 | Week B | 習慣機能拡張 | #B-1〜#B-7 | 28 | 🟡 進行中 |
 | Week C | タスク管理機能 | #C-1〜#C-7 | 28 | ⬜ 未着手 |
 | Week D | AI分析・PMVV機能 | #D-1〜#D-11 | 42 | ⬜ 未着手 |
@@ -132,6 +133,7 @@ flowchart LR
 | #A-6 | DBインデックス監査・最適化 | 2026-03-22 | feature/A-6-db-index-audit |
 | #A-7 | DBトランザクション設計・複数テーブル更新の整合性保証 | 2026-03-22 | feature/A-7-transaction-design |
 | #B-1 | 数値型習慣の記録・達成率計算・リフレクション手法対応 | 2026-03-27 | feature/B-1-numeric-habit |
+| #B-2 | 習慣の除外日設定（habit_excluded_days） | 2026-03-28 | feature/B-2-habit-excluded-days |
 
 <br>
 
@@ -991,6 +993,103 @@ end
 
 <br>
 
+### #B-2: 習慣の除外日設定（habit_excluded_days）
+
+<br>
+
+**ブランチ:** `feature/B-2-habit-excluded-days`<br>
+**完了日:** 2026-03-28<br>
+**概要:** 習慣ごとに「実施しない曜日」を設定できる除外日機能を実装。<br>
+除外日は達成率計算の分母から除外され、土日を除外した習慣は5日/5日=100%で達成となる。<br>
+習慣の新規作成・編集フォームに曜日チェックボックスを追加し、一覧カードに除外曜日を表示する。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Model | `HabitExcludedDay` モデル作成（`belongs_to :habit` / `day_of_week: 0-6` バリデーション / `DAY_NAMES` 定数） |
+| Model | `Habit` に `has_many :habit_excluded_days` 追加 |
+| Model | `Habit` に `excluded_day_numbers` メソッド追加（除外日番号の配列を昇順で返す） |
+| Model | `Habit` に `effective_weekly_target` メソッド追加（`min(weekly_target, 7-除外日数)` を返す） |
+| Model | `Habit#weekly_progress_stats` をチェック型の分母を `effective_weekly_target` に変更 |
+| Controller | `HabitsController` に `save_excluded_days!`（destroy_all→再登録方式）追加 |
+| Controller | `HabitsController#create` をトランザクションで習慣保存と除外日保存を一体化 |
+| Controller | `HabitsController` に `edit` / `update` アクション追加 |
+| Controller | `HabitsController#index` / `DashboardsController#index` / `WeeklyReflectionsController` に `includes(:habit_excluded_days)` 追加（N+1防止） |
+| Controller | 各コントローラーの `build_habit_stats` でチェック型の分母を `effective_weekly_target` に変更 |
+| View | `habits/new.html.erb` に除外曜日チェックボックス追加（グリッドレイアウト・スマホ対応・バリデーションエラー後の状態復元） |
+| View | `habits/edit.html.erb` を新規作成（既存除外日をチェック済み状態で表示・記録タイプ変更不可） |
+| View | `habits/index.html.erb` に「除外: 土・日」表示・編集ボタン追加 |
+| Route | `config/routes.rb` に `edit` / `update` を追加 |
+| Test | `HabitExcludedDay` モデルテスト15件追加 |
+| Fix | `test/fixtures/habit_excluded_days.yml` を削除（NOT NULL 制約違反の根本解決） |
+
+<br>
+
+#### effective_weekly_target の計算設計
+
+```
+実施予定日数 = min(weekly_target, 7 - 除外日数)
+
+例1: 目標5日 / 除外: 土日(2日) → min(5, 5) = 5日 → 5/5日 = 100%
+例2: 目標5日 / 除外なし      → min(5, 7) = 5日 → 従来通り
+例3: 目標7日 / 除外: 5日     → min(7, 2) = 2日 → 物理的な実施可能日数が分母
+```
+
+<br>
+
+チェック型のみ除外日が分母に影響する。数値型（分・冊・km）は絶対数値目標のため除外日に影響されない。
+
+<br>
+
+#### フォーム設計のポイント
+
+<br>
+
+| 設計 | 内容 |
+|:---|:---|
+| `check_box_tag "excluded_day_numbers[]"` | `habit` ネームスペース外で送信（habit テーブルのカラムではないため） |
+| `destroy_all` → 再登録方式 | 更新時に「チェックを全て外す」操作も確実に DB に反映できる |
+| `params.key?(:excluded_day_numbers)` | edit 画面でバリデーションエラー後の再表示時は params を優先し、通常表示は DB の値を使う |
+| `focus-within:ring-2` | `sr-only` で非表示のチェックボックスへのキーボードフォーカスをラベルに可視化 |
+| `has-[:checked]:border-blue-500` | JavaScript なしで選択状態を視覚的にハイライト |
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `app/models/habit_excluded_day.rb` | 新規作成（バリデーション・DAY_NAMES/DAY_NAMES_FULL定数） |
+| `app/models/habit.rb` | `has_many :habit_excluded_days` / `excluded_day_numbers` / `effective_weekly_target` / `weekly_progress_stats` 更新 |
+| `app/controllers/habits_controller.rb` | `edit` / `update` / `save_excluded_days!` 追加・`includes` 追加・`build_habit_stats` 更新 |
+| `app/controllers/dashboards_controller.rb` | `includes(:habit_excluded_days)` / `effective_weekly_target` 対応 |
+| `app/controllers/weekly_reflections_controller.rb` | `includes(:habit_excluded_days)` / `effective_weekly_target` 対応 |
+| `app/views/habits/new.html.erb` | 除外日チェックボックス追加・バリデーションエラー後の状態復元 |
+| `app/views/habits/edit.html.erb` | 新規作成（既存除外日をチェック済みで表示・記録タイプ変更不可） |
+| `app/views/habits/index.html.erb` | 「除外: 土・日」表示・編集ボタン追加・フォールバック値修正 |
+| `config/routes.rb` | `edit` / `update` を追加 |
+| `test/models/habit_excluded_day_test.rb` | 新規作成（15件） |
+| `test/fixtures/habit_excluded_days.yml` | 削除（NOT NULL 違反の根本解決） |
+
+<br>
+
+#### テスト結果
+
+<br>
+```
+B-2テスト: 15 runs, 33 assertions, 0 failures, 0 errors, 0 skips
+全テスト:  291 runs, 792 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -1817,7 +1916,7 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 | オンボーディング（初回ガイド） | 未実装 | 本リリースで追加予定 |
 | グラフ・チャート表示 | 未実装 | 本リリースで追加予定 |
 | 数値型習慣（冊数・時間・km等） | ✅ 実装済み（#B-1） | — |
-| 除外日設定（習慣ごとに実施しない曜日を設定） | 未実装 | 本リリースで追加予定 |
+| 除外日設定（習慣ごとに実施しない曜日を設定） | ✅ 実装済み（#B-2） | — |
 
 <br>
 
@@ -1882,8 +1981,8 @@ habitflow/
 ├── app/
 │   ├── controllers/
 │   │   ├── application_controller.rb      # 認証・ロック判定・エラーハンドリングの共通処理
-│   │   ├── dashboards_controller.rb       # ダッシュボード（変更: build_habit_stats 数値型対応 #B-1）
-│   │   ├── habits_controller.rb           # 習慣の CRUD（変更: unit / measurement_type Strong Parameters 追加 #B-1）
+│   │   ├── dashboards_controller.rb       # ダッシュボード（変更: includes・effective_weekly_target対応 #B-2）
+│   │   ├── habits_controller.rb           # 習慣の CRUD（変更: edit/update追加・save_excluded_days!・includes #B-2）
 │   │   ├── habit_records_controller.rb    # 習慣の日次記録（変更: Float() 安全変換・numeric_value 対応 #B-1）
 │   │   ├── weekly_reflections_controller.rb # 週次振り返り（変更: corrections 受け渡し・build_habit_stats 数値型対応 #B-1）
 │   │   ├── sessions_controller.rb         # ログイン・ログアウト
@@ -1896,7 +1995,8 @@ habitflow/
 │   │   ├── habit_record.rb                # 日次記録・AM4:00 基準・UNIQUE 制約
 │   │   ├── weekly_reflection.rb           # 週次振り返り・complete! メソッド
 │   │   ├── weekly_reflection_habit_summary.rb # スナップショット・達成率計算
-│   │   └── habit_template.rb                  # #A-5: オンボーディング用習慣テンプレートマスタ
+│   │   ├── habit_template.rb                  # #A-5: オンボーディング用習慣テンプレートマスタ
+│   │   └── habit_excluded_day.rb              # #B-2: 除外日モデル（DAY_NAMES定数・バリデーション）
 │   ├── services/
 │   │   ├── weekly_reflection_complete_service.rb  # #A-7 #B-1: 振り返り完了フロー（corrections引数・差分補正ロジック追加）
 │   │   ├── habit_record_save_service.rb            # #A-7 #B-1: 習慣記録保存フロー（数値型対応・errors:[]配列形式統一）
@@ -1918,7 +2018,7 @@ habitflow/
 │   │   └── test_mailer.rb                              # #A-4: 動作確認用メイラー（将来のMailer実装の参考）
 │   └── views/
 │       ├── dashboards/                    # ダッシュボード画面（変更: 単位表示をチェック型→日/数値型→unit に分岐 #B-1）
-│       ├── habits/                        # 習慣一覧・新規作成画面（変更: measurement_type/unit フィールド追加 #B-1）
+│       ├── habits/                        # 習慣一覧・新規作成・編集画面（変更: 除外日チェックボックス・edit追加 #B-2）
 │       ├── habit_records/                 # 習慣記録パーシャル（変更: チェック型/数値型UI切り替え・format("%g")統一 #B-1）
 │       ├── weekly_reflections/            # 振り返り一覧・入力・詳細画面（変更: リフレクション3項目・数値補正フィールド追加 #B-1）
 │       ├── shared/                        # ヘッダー・フッター・エラー表示パーシャル
@@ -1976,7 +2076,8 @@ habitflow/
     │   ├── weekly_reflection_complete_service_test.rb   # 変更: 補正ロジック・再補正・セキュリティテスト追加（#B-1）
     │   └── habit_record_save_service_test.rb            # #A-7: 習慣記録フローのテスト（3テスト）
     ├── models/
-    │   └── habit_record_test.rb              # 変更: numeric_value バリデーション・Service経由保存テスト追加（#B-1）
+    │   ├── habit_record_test.rb              # 変更: numeric_value バリデーション・Service経由保存テスト追加（#B-1）
+    │   └── habit_excluded_day_test.rb     # #B-2: 除外日モデルテスト（15件）
     └── integration/
         └── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
 ```
@@ -2008,7 +2109,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-276 runs, 759 assertions, 0 failures, 0 errors, 0 skips
+291 runs, 792 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
@@ -2036,6 +2137,7 @@ docker compose exec web bin/rails test
 | `test/models/habit_record_test.rb` | モデル | `numeric_value` バリデーション・Service経由保存（#B-1追記） |
 | `test/integration/numeric_habit_flow_test.rb` | E2E | 数値型習慣の作成→記録→進捗確認→ダッシュボード表示のフロー（#B-1） |
 | `test/services/weekly_reflection_complete_service_test.rb` | サービス | 差分補正・再補正・マイナスクランプ・セキュリティ（#B-1追記） |
+| `test/models/habit_excluded_day_test.rb` | モデル | 除外日バリデーション・UNIQUE制約・effective_weekly_target・達成率計算（#B-2・15件） |
 
 <br>
 
@@ -2584,6 +2686,51 @@ test "A" do
 end
 test "B" do
   travel_to Time.zone.local(2026, 4, 11, 10, 0) do ... end
+end
+```
+
+<br>
+
+### フィクスチャはテーブル追加時に必ず内容を確認する（#B-2）
+
+<br>
+
+`bin/rails generate model` は自動でフィクスチャファイルを生成するが、<br>
+`one: {}` は「全カラムが nil のレコード」を意味するため、<br>
+`NOT NULL` 制約があるカラムが含まれると `ActiveRecord::NotNullViolation` が発生する。<br>
+テストで setup メソッド内で動的にデータを作成する方式の場合、フィクスチャは不要なため削除する。<br>
+空ファイルにするより削除する方が将来の事故を完全に防げる。<br>
+```bash
+# ❌ 自動生成のままにする（one: {} が NOT NULL 違反を引き起こす）
+# test/fixtures/habit_excluded_days.yml に one: {} two: {} が残る
+
+# ✅ 不要なフィクスチャファイルを削除する
+git rm test/fixtures/habit_excluded_days.yml
+```
+
+<br>
+
+### `save_excluded_days!` は必ず先頭で `destroy_all` する（#B-2）
+
+<br>
+
+除外日の更新処理で「チェックを全て外す」操作（`params[:excluded_day_numbers]` が nil）に対応するには、<br>
+処理の先頭で `habit.habit_excluded_days.destroy_all` を実行してから保存し直す必要がある。<br>
+`return if excluded_day_params.blank?` を先に書くと nil のとき既存データが削除されずバグになる。<br>
+「リセット＆セーブ」方式により追加・削除・変更の全パターンを1つのロジックで処理できる。<br>
+```ruby
+# ❌ blank? チェックを先に書く → チェックを全て外しても除外日が残る
+def save_excluded_days!(habit, params)
+  return if params.blank?     # ← nil のとき destroy_all が呼ばれない
+  habit.habit_excluded_days.destroy_all
+  ...
+end
+
+# ✅ destroy_all を先頭に置く → 全解除も確実に反映される
+def save_excluded_days!(habit, params)
+  habit.habit_excluded_days.destroy_all  # ← 常に実行する
+  return if params.blank?
+  ...
 end
 ```
 

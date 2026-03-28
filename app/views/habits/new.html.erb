@@ -2,27 +2,24 @@
 <% content_for :title, "習慣を追加 | HabitFlow" %>
 <%#
   ==============================================================================
-  習慣新規作成ページ（B-1: 数値型習慣対応・ラジオボタンハイライト修正）
+  習慣新規作成ページ（B-2: 除外日設定追加）
   ==============================================================================
+  【B-2 での変更内容】
+    ① 除外する曜日チェックボックスセクションを追加
+       - 0（日）〜6（土）の7曜日を横並びで表示
+       - チェックした曜日が excluded_day_numbers[] として POST される
+       - スマホ・デスクトップ両対応レイアウト
 
-  【B-1 での変更内容】
-    ① measurement_type の選択フィールドを追加
-       - チェック型（0）: やった/やらないで記録
-       - 数値型（1）: 数値で記録（分・冊・km など）
-    ② unit（単位）の入力フィールドを追加（数値型のみ表示）
-    ③ Stimulus コントローラーで measurement_type に応じて unit フィールドを動的表示
+  【フォームデータの送信形式】
+    チェックした曜日番号が配列として送られる。
+    例: 土曜・日曜にチェック → params[:excluded_day_numbers] = ["6", "0"]
+    name="excluded_day_numbers[]" の [] により Rails が自動で配列に変換する。
 
-  【今回の修正内容】
-    ④ ラジオボタンを囲む label タグに data-habit-form-target="measurementLabel" を追加
-       → habit_form_controller.js の toggleUnit() からラベルのクラスを切り替えられるように
-
-  【なぜ label タグに target を付けるのか】
-    ラジオボタン自体は class="sr-only" で非表示にしており、
-    label タグ全体がカード風ボタンとして表示される。
-    ユーザーがクリックしたとき「選択中」の青枠を付けるために、
-    JavaScript（Stimulus）が label タグを直接操作する必要がある。
-    data-habit-form-target="measurementLabel" を付けることで
-    this.measurementLabelTargets から参照できるようになる。
+  【habit モデルの外のパラメータとして送る理由】
+    excluded_day_numbers は habit テーブルのカラムではなく、
+    habit_excluded_days テーブルへの別レコードとして保存する。
+    そのため form.check_box ではなく通常の check_box_tag を使い、
+    habit ネームスペースの外に配置する。
   ==============================================================================
 %>
 
@@ -42,8 +39,6 @@
   <%#
     data-controller="habit-form":
       このフォーム全体を habit_form_controller.js（Stimulus コントローラー）に紐付ける。
-      コントローラーが提供する toggleUnit() メソッドが
-      measurement_type の切り替えに応じて UI を更新する。
   %>
   <%= form_with model: @habit,
                 url: habits_path,
@@ -64,48 +59,17 @@
                     transition-colors" %>
     </div>
 
-    <%# measurement_type（B-1 追加） %>
+    <%# measurement_type %>
     <div>
       <%= f.label :measurement_type, "記録タイプ",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
       <p class="text-xs text-gray-500 mb-2">習慣をどのように記録するかを選択してください</p>
 
       <div class="grid grid-cols-2 gap-3">
-
-        <%# ── チェック型の選択カード ──────────────────────────────────────── %>
-        <%#
-          【修正箇所】data-habit-form-target="measurementLabel" を追加
-          この label タグを habit_form_controller.js の
-          this.measurementLabelTargets から参照できるようにする。
-          JS が label の border/背景クラスを切り替えて「選択中」を視覚的に示す。
-
-          【初期スタイルについて】
-          border-gray-200 を初期値にしている。
-          connect() メソッドが読み込み時に自動的に toggleUnit() を呼び出し、
-          現在の選択状態に合わせて正しいクラスを付与するため、
-          ERB 側でスタイルを条件分岐させる必要がなくなった。
-          （以前は = @habit.check_type? ? 'border-blue-500...' : 'border-gray-200...'
-            という ERB での条件分岐が必要だったが不要になった）
-        %>
+        <%# チェック型カード %>
         <label class="relative flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer
                       border-gray-200 hover:border-gray-300"
                data-habit-form-target="measurementLabel">
-          <%#
-            ラジオボタン本体: class="sr-only" で視覚的には非表示にしている。
-            sr-only = Screen Reader Only の略で、スクリーンリーダーには読まれるが
-            画面上には表示されない（アクセシビリティを保ちながら非表示にする方法）。
-
-            data-habit-form-target="measurementType":
-              JS から this.measurementTypeTargets で参照してチェック状態を取得する。
-            data-action="change->habit-form#toggleUnit":
-              ラジオボタンの選択が変わったとき（change イベント）に
-              habit_form_controller.js の toggleUnit() メソッドを呼び出す。
-
-            checked: @habit.check_type? || @habit.measurement_type.nil?:
-              新規作成時（measurement_type が nil）または
-              バリデーションエラーでチェック型が選ばれていた場合に
-              チェック済み状態で初期表示する。
-          %>
           <%= f.radio_button :measurement_type, "check_type",
                 checked: @habit.measurement_type.nil? || @habit.check_type?,
                 class: "sr-only",
@@ -120,25 +84,10 @@
           </div>
         </label>
 
-        <%# ── 数値型の選択カード ──────────────────────────────────────────── %>
-        <%#
-          【修正箇所】data-habit-form-target="measurementLabel" を追加
-          チェック型と同様に JS から参照できるようにする。
-          クリック時に toggleUnit() が呼ばれ、
-          このラベルに border-blue-500 bg-blue-50 が付き、
-          チェック型ラベルからは border-blue-500 bg-blue-50 が外れる。
-        %>
+        <%# 数値型カード %>
         <label class="relative flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer
                       border-gray-200 hover:border-gray-300"
                data-habit-form-target="measurementLabel">
-          <%#
-            数値型のラジオボタン。
-            checked 属性を省略しているため、デフォルトは非選択。
-            バリデーションエラーで数値型が選ばれていた場合（@habit.numeric_type?）は
-            チェック済みで表示される必要があるが、
-            connect() → toggleUnit() が読み込み時に自動実行されるため
-            ラベルのハイライトは JS が正しく設定してくれる。
-          %>
           <%= f.radio_button :measurement_type, "numeric_type",
                 class: "sr-only",
                 data: {
@@ -151,23 +100,10 @@
             <p class="text-xs text-gray-500">分・冊・km で記録</p>
           </div>
         </label>
-
       </div>
     </div>
 
-    <%# unit（単位）: 数値型のときのみ表示（B-1 追加） %>
-    <%#
-      data-habit-form-target="unitField":
-        habit_form_controller.js から this.unitFieldTarget で参照できる。
-        toggleUnit メソッドで hidden 属性を切り替えてフィールドを表示/非表示する。
-
-      hidden（初期状態）:
-        新規作成時はチェック型がデフォルトのため最初から非表示。
-        @habit.numeric_type? のとき（バリデーションエラー後の再表示など）は表示する。
-        【注意】hidden 属性の付け方:
-          ERB で hidden: true と書くと <div hidden="hidden"> になり正しく動く。
-          ただし今回は文字列補間で制御している。
-    %>
+    <%# unit（単位）: 数値型のときのみ表示 %>
     <div data-habit-form-target="unitField"
          <%= @habit.numeric_type? ? "" : "hidden" %>>
       <%= f.label :unit, "単位",
@@ -185,25 +121,12 @@
     <div>
       <%= f.label :weekly_target, "週次目標値",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
-      <%#
-        data-habit-form-target="weeklyTargetLabel":
-          measurement_type が変わったとき、ヒント文の内容を切り替える。
-          チェック型: 「（1〜7回）」 / 数値型: 「（単位: 1以上の数値）」
-      %>
       <p class="text-xs text-gray-500 mb-2">
         1週間の目標を設定してください
         <span data-habit-form-target="weeklyTargetLabel">
           <%= @habit.numeric_type? ? "（単位: 1以上の数値）" : "（1〜7回）" %>
         </span>
       </p>
-      <%#
-        max: @habit.numeric_type? ? nil : 7
-          数値型のとき max 属性を付けない（nil にすると Rails は属性を出力しない）。
-          チェック型のとき max=7 を設定する。
-          JS の toggleUnit() でも max を動的に変更するが、
-          ページ初期表示時の HTML も正しい状態にしておくことで
-          「JS が動く前の一瞬」もバリデーションが機能する。
-      %>
       <%= f.number_field :weekly_target,
             min: 1,
             max: @habit.numeric_type? ? nil : 7,
@@ -211,6 +134,81 @@
             class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                     transition-colors" %>
+    </div>
+
+    <%# ============================================================
+        除外する曜日（B-2 追加・修正）
+        ============================================================
+        【修正内容】
+          修正前: check_box_tag の第3引数が常に false
+                  → バリデーションエラーで再表示したとき
+                    チェックが全て外れてしまい、ユーザーが再入力する必要があった。
+          修正後: params[:excluded_day_numbers] からチェック状態を復元する。
+                  → エラー再表示時もユーザーが入力した内容が保持される。
+
+        【params からの復元ロジック】
+          Array(params[:excluded_day_numbers]).map(&:to_i)
+            params[:excluded_day_numbers] が nil の場合: Array(nil) → [] になる
+            文字列配列の場合: ["6", "0"].map(&:to_i) → [6, 0] になる
+          .include?(day_number) でその曜日がチェック済みかどうか判定する。
+
+        【なぜ @habit の属性ではなく params から復元するのか】
+          excluded_day_numbers は habit テーブルのカラムではないため
+          @habit オブジェクトに値が入っていない。
+          params を参照することで送信された値をそのまま復元できる。
+    %>
+    <div>
+      <label class="block text-sm font-semibold text-gray-700 mb-1">
+        除外する曜日
+      </label>
+      <p class="text-xs text-gray-500 mb-3">
+        実施しない曜日を選択してください（達成率の計算から除外されます）
+      </p>
+
+      <%#
+        selected_days: バリデーションエラー後の再表示時にチェック状態を復元するための配列。
+        【処理の流れ】
+          1. params[:excluded_day_numbers] を取得する（nil の場合もある）
+          2. Array() でラップして必ず配列にする（nil → [], "6" → ["6"]）
+          3. .map(&:to_i) で文字列 "6" → 整数 6 に変換する
+        これにより selected_days = [6, 0] のような整数配列になる。
+        後の .include?(day_number) で各曜日のチェック状態を判定できる。
+      %>
+      <% selected_days = Array(params[:excluded_day_numbers]).map(&:to_i) %>
+
+      <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">
+        <% HabitExcludedDay::DAY_NAMES_FULL.each do |day_number, day_name| %>
+          <%#
+            focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1 を追加。
+            【理由】
+              check_box_tag は class: "sr-only" で視覚的に非表示にしているため、
+              キーボードの Tab キーでフォーカスが当たっても視覚的なフィードバックがない。
+              label に focus-within を設定することで、
+              ラベル内の非表示チェックボックスにフォーカスが当たったとき
+              ラベル全体にリングが表示され、どこにフォーカスがあるか分かるようになる。
+          %>
+          <label class="flex flex-col items-center gap-1.5 p-2 border-2 rounded-lg cursor-pointer
+                        transition-colors hover:border-blue-300 hover:bg-blue-50
+                        has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50
+                        focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1">
+            <%#
+              【修正ポイント】check_box_tag の第3引数を変更
+              修正前: false（常に未チェック）
+              修正後: selected_days.include?(day_number)
+                      → バリデーションエラー後の再表示時にチェック状態を復元する
+            %>
+            <%= check_box_tag "excluded_day_numbers[]", day_number,
+                  selected_days.include?(day_number),
+                  id: "excluded_day_#{day_number}",
+                  class: "sr-only" %>
+            <span class="text-xs font-bold text-gray-600"><%= day_name %></span>
+          </label>
+        <% end %>
+      </div>
+
+      <p class="text-xs text-gray-400 mt-2">
+        ※ 例: 土日を除外すると週5日が最大達成日数になります
+      </p>
     </div>
 
     <%# ボタンエリア %>

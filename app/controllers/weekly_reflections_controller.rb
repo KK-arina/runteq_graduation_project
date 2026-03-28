@@ -1,21 +1,17 @@
 # app/controllers/weekly_reflections_controller.rb
 #
 # ==============================================================================
-# 【リフレクション手法対応での変更内容】
-#   ① create アクションで params[:reflection_numeric_corrections] を
-#     WeeklyReflectionCompleteService に渡す（corrections: 引数）
-#   ② weekly_reflection_params に :direct_reason / :background_situation /
-#     :next_action を追加
-#   ③ build_habit_stats を B-1 数値型対応版に更新
+# WeeklyReflectionsController（B-2: 除外日対応）
+# ==============================================================================
+# 【B-2 での変更内容】
+#   ① @habits 取得時に includes(:habit_excluded_days) を追加（N+1防止）
+#   ② build_habit_stats のチェック型の分母を effective_weekly_target に変更
 # ==============================================================================
 
 class WeeklyReflectionsController < ApplicationController
   before_action :require_login
   before_action :set_weekly_reflection, only: [ :show ]
 
-  # ---------------------------------------------------------------
-  # index
-  # ---------------------------------------------------------------
   def index
     @weekly_reflections = current_user.weekly_reflections
                                       .completed
@@ -24,13 +20,11 @@ class WeeklyReflectionsController < ApplicationController
 
     @current_week_reflection = WeeklyReflection.find_or_build_for_current_week(current_user)
 
-    @habits = current_user.habits.active
+    # includes(:habit_excluded_days)（B-2 追加）
+    @habits = current_user.habits.active.includes(:habit_excluded_days)
     @habit_stats = build_habit_stats(@habits, current_user)
   end
 
-  # ---------------------------------------------------------------
-  # new
-  # ---------------------------------------------------------------
   def new
     @weekly_reflection = find_pending_last_week_reflection ||
                         WeeklyReflection.find_or_build_for_current_week(current_user)
@@ -40,16 +34,14 @@ class WeeklyReflectionsController < ApplicationController
       return
     end
 
-    @habits = current_user.habits.active
+    # includes(:habit_excluded_days)（B-2 追加）
+    @habits = current_user.habits.active.includes(:habit_excluded_days)
     @habit_stats = build_habit_stats(@habits, current_user)
 
     @achieved_habits     = @habits.select { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
     @not_achieved_habits = @habits.reject { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
   end
 
-  # ---------------------------------------------------------------
-  # create
-  # ---------------------------------------------------------------
   def create
     @weekly_reflection = find_pending_last_week_reflection ||
                         WeeklyReflection.find_or_build_for_current_week(current_user)
@@ -62,26 +54,12 @@ class WeeklyReflectionsController < ApplicationController
     @weekly_reflection.assign_attributes(weekly_reflection_params)
     was_locked = current_user.locked?
 
-    # ── 変更: corrections を Service に渡す ────────────────────────────────
-    #
-    # params[:reflection_numeric_corrections] は以下の形式で届く:
-    #   { "habit_1" => "150.0", "habit_3" => "45" }
-    # フォームの name 属性が:
-    #   name="reflection_numeric_corrections[habit_#{habit.id}]"
-    # のように設定されているため、Rails が自動でネストしたハッシュに変換する。
-    #
-    # .permit! は使わず、Service 内で habit_id の妥当性チェックを行う設計にしている。
-    # （Service が自分のユーザーの習慣かどうかを確認するため）
-    #
-    # nil の場合は Service 側で {} に変換されるため、
-    # ここでは presence チェック不要（nil のまま渡す）。
     result = WeeklyReflectionCompleteService.new(
       reflection:  @weekly_reflection,
       user:        current_user,
       was_locked:  was_locked,
-      corrections: params[:reflection_numeric_corrections]  # ← 追加
+      corrections: params[:reflection_numeric_corrections]
     ).call
-    # ────────────────────────────────────────────────────────────────────────
 
     if result[:success]
       current_user.reload
@@ -96,7 +74,8 @@ class WeeklyReflectionsController < ApplicationController
     else
       Rails.logger.error "WeeklyReflectionCompleteService failed: #{result[:error]}"
 
-      @habits = current_user.habits.active
+      # includes(:habit_excluded_days)（B-2 追加）
+      @habits = current_user.habits.active.includes(:habit_excluded_days)
       @habit_stats = build_habit_stats(@habits, current_user)
       @achieved_habits     = @habits.select { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
       @not_achieved_habits = @habits.reject { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
@@ -106,9 +85,6 @@ class WeeklyReflectionsController < ApplicationController
     end
   end
 
-  # ---------------------------------------------------------------
-  # show
-  # ---------------------------------------------------------------
   def show
     @habit_summaries = @weekly_reflection.habit_summaries
                                          .includes(:habit)
@@ -147,6 +123,7 @@ class WeeklyReflectionsController < ApplicationController
                 .find_by(week_start_date: last_week)
   end
 
+  # build_habit_stats（B-2: 除外日対応に更新）
   def build_habit_stats(habits, user)
     today      = HabitRecord.today_for_record
     week_start = today.beginning_of_week(:monday)
@@ -175,15 +152,19 @@ class WeeklyReflectionsController < ApplicationController
 
     habits.each_with_object({}) do |habit, hash|
       if habit.check_type?
+        # 【B-2 変更】分母を effective_weekly_target に変更
+        target          = habit.effective_weekly_target
         completed_count = check_counts[habit.id] || 0
-        rate = habit.weekly_target.zero? ? 0 :
-          ((completed_count.to_f / habit.weekly_target) * 100).clamp(0, 100).floor
-        hash[habit.id] = { rate: rate, completed_count: completed_count, numeric_sum: nil }
+        rate = target.zero? ? 0 :
+          ((completed_count.to_f / target) * 100).clamp(0, 100).floor
+        hash[habit.id] = { rate: rate, completed_count: completed_count, numeric_sum: nil,
+                           effective_target: target }
       else
         numeric_sum = (numeric_sums[habit.id] || 0).to_f
         rate = habit.weekly_target.zero? ? 0 :
           ((numeric_sum / habit.weekly_target) * 100).clamp(0, 100).floor
-        hash[habit.id] = { rate: rate, completed_count: nil, numeric_sum: numeric_sum }
+        hash[habit.id] = { rate: rate, completed_count: nil, numeric_sum: numeric_sum,
+                           effective_target: habit.weekly_target }
       end
     end
   end
