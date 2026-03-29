@@ -59,7 +59,8 @@ flowchart LR
 [![B-1 数値型習慣](https://img.shields.io/badge/B--1_数値型習慣-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-1-numeric-habit)
 [![B-2 除外日設定](https://img.shields.io/badge/B--2_除外日設定-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-2-habit-excluded-days)
 [![B-3 ストリーク計算](https://img.shields.io/badge/B--3_ストリーク計算-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-3-streak-calculation)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-11%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![B-4 アーカイブ機能](https://img.shields.io/badge/B--4_アーカイブ機能-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-4-habit-archive)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-12%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -136,6 +137,7 @@ flowchart LR
 | #B-1 | 数値型習慣の記録・達成率計算・リフレクション手法対応 | 2026-03-27 | feature/B-1-numeric-habit |
 | #B-2 | 習慣の除外日設定（habit_excluded_days） | 2026-03-28 | feature/B-2-habit-excluded-days |
 | #B-3 | ストリーク計算・表示（current_streak / longest_streak） | 2026-03-29 | feature/B-3-streak-calculation |
+| #B-4 | 習慣のアーカイブ機能（archived_at）| 2026-03-29 | feature/B-4-habit-archive |
 
 <br>
 
@@ -1225,6 +1227,157 @@ B-3テスト: 25 runs, 33 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
+### #B-4: 習慣のアーカイブ機能（archived_at）
+
+<br>
+
+**ブランチ:** `feature/B-4-habit-archive`<br>
+**完了日:** 2026-03-29<br>
+**概要:** 習慣の「削除（deleted_at）」と「卒業アーカイブ（archived_at）」を明確に区別する機能を実装。<br>
+達成して卒業した習慣をアーカイブとして残しつつ、アクティブ一覧から非表示にする。<br>
+アーカイブ一覧ページ・復元機能・状態ガード付きのモデルメソッドを実装した。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Model | `scope :active` を修正（`archived_at: nil` の条件を追加） |
+| Model | `scope :archived` を新規追加（`deleted_at: nil AND archived_at IS NOT NULL`） |
+| Model | `archive!` メソッドを追加（状態ガード付き：二重実行・削除済みで RuntimeError） |
+| Model | `unarchive!` メソッドを追加（状態ガード付き：未アーカイブで RuntimeError） |
+| Model | `archived?` メソッドを追加（`archived_at.present?` を返す可読性向上ヘルパー） |
+| Model | `active?` メソッドを修正（`deleted_at.nil? && archived_at.nil?` に変更） |
+| Controller | `archive` アクション追加（POST /habits/:id/archive → habits#archive） |
+| Controller | `unarchive` アクション追加（PATCH /habits/:id/unarchive → habits#unarchive） |
+| Controller | `archived` アクション追加（GET /habits/archived → 8-2番画面） |
+| Controller | `set_habit` を修正（`where(deleted_at: nil).find` に変更） |
+| Controller | `before_action :require_unlocked` に `:archive` を追加 |
+| Route | `collection do get :archived end` を追加（`archived_habits_path`） |
+| Route | `member do post :archive / patch :unarchive end` を追加 |
+| View | `habits/index.html.erb` にヘッダーの「📦 アーカイブ済みを見る」リンクを追加 |
+| View | `habits/index.html.erb` の各習慣カードに `button_to` で「📦 卒業」ボタンを追加 |
+| View | `habits/archived.html.erb` を新規作成（8-2番画面・スマホ・デスクトップ両対応） |
+| Test | `test/models/habit_archive_test.rb` を新規作成（22件） |
+| Test | `test/controllers/habits_archive_controller_test.rb` を新規作成（6件） |
+
+<br>
+
+#### 習慣の状態管理設計
+
+<br>
+
+| 状態 | 条件 | 操作可否 |
+|:---|:---|:---|
+| アクティブ | `deleted_at: nil AND archived_at: nil` | 全操作可能 |
+| アーカイブ済み | `deleted_at: nil AND archived_at: 設定済み` | 復元のみ可能 |
+| 削除済み | `deleted_at: 設定済み` | 操作不可 |
+
+<br>
+
+#### archive! の状態ガード設計
+
+```ruby
+def archive!
+  raise RuntimeError, "すでにアーカイブ済みです" if archived?
+  raise RuntimeError, "削除済みのため操作できません" if deleted?
+  update!(archived_at: Time.current)
+end
+
+def unarchive!
+  raise RuntimeError, "アーカイブされていません" unless archived?
+  update!(archived_at: nil)
+end
+```
+
+<br>
+
+状態ガードをモデルに集約することで、コントローラーが薄くなり（単一責任の原則）、<br>
+不正な状態遷移（二重アーカイブ・削除済み習慣のアーカイブ）をデータ層で防いでいる。
+
+<br>
+
+#### set_habit の変更履歴と設計意図
+
+<br>
+
+| バージョン | 実装 | 問題 |
+|:---|:---|:---|
+| MVP版 | `current_user.habits.active.find` | アーカイブ済み習慣が `unarchive` で取得不可 |
+| B-4初版 | `current_user.habits.find` | 論理削除済み習慣も取得できてしまい既存テスト失敗 |
+| B-4最終版 | `current_user.habits.where(deleted_at: nil).find` | 削除済みを除外・アーカイブ済みは操作可能 |
+
+<br>
+
+`where(deleted_at: nil)` を使うことで「削除済みだけ排除」し、<br>
+アクティブ（`archived_at: nil`）とアーカイブ済み（`archived_at: 設定済み`）の両方を操作対象にできる。<br>
+`current_user.habits.` で絞り込むため他ユーザーの習慣は RecordNotFound になりセキュリティも維持される。
+
+<br>
+
+#### button_to 採用の理由
+
+<br>
+
+アーカイブボタンは `link_to + data-turbo-method: :post` から `button_to` に変更した。
+
+<br>
+
+| 方式 | POST の仕組み | リスク |
+|:---|:---|:---|
+| `link_to + turbo_method` | Turbo が JS で POST に変換（疑似POST） | JS無効・Turbo読み込み失敗時に GET になる |
+| `button_to` | `<form method="post">` として展開（本物のPOST） | JS なしでも確実に POST が送られる |
+
+<br>
+
+`form: { style: "display:inline" }` を指定することで他のボタンと横並びのレイアウトを維持している。
+
+<br>
+
+#### アーカイブ一覧ページ（8-2番画面）の設計
+
+<br>
+
+| 設計 | 内容 |
+|:---|:---|
+| グレートーン配色 | アクティブ習慣（白背景）と視覚的に区別（`bg-gray-50 / text-gray-600`） |
+| レスポンシブ | `grid-cols-1 md:grid-cols-2 lg:grid-cols-3`（スマホ1列・タブレット2列・PC3列） |
+| Empty State | 0件時に「卒業ボタンでアーカイブできます」の案内とボタンを表示 |
+| アーカイブ日表示 | `habit.archived_at.strftime("%Y年%m月%d日")` で卒業日を表示 |
+| 最高ストリーク表示 | `longest_streak > 0` のときに「🔥 N日」を表示して達成を称える |
+| パンくず代わり | 「← 習慣一覧に戻る」リンクでユーザーが迷子にならないよう設置 |
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `app/models/habit.rb` | `scope :active` 修正・`scope :archived` 追加・`archive!` / `unarchive!` / `archived?` / `active?` 追加 |
+| `app/controllers/habits_controller.rb` | `archive` / `unarchive` / `archived` アクション追加・`set_habit` 修正・`before_action` 更新 |
+| `config/routes.rb` | `collection :archived` / `member :archive` / `member :unarchive` を追加 |
+| `app/views/habits/index.html.erb` | 「📦 アーカイブ済みを見る」リンク追加・`button_to` でアーカイブボタン追加 |
+| `app/views/habits/archived.html.erb` | 新規作成（8-2番画面・グレートーン・Empty State・復元ボタン） |
+| `test/models/habit_archive_test.rb` | 新規作成（22件：scope・archive!/unarchive!・状態ガード異常系） |
+| `test/controllers/habits_archive_controller_test.rb` | 新規作成（6件：archived一覧・archive・unarchive・他ユーザー防止） |
+
+<br>
+
+#### テスト結果
+
+<br>
+```
+B-4テスト: 22 runs, 33 assertions, 0 failures, 0 errors, 0 skips
+全テスト:  344 runs, 867 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -2142,6 +2295,7 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 | グラフ・チャート表示 | 未実装 | 本リリースで追加予定 |
 | 数値型習慣（冊数・時間・km等） | ✅ 実装済み（#B-1） | — |
 | 除外日設定（習慣ごとに実施しない曜日を設定） | ✅ 実装済み（#B-2） | — |
+| 習慣のアーカイブ | ✅ 実装済み（#B-4） | — |
 
 <br>
 
@@ -2207,7 +2361,7 @@ habitflow/
 │   ├── controllers/
 │   │   ├── application_controller.rb      # 認証・ロック判定・エラーハンドリングの共通処理
 │   │   ├── dashboards_controller.rb       # ダッシュボード（変更: includes・effective_weekly_target対応 #B-2）
-│   │   ├── habits_controller.rb           # 習慣の CRUD（変更: edit/update追加・save_excluded_days!・includes #B-2）
+│   │   ├── habits_controller.rb           # 習慣の CRUD（変更: archive/unarchive/archived追加・set_habit修正 #B-4）
 │   │   ├── habit_records_controller.rb    # 習慣の日次記録（変更: Float() 安全変換・numeric_value 対応 #B-1）
 │   │   ├── weekly_reflections_controller.rb # 週次振り返り（変更: corrections 受け渡し・build_habit_stats 数値型対応 #B-1）
 │   │   ├── sessions_controller.rb         # ログイン・ログアウト
@@ -2244,7 +2398,7 @@ habitflow/
 │   │   └── test_mailer.rb                              # #A-4: 動作確認用メイラー（将来のMailer実装の参考）
 │   └── views/
 │       ├── dashboards/                    # ダッシュボード画面（変更: 🔥ストリークバッジ追加 #B-3）
-│       ├── habits/                        # 習慣一覧・新規作成・編集画面（変更: ストリークバッジ追加 #B-3）
+│       ├── habits/                        # 習慣一覧・新規作成・編集・アーカイブ一覧画面（変更: アーカイブボタン・archived.html.erb追加 #B-4）
 │       ├── habit_records/                 # 習慣記録パーシャル（変更: 状態バッジ5パターン #B-3）
 │       ├── weekly_reflections/            # 振り返り一覧・入力・詳細画面（変更: リフレクション3項目・数値補正フィールド追加 #B-1）
 │       ├── shared/                        # ヘッダー・フッター・エラー表示パーシャル
@@ -2304,9 +2458,12 @@ habitflow/
     ├── models/
     │   ├── habit_record_test.rb              # 変更: numeric_value バリデーション・Service経由保存テスト追加（#B-1）
     │   ├── habit_excluded_day_test.rb     # #B-2: 除外日モデルテスト（15件）
-    │   └── habit_streak_test.rb           # #B-3: ストリーク計算テスト（25件・境界値・除外日・お休みモード）
-    └── integration/
-        └── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
+    │   ├── habit_streak_test.rb           # #B-3: ストリーク計算テスト（25件・境界値・除外日・お休みモード）
+    │   └── habit_archive_test.rb          # #B-4: アーカイブ機能テスト（22件：scope・状態遷移・状態ガード異常系）
+    ├── integration/
+    │   └── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
+    └── controllers/
+        └── habits_archive_controller_test.rb  # #B-4: アーカイブコントローラーテスト（6件：archived一覧・archive・unarchive・他ユーザー防止）
 ```
 
 <br>
@@ -2336,7 +2493,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-316 runs, 825 assertions, 0 failures, 0 errors, 0 skips
+344 runs, 867 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
@@ -2366,6 +2523,8 @@ docker compose exec web bin/rails test
 | `test/services/weekly_reflection_complete_service_test.rb` | サービス | 差分補正・再補正・マイナスクランプ・セキュリティ（#B-1追記） |
 | `test/models/habit_excluded_day_test.rb` | モデル | 除外日バリデーション・UNIQUE制約・effective_weekly_target・達成率計算（#B-2・15件） |
 | `test/models/habit_streak_test.rb` | モデル | ストリーク計算・longest_streak保護・除外日・お休みモード日付単位判定・AM4:00境界値（#B-3・25件） |
+| `test/models/habit_archive_test.rb` | モデル | アーカイブscope・archive!/unarchive!・状態ガード異常系（#B-4・22件） |
+| `test/controllers/habits_archive_controller_test.rb` | コントローラー | archived一覧・archive・unarchive・他ユーザー防止（#B-4・6件） |
 
 <br>
 
@@ -3006,6 +3165,52 @@ end
 `update_columns` はバリデーションをスキップして直接 UPDATE するため高速。<br>
 また `updated_at` が更新されないため「ストリーク計算による更新」と「ユーザーによる更新」を区別できる。<br>
 `last_streak_calculated_at` に計算時刻を記録することでデバッグや再計算判定にも活用できる。
+
+<br>
+
+### set_habit のスコープは「削除済み除外」と「状態問わず取得」を分けて考えること（#B-4）
+
+<br>
+
+`scope :active`（`deleted_at: nil AND archived_at: nil`）で `set_habit` を絞り込むと、<br>
+アーカイブ済み習慣を `unarchive` しようとしたとき RecordNotFound になって操作できない。<br>
+かといってスコープなしの `.find` にすると論理削除済み習慣も取得できてしまい既存テストが壊れる。<br>
+`where(deleted_at: nil).find` が最適解。「削除済みだけ排除・archived_at は問わない」設計にすることで<br>
+アクティブ・アーカイブ済みの両方を操作対象にしつつ、削除済みへの操作は RecordNotFound で弾ける。
+
+<br>
+
+### 状態変更メソッドの状態ガードはモデルに集約すること（#B-4）
+
+<br>
+
+コントローラーで `if @habit.active?` と状態チェックを書くとコントローラーが肥大化し、<br>
+将来 API や他コントローラーから同じメソッドを呼んだとき状態ガードが抜ける危険がある。<br>
+`archive!` / `unarchive!` の中で `raise RuntimeError` で状態ガードをすることで、<br>
+どこから呼んでも不正な状態遷移を防げる（二重アーカイブ・削除済み習慣のアーカイブ等）。<br>
+コントローラー側は `rescue RuntimeError => e` で `flash[:alert] = e.message` するだけでよい。
+
+<br>
+
+### `link_to + data-turbo-method` はフォールバックが弱い。状態変更には `button_to` を使うこと（#B-4）
+
+<br>
+
+`link_to + data: { turbo_method: :post }` は Turbo が JS で POST に変換する疑似 POST のため、<br>
+JavaScript が無効・Turbo の読み込み失敗時に GET リクエストになってしまう。<br>
+`button_to` は `<form method="post">` として HTML に展開されるため JS なしでも確実に POST が送られる。<br>
+横並びのボタン群の中で使う場合は `form: { style: "display:inline" }` でレイアウト崩れを防ぐこと。
+
+<br>
+
+### 異常系テストは正常系と同じくらい重要（#B-4）
+
+<br>
+
+正常系（happy path）だけテストしていると「二重アーカイブ」「削除済み習慣のアーカイブ」のような<br>
+ありえない操作をしたときにどうなるかが保証されない。<br>
+`assert_raises(RuntimeError)` で異常系テストを追加することで状態ガードが正しく機能することを確認できる。<br>
+テスト件数が増えても `0 failures, 0 errors` を保てるよう異常系も網羅する習慣をつけること。
 
 <br>
 
