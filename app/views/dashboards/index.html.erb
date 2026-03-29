@@ -2,25 +2,13 @@
 <% content_for :title, "ダッシュボード | HabitFlow" %>
 <%#
   ═══════════════════════════════════════════════════════════════════
-  【このファイルの役割】
-    ダッシュボードのメインビュー。
-    @locked が true の場合は警告バナーを表示し、
-    習慣チェックリストはロック中でも使用できます。
+  【B-3 での変更内容】
+    今日の習慣チェックリスト内の各習慣名の横に
+    🔥 N日 のストリークバッジを表示する。
 
-  【単位表示の修正内容】
-    修正前: チェック型・数値型どちらも「日」と決め打ちしていた
-            例: 「6/7日（85%）」← 数値型（読書/冊）でも「日」になっていた
-
-    修正後: habit.check_type? で分岐して単位を出し分ける
-            チェック型 → 「3/7日」（completed_count を使う）
-            数値型     → 「6/7冊」（numeric_sum と habit.unit を使う）
-
-  【なぜ分岐が必要なのか】
-    チェック型と数値型では「何を記録するか」が根本的に異なる。
-      チェック型: やった日数を数える → completed_count（0〜7）
-      数値型:     累計値を合計する   → numeric_sum（例: 6.0冊）
-    同じ変数・同じ単位で表示すると誤った情報をユーザーに見せてしまうため、
-    habit の種類に応じて表示を切り替える必要がある。
+    ストリークバッジの表示ルール:
+      current_streak > 0  → 「🔥 N日」（橙色バッジ）
+      current_streak == 0 → バッジ非表示
   ═══════════════════════════════════════════════════════════════════
 %>
 
@@ -88,57 +76,37 @@
 
       <%# 習慣ごとの達成率 %>
       <% @habits.each do |habit| %>
-        <%#
-          @habit_stats[habit.id] には以下のキーが入っている（dashboards_controller.rb で設定）:
-            チェック型: { rate: 整数, completed_count: 整数, numeric_sum: nil }
-            数値型:     { rate: 整数, completed_count: nil, numeric_sum: 小数 }
-          || {} はデータが存在しない場合に空ハッシュを返す（エラー防止）。
-        %>
         <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
         <div class="mb-3">
           <div class="flex justify-between items-center mb-1 gap-2">
-            <%#
-              習慣名
-              flex-1 min-w-0 truncate: 長い名前は「...」で省略してレイアウトを守る
-            %>
-            <span class="text-sm text-gray-700 flex-1 min-w-0 truncate">
-              <%= habit.name %>
+            <%# 習慣名 + ストリークバッジ（B-3 追加）%>
+            <span class="text-sm text-gray-700 flex-1 min-w-0 flex items-center gap-2">
+              <span class="truncate"><%= habit.name %></span>
+              <%# ── B-3 追加: ストリークバッジ ────────────────────────────────────
+                  current_streak > 0 の場合のみ「🔥 N日」バッジを表示する。
+                  current_streak == 0 のときは非表示（バッジがないほうがすっきりする）。
+
+                  バッジの色（streak 日数に応じて変化）:
+                    7日以上  → 橙色（習慣が定着している）
+                    1〜6日   → 黄色（継続中）
+              %>
+              <% if habit.current_streak > 0 %>
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold flex-shrink-0
+                             <%= habit.current_streak >= 7 ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700' %>">
+                  🔥 <%= habit.current_streak %>日
+                </span>
+              <% end %>
             </span>
 
-            <%# ── 【修正箇所】単位を habit の種類に応じて切り替える ──────────────
-              修正前: = stats[:completed_count] /= habit.weekly_target 日
-                      → チェック型・数値型どちらも「日」と固定されていた
-                      → 数値型の読書（冊）でも「日」と表示されてしまっていた
-
-              修正後: habit.check_type? で分岐
-                チェック型: completed_count（実施した日数）と「日」を表示
-                            例: 「5/7日（71%）」
-                数値型:     numeric_sum（今週の累計）と habit.unit（登録した単位）を表示
-                            例: 「6.0/7冊（85%）」
-
-              format("%g", ...) とは？
-                小数点以下の不要なゼロを削除するフォーマット指定子。
-                例: format("%g", 6.0) → "6"（末尾の .0 が消える）
-                    format("%g", 6.5) → "6.5"（必要な小数は残る）
-                これにより「6.0冊」ではなく「6冊」と自然な表示になる。
-
-              habit.unit.presence || "回":
-                unit が nil や空文字の場合は「回」をデフォルト単位として使う。
-                presence は nil や "" を nil に統一するメソッド。
-            %>
             <span class="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
               <% if habit.check_type? %>
-                <%# チェック型: 実施した日数を表示 %>
                 <%= stats[:completed_count] %>/<%= habit.weekly_target %>日
                 （<%= stats[:rate] %>%）
               <% else %>
-                <%# 数値型: 今週の累計と登録した単位を表示 %>
                 <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %>/<%= habit.weekly_target %><%= habit.unit.presence || "回" %>
                 （<%= stats[:rate] %>%）
               <% end %>
             </span>
-            <%# ────────────────────────────────────────────────────────────────── %>
-
           </div>
           <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
                role="progressbar"
@@ -191,7 +159,6 @@
 
   <%# ============================================================ %>
   <%# クイックリンク %>
-  <%# grid-cols-1 sm:grid-cols-2: モバイルは1列、640px以上は2列 %>
   <%# ============================================================ %>
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
     <%= link_to habits_path,

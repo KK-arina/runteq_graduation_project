@@ -1,32 +1,23 @@
 # app/models/habit.rb
 #
 # ==============================================================================
-# Habit（習慣）モデル（B-2: 除外日設定対応）
+# Habit（習慣）モデル（B-3: ストリーク計算対応）
 # ==============================================================================
-# 【B-2 での変更内容】
 #
-#   ① has_many :habit_excluded_days を追加
-#      習慣が削除されたときに除外日設定も一緒に削除するため
-#      dependent: :destroy を指定する。
+# 【B-3 での変更内容】
 #
-#   ② effective_weekly_target メソッドを追加
-#      実施予定日数 = 7 - 除外日数 を返す。
-#      達成率計算の分母として使用する。
+#   ① calculate_streak! メソッドを追加
+#   ② on_rest_mode? メソッドを追加
+#   ③ rest_mode_on_date?（新規）メソッドを追加（B-3 修正）
+#      「指定日にお休みモードが適用されていたか」を返す。
+#      on_rest_mode? は「今この瞬間のお休みモード状態」を返すだけなので、
+#      過去日付の判定には使えない。
+#      例: 昨日お休みモードが終了していた場合に
+#          on_rest_mode? は false を返すが、
+#          昨日は rest_mode_until 以前なので「昨日はお休みモード中」だった。
+#      rest_mode_on_date?(date) で日付単位の判定をすることで
+#      この問題を解決する。
 #
-#   ③ weekly_progress_stats を除外日対応に更新
-#      分母を weekly_target から effective_weekly_target に変更。
-#      チェック型のみ除外日の影響を受ける（数値型は目標値で計算する）。
-#
-#   ④ excluded_day_numbers メソッドを追加
-#      設定されている除外日の day_of_week 配列を返す便利メソッド。
-#      ビューや計算で何度も habit.habit_excluded_days.pluck(:day_of_week) と
-#      書かずに済むようにする。
-#
-# 【なぜチェック型だけ除外日の影響を受けるのか】
-#   チェック型: 「週に何日実施するか」が目標 → 除外日を引いた実施可能日数が分母
-#               例: 目標5日, 除外: 土日 → 5日/5日 = 100%（7日ではなく5日が満点）
-#   数値型:     「週に何分/冊/km達成するか」が目標 → 曜日に依存しない絶対数値
-#               例: 目標150分, 除外: 土日 → 150分/150分 = 100%（分母は変わらない）
 # ==============================================================================
 
 class Habit < ApplicationRecord
@@ -37,29 +28,15 @@ class Habit < ApplicationRecord
   belongs_to :user
   has_many :habit_records, dependent: :destroy
   has_many :weekly_reflection_habit_summaries, dependent: :nullify
-
-  # has_many :habit_excluded_days（B-2 追加）
-  # 【理由】
-  #   習慣に対して複数の除外日を設定できる（例: 土曜・日曜の2件）。
-  #   dependent: :destroy を指定することで、習慣が論理削除（soft_delete）ではなく
-  #   物理削除されたときに除外日設定も一緒に削除される。
-  #   論理削除（deleted_at を付ける）の場合は連動しないが、
-  #   将来の完全削除機能に備えて指定しておく。
   has_many :habit_excluded_days, dependent: :destroy
 
   # ============================================================
   # Enum 定義
   # ============================================================
 
-  # measurement_type の enum
-  # DB には整数（0, 1）で保存されるが、Ruby 上では名前で扱える。
-  # 自動生成されるメソッド例:
-  #   habit.check_type?   → measurement_type == 0 なら true
-  #   habit.numeric_type? → measurement_type == 1 なら true
-  #   Habit.check_type    → measurement_type が 0 の習慣を返すスコープ
   enum :measurement_type, {
-    check_type:   0,  # チェック型（やった/やらない）
-    numeric_type: 1   # 数値型（分・冊・km などを数値で記録）
+    check_type:   0,
+    numeric_type: 1
   }
 
   # ============================================================
@@ -68,11 +45,6 @@ class Habit < ApplicationRecord
 
   validates :name, presence: true, length: { maximum: 50 }
 
-  # ── weekly_target のバリデーション ──────────────────────────────────────────
-  #
-  # 共通: 必須・整数・1以上（チェック型・数値型どちらも最低1以上必要）
-  # チェック型専用: 7以下（週7日が上限）
-  # 数値型は上限なし
   validates :weekly_target,
             presence: true,
             numericality: {
@@ -81,7 +53,6 @@ class Habit < ApplicationRecord
               message: "は1以上の整数を入力してください"
             }
 
-  # チェック型のみ weekly_target の上限を7に制限する
   validates :weekly_target,
             numericality: {
               less_than_or_equal_to: 7,
@@ -89,14 +60,12 @@ class Habit < ApplicationRecord
             },
             if: -> { check_type? }
 
-  # measurement_type は enum の有効値のみ許可
   validates :measurement_type, presence: true,
                                 inclusion: {
                                   in: measurement_types.keys,
                                   message: "は有効な値を選択してください"
                                 }
 
-  # 数値型では unit（単位）を必須にする
   validates :unit,
             presence: {
               message: "は数値型習慣では入力が必要です"
@@ -108,14 +77,11 @@ class Habit < ApplicationRecord
   # スコープ
   # ============================================================
 
-  # active: 論理削除されていない習慣だけを返す
-  scope :active, -> { where(deleted_at: nil) }
-
-  # deleted: 論理削除済みの習慣だけを返す
-  scope :deleted, -> { where.not(deleted_at: nil) }
+  scope :active,   -> { where(deleted_at: nil) }
+  scope :deleted,  -> { where.not(deleted_at: nil) }
 
   # ============================================================
-  # インスタンスメソッド
+  # インスタンスメソッド（既存）
   # ============================================================
 
   def soft_delete
@@ -130,80 +96,186 @@ class Habit < ApplicationRecord
     !active?
   end
 
-  # excluded_day_numbers（B-2 追加）
-  # 【役割】
-  #   設定されている除外日の day_of_week 番号の配列を返す。
-  #
-  # 【なぜ便利メソッドとして定義するのか】
-  #   ビューや達成率計算で除外日番号が必要な場面が複数ある。
-  #   毎回 habit.habit_excluded_days.pluck(:day_of_week) と書くと冗長で、
-  #   N+1 問題も起きやすい。
-  #   このメソッドに一本化することでコードの重複を防ぐ。
-  #
-  # 【pluck(:day_of_week) とは】
-  #   関連レコードから指定カラムの値だけを配列で取得する Rails メソッド。
-  #   HabitExcludedDay オブジェクト全体を取得する load より軽量。
-  #   例: habit に土曜(6)・日曜(0)が設定されている場合 → [6, 0] を返す
-  #
-  # 【.sort の理由】
-  #   表示順を曜日番号の昇順（0=日〜6=土）に統一するため。
-  #   pluck は挿入順に返すことが多いが保証されないため明示的にソートする。
   def excluded_day_numbers
     habit_excluded_days.pluck(:day_of_week).sort
   end
 
-  # effective_weekly_target（B-2 追加）
-  # 【役割】
-  #   チェック型習慣の「実際に実施予定の日数」を返す。
-  #   達成率計算の分母として使用する。
-  #
-  # 【計算式】
-  #   実施予定日数 = weekly_target（目標日数）
-  #   ただし除外日がある場合は（7 - 除外日数）と weekly_target の小さい方を使う。
-  #
-  # 【なぜ min を使うのか】
-  #   例: weekly_target=5, 除外日=土日(2日)
-  #     → 実施可能な最大日数 = 7 - 2 = 5日
-  #     → effective_weekly_target = min(5, 5) = 5  ← 正しい
-  #   例: weekly_target=5, 除外日=なし
-  #     → 実施可能な最大日数 = 7 - 0 = 7日
-  #     → effective_weekly_target = min(5, 7) = 5  ← 正しい
-  #   例: weekly_target=3, 除外日=土日+金(3日)
-  #     → 実施可能な最大日数 = 7 - 3 = 4日
-  #     → effective_weekly_target = min(3, 4) = 3  ← 正しい
-  #
-  # 【数値型では呼び出さない】
-  #   数値型は weekly_target が絶対数値（分・冊など）のため除外日は関係ない。
-  #   呼び出し元で check_type? を確認してから使うこと。
   def effective_weekly_target
     excluded_count = habit_excluded_days.size
     available_days = 7 - excluded_count
-    # weekly_target と実施可能な最大日数の小さい方を返す
-    # [a, b].min → a と b の小さい方を返す Ruby の Array#min
     [ weekly_target, available_days ].min
   end
 
   # ============================================================
-  # 進捗統計メソッド
+  # B-3 追加: ストリーク関連メソッド
   # ============================================================
 
-  # weekly_progress_stats（B-2: 除外日対応に更新）
-  # 今週の進捗率と詳細を返す。measurement_type によって計算方法を分岐する。
+  # on_rest_mode?
+  # 【役割】
+  #   「このユーザーが現在（今この瞬間）お休みモード中か」を返す。
+  #   ストリーク計算では rest_mode_on_date? を使うため、
+  #   このメソッドは外部から呼ぶ用途（UI表示など）のために残している。
   #
-  # 【B-2 での変更内容】
-  #   チェック型の分母を weekly_target から effective_weekly_target に変更。
-  #   除外日がある場合は実施予定日数（最大 7 - 除外日数）が分母になる。
+  # 【&. (safe navigation operator) を使う理由】
+  #   user_setting が存在しないユーザーの場合に NoMethodError が発生するのを防ぐ。
+  #   &. は左辺が nil の場合に nil を返してメソッドを呼ばない。
+  def on_rest_mode?
+    user.user_setting&.rest_mode_active?
+  end
+
+  # rest_mode_on_date?（B-3 修正追加）
+  # 【役割】
+  #   「指定した日付に、このユーザーのお休みモードが有効だったか」を返す。
   #
-  # 戻り値 Hash:
-  #   チェック型: { rate: Integer, completed_count: Integer, numeric_sum: nil,
-  #                 effective_target: Integer }
-  #   数値型:     { rate: Integer, completed_count: nil, numeric_sum: Float,
-  #                 effective_target: Integer }
+  # 【なぜ on_rest_mode? ではなく rest_mode_on_date? を使うのか】
+  #   on_rest_mode? は「今この瞬間」のお休みモード状態を返す。
+  #   ストリーク計算では過去の日付（昨日・一昨日など）を遡って判定するため、
+  #   「その日にお休みモードが有効だったか」を日付単位で確認する必要がある。
+  #
+  # 【仕組み】
+  #   user_setting.rest_mode_until が設定されており、
+  #   かつ rest_mode_until.to_date が date 以上（= dateはまだお休み期間内）なら
+  #   そのユーザーはその日もお休みモード中だったと判定できる。
+  #
+  # 【引数】
+  #   date: 判定したい日付（Date オブジェクト）
+  #
+  # 【例】
+  #   rest_mode_until = 2026-04-10（金）と設定されている場合:
+  #   rest_mode_on_date?(Date.new(2026, 4, 8))  → true  （4/8はお休み期間内）
+  #   rest_mode_on_date?(Date.new(2026, 4, 10)) → true  （4/10はお休み最終日）
+  #   rest_mode_on_date?(Date.new(2026, 4, 11)) → false （4/11はお休み終了後）
+  def rest_mode_on_date?(date)
+    # allow_rest_mode が false の習慣はお休みモードを適用しない
+    return false unless allow_rest_mode
+
+    # user_setting が存在しない場合は false
+    setting = user.user_setting
+    return false unless setting
+
+    # rest_mode_until が設定されていない場合は false
+    return false unless setting.rest_mode_until.present?
+
+    # rest_mode_until の「日付部分」が date 以上ならその日はお休みモード中
+    # to_date でタイムゾーンの影響を排除して日付のみで比較する
+    setting.rest_mode_until.to_date >= date
+  end
+
+  # calculate_streak!
+  # 【役割】
+  #   今日時点のストリーク（連続達成日数）を計算して
+  #   habits.current_streak と habits.longest_streak を更新する。
+  #
+  # 【引数】
+  #   reference_date: 計算基準日（デフォルトは HabitRecord.today_for_record）
+  #
+  # 【ストリーク計算のアルゴリズム】
+  #   1. 基準日から過去に向かって1日ずつさかのぼる
+  #   2. その日が除外日なら「スキップ」（連続日数にカウントしない）
+  #   3. その日が達成済みなら streak + 1
+  #   4. 未達成で rest_mode_on_date? が true なら「スキップ」（ストリーク維持）
+  #   5. 未達成でお休みモードでもない → ストリーク終了
+  def calculate_streak!(reference_date = HabitRecord.today_for_record)
+    # ── Step 1: 過去90日分の達成記録を一括取得 ──────────────────────────
+    #
+    # なぜ一括取得するのか:
+    #   ループの中で毎回 DB クエリを発行すると N+1 問題になる。
+    #   90日分を1回のクエリで取得して Hash に変換し、
+    #   ループ内では Hash の参照だけで完結させることで高速化する。
+    #
+    # pluck(:record_date, :completed, :numeric_value) とは:
+    #   HabitRecord オブジェクト全体ではなく、
+    #   必要な3カラムだけを配列で取得する Rails のメソッド。
+    #   メモリ使用量を抑えられる。
+    start_date  = reference_date - 90.days
+    records_map = habit_records
+                    .where(record_date: start_date..reference_date, deleted_at: nil)
+                    .pluck(:record_date, :completed, :numeric_value)
+                    .each_with_object({}) do |(date, completed, numeric_value), hash|
+                      # { 日付 => 達成したか(boolean) } のハッシュを作る
+                      #
+                      # 【修正】numeric_value の判定を present? && > 0 に変更
+                      # 修正前: numeric_value.to_f > 0
+                      #   → nil.to_f が 0.0 になるため、
+                      #     「未入力(nil)」と「0入力」の区別がつかなかった。
+                      # 修正後: numeric_value.present? && numeric_value > 0
+                      #   → nil と 0 を明示的に区別して判定する。
+                      #   present? は nil と空文字を false にするため、
+                      #   nil（未入力）の場合は false（未達成）として扱える。
+                      hash[date] = if check_type?
+                                     completed
+                                   else
+                                     numeric_value.present? && numeric_value > 0
+                                   end
+                    end
+
+    # ── Step 2: 除外日番号をセットに変換 ────────────────────────────────
+    #
+    # Set を使う理由:
+    #   Array#include? は O(n) だが Set#include? は O(1) でより高速。
+    excluded_days_set = Set.new(excluded_day_numbers)
+
+    # ── Step 3: 過去に向かってループしてストリークを計算 ─────────────────
+    streak = 0
+
+    (0..90).each do |days_ago|
+      date        = reference_date - days_ago
+      day_of_week = date.wday  # 0=日曜, 1=月曜, ..., 6=土曜
+
+      # ── 除外日の処理 ──────────────────────────────────────────────────
+      # 除外日はスキップする（ストリークを壊さないし、増やさない）
+      next if excluded_days_set.include?(day_of_week)
+
+      achieved = records_map[date]
+
+      if achieved
+        streak += 1
+      else
+        # ── お休みモードの処理（修正版）────────────────────────────────
+        # 【修正ポイント】
+        #   修正前: on_rest_mode? → 「今この瞬間」の状態で判定していた
+        #           → 昨日はお休みモード中だったが今日は終了している場合に
+        #             誤って「お休みモード外」と判定してしまうバグがあった。
+        #   修正後: rest_mode_on_date?(date) → 「その日（date）の時点」で判定する
+        #           → 過去の日付に対しても正しくお休みモードを適用できる。
+        if rest_mode_on_date?(date)
+          # お休みモードが有効な日はスキップ（ストリークを維持）
+          next
+        end
+
+        # 未達成でお休みモードでもない → ストリーク終了
+        break
+      end
+    end
+
+    # ── Step 4: habits テーブルを更新 ────────────────────────────────────
+    #
+    # longest_streak の保護:
+    #   現在の longest_streak より streak が大きい場合のみ更新する。
+    #   「最高記録は絶対に下がらない」という仕様を守る。
+    new_longest = [ longest_streak, streak ].max
+
+    # update_columns を使う理由:
+    #   ① バリデーションをスキップして高速に更新できる
+    #   ② updated_at を更新しない
+    #   ③ last_streak_calculated_at で最後の計算時刻を記録する
+    update_columns(
+      current_streak:            streak,
+      longest_streak:            new_longest,
+      last_streak_calculated_at: Time.current
+    )
+
+    streak
+  end
+
+  # ============================================================
+  # 進捗統計メソッド（既存）
+  # ============================================================
+
   def weekly_progress_stats(user)
     range = current_week_range
 
     if check_type?
-      # 【B-2 変更】分母を effective_weekly_target（除外日考慮後の実施予定日数）に変更
       target = effective_weekly_target
       return { rate: 0, completed_count: 0, numeric_sum: nil, effective_target: target } if target.zero?
 
@@ -213,7 +285,6 @@ class Habit < ApplicationRecord
       rate = ((completed_count.to_f / target) * 100).clamp(0, 100).floor
       { rate: rate, completed_count: completed_count, numeric_sum: nil, effective_target: target }
     else
-      # 数値型は weekly_target のまま（除外日は関係ない）
       return { rate: 0, completed_count: nil, numeric_sum: 0.0, effective_target: weekly_target } if weekly_target.zero?
 
       numeric_sum   = habit_records
@@ -230,7 +301,6 @@ class Habit < ApplicationRecord
   # ============================================================
   private
 
-  # current_week_range: AM4:00基準で「今週の月曜日〜今日」の Range を返す
   def current_week_range
     today      = HabitRecord.today_for_record
     week_start = today.beginning_of_week(:monday)

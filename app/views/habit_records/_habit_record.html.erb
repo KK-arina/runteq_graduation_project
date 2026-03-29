@@ -1,35 +1,24 @@
 <%# app/views/habit_records/_habit_record.html.erb %>
 <%# =============================================================
-    習慣の日次記録パーシャル（B-1: 数値型習慣対応）
-    このパーシャルは以下の箇所から呼ばれる:
-      1. app/views/dashboards/index.html.erb
-      2. app/views/habits/index.html.erb
+    習慣の日次記録パーシャル（B-3: 表示状態ロジック更新）
 
     渡されるローカル変数:
       - habit        : Habit オブジェクト（必須）
       - habit_record : HabitRecord オブジェクト（今日の記録。なければ nil）
 
-    【B-1 での変更内容】
-      ① チェック型と数値型で表示を切り替える
-         - チェック型: 従来通りのチェックボックス UI
-         - 数値型:    数値入力フィールド + 単位ラベル の UI
-      ② 数値型用の Stimulus コントローラー属性を追加
-         （habit_record_controller.js が数値型も扱えるようにする）
+    【B-3 での変更内容】
+      ストリーク計算の追加に合わせて「記録の状態」表示を以下の5パターンに更新する:
 
-    【数値表示の統一について】
-      修正前: record.numeric_value.to_f → 「6.0」のように小数点ゼロが表示された
-      修正後: format("%g", value) → 「6」のように末尾の不要なゼロを削除して表示
+      1. habit_record が nil                 → 「未記録」（灰色）
+      2. habit_record.first_recorded_today?  → 「今日記録済み」（緑色）
+      3. habit_record.updated_today?         → 「今日更新済み」（青色）
+      4. 昨日以前に作成・今日未更新         → 「記録あり」（緑色：昨日以前の記録が残っている）
 
-      format("%g", ...) とは？
-        Ruby の文字列フォーマット指定子の一つ。
-        小数点以下が 0 の場合は整数表示にする。
-        例: format("%g", 6.0)  → "6"   （末尾の .0 が消える）
-            format("%g", 6.5)  → "6.5" （必要な小数は残る）
-            format("%g", 30.0) → "30"  （同様に末尾ゼロが消える）
-        これにより「6.0冊」「30.0分」のような不自然な表示を防げる。
-
-      他の画面（ダッシュボード・振り返り一覧など）でも同じ format("%g") を使って
-      統一しているため、この画面でも合わせる必要があった。
+    【なぜ表示状態を細かく分けるのか】
+      「昨日入力済み・今日未入力 → 記録済み（前の記録が残っている）」
+      「今日初入力 → 今日記録済み」
+      「今日変更 → 今日更新済み」
+      これらを区別することでユーザーが「今日の操作状況」を一目で把握できる。
     ============================================================= %>
 
 <%# 今日の記録がない場合はデフォルト値（未完了・numeric_value なし）で初期化 %>
@@ -38,43 +27,45 @@
 <% update_url = record.persisted? ? habit_habit_record_path(habit, record) : "" %>
 <% record_id  = record.persisted? ? record.id : 0 %>
 
-<%#
-  habit_record_row_#{habit.id}:
-    Turbo Stream の replace ターゲット。
-    コントローラーが turbo_stream.replace "habit_record_row_#{habit.id}" で
-    この div の中身をまるごと入れ替える。
+<%# ── B-3 追加: 表示状態を計算 ──────────────────────────────────────────────
+    habit_record が nil の場合は「未記録」。
+    persisted? = true（DBに保存済み）の場合のみ状態メソッドを呼ぶ。
+
+    record_status の値:
+      :not_recorded        → 未記録（habit_record が nil）
+      :recorded_today      → 今日初入力
+      :updated_today       → 今日更新済み
+      :previously_recorded → 昨日以前の記録が残っている
 %>
+<% record_status =
+     if habit_record.nil?
+       :not_recorded
+     elsif habit_record.updated_today?
+       # updated_today? を先に判定する理由:
+       #   first_recorded_today? が true でも、その後に更新されていれば
+       #   「更新済み」として表示するのが正しい。
+       #   updated_today? = updated_at が created_at より新しく、かつ今日
+       :updated_today
+     elsif habit_record.first_recorded_today?
+       :recorded_today
+     else
+       # 昨日以前に作成されていて、今日は更新していない
+       :previously_recorded
+     end %>
+
 <div id="habit_record_row_<%= habit.id %>"
      class="flex items-center gap-3 py-3">
 
-  <%#
-    data-controller="habit-record": Stimulus の habit_record_controller.js を紐付ける
-    data-habit-record-create-url-value: 新規作成時の POST URL
-    data-habit-record-update-url-value: 更新時の PATCH URL
-    data-habit-record-record-id-value: 既存レコードの ID（0 = まだ存在しない）
-  %>
   <div class="flex items-center gap-3 w-full"
        data-controller="habit-record"
        data-habit-record-create-url-value="<%= create_url %>"
        data-habit-record-update-url-value="<%= update_url %>"
        data-habit-record-record-id-value="<%= record_id %>">
 
-    <%# ============================================================
-        measurement_type によって表示を切り替える
-        ============================================================ %>
-
     <% if habit.check_type? %>
       <%# ────────────────────────────────────────────────────────
-          チェック型: チェックボックス UI（従来通り）
+          チェック型: チェックボックス UI
           ──────────────────────────────────────────────────────── %>
-
-      <%#
-        チェックボックス
-        id="habit_checkbox_#{habit.id}": label の for 属性と紐付けるための一意 ID
-        aria-describedby: 完了バッジと連携してスクリーンリーダーに状態を伝える
-        data-habit-record-target="checkbox": JS から this.checkboxTarget で参照できる
-        data-action="change->habit-record#toggle": 変更時に toggle メソッドを呼ぶ
-      %>
       <input type="checkbox"
              id="habit_checkbox_<%= habit.id %>"
              class="w-5 h-5 rounded accent-blue-600 cursor-pointer flex-shrink-0
@@ -84,51 +75,17 @@
              aria-describedby="habit_status_<%= habit.id %>"
              <%= record.completed ? "checked" : "" %>>
 
-      <%# 習慣名 label（label タグにすることでチェックボックスと関連付く） %>
       <label for="habit_checkbox_<%= habit.id %>"
              class="text-sm flex-1 cursor-pointer
                     <%= record.completed ? 'line-through text-gray-400' : 'text-gray-700' %>">
         <%= habit.name %>
       </label>
 
-      <%# 完了バッジ（チェック済みの場合のみ表示） %>
-      <% if record.completed %>
-        <span id="habit_status_<%= habit.id %>"
-              class="text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full flex-shrink-0">
-          ✓ 完了
-        </span>
-      <% else %>
-        <%# 未完了でも aria-describedby の参照先として DOM に残しておく %>
-        <span id="habit_status_<%= habit.id %>" class="sr-only">未完了</span>
-      <% end %>
-
     <% else %>
       <%# ────────────────────────────────────────────────────────
-          B-1 追加: 数値型: 数値入力フィールド UI
+          数値型: 数値入力フィールド UI
           ──────────────────────────────────────────────────────── %>
-
-      <%#
-        【修正箇所】数値入力フィールドの value を format("%g", ...) で整形する
-
-        修正前:
-          value=" record.numeric_value.present? ? record.numeric_value.to_f : '' "
-          → .to_f は小数点以下のゼロを削除しないため「6.0」と表示されてしまう
-
-        修正後:
-          value=" record.numeric_value.present? ? format("%g", record.numeric_value.to_f) : '' "
-          → format("%g", 6.0)  → "6"  （末尾の .0 が消える）
-          → format("%g", 6.5)  → "6.5" （必要な小数は残る）
-
-        なぜ .to_f を先に呼ぶのか？
-          record.numeric_value は ActiveRecord から返る BigDecimal 型。
-          format("%g") は Float 型で計算するため、先に .to_f で Float に変換する。
-          BigDecimal のまま渡しても動くが、型を明示することでコードの意図が明確になる。
-
-        他のオプション:
-          .round(0) + .to_i でも「6」と表示できるが、小数（例: 6.5）が失われる。
-          format("%g") なら「整数なら整数表示、小数なら小数表示」を自動判断できる。
-      %>
-      <% numeric_value_display = record.numeric_value.present? ? format("%g", record.numeric_value.to_f) : '' %>
+      <% numeric_value_display = record.numeric_value.present? ? format("%g", record.numeric_value.to_f) : "" %>
 
       <input type="number"
              id="habit_numeric_input_<%= habit.id %>"
@@ -143,44 +100,42 @@
              aria-describedby="habit_unit_<%= habit.id %>"
              placeholder="0">
 
-      <%#
-        単位ラベル（例: "分"）
-        id="habit_unit_#{habit.id}": aria-describedby の参照先
-        habit.unit.presence || "回":
-          unit が nil や空文字の場合は「回」をデフォルト単位として使う。
-          presence は nil や "" を nil に統一するメソッド（Rails 提供）。
-      %>
       <span id="habit_unit_<%= habit.id %>"
             class="text-sm text-gray-500 flex-shrink-0">
         <%= habit.unit.presence || "回" %>
       </span>
 
-      <%# 習慣名（label タグで入力フィールドと関連付ける） %>
       <label for="habit_numeric_input_<%= habit.id %>"
              class="text-sm text-gray-700 flex-1 cursor-pointer">
         <%= habit.name %>
       </label>
-
-      <%# 記録済みインジケーター（入力値がある場合に「記録済み」を表示） %>
-      <% if record.numeric_value.present? && record.numeric_value > 0 %>
-        <span id="habit_status_<%= habit.id %>"
-              class="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full flex-shrink-0">
-          ✓ 記録済み
-        </span>
-      <% else %>
-        <span id="habit_status_<%= habit.id %>" class="sr-only">未記録</span>
-      <% end %>
     <% end %>
 
-    <%# ============================================================
-        ローディングアイコン（チェック型・数値型 共通）
-        保存中に表示されるスピナー。JS で hidden 属性を制御する。
-        ============================================================ %>
-    <%#
-      role="status": スクリーンリーダーに「状態通知」として認識させる
-      aria-label="保存中": SVGアイコンの意味を音声で伝える
-      hidden: 初期状態は非表示。JS の _setLoadingState(true) で表示される
+    <%# ── B-3 更新: 状態バッジ（5パターン対応） ─────────────────────────────
+        record_status の値に応じてバッジの色とテキストを変える。
+
+        :not_recorded        → 表示なし（バッジは出さない）
+        :recorded_today      → 緑「✓ 今日記録済み」
+        :updated_today       → 青「↑ 今日更新済み」
+        :previously_recorded → 緑「✓ 記録済み」（昨日以前の記録が残っている）
     %>
+    <span id="habit_status_<%= habit.id %>"
+          class="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0
+                 <%= case record_status
+                     when :recorded_today      then 'text-green-600 bg-green-50'
+                     when :updated_today       then 'text-blue-600 bg-blue-50'
+                     when :previously_recorded then 'text-green-600 bg-green-50'
+                     else                           'sr-only'
+                     end %>">
+      <%= case record_status
+          when :recorded_today      then "✓ 今日記録済み"
+          when :updated_today       then "↑ 今日更新済み"
+          when :previously_recorded then "✓ 記録済み"
+          else                           "未記録"
+          end %>
+    </span>
+
+    <%# ローディングアイコン（共通） %>
     <div data-habit-record-target="loading"
          hidden
          role="status"

@@ -1,0 +1,40 @@
+<%# app/views/shared/_streak_badge.html.erb %>
+<%#
+  ==============================================================================
+  ストリークバッジパーシャル（B-3 追加）
+  ==============================================================================
+  【このパーシャルの役割】
+    習慣カード（習慣一覧・ダッシュボード）に表示する
+    「🔥 N日」ストリークバッジ。
+    current_streak が 0 のときは表示しない。
+
+  【使い方】
+    = render "shared/streak_badge", habit: habit
+
+  【引数】
+    habit: Habit モデルのインスタンス
+  ==============================================================================
+%>
+
+<% if habit.current_streak > 0 %>
+  <%#
+    ストリークの長さによってバッジの色を変える。
+    3日以上: オレンジ（🔥 を強調）
+    1〜2日:  グレー（まだ続いていない状態）
+
+    inline-flex: インライン要素として横並びに表示する
+    items-center: 縦方向中央揃え
+    gap-1: アイコンと数字の間隔
+    px-2 py-0.5: 左右に8px・上下に2pxの余白
+    rounded-full: 完全な角丸（カプセル型）
+    text-xs: 極小フォント
+    font-bold: 太字
+    border: 枠線あり
+  %>
+  <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border
+               <%= habit.current_streak >= 3 ?
+                     'bg-orange-50 border-orange-200 text-orange-700' :
+                     'bg-gray-50 border-gray-200 text-gray-500' %>">
+    🔥 <%= habit.current_streak %>日
+  </span>
+<% end %>
