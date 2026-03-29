@@ -2,10 +2,13 @@
 <% content_for :title, "習慣管理 | HabitFlow" %>
 <%#
   ==============================================================================
-  習慣一覧ページ（B-3: ストリークバッジ追加）
+  習慣一覧ページ（B-4: アーカイブ済みを見るリンク追加）
   ==============================================================================
-  【B-3 での変更内容】
-    習慣カードのヘッダー部分に 🔥 N日 のストリークバッジを追加する。
+  【B-4 での変更内容】
+    ① ページヘッダー右側に「📦 アーカイブ済みを見る」リンクを追加する。
+    ② アーカイブボタンを各習慣カードに追加する。
+    ③ scope :active が修正されたことで、アーカイブ済み習慣は
+       この一覧に表示されなくなる（モデル側の変更）。
   ==============================================================================
 %>
 
@@ -30,19 +33,52 @@
   <% end %>
 
   <%# ページヘッダー %>
-  <div class="flex justify-between items-center mb-6">
+  <%#
+    B-4 変更点:
+    ヘッダーを flex で左右に分割し、
+    左側に「習慣管理」タイトル、
+    右側に「アーカイブ済みを見る」リンクと「新しい習慣を追加」ボタンを並べる。
+
+    gap-3: ボタン間の間隔（12px）
+    flex-wrap: sm:nowrap で、スマホでは折り返し、PC では1行に収める。
+  %>
+  <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
     <h1 class="text-2xl font-bold text-gray-900">習慣管理</h1>
-    <% if @locked %>
-      <span class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-400 cursor-not-allowed"
-            title="先週の振り返りを完了すると追加できます">
-        🔒 + 新しい習慣を追加
-      </span>
-    <% else %>
-      <%= link_to new_habit_path,
-            class: "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors" do %>
-        + 新しい習慣を追加
+
+    <%# 右側ボタン群 %>
+    <div class="flex items-center gap-2 flex-wrap">
+      <%#
+        「📦 アーカイブ済みを見る」リンク（B-4 新規追加）
+        【役割】
+          アーカイブ一覧ページ（8-2番画面）へ遷移するリンク。
+        【archived_habits_path とは】
+          routes.rb の collection do で定義した get :archived ルートから
+          Rails が自動生成するパスヘルパー。
+          → GET /habits/archived に対応する。
+        【デザイン方針】
+          ロック状態に関わらず常に表示する。
+          （アーカイブ一覧の閲覧はいつでも可能にする）
+      %>
+      <%= link_to archived_habits_path,
+            class: "inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium
+                    bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors" do %>
+        <span>📦</span>
+        <span>アーカイブ済みを見る</span>
       <% end %>
-    <% end %>
+
+      <%# 新しい習慣を追加ボタン（既存・変更なし） %>
+      <% if @locked %>
+        <span class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-400 cursor-not-allowed"
+              title="先週の振り返りを完了すると追加できます">
+          🔒 + 新しい習慣を追加
+        </span>
+      <% else %>
+        <%= link_to new_habit_path,
+              class: "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors" do %>
+          + 新しい習慣を追加
+        <% end %>
+      <% end %>
+    </div>
   </div>
 
   <%# 習慣カード一覧 %>
@@ -71,7 +107,7 @@
         <div id="habit_record_<%= habit.id %>"
              class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col">
 
-          <%# カードヘッダー（習慣名 + ストリークバッジ + 編集・削除ボタン）%>
+          <%# カードヘッダー（習慣名 + ストリークバッジ + 操作ボタン群） %>
           <div class="flex justify-between items-start p-4 pb-2">
             <div class="flex-1 min-w-0 mr-2">
               <h3 class="text-base font-bold text-gray-800 leading-snug flex items-center gap-2 flex-wrap">
@@ -83,14 +119,7 @@
                 <% end %>
               </h3>
 
-              <%# ── B-3 追加: ストリークバッジ ───────────────────────────────────
-                  current_streak > 0 の場合のみ表示する。
-                  longest_streak も合わせて表示することで「過去最高」が分かる。
-
-                  表示例:
-                    🔥 14日 （最高: 45日）
-                    🔥 7日
-              %>
+              <%# ストリークバッジ（B-3 追加・変更なし） %>
               <% if habit.current_streak > 0 %>
                 <div class="mt-1 flex items-center gap-2 flex-wrap">
                   <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold
@@ -98,7 +127,6 @@
                     🔥 <%= habit.current_streak %>日 継続中
                   </span>
                   <% if habit.longest_streak > habit.current_streak %>
-                    <%# 最高記録が現在のストリークより大きい場合のみ表示 %>
                     <span class="text-xs text-gray-400">
                       最高: <%= habit.longest_streak %>日
                     </span>
@@ -107,10 +135,64 @@
               <% end %>
             </div>
 
+            <%#
+              カード右側の操作ボタン群（B-4 修正: アーカイブボタン追加）
+              【変更前】編集ボタン・削除ボタンのみ
+              【変更後】編集ボタン・アーカイブボタン・削除ボタン
+            %>
             <div class="flex items-center gap-1 flex-shrink-0">
+              <%# 編集ボタン（既存・変更なし） %>
               <%= link_to "編集", edit_habit_path(habit),
                     class: "text-xs px-2 py-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors" %>
 
+              <%#
+                アーカイブボタン（B-4: button_to に変更）
+                【link_to から button_to に変更した理由】
+                  link_to + data-turbo-method: :post は
+                  Turbo が有効な環境では正しく POST を送れるが、
+                  JavaScript が無効な環境・Turbo の読み込み失敗時には
+                  GET リクエストになってしまう疑似 POST であり不確実。
+
+                  button_to はフォームタグ（<form method="post">）として
+                  HTML に展開されるため、JavaScript なしでも確実に
+                  POST リクエストを送れる本物の POST になる。
+
+                  これが Rails における「状態変更操作」の正しい実装方法。
+
+                【button_to の注意点】
+                  button_to は <form> タグを生成するため、
+                  デフォルトでは inline-block になる。
+                  Tailwind CSS で他のボタンと同じ見た目・配置にするために
+                  form: { style: "display:inline" } を指定して
+                  フォーム要素が横並びのレイアウトを崩さないようにする。
+              %>
+              <% if @locked %>
+                <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-300 cursor-not-allowed"
+                      title="先週の振り返りを完了するとアーカイブできます">
+                  🔒 卒業
+                </span>
+              <% else %>
+                <%#
+                  button_to:
+                    Rails の form_with をラップしたヘルパー。
+                    第1引数: ボタンのラベル
+                    第2引数: リクエスト送信先（archive_habit_path(habit)）
+                    method: :post → POST リクエストを送る
+                    form: { style: "display:inline" } → フォームを inline にして
+                      横並びのボタン群のレイアウトを崩さないようにする
+                    data: { turbo_confirm: "..." } → Turbo が有効なら確認ダイアログを表示
+                %>
+                <%= button_to "📦 卒業",
+                      archive_habit_path(habit),
+                      method: :post,
+                      form: { style: "display:inline" },
+                      data: {
+                        turbo_confirm: "「#{habit.name}」をアーカイブしますか？\n達成した習慣として記録を残しつつ、一覧から非表示にします。"
+                      },
+                      class: "text-xs px-2 py-1 rounded bg-purple-50 text-purple-600 hover:bg-purple-100 transition-colors cursor-pointer border-0" %>
+              <% end %>
+
+              <%# 削除ボタン（既存・変更なし） %>
               <% if @locked %>
                 <span class="text-xs px-2 py-1 rounded bg-gray-100 text-gray-300 cursor-not-allowed"
                       title="先週の振り返りを完了すると削除できます">
@@ -127,7 +209,7 @@
             </div>
           </div>
 
-          <%# 週次目標と除外日の表示 %>
+          <%# 週次目標と除外日の表示（既存・変更なし） %>
           <div class="px-4 pb-2">
             <% if habit.check_type? %>
               <span class="text-xs text-gray-400">
@@ -147,14 +229,14 @@
             <% end %>
           </div>
 
-          <%# 今日のチェックボックス or 数値入力 %>
+          <%# 今日のチェックボックス or 数値入力（既存・変更なし） %>
           <div class="px-4 pb-3">
             <%= render "habit_records/habit_record",
                   habit: habit,
                   habit_record: @today_records_hash[habit.id] %>
           </div>
 
-          <%# 今週の進捗バー %>
+          <%# 今週の進捗バー（既存・変更なし） %>
           <div class="px-4 pb-4 mt-auto">
             <div class="flex justify-between items-center mb-1">
               <span class="text-xs text-gray-500">今週の進捗</span>

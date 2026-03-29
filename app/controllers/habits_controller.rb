@@ -1,27 +1,53 @@
 # app/controllers/habits_controller.rb
 #
 # ==============================================================================
-# HabitsController（B-2: 除外日設定対応）
+# HabitsController（B-4: アーカイブ機能追加）
 # ==============================================================================
-# 【B-2 での変更内容】
 #
-#   ① habit_params に :excluded_day_numbers（配列）を追加
-#      フォームから送られる除外日の曜日番号配列を受け取る。
+# 【B-4 での変更内容】
 #
-#   ② create アクションで除外日を保存する処理を追加
-#      ハビット保存後に save_excluded_days! を呼び出す。
+#   ① before_action :set_habit のみ対象アクションに :archive / :unarchive を追加
+#      理由: archive / unarchive アクションでも @habit を事前にセットする必要がある。
 #
-#   ③ build_habit_stats を除外日対応（effective_weekly_target 使用）に更新
-#      チェック型の分母を 7 から（7 - 除外日数）に変更する。
+#   ② require_unlocked の対象に :archive を追加
+#      理由: PDCAロック中はアーカイブ（= 習慣の状態変更）もできないようにする。
+#            unarchive（復元）はロック中でも許可する。
+#            「復元」はアクティブな習慣を増やす操作であり、
+#            「削除・追加」とは性質が異なるが、
+#            シンプルな設計として ISSUEリストの方針（ロック中は変更不可）に従う。
+#            ※ 要件に応じて unarchive をロック不要にする変更も容易。
 #
-#   ④ index で習慣を取得するとき habit_excluded_days を eager load する
-#      N+1 クエリを防ぐために includes(:habit_excluded_days) を追加。
+#   ③ archive アクション（POST /habits/:id/archive）を新規追加
+#      対象習慣の archived_at に現在時刻をセットしてアーカイブする。
+#
+#   ④ unarchive アクション（PATCH /habits/:id/unarchive）を新規追加
+#      archived_at を nil に戻してアクティブ状態に復元する。
+#
+#   ⑤ archived アクション（GET /habits/archived）を新規追加
+#      アーカイブ済み習慣の一覧を表示する（8-2番画面）。
+#
+#   ⑥ set_habit を修正
+#      修正前: current_user.habits.active.find(params[:id])
+#      修正後: current_user.habits.find(params[:id])
+#      理由: archive / unarchive は active でも archived でもどちらの状態の習慣も
+#            操作対象になり得るため、スコープを外した状態で検索する。
+#            セキュリティは current_user. で絞り込む（他ユーザーの習慣は取得不可）。
+#
 # ==============================================================================
 
 class HabitsController < ApplicationController
   before_action :require_login
-  before_action :require_unlocked, only: [ :create, :update, :destroy ]
-  before_action :set_habit, only: [ :edit, :update, :destroy ]
+
+  # require_unlocked の対象アクション（B-4 修正: :archive を追加）
+  # 【理由】
+  #   PDCAロック中は :create / :update / :destroy に加えて :archive も禁止する。
+  #   :unarchive（復元）はロック対象外とする（アクティブ習慣を増やす操作のため）。
+  before_action :require_unlocked, only: [ :create, :update, :destroy, :archive ]
+
+  # set_habit を対象とするアクション（B-4 修正: :archive / :unarchive を追加）
+  # 【理由】
+  #   archive・unarchive アクションでも @habit.id でアーカイブ対象を特定するため。
+  before_action :set_habit, only: [ :edit, :update, :destroy, :archive, :unarchive ]
 
   # ============================================================
   # GET /habits
@@ -49,6 +75,29 @@ class HabitsController < ApplicationController
   end
 
   # ============================================================
+  # GET /habits/archived（B-4 新規追加）
+  # ============================================================
+  # 【役割】
+  #   8-2. 習慣アーカイブ一覧ページを表示する。
+  #
+  # 【scope :archived の利用】
+  #   Habit モデルに定義した scope :archived を使うことで
+  #   deleted_at: nil かつ archived_at が設定されている習慣だけを取得できる。
+  #
+  # 【order(archived_at: :desc)】
+  #   最近アーカイブした習慣から順に表示する（新しいものが上）。
+  #
+  # 【includes(:habit_excluded_days)】
+  #   アーカイブ一覧でも effective_weekly_target を使う可能性があるため
+  #   N+1 対策として先読みする。
+
+  def archived
+    @archived_habits = current_user.habits.archived
+                                   .includes(:habit_excluded_days)
+                                   .order(archived_at: :desc)
+  end
+
+  # ============================================================
   # GET /habits/new
   # ============================================================
   def new
@@ -59,23 +108,12 @@ class HabitsController < ApplicationController
   # GET /habits/:id/edit
   # ============================================================
   def edit
-    # @habit は before_action :set_habit で設定済み
-    # ビューで既存の除外日をチェック済み状態で表示するために
-    # @existing_excluded_days を渡す
-    # 【理由】
-    #   edit フォームでは「現在設定されている除外日」をチェック済みで表示する必要がある。
-    #   @habit.excluded_day_numbers を使ってビューで判定する。
   end
 
   # ============================================================
   # PATCH /habits/:id
   # ============================================================
   def update
-    # save_excluded_days! 内で destroy_all → 再登録するため
-    # トランザクションで習慣の更新と除外日の更新を一体として扱う
-    # 【理由】
-    #   「習慣名の変更」と「除外日の変更」が同時に失敗した場合に
-    #   中途半端な状態にならないようにする（A-7 のトランザクション設計に準拠）
     result = ApplicationRecord.with_transaction do
       @habit.update!(habit_params)
       save_excluded_days!(@habit, params[:excluded_day_numbers])
@@ -91,7 +129,6 @@ class HabitsController < ApplicationController
     end
 
   rescue ActiveRecord::RecordInvalid => e
-    # バリデーションエラー時はフォームを再表示する
     flash.now[:alert] = "習慣の更新に失敗しました"
     render :edit, status: :unprocessable_entity
   end
@@ -102,12 +139,6 @@ class HabitsController < ApplicationController
   def create
     @habit = current_user.habits.build(habit_params)
 
-    # save_excluded_days! をトランザクション内で実行するために
-    # ApplicationRecord.with_transaction でラップする
-    # 【理由】
-    #   習慣の保存と除外日の保存を一体として扱うことで、
-    #   「習慣は作成されたが除外日の保存に失敗した」という
-    #   中途半端な状態を防ぐ（A-7 のトランザクション設計に準拠）。
     result = ApplicationRecord.with_transaction do
       @habit.save!
       save_excluded_days!(@habit, params[:excluded_day_numbers])
@@ -123,8 +154,6 @@ class HabitsController < ApplicationController
     end
 
   rescue ActiveRecord::RecordInvalid => e
-    # バリデーションエラー時はフォームを再表示する
-    # e.record.errors.full_messages で日本語エラーメッセージが取得できる
     flash.now[:alert] = "習慣の登録に失敗しました"
     render :new, status: :unprocessable_entity
   end
@@ -143,60 +172,116 @@ class HabitsController < ApplicationController
   end
 
   # ============================================================
+  # POST /habits/:id/archive（B-4 新規追加）
+  # ============================================================
+  # 【役割】
+  #   習慣を「卒業アーカイブ」状態にする。
+  #   archived_at に現在時刻をセットする。
+  #
+  # 【HTTP メソッドを POST にする理由】
+  #   アーカイブはリソースの「状態変更」であり、
+  #   GET（参照）でも DELETE（削除）でもない。
+  #   Rails の慣例として「状態変更」には POST または PATCH を使う。
+  #   今回は既存リソースへの部分的な変更なので PATCH でも良いが、
+  #   ルーティングでは member do ... end 内で post :archive を使うことが多い。
+  #
+  # 【status: :see_other（303）を使う理由】
+  #   Turbo（Hotwire）では POST / PATCH / DELETE の後のリダイレクトに
+  #   302 ではなく 303 See Other を使う必要がある。
+  #   303 は「別の URL を GET で参照してください」という意味のステータスコードで、
+  #   Turbo が正しくリダイレクト後のページを GET で取得するために必要。
+
+  def archive
+    @habit.archive!
+    flash[:notice] = "「#{@habit.name}」をアーカイブしました"
+    redirect_to habits_path, status: :see_other
+  rescue ActiveRecord::RecordInvalid
+    flash[:alert] = "アーカイブに失敗しました"
+    redirect_to habits_path, status: :see_other
+  end
+
+  # ============================================================
+  # PATCH /habits/:id/unarchive（B-4 新規追加）
+  # ============================================================
+  # 【役割】
+  #   アーカイブを解除してアクティブ状態に復元する。
+  #   archived_at を nil に戻す。
+  #
+  # 【require_unlocked の対象外にした理由】
+  #   復元（unarchive）は「アクティブな習慣を増やす」操作だが、
+  #   PDCAロック中に習慣を「追加」するのと同等と見なせる場合は
+  #   ロック対象に含めることも検討できる。
+  #   今回は設計の一貫性よりも「卒業した習慣を間違えてアーカイブしてしまった場合に
+  #   すぐ戻せる」というUXを優先して、ロック対象外にしている。
+
+  def unarchive
+    @habit.unarchive!
+    flash[:notice] = "「#{@habit.name}」を復元しました"
+    redirect_to archived_habits_path, status: :see_other
+  rescue RuntimeError => e
+    flash[:alert] = e.message
+    redirect_to archived_habits_path, status: :see_other
+  rescue ActiveRecord::RecordInvalid
+    flash[:alert] = "復元に失敗しました"
+    redirect_to archived_habits_path, status: :see_other
+  end
+
+  # ============================================================
   # Private メソッド
   # ============================================================
   private
 
-  # habit_params
-  # 【Strong Parameters】
-  #   フォームから送られるパラメータのうち許可するものをホワイトリストで指定する。
-  #   excluded_day_numbers は habit モデルのカラムではないため
-  #   ここには含めず、別途 params[:excluded_day_numbers] で受け取る。
   def habit_params
     params.require(:habit).permit(:name, :weekly_target, :measurement_type, :unit)
   end
 
-  # set_habit: destroy の前に @habit をセットする
+  # set_habit（B-4 修正・再修正）
+  # ==============================================================================
+  # 【変更履歴】
+  #   MVP版:  current_user.habits.active.find(params[:id])
+  #           → active スコープ（deleted_at: nil, archived_at: nil）で検索
+  #
+  #   B-4 初版: current_user.habits.find(params[:id])
+  #           → スコープなしに変更（archive / unarchive 対応のため）
+  #           → 問題: 論理削除済み習慣も find できてしまい、
+  #                   「削除済み習慣は再削除できない」テストが失敗した
+  #
+  #   B-4 再修正: current_user.habits.where(deleted_at: nil).find(params[:id])
+  #           → deleted_at が nil のもの（削除されていない習慣）だけを対象にする
+  #           → archived_at は問わない
+  #             （アーカイブ済み・アクティブの両方を操作できるようにする）
+  #
+  # 【この設計の意図】
+  #   習慣の状態は3種類ある:
+  #     1. アクティブ:     deleted_at = nil, archived_at = nil
+  #     2. アーカイブ済み: deleted_at = nil, archived_at = 設定済み
+  #     3. 削除済み:       deleted_at = 設定済み
+  #
+  #   set_habit が取得すべき対象:
+  #     ・edit / update:   1 のみ（アクティブ）※ destroy も実質 1 のみ
+  #     ・archive:         1 のみ（アクティブを archive する）
+  #     ・unarchive:       2 のみ（アーカイブ済みを戻す）
+  #
+  #   1 と 2 はどちらも deleted_at = nil なので、
+  #   「deleted_at: nil で絞り込む」だけで両方カバーできる。
+  #   3（削除済み）は find 対象から外れるため、
+  #   削除済み習慣への操作は RecordNotFound → habits_path へリダイレクト される。
+  # ==============================================================================
+
   def set_habit
-    @habit = current_user.habits.active.find(params[:id])
+    # where(deleted_at: nil) で削除済み習慣を除外する。
+    # archived_at は条件に含めない（アーカイブ済み習慣も操作対象のため）。
+    # current_user. で絞り込むことで他ユーザーの習慣は取得不可（セキュリティ）。
+    @habit = current_user.habits.where(deleted_at: nil).find(params[:id])
   rescue ActiveRecord::RecordNotFound
     flash[:alert] = "習慣が見つかりませんでした"
     redirect_to habits_path
   end
 
-  # save_excluded_days!（B-2 修正版）
-  # ==============================================================================
-  # 【修正内容】
-  #   修正前: nil または空の場合は return していたため、
-  #           編集時に「チェックを全て外す」操作が無視されていた。
-  #           → 既存の除外日がそのまま残るバグがあった。
-  #
-  #   修正後: 処理の先頭で必ず destroy_all（全削除）してから保存し直す。
-  #           これにより「チェックを外した」操作も確実に DB に反映される。
-  #
-  # 【destroy_all を先頭に置く理由】
-  #   「リセット＆セーブ」方式を採用することで、
-  #   追加・削除・変更のすべてのパターンを1つのロジックで処理できる。
-  #   差分管理（どれが増えてどれが減ったか）より実装がシンプルになる。
-  #
-  # 【なぜ create でなく new + habit_excluded_days.build なのか】
-  #   destroy_all で既存レコードを消した後に create! を呼ぶので、
-  #   UNIQUE 制約に引っかかることはない。
-  # ==============================================================================
   def save_excluded_days!(habit, excluded_day_params)
-    # 【修正ポイント】
-    # まず既存の除外日を全削除する（更新時にチェックを外す操作に対応するため）
-    # 【理由】
-    #   destroy_all の前に return してしまうと、
-    #   excluded_day_params が nil（全チェックを外した状態）のとき
-    #   既存データが削除されずに残ってしまう。
-    #   必ず destroy_all を実行してから、新しい設定を保存する。
     habit.habit_excluded_days.destroy_all
-
-    # nil や空の場合はここで終了（= 除外日を全て解除した状態で完了）
     return if excluded_day_params.blank?
 
-    # 文字列配列を整数配列に変換し、0〜6 の有効な値だけを残す
     day_numbers = Array(excluded_day_params)
                     .map(&:to_i)
                     .select { |d| d.between?(0, 6) }
@@ -207,18 +292,6 @@ class HabitsController < ApplicationController
     end
   end
 
-  # build_habit_stats（B-2: 除外日対応に更新）
-  # チェック型の分母を effective_weekly_target（除外日考慮後）に変更する。
-  #
-  # 【B-2 での変更点】
-  #   チェック型: 分母が weekly_target から effective_weekly_target に変わる
-  #               例: 目標5日・除外土日 → 分母は min(5, 5) = 5
-  #   数値型:     変更なし（分母は weekly_target のまま）
-  #
-  # 【N+1 対策】
-  #   index アクションで includes(:habit_excluded_days) を付けているため、
-  #   effective_weekly_target が habit_excluded_days.size を呼んでも
-  #   追加のクエリは発生しない。
   def build_habit_stats(habits, user)
     today      = HabitRecord.today_for_record
     week_start = today.beginning_of_week(:monday)
@@ -247,8 +320,6 @@ class HabitsController < ApplicationController
 
     habits.each_with_object({}) do |habit, hash|
       if habit.check_type?
-        # 【B-2 変更】分母を effective_weekly_target に変更
-        # effective_weekly_target = min(weekly_target, 7 - 除外日数)
         target          = habit.effective_weekly_target
         completed_count = check_counts[habit.id] || 0
         rate = target.zero? ? 0 :
