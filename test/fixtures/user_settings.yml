@@ -1,0 +1,35 @@
+# test/fixtures/user_settings.yml
+# ==============================================================================
+# UserSetting のテスト用フィクスチャ
+# ==============================================================================
+# 【注意】
+#   B-3 のストリークテストでは travel_to + @user.build_user_setting で
+#   動的に user_setting を作成するため、このフィクスチャはテスト補助用。
+#   habit_streak_test.rb では fixtures から直接参照しない。
+# ==============================================================================
+
+setting_one:
+  user: one
+  time_zone: "Asia/Tokyo"
+  notification_enabled: true
+  line_notification_enabled: false
+  email_notification_enabled: true
+  daily_notification_limit: 5
+  daily_notification_count: 0
+  weekly_report_enabled: true
+  ai_analysis_count: 0
+  ai_analysis_monthly_limit: 10
+  rest_mode_until:       # null = お休みモードなし
+
+setting_two:
+  user: two
+  time_zone: "Asia/Tokyo"
+  notification_enabled: true
+  line_notification_enabled: false
+  email_notification_enabled: true
+  daily_notification_limit: 5
+  daily_notification_count: 0
+  weekly_report_enabled: true
+  ai_analysis_count: 0
+  ai_analysis_monthly_limit: 10
+  rest_mode_until:       # null = お休みモードなし

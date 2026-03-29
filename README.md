@@ -50,15 +50,16 @@ flowchart LR
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/Docker-対応済み-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
 [![DB Migration](https://img.shields.io/badge/A--1_DBマイグレーション-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-1-db-migrations)
-[![GoodJob](https://img.shields.io/badge/A--3_GoodJob導入-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-3-good-job)
 [![本番デプロイ](https://img.shields.io/badge/A--2_本番デプロイ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-2-production-deploy)
+[![GoodJob](https://img.shields.io/badge/A--3_GoodJob導入-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-3-good-job)
 [![Resend](https://img.shields.io/badge/A--4_Resendメール設定-完了-10b981?style=flat-square)](https://github.com/KK-arina/runteq_graduation_project/tree/feature/A-4-resend-mailer)
 [![A-5 habit_templates](https://img.shields.io/badge/A--5_habit__templates-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-5-habit-templates-seed)
 [![DBインデックス監査](https://img.shields.io/badge/A--6_DBインデックス監査-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-6-db-index-audit)
 [![DB Transaction](https://img.shields.io/badge/A--7_DBトランザクション設計-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-7-transaction-design)
 [![B-1 数値型習慣](https://img.shields.io/badge/B--1_数値型習慣-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-1-numeric-habit)
 [![B-2 除外日設定](https://img.shields.io/badge/B--2_除外日設定-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-2-habit-excluded-days)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-9%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![B-3 ストリーク計算](https://img.shields.io/badge/B--3_ストリーク計算-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-3-streak-calculation)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-11%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -134,6 +135,7 @@ flowchart LR
 | #A-7 | DBトランザクション設計・複数テーブル更新の整合性保証 | 2026-03-22 | feature/A-7-transaction-design |
 | #B-1 | 数値型習慣の記録・達成率計算・リフレクション手法対応 | 2026-03-27 | feature/B-1-numeric-habit |
 | #B-2 | 習慣の除外日設定（habit_excluded_days） | 2026-03-28 | feature/B-2-habit-excluded-days |
+| #B-3 | ストリーク計算・表示（current_streak / longest_streak） | 2026-03-29 | feature/B-3-streak-calculation |
 
 <br>
 
@@ -1090,6 +1092,139 @@ B-2テスト: 15 runs, 33 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
+### #B-3: ストリーク計算・表示（current_streak / longest_streak）
+
+<br>
+
+**ブランチ:** `feature/B-3-streak-calculation`<br>
+**完了日:** 2026-03-29<br>
+**概要:** 習慣の継続日数（ストリーク）を GoodJob で日次計算し、<br>
+`habits.current_streak` / `longest_streak` に保存。<br>
+ダッシュボード・習慣一覧に「🔥 N日」として表示する。<br>
+AM4:00 基準・除外日考慮・お休みモード対応の完全実装。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Model | `Habit#calculate_streak!` を追加（AM4:00基準・90日遡及・N+1防止の pluck+Hash化） |
+| Model | `Habit#on_rest_mode?` を追加（現在のお休みモード状態を返す・UI表示用） |
+| Model | `Habit#rest_mode_on_date?(date)` を追加（日付単位のお休みモード判定・ストリーク計算用） |
+| Model | `HabitRecord#recorded?` を追加（チェック型: completed / 数値型: numeric_value > 0） |
+| Model | `HabitRecord#first_recorded_today?` を追加（created_at が today_for_record と一致するか） |
+| Model | `HabitRecord#updated_today?` を追加（updated_at が created_at より新しく今日の日付か） |
+| Model | `User` に `has_one :user_setting` を追加（on_rest_mode? の参照に必要） |
+| Job | `StreakCalculationJob` を本実装（毎日AM4:05・find_each・個別エラーはスキップ） |
+| View | `_habit_record.html.erb` の状態バッジを5パターンに更新（未記録/今日記録済み/今日更新済み/記録済み） |
+| View | `dashboards/index.html.erb` に🔥ストリークバッジ追加（7日以上→橙色/1〜6日→黄色） |
+| View | `habits/index.html.erb` にストリークバッジ追加（継続日数・最高記録を表示） |
+| Test | `test/models/habit_streak_test.rb` を新規作成（25件・33assertions） |
+
+<br>
+
+#### calculate_streak! のアルゴリズム
+
+<br>
+```
+基準日（AM4:00境界の「今日」）から過去90日に向かって1日ずつ遡る
+  ↓
+その日が除外日（habit_excluded_days）なら → スキップ（ストリークを壊さず増やさない）
+  ↓
+達成済み（completed=true または numeric_value > 0）なら → streak + 1
+  ↓
+未達成 + rest_mode_on_date?(date) = true なら → スキップ（ストリーク維持）
+  ↓
+未達成 + お休みモードなし → break（ストリーク確定）
+```
+
+<br>
+
+#### on_rest_mode? と rest_mode_on_date? の使い分け
+
+<br>
+
+| メソッド | 判定対象 | 用途 |
+|:---|:---|:---|
+| `on_rest_mode?` | 今この瞬間 | ビューでのUI表示判定 |
+| `rest_mode_on_date?(date)` | 指定した過去の日付 | ストリーク計算（過去日付を遡るため必須） |
+
+<br>
+
+`on_rest_mode?` だけを使うと「昨日はお休みモード中だったが今日は終了している」ケースで<br>
+昨日の未達成が誤って「通常未達成」と判定されストリークがリセットされるバグが発生する。<br>
+`rest_mode_on_date?(date)` は `rest_mode_until.to_date >= date` で日付単位に判定するため正確。
+
+<br>
+
+#### 表示状態の5パターン
+
+<br>
+
+| `record_status` | 条件 | 表示 | 色 |
+|:---|:---|:---|:---|
+| `:not_recorded` | habit_record が nil | 未記録（非表示） | sr-only |
+| `:updated_today` | updated_at > created_at かつ今日 | ↑ 今日更新済み | 青 |
+| `:recorded_today` | created_at が今日 | ✓ 今日記録済み | 緑 |
+| `:previously_recorded` | 昨日以前に作成・今日は未更新 | ✓ 記録済み | 緑 |
+
+<br>
+
+`updated_today?` を `first_recorded_today?` より先に判定する理由:<br>
+今日初入力後にすぐ変更した場合、`first_recorded_today?` も `updated_today?` も true になるが<br>
+ユーザーには「更新済み」として表示するのが正しいため `updated_today?` を優先する。
+
+<br>
+
+#### longest_streak の保護設計
+
+```ruby
+new_longest = [longest_streak, streak].max
+update_columns(
+  current_streak:            streak,
+  longest_streak:            new_longest,  # 過去最高は絶対に下がらない
+  last_streak_calculated_at: Time.current
+)
+```
+
+<br>
+
+`update_columns` を使う理由: バリデーションスキップ・`updated_at` 非更新・高速化。<br>
+ストリーク計算はバッチ処理で頻繁に実行されるため `update!` のオーバーヘッドを避ける。
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `app/models/habit.rb` | `calculate_streak!` / `on_rest_mode?` / `rest_mode_on_date?` を追加 |
+| `app/models/habit_record.rb` | `recorded?` / `first_recorded_today?` / `updated_today?` を追加 |
+| `app/models/user.rb` | `has_one :user_setting` を追加 |
+| `app/jobs/streak_calculation_job.rb` | 本実装（includes N+1防止・個別エラースキップ） |
+| `app/views/habit_records/_habit_record.html.erb` | 状態バッジを5パターンに更新 |
+| `app/views/dashboards/index.html.erb` | 🔥ストリークバッジ追加 |
+| `app/views/habits/index.html.erb` | ストリークバッジ・最高記録表示追加 |
+| `test/models/habit_streak_test.rb` | 新規作成（25件） |
+| `test/fixtures/habit_excluded_days.yml` | 削除（外部キー違反の根本解決） |
+
+<br>
+
+#### テスト結果
+
+<br>
+```
+B-3テスト: 25 runs, 33 assertions, 0 failures, 0 errors, 0 skips
+全テスト:  316 runs, 825 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -1102,11 +1237,8 @@ B-2テスト: 15 runs, 33 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
-深夜に習慣を行うユーザーを考慮し、1日の境界を **AM4:00** に設定しています。  
-`Time.now` ではなく `Time.current` を使用し、タイムゾーン（JST）を確実に適用しています。
-
-<br>
-
+深夜に習慣を行うユーザーを考慮し、1日の境界を **AM4:00** に設定しています。<br>
+`Time.now` ではなく `Time.current` を使用し、タイムゾーン（JST）を確実に適用しています。<br>
 ```ruby
 def self.today_date
   now = Time.current
@@ -1120,10 +1252,7 @@ end
 
 <br>
 
-ダッシュボードでは複数の習慣と記録を同時に表示するため、`index_by` と `group(:habit_id).count` を使い、**それぞれ1クエリで**一括取得しています。ループ内での DB アクセスを完全に排除し、習慣が増えてもクエリ数が変わらない設計にしています。
-
-<br>
-
+ダッシュボードでは複数の習慣と記録を同時に表示するため、`index_by` と `group(:habit_id).count` を使い、**それぞれ1クエリで**一括取得しています。ループ内での DB アクセスを完全に排除し、習慣が増えてもクエリ数が変わらない設計にしています。<br>
 ```ruby
 # 今日の記録を O(1) で参照できるハッシュに変換（1クエリ）
 @today_records_hash = current_user.habit_records
@@ -1215,8 +1344,7 @@ Neon などのマネージド PostgreSQL では「DB 作成権限（`CREATE DATA
 `db:prepare` は「DB が存在しなければ作成 → マイグレーション実行」という処理のため、<br>
 CREATE DATABASE ステップで権限エラーが発生し `exit 1` → デプロイ失敗ループになる。<br>
 `db:migrate` は既存 DB に対してマイグレーションのみ実行するため、マネージド DB で正しく動作する。<br>
-何度実行しても適用済みはスキップされるため安全（冪等性あり）。
-
+何度実行しても適用済みはスキップされるため安全（冪等性あり）。<br>
 ```ruby
 # ❌ Neon ではエラーになる（CREATE DATABASE 権限なし）
 DISABLE_DATABASE_ENVIRONMENT_CHECK=1 ./bin/rails db:prepare
@@ -1235,8 +1363,7 @@ DISABLE_DATABASE_ENVIRONMENT_CHECK=1 ./bin/rails db:prepare
 `exec` を使わない場合、シェル（PID 1）→ Puma（PID 2）という親子関係になり、<br>
 Render の停止シグナル（SIGTERM）がシェルに届いても Puma に転送されず強制終了（SIGKILL）される。<br>
 `exec` を使うと Puma が PID 1 になり SIGTERM を直接受け取れるため、<br>
-処理中のリクエストを完了してから終了する Graceful Shutdown が機能する。
-
+処理中のリクエストを完了してから終了する Graceful Shutdown が機能する。<br>
 ```bash
 # ❌ exec なし：シェルが PID 1 のまま → SIGTERM が Puma に届かない
 bundle exec puma -C config/puma.rb
@@ -1387,7 +1514,6 @@ docker compose exec web cat tmp/letter_opener/【フォルダ名】/plain.html
 
 `find_or_initialize_by` + `assign_attributes` + `save!` を組み合わせることで<br>
 新規作成・既存更新の両方を1つのパターンで安全に処理できる。<br>
-
 ```ruby
 # ❌ find_or_create_by! ブロック方式：既存データが更新されない
 HabitTemplate.find_or_create_by!(name: data[:name], category: data[:category]) do |t|
@@ -1482,7 +1608,7 @@ rescue => e          # ← ロールバック完了後にここに来る
 
 テスト内でクラスメソッドやインスタンスメソッドを `define_method` で直接書き換えると、<br>
 `ensure` での復元が不完全な場合に他テストに影響するフレーキーテストが発生する。<br>
-`minitest/mock` の `stub` はブロックを抜けると自動で元に戻るため安全。
+`minitest/mock` の `stub` はブロックを抜けると自動で元に戻るため安全。<br>
 ```ruby
 # ❌ define_method + remove_method → 元のメソッドも消えてしまう
 WeeklyReflection.define_method(:complete!) { raise ... }
@@ -1493,6 +1619,105 @@ ensure
 error_lambda = -> { raise ActiveRecord::RecordInvalid, invalid_record }
 reflection.stub(:complete!, error_lambda) do
   # このブロック内だけ complete! が差し替えられる
+end
+```
+
+<br>
+
+### 14. ストリーク計算の N+1 防止設計（#B-3）
+
+<br>
+
+ストリーク計算は全ユーザー × 全習慣をバッチ処理するため、N+1 が発生すると処理時間が指数的に増大する。<br>
+以下の設計で全ての N+1 を排除している。
+
+<br>
+
+**① 90日分の記録を1クエリで一括取得・Hash化**
+
+```ruby
+# ❌ ループ内でクエリ → 90日 × 習慣数 のクエリが発生
+(0..90).each do |i|
+  HabitRecord.find_by(record_date: date - i, ...)  # N+1
+end
+
+# ✅ 90日分を1クエリで取得して Hash に変換 → ループ内はメモリ参照のみ
+records_map = habit_records
+  .where(record_date: start_date..reference_date)
+  .pluck(:record_date, :completed, :numeric_value)
+  .each_with_object({}) { |(date, comp, num), hash| hash[date] = ... }
+```
+
+<br>
+
+**② Job 側で includes を使って関連データを一括取得**
+
+```ruby
+Habit.active
+  .includes(:habit_excluded_days)   # excluded_day_numbers の N+1 防止
+  .includes(user: :user_setting)    # on_rest_mode? の N+1 防止
+  .find_each { |habit| habit.calculate_streak!(reference_date) }
+```
+
+<br>
+
+`find_each` を使う理由: 大量レコードを1000件ずつバッチ処理してメモリ効率を高めるため。<br>
+`each` は全レコードを一括ロードするが `find_each` は分割して処理するためユーザー数が増えても安全。
+
+<br>
+
+### 15. on_rest_mode? と rest_mode_on_date? の分離設計（#B-3）
+
+<br>
+
+お休みモードの判定を「現在」と「過去の日付」で分離している。<br>
+
+<br>
+
+**なぜ分離が必要か:**<br>
+ストリーク計算では基準日から過去に向かって1日ずつ遡るため、<br>
+各日が「その日にお休みモード中だったか」を正確に判定する必要がある。<br>
+`on_rest_mode?`（現在時刻での判定）を使うと、<br>
+「昨日はお休みモード中だったが今日（計算時点）は終了している」ケースで<br>
+昨日の未達成が誤って「通常未達成」と判定されストリークがリセットされるバグになる。<br>
+```ruby
+# on_rest_mode? → 今この瞬間のお休みモード状態（UI表示用）
+def on_rest_mode?
+  user.user_setting&.rest_mode_active?
+end
+
+# rest_mode_on_date?(date) → 指定した日付のお休みモード状態（ストリーク計算用）
+def rest_mode_on_date?(date)
+  return false unless allow_rest_mode
+  setting = user.user_setting
+  return false unless setting&.rest_mode_until.present?
+  setting.rest_mode_until.to_date >= date  # その日はまだお休み期間内か
+end
+```
+
+<br>
+
+### 16. travel_to のネスト禁止と代替手法（#B-3）
+
+<br>
+
+Rails 7.x 以降は `travel_to` ブロックの入れ子を `RuntimeError` として禁止している。<br>
+「昨日作成されたレコード」を再現したい場合に `travel_to` を2重にネストするパターンは使えない。<br>
+```ruby
+# ❌ travel_to のネスト → RuntimeError
+travel_to Time.zone.local(2026, 4, 12) do
+  record = HabitRecord.create!(...)
+  travel_to Time.zone.local(2026, 4, 13) do  # RuntimeError: Calling travel_to with a block...
+    assert_not record.first_recorded_today?
+  end
+end
+
+# ✅ update_columns で created_at を直接書き換えて「昨日作成」を再現する
+travel_to Time.zone.local(2026, 4, 13, 10, 0, 0) do
+  record = HabitRecord.create!(record_date: Date.new(2026, 4, 12), ...)
+  # created_at を昨日に強制変更（update_columns はバリデーション・タイムスタンプ更新をスキップ）
+  record.update_columns(created_at: Time.zone.local(2026, 4, 12, 10, 0, 0))
+  assert_not record.first_recorded_today?
 end
 ```
 
@@ -1996,7 +2221,8 @@ habitflow/
 │   │   ├── weekly_reflection.rb           # 週次振り返り・complete! メソッド
 │   │   ├── weekly_reflection_habit_summary.rb # スナップショット・達成率計算
 │   │   ├── habit_template.rb                  # #A-5: オンボーディング用習慣テンプレートマスタ
-│   │   └── habit_excluded_day.rb              # #B-2: 除外日モデル（DAY_NAMES定数・バリデーション）
+│   │   ├── habit_excluded_day.rb              # #B-2: 除外日モデル（DAY_NAMES定数・バリデーション）
+│   │   └── user_setting.rb                    # ユーザー設定（rest_mode_active?・#B-3で参照）
 │   ├── services/
 │   │   ├── weekly_reflection_complete_service.rb  # #A-7 #B-1: 振り返り完了フロー（corrections引数・差分補正ロジック追加）
 │   │   ├── habit_record_save_service.rb            # #A-7 #B-1: 習慣記録保存フロー（数値型対応・errors:[]配列形式統一）
@@ -2009,7 +2235,7 @@ habitflow/
 │   │   └── form_submit_controller.js      # フォーム送信ローディング・二重送信防止
 │   ├── jobs/
 │   │   ├── application_job.rb                          # 変更: retry_on / discard_on 追加（#A-3）
-│   │   ├── streak_calculation_job.rb                   # #A-3: ストリーク計算（#B-3で本実装）
+│   │   ├── streak_calculation_job.rb                   # #A-3 #B-3: ストリーク計算（本実装完了）
 │   │   ├── daily_notification_count_reset_job.rb       # #A-3: 日次通知カウントリセット
 │   │   ├── monthly_ai_count_reset_job.rb               # #A-3: 月次AI使用回数リセット
 │   │   └── hello_good_job.rb                           # #A-3: 動作確認用（確認後削除可）
@@ -2017,9 +2243,9 @@ habitflow/
 │   │   ├── application_mailer.rb                       # #A-4: 全メール共通設定（fromアドレス）
 │   │   └── test_mailer.rb                              # #A-4: 動作確認用メイラー（将来のMailer実装の参考）
 │   └── views/
-│       ├── dashboards/                    # ダッシュボード画面（変更: 単位表示をチェック型→日/数値型→unit に分岐 #B-1）
-│       ├── habits/                        # 習慣一覧・新規作成・編集画面（変更: 除外日チェックボックス・edit追加 #B-2）
-│       ├── habit_records/                 # 習慣記録パーシャル（変更: チェック型/数値型UI切り替え・format("%g")統一 #B-1）
+│   │   ├── dashboards/                    # ダッシュボード画面（変更: 🔥ストリークバッジ追加 #B-3）
+│   │   ├── habits/                        # 習慣一覧・新規作成・編集画面（変更: ストリークバッジ追加 #B-3）
+│   │   ├── habit_records/                 # 習慣記録パーシャル（変更: 状態バッジ5パターン #B-3）
 │       ├── weekly_reflections/            # 振り返り一覧・入力・詳細画面（変更: リフレクション3項目・数値補正フィールド追加 #B-1）
 │       ├── shared/                        # ヘッダー・フッター・エラー表示パーシャル
 │       ├── errors/                        # 404・422・500 エラーページ
@@ -2077,7 +2303,8 @@ habitflow/
     │   └── habit_record_save_service_test.rb            # #A-7: 習慣記録フローのテスト（3テスト）
     ├── models/
     │   ├── habit_record_test.rb              # 変更: numeric_value バリデーション・Service経由保存テスト追加（#B-1）
-    │   └── habit_excluded_day_test.rb     # #B-2: 除外日モデルテスト（15件）
+    │   ├── habit_excluded_day_test.rb     # #B-2: 除外日モデルテスト（15件）
+    │   └── habit_streak_test.rb           # #B-3: ストリーク計算テスト（25件・境界値・除外日・お休みモード）
     └── integration/
         └── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
 ```
@@ -2109,7 +2336,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-291 runs, 792 assertions, 0 failures, 0 errors, 0 skips
+316 runs, 825 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
@@ -2138,6 +2365,7 @@ docker compose exec web bin/rails test
 | `test/integration/numeric_habit_flow_test.rb` | E2E | 数値型習慣の作成→記録→進捗確認→ダッシュボード表示のフロー（#B-1） |
 | `test/services/weekly_reflection_complete_service_test.rb` | サービス | 差分補正・再補正・マイナスクランプ・セキュリティ（#B-1追記） |
 | `test/models/habit_excluded_day_test.rb` | モデル | 除外日バリデーション・UNIQUE制約・effective_weekly_target・達成率計算（#B-2・15件） |
+| `test/models/habit_streak_test.rb` | モデル | ストリーク計算・longest_streak保護・除外日・お休みモード日付単位判定・AM4:00境界値（#B-3・25件） |
 
 <br>
 
@@ -2733,6 +2961,51 @@ def save_excluded_days!(habit, params)
   ...
 end
 ```
+
+<br>
+
+### ストリーク計算でお休みモードは「日付単位」で判定すること（#B-3）
+
+<br>
+
+`on_rest_mode?`（現在時刻での判定）をストリーク計算に使うと、<br>
+計算時点（AM4:05）ではお休みモードが終了していても、昨日はお休みモード中だったケースを正しく処理できない。<br>
+過去日付を遡るストリーク計算では必ず `rest_mode_on_date?(date)` で日付単位の判定をすること。<br>
+`rest_mode_until.to_date >= date` でその日がお休み期間内かどうかを正確に判定できる。
+
+<br>
+
+### travel_to のネストは Rails 7.x 以降では RuntimeError になる（#B-3）
+
+<br>
+
+「昨日作成されたレコード」を再現するために `travel_to` を入れ子にするパターンは使えない。<br>
+代わりに `update_columns(created_at: 昨日の日時)` で直接タイムスタンプを書き換える方法を使う。<br>
+`update_columns` はバリデーションと `updated_at` の自動更新をスキップするため、<br>
+任意のタイムスタンプ値を設定できる（テスト専用の手法として有効）。
+
+<br>
+
+### フィクスチャは generate 後に必ず不要ファイルを削除する（#B-3）
+
+<br>
+
+`habit_excluded_days.yml` のように `setup` で動的にデータを作成するテストでは<br>
+フィクスチャファイル自体が不要。残っていると存在しない habit_id を参照する外部キー違反が発生し<br>
+全テストが `PG::ForeignKeyViolation` で落ちる。<br>
+フィクスチャが不要と判断したら `git rm` で完全に削除し `db:test:prepare` でリセットすること。
+
+<br>
+
+### update_columns はストリークのような「計算結果カラム」の更新に最適（#B-3）
+
+<br>
+
+ストリーク計算はバッチジョブで全習慣に対して毎日実行される。<br>
+`update!` はバリデーション・コールバック・`updated_at` の更新が走るため処理コストが高い。<br>
+`update_columns` はバリデーションをスキップして直接 UPDATE するため高速。<br>
+また `updated_at` が更新されないため「ストリーク計算による更新」と「ユーザーによる更新」を区別できる。<br>
+`last_streak_calculated_at` に計算時刻を記録することでデバッグや再計算判定にも活用できる。
 
 <br>
 
