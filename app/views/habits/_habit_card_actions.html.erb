@@ -1,0 +1,287 @@
+<%# app/views/habits/_habit_card_actions.html.erb %>
+<%#
+  ==============================================================================
+  習慣カード操作メニューパーシャル（B-5 content_for版）
+  ==============================================================================
+  【このファイルの役割】
+    習慣一覧ページの各カードに「⋯」メニューと削除確認モーダル（M-1）を追加する。
+    ロック中は「⋯」メニューボタン自体を非表示にする。
+
+  【fixed inset-0 が効かなかった根本原因】
+    CSSの仕様:
+      祖先要素に transform / transition / will-change プロパティがあると
+      その子孫の fixed 要素の基準が「ビューポート全体」ではなく
+      「その祖先要素」になってしまう。
+
+    習慣カードのDIV:
+      class="... transition-shadow ..."
+      → transition プロパティが設定される
+      → カード内に置いた fixed 要素がカード基準になってしまう
+
+  【解決策: content_for :modals】
+    content_for :modals do ... end で囲んだHTMLは
+    application.html.erb の yield :modals の位置に出力される。
+    yield :modals は </body> 直前に置いてあるため、
+    すべてのカードDIVの外側に出力される。
+    → transition の影響を受けない
+    → fixed inset-0 が正しくビューポート全体を覆う
+
+  【data-controller の外にモーダルを置く理由（変更なし）】
+    button_to が生成する <form> タグとイベントの干渉を防ぐため。
+    JS から getElementById() でモーダルを取得する。
+
+  【渡されるローカル変数】
+    habit:  Habit オブジェクト（必須）
+    locked: PDCAロック中か否か（true/false）
+  ==============================================================================
+%>
+
+<% unless locked %>
+
+  <%#
+    ============================================================
+    「⋯」ボタン（カード内に残す）
+    ============================================================
+    data-controller="habit-menu" はこのDIVのみ。
+    モーダル・ボトムシートは content_for :modals で body直前に出力する。
+
+    data-habit-menu-modal-id-value:
+      JS が getElementById() でモーダルを特定するためのID文字列。
+      "habit-modal-{habit.id}" の形式。
+
+    data-habit-menu-sheet-id-value:
+      JS が getElementById() でボトムシートを特定するためのID文字列。
+      "habit-sheet-{habit.id}" の形式。
+  %>
+  <div data-controller="habit-menu"
+       data-habit-menu-habit-name-value="<%= habit.name %>"
+       data-habit-menu-modal-id-value="habit-modal-<%= habit.id %>"
+       data-habit-menu-sheet-id-value="habit-sheet-<%= habit.id %>"
+       data-action="keydown@window->habit-menu#keydown"
+       class="inline-block">
+
+    <button type="button"
+            class="p-1.5 rounded-md text-gray-400 hover:text-gray-600
+                   hover:bg-gray-100 transition-colors
+                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+            data-action="click->habit-menu#openMenu"
+            aria-label="<%= habit.name %> のメニューを開く"
+            aria-haspopup="dialog">
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+        <circle cx="10" cy="4"  r="1.5"/>
+        <circle cx="10" cy="10" r="1.5"/>
+        <circle cx="10" cy="16" r="1.5"/>
+      </svg>
+    </button>
+
+  </div>
+  <%# /data-controller="habit-menu" %>
+
+  <%#
+    ============================================================
+    モーダル・ボトムシートを body 直前に出力する
+    ============================================================
+    content_for :modals do ... end:
+      このブロック内のHTMLを :modals という名前のバッファに追記する。
+      @habits.each で5回ループすれば5習慣分のモーダルが蓄積される。
+      蓄積されたHTMLは application.html.erb の yield :modals で一括出力される。
+
+    なぜ content_for を使うのか:
+      パーシャルはカードのループ内（transition-shadow の子孫）で呼ばれる。
+      モーダルのHTMLをそのまま書くと transition の影響を受ける。
+      content_for を使うことでモーダルHTMLだけを body 直前に「逃がせる」。
+  %>
+  <% content_for :modals do %>
+
+    <%#
+      ============================================================
+      デスクトップ用モーダル
+      ============================================================
+      id="habit-modal-<%= habit.id":
+        habit_menu_controller.js が getElementById() で取得する一意なID。
+
+      fixed inset-0:
+        body直前にあるため transition-shadow の影響を受けない。
+        正しくビューポート全体を覆う。
+
+      bg-black/50 z-50:
+        半透明の黒背景でモーダルの背後を暗くする。
+        z-index: 50 で他の要素より前面に表示する。
+    %>
+    <%# デスクトップモーダル - hidden を削除して style で非表示にする %>
+    <div id="habit-modal-<%= habit.id %>"
+         class="fixed inset-0 bg-black/50 z-50 items-center justify-center px-4"
+         style="display: none;"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="modal-title-<%= habit.id %>">
+
+      <%#
+        モーダルパネル
+        id="habit-modal-panel-{habit.id}":
+          JS の stopPropagation 設定対象。
+          パネル内クリックがオーバーレイまで伝播するのを防ぐ。
+      %>
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm border-t-4 border-red-500 p-6"
+           id="habit-modal-panel-<%= habit.id %>">
+
+        <%#
+          js-habit-menu-title クラス:
+            habit_menu_controller.js の _updateModalTitle() が
+            querySelector(".js-habit-menu-title") でこの要素を取得し
+            習慣名を動的にセットする。
+        %>
+        <h3 id="modal-title-<%= habit.id %>"
+            class="js-habit-menu-title text-lg font-bold text-gray-900 mb-4">
+          「<%= habit.name %>」を削除しますか？
+        </h3>
+
+        <p class="text-sm text-gray-600 mb-6 leading-relaxed">
+          <strong class="text-purple-600">📦 アーカイブ</strong>なら過去の記録を残したまま一覧から非表示にできます。<br>
+          達成した習慣は「アーカイブ」がおすすめです。
+        </p>
+
+        <div class="flex flex-col gap-3">
+
+          <%# アーカイブボタン %>
+          <%= button_to archive_habit_path(habit),
+                method: :post,
+                form: { class: "w-full" },
+                class: "w-full px-4 py-3 rounded-lg text-sm font-semibold
+                        bg-purple-50 text-purple-700 border border-purple-200
+                        hover:bg-purple-100 transition-colors
+                        focus:outline-none focus:ring-2 focus:ring-purple-500" do %>
+            📦 アーカイブする（卒業・復元可能）
+          <% end %>
+
+          <%# 削除ボタン %>
+          <%= button_to habit_path(habit),
+                method: :delete,
+                form: { class: "w-full" },
+                class: "w-full px-4 py-3 rounded-lg text-sm font-semibold
+                        bg-red-50 text-red-700 border border-red-200
+                        hover:bg-red-100 transition-colors
+                        focus:outline-none focus:ring-2 focus:ring-red-500" do %>
+            🗑️ 完全に削除する（元に戻せません）
+          <% end %>
+
+          <%#
+            キャンセルボタン
+            id="habit-modal-cancel-{habit.id}":
+              habit_menu_controller.js が addEventListener でクリックイベントを設定する対象。
+          %>
+          <button type="button"
+                  id="habit-modal-cancel-<%= habit.id %>"
+                  class="w-full px-4 py-3 rounded-lg text-sm font-semibold
+                         bg-gray-100 text-gray-600 border border-gray-200
+                         hover:bg-gray-200 transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-gray-400">
+            キャンセル
+          </button>
+
+        </div>
+      </div>
+    </div>
+    <%# /デスクトップ用モーダル %>
+
+    <%#
+      ============================================================
+      スマホ用ボトムシート
+      ============================================================
+      id="habit-sheet-<%= habit.id":
+        habit_menu_controller.js が getElementById() で取得する一意なID。
+
+      fixed inset-0 flex items-end:
+        body直前にあるため fixed が正しく機能する。
+        items-end でパネルを画面下端に配置する。
+    %>
+    <%# ボトムシート - hidden を削除して style で非表示にする %>
+    <div id="habit-sheet-<%= habit.id %>"
+         class="fixed inset-0 bg-black/50 z-50 items-end"
+         style="display: none;"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="sheet-title-<%= habit.id %>">
+
+      <%#
+        ボトムシートパネル
+        id="habit-sheet-panel-{habit.id}":
+          habit_menu_controller.js がスライドアニメーションの制御と
+          stopPropagation の設定に使用する。
+
+        translate-y-full:
+          初期状態: 自身の高さ分だけ下にずれた状態（画面外に隠れている）。
+          openBottomSheet() が translate-y-0 に切り替えてスライドイン。
+
+        transition-transform duration-300:
+          translate の変化を 300ms でアニメーション化する。
+      %>
+      <div id="habit-sheet-panel-<%= habit.id %>"
+           class="bg-white rounded-t-2xl w-full max-h-[90vh] overflow-y-auto
+                  translate-y-full transition-transform duration-300
+                  border-t-4 border-red-500">
+
+        <div class="pt-3 pb-1">
+          <div class="w-10 h-1.5 bg-gray-300 rounded-full mx-auto"></div>
+        </div>
+
+        <div class="px-5 pt-2 pb-8">
+
+          <h3 id="sheet-title-<%= habit.id %>"
+              class="js-habit-menu-title text-lg font-bold text-gray-900 mb-3 mt-2">
+            「<%= habit.name %>」を削除しますか？
+          </h3>
+
+          <p class="text-sm text-gray-600 mb-5 leading-relaxed">
+            <strong class="text-purple-600">📦 アーカイブ</strong>なら過去の記録を残したまま一覧から非表示にできます。
+          </p>
+
+          <div class="flex flex-col gap-3">
+
+            <%# アーカイブボタン %>
+            <%= button_to archive_habit_path(habit),
+                  method: :post,
+                  form: { class: "w-full" },
+                  class: "w-full px-4 py-4 rounded-xl text-sm font-semibold
+                          bg-purple-50 text-purple-700 border border-purple-200
+                          hover:bg-purple-100 transition-colors
+                          focus:outline-none focus:ring-2 focus:ring-purple-500" do %>
+              📦 アーカイブする（卒業・復元可能）
+            <% end %>
+
+            <%# 削除ボタン %>
+            <%= button_to habit_path(habit),
+                  method: :delete,
+                  form: { class: "w-full" },
+                  class: "w-full px-4 py-4 rounded-xl text-sm font-semibold
+                          bg-red-50 text-red-700 border border-red-200
+                          hover:bg-red-100 transition-colors
+                          focus:outline-none focus:ring-2 focus:ring-red-500" do %>
+              🗑️ 完全に削除する（元に戻せません）
+            <% end %>
+
+            <%#
+              キャンセルボタン
+              id="habit-sheet-cancel-{habit.id}":
+                habit_menu_controller.js が addEventListener でクリックイベントを設定する対象。
+            %>
+            <button type="button"
+                    id="habit-sheet-cancel-<%= habit.id %>"
+                    class="w-full px-4 py-4 rounded-xl text-sm font-semibold
+                           bg-gray-100 text-gray-600 border border-gray-200
+                           hover:bg-gray-200 transition-colors
+                           focus:outline-none focus:ring-2 focus:ring-gray-400">
+              キャンセル
+            </button>
+
+          </div>
+        </div>
+      </div>
+    </div>
+    <%# /スマホ用ボトムシート %>
+
+  <% end %>
+  <%# /content_for :modals %>
+
+<% end %>
+<%# /unless locked %>
