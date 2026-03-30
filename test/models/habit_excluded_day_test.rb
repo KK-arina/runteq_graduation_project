@@ -148,53 +148,55 @@ class HabitExcludedDayTest < ActiveSupport::TestCase
   # ============================================================
 
   test "チェック型: 土日除外で5日実施すると達成率100%になる" do
-    # 土日を除外日に設定する
-    @habit.habit_excluded_days.create!(day_of_week: 0)  # 日
-    @habit.habit_excluded_days.create!(day_of_week: 6)  # 土
-    @habit.reload
+    # 【修正理由】
+    #   current_week_range は week_start..today_for_record の範囲で集計する。
+    #   今日が月曜の場合、週の範囲が「月曜1日分」しかなく
+    #   月〜金に作成した記録が全件カウントされない。
+    #   travel_to で週の中日（金曜AM10:00）に固定することで
+    #   月〜金の記録が確実に今週の範囲に含まれるようにする。
+    travel_to Time.zone.parse("2025-01-17 10:00:00") do  # 2025-01-17 = 金曜日
+      @habit.habit_excluded_days.create!(day_of_week: 0)  # 日
+      @habit.habit_excluded_days.create!(day_of_week: 6)  # 土
+      @habit.reload
 
-    # 今週月〜金の5日分の記録を作成する（AM4:00基準の今日を基点に）
-    today = HabitRecord.today_for_record
-    week_start = today.beginning_of_week(:monday)
-    5.times do |i|
-      @habit.habit_records.create!(
-        user:        @user,
-        record_date: week_start + i.days,
-        completed:   true
-      )
+      today = HabitRecord.today_for_record
+      week_start = today.beginning_of_week(:monday)
+      5.times do |i|
+        @habit.habit_records.create!(
+          user:        @user,
+          record_date: week_start + i.days,
+          completed:   true
+        )
+      end
+
+      stats = @habit.weekly_progress_stats(@user)
+
+      assert_equal 5, stats[:completed_count], "5日実施されているはず"
+      assert_equal 5, stats[:effective_target], "除外土日後の実施予定日数は5のはず"
+      assert_equal 100, stats[:rate], "5/5 = 100% のはず"
     end
-
-    stats = @habit.weekly_progress_stats(@user)
-
-    # 除外日考慮後の effective_weekly_target = 5 なので
-    # 5日完了 / 5日 = 100%
-    assert_equal 5, stats[:completed_count],
-                 "5日実施されているはず"
-    assert_equal 5, stats[:effective_target],
-                 "除外土日後の実施予定日数は5のはず"
-    assert_equal 100, stats[:rate],
-                 "5/5 = 100% のはず"
   end
 
   test "チェック型: 除外日なしで weekly_target を分母にする（従来通り）" do
-    # 除外日なし・3日完了・目標5日
-    today = HabitRecord.today_for_record
-    week_start = today.beginning_of_week(:monday)
-    3.times do |i|
-      @habit.habit_records.create!(
-        user:        @user,
-        record_date: week_start + i.days,
-        completed:   true
-      )
+    # 【修正理由】
+    #   同上。travel_to で金曜に固定して月〜水の3件が今週範囲に含まれることを保証する。
+    travel_to Time.zone.parse("2025-01-17 10:00:00") do  # 2025-01-17 = 金曜日
+      today = HabitRecord.today_for_record
+      week_start = today.beginning_of_week(:monday)
+      3.times do |i|
+        @habit.habit_records.create!(
+          user:        @user,
+          record_date: week_start + i.days,
+          completed:   true
+        )
+      end
+
+      stats = @habit.weekly_progress_stats(@user)
+
+      assert_equal 3, stats[:completed_count]
+      assert_equal 5, stats[:effective_target], "除外日なし → effective_target = weekly_target = 5"
+      assert_equal 60, stats[:rate], "3/5 = 60% のはず"
     end
-
-    stats = @habit.weekly_progress_stats(@user)
-
-    assert_equal 3, stats[:completed_count]
-    assert_equal 5, stats[:effective_target],
-                 "除外日なし → effective_target = weekly_target = 5"
-    assert_equal 60, stats[:rate],   # 3/5 = 60%
-                 "3/5 = 60% のはず"
   end
 
   test "数値型: 除外日を設定しても weekly_target を分母にする" do

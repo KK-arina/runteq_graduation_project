@@ -308,5 +308,28 @@
 
     <%= render "shared/footer" %>
 
+    <%#
+      ============================================================
+      モーダル出力エリア（B-5 追加）
+      ============================================================
+      【なぜここに置くのか】
+        CSSの仕様として、祖先要素に transform / transition / will-change
+        プロパティが設定されていると、その子孫の fixed 要素が
+        「画面全体」ではなく「その祖先要素」を基準に配置されてしまう。
+
+        習慣カードの div に transition-shadow クラス（= CSS の transition プロパティ）
+        があるため、カード内に fixed モーダルを置くと正しく表示されない。
+
+        content_for :modals で収集したモーダルHTMLを
+        body の直前（すべてのカードDIVの外側）で出力することで
+        transition の影響を受けずに fixed inset-0 が正しく機能する。
+
+      yield :modals:
+        各ビューで content_for :modals do ... end と書いた内容を
+        ここに展開する。
+        習慣が5件あれば5つ分のモーダルHTMLがここにまとめて出力される。
+    %>
+    <%= yield :modals %>
+
   </body>
 </html>

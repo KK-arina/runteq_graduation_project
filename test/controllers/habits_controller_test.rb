@@ -83,29 +83,31 @@ class HabitsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "習慣の記録がある場合に完了日数が正しく表示されること" do
-    habit = habits(:habit_one)
-    today = HabitRecord.today_for_record
-    week_start = today.beginning_of_week(:monday)
+    # 【修正理由】
+    #   current_week_range は week_start..today_for_record の範囲で集計する。
+    #   今日が月曜の場合、週の範囲が「月曜1日分」のため
+    #   月曜・火曜に作成した2件のうち月曜分しかカウントされず
+    #   「1/7日」と表示されてしまう。
+    #   travel_to で水曜以降に固定することで「2/7日」が確実に表示される。
+    travel_to Time.zone.parse("2025-01-15 10:00:00") do  # 2025-01-15 = 水曜日
+      habit = habits(:habit_one)
+      today = HabitRecord.today_for_record
+      week_start = today.beginning_of_week(:monday)
 
-    # 【重要】テストを独立させるため、今週の記録を全て削除してからテスト用記録を作成します。
-    # fixtures にすでに今週の記録が存在する場合、削除せずに記録を追加すると
-    # 「fixtures の件数 + テストで追加した件数」になってしまい、期待値がズレます。
-    # delete_all を先に実行することで「必ず2件だけ」の状態を保証します。
-    HabitRecord.where(
-      user: @user,
-      habit: habit,
-      record_date: week_start..week_start + 6.days
-    ).delete_all
+      HabitRecord.where(
+        user: @user,
+        habit: habit,
+        record_date: week_start..week_start + 6.days
+      ).delete_all
 
-    # 今週の月曜・火曜に記録を2件作成（= 「2/7日」と表示されるはず）
-    HabitRecord.create!(user: @user, habit: habit, record_date: week_start,           completed: true)
-    HabitRecord.create!(user: @user, habit: habit, record_date: week_start + 1.day,   completed: true)
+      HabitRecord.create!(user: @user, habit: habit, record_date: week_start,         completed: true)
+      HabitRecord.create!(user: @user, habit: habit, record_date: week_start + 1.day, completed: true)
 
-    get habits_path
-    assert_response :success
+      get habits_path
+      assert_response :success
 
-    # 今週の記録が2件のため「2/7日」と表示されることを確認します
-    assert_match(/2\/7日/, response.body)
+      assert_match(/2\/7日/, response.body)
+    end
   end
 
   test "習慣が0件のとき Empty State が表示されること" do
