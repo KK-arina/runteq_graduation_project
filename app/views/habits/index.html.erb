@@ -1,15 +1,17 @@
 <%# app/views/habits/index.html.erb %>
-<%#
-  ==============================================================================
-  習慣一覧ページ（B-5: ⋯メニュー + 削除確認モーダル追加）
-  ==============================================================================
-  【B-5 での変更内容】
-    ① 各習慣カードの右上にある「編集/📦卒業/削除」ボタン群を廃止する。
-    ② 代わりに「⋯」（三点リーダー）メニューボタンを設置する。
-    ③ 「⋯」クリックでM-1モーダル（アーカイブ or 完全削除の2択）を表示する。
-    ④ モーダルは _habit_card_actions パーシャルとして切り出す。
-    ⑤ 「編集」ボタンは削除確認とは別操作のため残す（/habits/:id/edit への遷移）。
-  ==============================================================================
+<%# ==============================================================================
+    習慣一覧ページ（B-6: カラー・アイコン・Drag & Drop 並び替え追加）
+    ==============================================================================
+    【B-6 での変更内容】
+      ① グリッドコンテナに data-controller="habit-sort" を追加
+         Drag & Drop 並び替えを Stimulus で管理する。
+      ② 各カードに data-habit-id と data-sort-handle を追加
+         habit-sort コントローラーが習慣 ID を取得し、
+         sort-handle でドラッグハンドルを識別する。
+      ③ カードの左ボーダーに habit.color を反映する
+         style="border-left: 4px solid <%= habit.color"
+      ④ カードヘッダーにアイコン（habit.icon）を表示する
+    ==============================================================================
 %>
 <% content_for :title, "習慣管理 | HabitFlow" %>
 
@@ -45,8 +47,7 @@
       <% end %>
 
       <% if @locked %>
-        <span class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-400 cursor-not-allowed"
-              title="先週の振り返りを完了すると追加できます">
+        <span class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gray-200 text-gray-400 cursor-not-allowed">
           🔒 + 新しい習慣を追加
         </span>
       <% else %>
@@ -58,7 +59,6 @@
     </div>
   </div>
 
-  <%# 習慣カード一覧 %>
   <% if @habits.empty? %>
     <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
       <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
@@ -72,7 +72,50 @@
     </div>
 
   <% else %>
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <%#
+      ============================================================
+      グリッドコンテナ（B-6 変更: Drag & Drop 用の data 属性を追加）
+      ============================================================
+
+      data-controller="habit-sort":
+        habit_sort_controller.js をこの div に紐付ける。
+        SortableJS の初期化はこの div の直接の子要素（カード）に適用される。
+
+      data-habit-sort-sort-url-value="<%= sort_habits_path":
+        habit_sort_controller が fetch で送信する URL。
+        sort_habits_path → PATCH /habits/sort
+        ハードコードせず Rails のパスヘルパーを使うことで、
+        ルーティングが変わっても自動で対応できる。
+
+      【なぜ id="habits-grid" を付けるのか】
+        SortableJS のデバッグや他の JS から参照しやすくするため（任意）。
+    %>
+    <%#
+      ==============================================================================
+      B-6 レビュー修正内容（index.html.erb）
+      ==============================================================================
+      ① グリッドコンテナに data-habit-sort-locked-value を追加
+        habit_sort_controller.js がロック状態を受け取れるようにする。
+
+      ② カラースウォッチに hover:scale-110 を HTML 側に記述する
+        ※ スウォッチは new.html.erb / edit.html.erb にあるため
+            ここでは対応不要。記述はフォームファイル側で行う。
+      ==============================================================================
+    %>
+
+    <%# ── グリッドコンテナ（修正: locked-value を追加） ─────────── %>
+    <%#
+      data-habit-sort-locked-value="<%= @locked":
+        habit_sort_controller の this.lockedValue として参照される。
+        @locked が true のとき Stimulus が SortableJS を初期化しない。
+        Stimulus の Boolean Value は "true"/"false" 文字列を自動変換する。
+    %>
+    <div id="habits-grid"
+        class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+        data-controller="habit-sort"
+        data-habit-sort-sort-url-value="<%= sort_habits_path %>"
+        data-habit-sort-locked-value="<%= @locked %>">
+
       <% @habits.each do |habit| %>
         <% stats = @habit_stats[habit.id] || {
              rate:            0,
@@ -81,15 +124,50 @@
              effective_target: habit.check_type? ? habit.effective_weekly_target : habit.weekly_target
            } %>
 
-        <div id="habit_record_<%= habit.id %>"
-             class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col">
+        <%#
+          ============================================================
+          習慣カード（B-6 変更点）
+          ============================================================
 
-          <%# ────────────────────────────────────────────────────────────
-              カードヘッダー（B-5 変更: ⋯メニューに置き換え）
-              ──────────────────────────────────────────────────────────── %>
+          data-habit-id="<%= habit.id":
+            habit_sort_controller の updateOrder() が
+            querySelectorAll("[data-habit-id]") でこの要素を取得し、
+            dataset.habitId で習慣 ID を読み取る。
+            ドラッグ後の並び順をサーバーに送信するために必要。
+
+          style="border-left: 4px solid <%= habit.color.presence || '#3b82f6'":
+            カードの左ボーダーにユーザーが選択した色を適用する。
+            Tailwind の静的クラスでは動的なカラーコードを扱えないため
+            インラインスタイルを使う。
+            habit.color が nil（未設定）の場合はデフォルトの青（#3b82f6）を使う。
+
+          【なぜ Tailwind のクラスで color が使えないのか】
+            Tailwind は使用するクラスをビルド時に静的解析して CSS を生成する。
+            "border-l-[= habit.color]" のような動的な値は
+            Tailwind のパージ対象として認識されず、CSS が生成されない。
+            そのため動的な色はインラインスタイルで直接指定する必要がある。
+        %>
+        <div id="habit_record_<%= habit.id %>"
+             data-habit-id="<%= habit.id %>"
+             class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col"
+             style="border-left: 4px solid <%= habit.color.presence || '#3b82f6' %>">
+
+          <%# カードヘッダー %>
           <div class="flex justify-between items-start p-4 pb-2">
             <div class="flex-1 min-w-0 mr-2">
               <h3 class="text-base font-bold text-gray-800 leading-snug flex items-center gap-2 flex-wrap">
+
+                <%#
+                  ── B-6 追加: アイコン表示 ──────────────────────────────────
+                  habit.icon.presence || "📋":
+                    habit.icon が設定されていればその絵文字を表示する。
+                    未設定（nil または空文字）の場合はデフォルトの 📋 を使う。
+                  aria-hidden="true":
+                    スクリーンリーダーにアイコン（装飾用絵文字）を読み上げさせない。
+                    習慣名が後に続くので、アイコンは装飾として扱う。
+                %>
+                <span aria-hidden="true"><%= habit.icon.presence || "📋" %></span>
+
                 <%= habit.name %>
                 <% if habit.numeric_type? %>
                   <span class="text-xs font-normal text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">
@@ -98,7 +176,7 @@
                 <% end %>
               </h3>
 
-              <%# ストリークバッジ（B-3 追加・変更なし） %>
+              <%# ストリークバッジ（変更なし） %>
               <% if habit.current_streak > 0 %>
                 <div class="mt-1 flex items-center gap-2 flex-wrap">
                   <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold
@@ -106,71 +184,72 @@
                     🔥 <%= habit.current_streak %>日 継続中
                   </span>
                   <% if habit.longest_streak > habit.current_streak %>
-                    <span class="text-xs text-gray-400">
-                      最高: <%= habit.longest_streak %>日
-                    </span>
+                    <span class="text-xs text-gray-400">最高: <%= habit.longest_streak %>日</span>
                   <% end %>
                 </div>
               <% end %>
             </div>
 
-            <%#
-              ─────────────────────────────────────────────────────────────
-              カード右側のアクションエリア（B-5 変更）
-
-              【変更前（B-4）】
-                「編集」「📦 卒業」「削除」の3ボタンが横並び
-                → ボタンが3つあって横幅が狭いカードでは崩れやすかった
-
-              【変更後（B-5）】
-                「編集」ボタン + 「⋯」メニューボタン の2ボタン構成
-                「⋯」をクリックすると M-1 モーダル（アーカイブ or 削除）が開く
-                → スッキリしたUIに。削除前に必ず確認モーダルを経由するので誤操作防止にもなる
-
-              【「編集」ボタンをモーダル外に残す理由】
-                編集は「現在のページを離れて edit ページへ遷移する」操作。
-                削除・アーカイブの「危険操作」とは性質が異なるため、
-                モーダルとは別のボタンとして独立させる。
-              ─────────────────────────────────────────────────────────────
-            %>
             <div class="flex items-center gap-1 flex-shrink-0">
 
-              <%# 編集ボタン（モーダル外に独立して残す） %>
+              <%#
+                ── B-6 追加: ドラッグハンドル ──────────────────────────────────
+                data-sort-handle:
+                  habit_sort_controller.js の SortableJS 設定で
+                  handle: "[data-sort-handle]" と指定したため、
+                  この属性を持つ要素のみがドラッグを開始できる「持ち手」になる。
+
+                cursor-grab / active:cursor-grabbing:
+                  マウスカーソルを「手のひら（グラブ）」の形にして
+                  「ここを掴んでドラッグできる」とユーザーに視覚的に伝える。
+                  active: は要素をクリックしている間だけ適用される Tailwind クラス。
+
+                aria-label="ドラッグして並び替え":
+                  スクリーンリーダー用。このボタンの役割を読み上げる。
+
+                title="ドラッグして並び替え":
+                  マウスホバー時にツールチップを表示する。
+              %>
+              <% unless @locked %>
+                <button type="button"
+                        data-sort-handle
+                        class="p-1.5 rounded text-gray-300 hover:text-gray-500
+                               cursor-grab active:cursor-grabbing
+                               focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        aria-label="ドラッグして並び替え"
+                        title="ドラッグして並び替え">
+                  <%# 6つの点（⠿）でドラッグハンドルを表現する SVG アイコン %>
+                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+                    <circle cx="7"  cy="5"  r="1.5"/>
+                    <circle cx="13" cy="5"  r="1.5"/>
+                    <circle cx="7"  cy="10" r="1.5"/>
+                    <circle cx="13" cy="10" r="1.5"/>
+                    <circle cx="7"  cy="15" r="1.5"/>
+                    <circle cx="13" cy="15" r="1.5"/>
+                  </svg>
+                </button>
+              <% end %>
+
+              <%# 編集ボタン（変更なし） %>
               <%= link_to "編集", edit_habit_path(habit),
                     class: "text-xs px-2 py-1 rounded bg-blue-50 text-blue-600
                             hover:bg-blue-100 transition-colors
                             focus:outline-none focus:ring-2 focus:ring-blue-500" %>
 
-              <%#
-                ⋯ メニューボタン + モーダル（_habit_card_actions パーシャル）
-
-                render "habits/habit_card_actions":
-                  app/views/habits/_habit_card_actions.html.erb を呼び出す。
-                  habit: と locked: の2変数を渡す。
-
-                locked: @locked:
-                  @locked は ApplicationController#locked? で計算される値。
-                  パーシャル内で「ロック中は⋯ボタン自体を出力しない」判定に使用する。
-              %>
+              <%# ⋯ メニュー（変更なし） %>
               <%= render "habits/habit_card_actions",
                     habit: habit,
                     locked: @locked %>
-
             </div>
           </div>
 
           <%# 週次目標と除外日の表示（変更なし） %>
           <div class="px-4 pb-2">
             <% if habit.check_type? %>
-              <span class="text-xs text-gray-400">
-                週次目標: <%= habit.effective_weekly_target %>回
-              </span>
+              <span class="text-xs text-gray-400">週次目標: <%= habit.effective_weekly_target %>回</span>
             <% else %>
-              <span class="text-xs text-gray-400">
-                週次目標: <%= habit.weekly_target %><%= habit.unit.presence || "回" %>/週
-              </span>
+              <span class="text-xs text-gray-400">週次目標: <%= habit.weekly_target %><%= habit.unit.presence || "回" %>/週</span>
             <% end %>
-
             <% excluded_numbers = habit.excluded_day_numbers %>
             <% if excluded_numbers.any? %>
               <span class="ml-2 text-xs text-orange-500">
@@ -190,23 +269,19 @@
           <div class="px-4 pb-4 mt-auto">
             <div class="flex justify-between items-center mb-1">
               <span class="text-xs text-gray-500">今週の進捗</span>
-
               <% if habit.check_type? %>
                 <span class="text-xs font-bold whitespace-nowrap
                              <%= stats[:rate] >= 80 ? 'text-green-600' : stats[:rate] >= 50 ? 'text-blue-600' : 'text-red-500' %>">
-                  <%= stats[:completed_count] %>/<%= stats[:effective_target] %>日
-                  （<%= stats[:rate] %>%）
+                  <%= stats[:completed_count] %>/<%= stats[:effective_target] %>日（<%= stats[:rate] %>%）
                 </span>
               <% else %>
                 <% numeric_sum_display = stats[:numeric_sum].nil? ? 0.0 : stats[:numeric_sum] %>
                 <span class="text-xs font-bold whitespace-nowrap
                              <%= stats[:rate] >= 80 ? 'text-green-600' : stats[:rate] >= 50 ? 'text-blue-600' : 'text-red-500' %>">
-                  <%= format("%g", numeric_sum_display.round(1)) %>/<%= habit.weekly_target %><%= habit.unit.presence || "回" %>
-                  （<%= stats[:rate] %>%）
+                  <%= format("%g", numeric_sum_display.round(1)) %>/<%= habit.weekly_target %><%= habit.unit.presence || "回" %>（<%= stats[:rate] %>%）
                 </span>
               <% end %>
             </div>
-
             <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
                  role="progressbar"
                  aria-valuenow="<%= stats[:rate] %>"

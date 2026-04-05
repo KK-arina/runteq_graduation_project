@@ -1,26 +1,17 @@
 <%# app/views/habits/edit.html.erb %>
-<% content_for :title, "習慣を編集 | HabitFlow" %>
-<%#
-  ==============================================================================
-  習慣編集ページ（B-2: 除外日設定の編集対応）
-  ==============================================================================
-  【new.html.erb との違い】
-    ① フォームの method が PATCH になる（Rails が form_with model: で自動判定）
-    ② 除外日チェックボックスの初期状態が「既存設定」から復元される
-       new では params から復元していたが、
-       edit では @habit.excluded_day_numbers から復元する。
-
-  【なぜ edit で @habit.excluded_day_numbers から復元するのか】
-    新規作成時はまだ DB にデータがないため params を使う。
-    編集時はすでに DB に除外日が保存されているため
-    @habit.excluded_day_numbers（DB の値）をデフォルト値として使う。
-    ただしバリデーションエラー後の再表示時は params を優先する。
-  ==============================================================================
+<%# ==============================================================================
+    習慣編集ページ（B-6: カラー・アイコン選択追加）
+    ==============================================================================
+    【new.html.erb との違い】
+      ① カラーの初期値は @habit.color.presence || "#3b82f6"（DB の値）
+      ② アイコンの初期値は @habit.icon.presence || "📋"（DB の値）
+      ③ measurement_type は変更不可のため radio ではなく hidden + 表示のみ
+    ==============================================================================
 %>
+<% content_for :title, "習慣を編集 | HabitFlow" %>
 
 <div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-  <%# 戻るリンク %>
   <div class="mb-6">
     <%= link_to "← 習慣管理に戻る", habits_path,
           class: "text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors" %>
@@ -28,23 +19,14 @@
 
   <h1 class="text-2xl font-bold text-gray-900 mb-6">習慣を編集</h1>
 
-  <%# バリデーションエラーの表示 %>
   <%= render "shared/form_errors", model: @habit %>
 
-  <%#
-    form_with model: @habit で PATCH メソッドが自動的に設定される。
-    【理由】
-      @habit が persisted?（DB に保存済み）のとき、
-      Rails は自動的に PATCH メソッドと /habits/:id の URL を設定する。
-      new のときは POST と /habits の URL が設定される。
-      この自動判定により new と edit でほぼ同じコードが使える。
-  %>
   <%= form_with model: @habit,
                 local: true,
                 class: "space-y-6",
                 data: { controller: "habit-form" } do |f| %>
 
-    <%# 習慣名 %>
+    <%# 習慣名（変更なし） %>
     <div>
       <%= f.label :name, "習慣名",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
@@ -56,25 +38,98 @@
                     transition-colors" %>
     </div>
 
-    <%# measurement_type（編集時は変更不可） %>
-    <%#
-      測定タイプは過去の habit_records のデータ型に影響するため変更不可にする。
-      【理由】
-        チェック型 → 数値型に変更すると、過去の completed=true のレコードが
-        numeric_value を持たない状態になり整合性が壊れる。
-        表示のみ（readonly）にして変更できないようにする。
-    %>
+    <%# カラー選択（B-6 追加）- new.html.erb と同じ構成 %>
+    <div>
+      <label class="block text-sm font-semibold text-gray-700 mb-1">カラー</label>
+      <p class="text-xs text-gray-500 mb-3">習慣カードの左ボーダーの色を選択してください</p>
+
+      <%= f.hidden_field :color,
+            value: @habit.color.presence || "#3b82f6",
+            data: { habit_form_target: "colorInput" } %>
+
+      <% habit_colors = [
+           { value: "#3b82f6", label: "ブルー",  bg: "bg-blue-500"   },
+           { value: "#10b981", label: "グリーン", bg: "bg-emerald-500" },
+           { value: "#f59e0b", label: "アンバー", bg: "bg-amber-500"   },
+           { value: "#ef4444", label: "レッド",  bg: "bg-red-500"    },
+           { value: "#8b5cf6", label: "パープル", bg: "bg-violet-500"  },
+           { value: "#ec4899", label: "ピンク",  bg: "bg-pink-500"   },
+           { value: "#06b6d4", label: "シアン",  bg: "bg-cyan-500"   },
+           { value: "#64748b", label: "スレート", bg: "bg-slate-500"  }
+         ] %>
+
+      <%#
+        ============================================================
+        カラー選択（修正: 初期選択状態の付与方法）
+        ============================================================
+      <%#
+        【修正理由】
+        selected_color = @habit.color.presence || "#3b82f6" が
+        habit_colors.each ループの内側に書かれているため、
+        8回ループするたびに同じ値を再計算している（非効率だが動作はする）。
+        ループの外に出すことで1回だけ計算する（最適化）。
+        これが原因でバグが起きているわけではないが、
+        コードをクリーンにするために外に出す。
+      %>
+
+      <% selected_color = @habit.color.presence || "#3b82f6" %>
+      <div class="flex gap-3 flex-wrap">
+        <% habit_colors.each do |color_item| %>
+          <button type="button"
+                  class="w-9 h-9 rounded-full transition-all
+                        focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400
+                        <%= color_item[:bg] %>
+                        <%= selected_color == color_item[:value] ? 'ring-2 ring-offset-2 ring-gray-800 scale-110' : 'hover:scale-110' %>"
+                  data-action="click->habit-form#selectColor"
+                  data-color-value="<%= color_item[:value] %>"
+                  data-habit-form-target="colorSwatch"
+                  aria-label="<%= color_item[:label] %>を選択">
+          </button>
+        <% end %>
+      </div>
+    </div>
+
+    <%# アイコン選択（B-6 追加）- new.html.erb と同じ構成 %>
+    <div>
+      <label class="block text-sm font-semibold text-gray-700 mb-1">アイコン</label>
+      <p class="text-xs text-gray-500 mb-3">習慣カードに表示する絵文字を選択してください</p>
+
+      <%= f.hidden_field :icon,
+            value: @habit.icon.presence || "📋",
+            data: { habit_form_target: "iconInput" } %>
+
+      <% habit_icons = ["📚", "💪", "🏃", "🧘", "✍️", "🎵",
+                        "💻", "🌱", "🍎", "😴", "🎯", "⭐",
+                        "📋", "🔥", "💡", "🎨"] %>
+
+      <div class="grid grid-cols-8 sm:grid-cols-8 gap-2">
+        <% habit_icons.each do |icon| %>
+          <button type="button"
+                  class="aspect-square flex items-center justify-center text-xl
+                         border-2 rounded-lg transition-all
+                         focus:outline-none focus:ring-2 focus:ring-blue-500
+                         <%= (@habit.icon.presence || '📋') == icon ? 'border-blue-500 bg-blue-50 scale-110' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50' %>"
+                  data-action="click->habit-form#selectIcon"
+                  data-icon-value="<%= icon %>"
+                  data-habit-form-target="iconButton"
+                  aria-label="<%= icon %>を選択">
+            <%= icon %>
+          </button>
+        <% end %>
+      </div>
+    </div>
+
+    <%# measurement_type（変更なし・変更不可） %>
     <div>
       <label class="block text-sm font-semibold text-gray-700 mb-1">記録タイプ</label>
       <div class="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm text-gray-500">
         <%= @habit.check_type? ? "☑️ チェック型（やった/やらない）" : "🔢 数値型（#{@habit.unit}で記録）" %>
         <span class="ml-2 text-xs text-gray-400">※ 過去データの整合性のため変更できません</span>
       </div>
-      <%# hidden field で measurement_type の値を送信する %>
       <%= f.hidden_field :measurement_type %>
     </div>
 
-    <%# unit（数値型のときのみ表示） %>
+    <%# unit（変更なし） %>
     <% if @habit.numeric_type? %>
       <div>
         <%= f.label :unit, "単位",
@@ -88,7 +143,7 @@
       </div>
     <% end %>
 
-    <%# 週次目標値 %>
+    <%# 週次目標値（変更なし） %>
     <div>
       <%= f.label :weekly_target, "週次目標値",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
@@ -104,51 +159,21 @@
                     transition-colors" %>
     </div>
 
-    <%# 除外する曜日 %>
-    <%#
-      【edit と new の違い】
-        new:  selected_days = Array(params[:excluded_day_numbers]).map(&:to_i)
-              → まだ DB にデータがないため params から復元する
-        edit: 通常表示は @habit.excluded_day_numbers（DB の値）を使う
-              バリデーションエラー後は params を優先する（ユーザーの入力を保持）
-
-      【なぜ params.key? で判定するのか】
-        バリデーションエラーで再表示されるときは params に送信データが残っている。
-        通常の編集表示（GET）のときは params に excluded_day_numbers がない。
-        params.key?(:excluded_day_numbers) で「フォーム送信後かどうか」を判定できる。
-    %>
+    <%# 除外日（変更なし） %>
     <div>
-      <label class="block text-sm font-semibold text-gray-700 mb-1">
-        除外する曜日
-      </label>
-      <p class="text-xs text-gray-500 mb-3">
-        実施しない曜日を選択してください（達成率の計算から除外されます）
-      </p>
-
-      <%#
-        selected_days の決定ロジック:
-          バリデーションエラー後（params に excluded_day_numbers が存在する場合）
-            → params の値を使う（ユーザーの最後の入力を保持する）
-          通常の編集表示（GET リクエスト）
-            → @habit.excluded_day_numbers（DB の現在値）を使う
-      %>
+      <label class="block text-sm font-semibold text-gray-700 mb-1">除外する曜日</label>
+      <p class="text-xs text-gray-500 mb-3">実施しない曜日を選択してください（達成率の計算から除外されます）</p>
       <% selected_days = if params.key?(:excluded_day_numbers)
                            Array(params[:excluded_day_numbers]).map(&:to_i)
                          else
                            @habit.excluded_day_numbers
                          end %>
-
       <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">
         <% HabitExcludedDay::DAY_NAMES_FULL.each do |day_number, day_name| %>
           <label class="flex flex-col items-center gap-1.5 p-2 border-2 rounded-lg cursor-pointer
                         transition-colors hover:border-blue-300 hover:bg-blue-50
                         has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50
                         focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1">
-            <%#
-              selected_days.include?(day_number) でチェック状態を決定する。
-              edit 時は @habit.excluded_day_numbers（DB の値）が入っているため
-              既存の除外日設定がチェック済み状態で表示される。
-            %>
             <%= check_box_tag "excluded_day_numbers[]", day_number,
                   selected_days.include?(day_number),
                   id: "excluded_day_#{day_number}",
@@ -157,13 +182,10 @@
           </label>
         <% end %>
       </div>
-
-      <p class="text-xs text-gray-400 mt-2">
-        ※ 例: 土日を除外すると週5日が最大達成日数になります
-      </p>
+      <p class="text-xs text-gray-400 mt-2">※ 例: 土日を除外すると週5日が最大達成日数になります</p>
     </div>
 
-    <%# ボタンエリア %>
+    <%# ボタンエリア（変更なし） %>
     <div class="flex justify-end items-center gap-4 pt-2">
       <%= link_to "キャンセル", habits_path,
             class: "px-5 py-3 bg-white border border-gray-300 text-gray-700 text-sm font-semibold
@@ -176,5 +198,4 @@
     </div>
 
   <% end %>
-
 </div>
