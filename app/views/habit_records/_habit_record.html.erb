@@ -76,8 +76,16 @@
              <%= record.completed ? "checked" : "" %>>
 
       <label for="habit_checkbox_<%= habit.id %>"
-             class="text-sm flex-1 cursor-pointer
+             class="text-sm flex-1 cursor-pointer flex items-center gap-1.5
                     <%= record.completed ? 'line-through text-gray-400' : 'text-gray-700' %>">
+        <%#
+          B-6 追加: アイコン表示
+          habit.icon.presence || "📋" でデフォルトアイコンにフォールバック。
+          aria-hidden="true" でスクリーンリーダーには読まれない（装飾のため）。
+          line-through が適用されるときもアイコンごと打ち消し線になるが、
+          それが自然な見た目のため許容する。
+        %>
+        <span aria-hidden="true"><%= habit.icon.presence || "📋" %></span>
         <%= habit.name %>
       </label>
 
@@ -106,7 +114,12 @@
       </span>
 
       <label for="habit_numeric_input_<%= habit.id %>"
-             class="text-sm text-gray-700 flex-1 cursor-pointer">
+             class="text-sm text-gray-700 flex-1 cursor-pointer flex items-center gap-1.5">
+        <%#
+          B-6 追加: アイコン表示（数値型）
+          チェック型と同じくデフォルトは "📋"。
+        %>
+        <span aria-hidden="true"><%= habit.icon.presence || "📋" %></span>
         <%= habit.name %>
       </label>
     <% end %>

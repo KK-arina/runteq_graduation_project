@@ -1551,6 +1551,7 @@ Drag & Drop 並び替え（即時保存）を実装。
 | View | カード左ボーダーにインラインスタイルで `habit.color` を反映（Tailwind 動的クラスはビルド対象外のためインラインスタイル採用） |
 | View | カード習慣名の前にアイコン（`habit.icon`）を表示 |
 | View | `dashboards/index.html.erb` にアイコン表示・カラープログレスバーを追加 |
+| View | `habit_records/_habit_record.html.erb` のチェック型・数値型ラベルにアイコン表示を追加（対応漏れ修正） |
 | Test | `test/models/habit_sort_test.rb` を新規作成（8件） |
 | Test | `test/controllers/habits_sort_controller_test.rb` を新規作成（3件） |
 
@@ -1619,6 +1620,7 @@ importmap は ECMAScript Module（ESM）形式のみ対応。<br>
 | `app/views/habits/edit.html.erb` | カラーピッカー・アイコン選択 UI 追加 |
 | `app/views/habits/index.html.erb` | Drag & Drop コンテナ設定・カラー左ボーダー・アイコン・ドラッグハンドル追加 |
 | `app/views/dashboards/index.html.erb` | アイコン表示・カラープログレスバー追加 |
+| `app/views/habit_records/_habit_record.html.erb` | チェック型・数値型ラベルにアイコン（`habit.icon`）表示を追加（対応漏れ修正） |
 | `test/models/habit_sort_test.rb` | 新規作成（8件：カラー・アイコンバリデーション・acts_as_list 動作確認） |
 | `test/controllers/habits_sort_controller_test.rb` | 新規作成（3件：並び替え保存・未ログイン・不正ID混入） |
 
