@@ -61,7 +61,8 @@ flowchart LR
 [![B-3 ストリーク計算](https://img.shields.io/badge/B--3_ストリーク計算-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-3-streak-calculation)
 [![B-4 アーカイブ機能](https://img.shields.io/badge/B--4_アーカイブ機能-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-4-habit-archive)
 [![B-5 削除確認モーダル](https://img.shields.io/badge/B--5_削除確認モーダル-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-5-habit-menu-modal)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-13%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![B-6 カラー・アイコン・並び替え](https://img.shields.io/badge/B--6_カラー・アイコン・並び替え-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-6-habit-color-icon-sort)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-14%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -140,6 +141,7 @@ flowchart LR
 | #B-3 | ストリーク計算・表示（current_streak / longest_streak） | 2026-03-29 | feature/B-3-streak-calculation |
 | #B-4 | 習慣のアーカイブ機能（archived_at）| 2026-03-29 | feature/B-4-habit-archive |
 | #B-5 | 習慣削除確認モーダル（M-1）⋯メニュー + デスクトップモーダル / スマホボトムシート | 2026-03-30 | feature/B-5-habit-menu-modal |
+| #B-6 | 習慣のカラー・アイコン・Drag&Drop 並び替え（acts_as_list + SortableJS） | 2026-04-05 | feature/B-6-habit-color-icon-sort |
 
 <br>
 
@@ -1510,6 +1512,128 @@ B-5テスト: 14 runs, 38 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
+### #B-6: 習慣のカラー・アイコン・Drag&Drop 並び替え
+
+<br>
+
+**ブランチ:** `feature/B-6-habit-color-icon-sort`<br>
+**完了日:** 2026-04-05<br>
+**概要:** 習慣にカラーコードとアイコン（絵文字）を設定可能にし、ダッシュボード・習慣一覧の視認性を向上。<br>
+`acts_as_list` gem でユーザーごとの並び順を DB 管理し、SortableJS + Stimulus で<br>
+Drag & Drop 並び替え（即時保存）を実装。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Gem | `acts_as_list` を追加（`position` カラムで並び順管理・`scope: :user_id` でユーザー別管理） |
+| Model | `Habit` に `acts_as_list column: :position, scope: :user_id, add_new_at: :bottom` を追加 |
+| Model | `scope :active` の order を `position ASC NULLS LAST, created_at ASC` に変更（並び替え順を反映） |
+| Model | `color` バリデーション追加（`#rrggbb` 形式・`allow_blank: true`） |
+| Model | `icon` バリデーション追加（最大2文字・`allow_blank: true`） |
+| Controller | `sort` アクション追加（`PATCH /habits/sort`・`insert_at` で position 更新） |
+| Controller | `require_unlocked` に `:sort` を追加（PDCAロック中は並び替え不可） |
+| Controller | `habit_params` に `:color` / `:icon` を追加（Strong Parameters） |
+| Route | `collection do patch :sort end` を追加（`sort_habits_path`） |
+| Importmap | `Sortable` を jsdelivr CDN からピン留め（ESM 形式・CDN は `cdnjs` では 404 のため `jsdelivr` を採用） |
+| JS | `habit_sort_controller.js` を新規作成（SortableJS + fetch で PATCH 送信） |
+| JS | `forceFallback: true` を設定（`display: grid` コンテナでの動作を保証） |
+| JS | `habit_form_controller.js` に `selectColor()` / `selectIcon()` / `syncInitialState()` を追加 |
+| JS | `syncInitialState()` で hidden input の値から初期選択状態を JS 側で一元管理（ERB 依存を排除） |
+| View | `new.html.erb` / `edit.html.erb` にカラーピッカー（8色スウォッチ）・アイコン選択（16絵文字）UI を追加 |
+| View | カラー・アイコンは hidden input + Stimulus で管理（スウォッチは `<button>` のためそのままでは送信されない） |
+| View | `habits/index.html.erb` のグリッドコンテナに `data-controller="habit-sort"` / `data-habit-sort-sort-url-value` / `data-habit-sort-locked-value` を追加 |
+| View | 各カードに `data-habit-id` / ドラッグハンドルボタン（`data-sort-handle`）を追加 |
+| View | カード左ボーダーにインラインスタイルで `habit.color` を反映（Tailwind 動的クラスはビルド対象外のためインラインスタイル採用） |
+| View | カード習慣名の前にアイコン（`habit.icon`）を表示 |
+| View | `dashboards/index.html.erb` にアイコン表示・カラープログレスバーを追加 |
+| Test | `test/models/habit_sort_test.rb` を新規作成（8件） |
+| Test | `test/controllers/habits_sort_controller_test.rb` を新規作成（3件） |
+
+<br>
+
+#### カラー・アイコンの UI 設計
+
+<br>
+
+| 設計 | 内容 |
+|:---|:---|
+| hidden input 方式 | カラースウォッチ・アイコンボタンは `<button>` 要素のためフォーム送信されない。Stimulus が hidden input の value を更新することで Rails に届ける |
+| ERB での初期選択 | `selected_color == color_item[:value]` で初期選択クラスを付与（ERB + JS の二重管理で確実に表示） |
+| syncInitialState() | `connect()` 時に hidden input の値を読んでスウォッチ・アイコンの選択状態を JS で同期（バリデーションエラー後の再表示も正確） |
+| hover クラスは HTML に記述 | Tailwind の `hover:scale-110` を JS（classList）で動的追加するとビルド対象外になるリスクがあるため HTML に常時記述する |
+| インラインスタイルでカラー適用 | `style="border-left: 4px solid <%= habit.color %>"` → Tailwind は動的カラーコードを静的解析できないためインラインスタイルを採用 |
+
+<br>
+
+#### Drag & Drop 実装の設計
+
+<br>
+
+| 設計 | 内容 |
+|:---|:---|
+| SortableJS + Stimulus | importmap（CDN）経由で SortableJS を読み込み、Stimulus コントローラー内で初期化 |
+| handle 指定 | `handle: "[data-sort-handle]"` でハンドルアイコン以外からのドラッグを防止（チェックボックスや数値入力との誤操作防止） |
+| forceFallback: true | `display: grid` のコンテナで SortableJS のネイティブ DnD が正常に動作しないため CSS フォールバック実装を強制 |
+| 即時保存 | `onEnd` コールバックで DOM 順から habitIds 配列を取得し `PATCH /habits/sort` に fetch 送信 |
+| ロック中は無効化 | ERB 側でハンドル非表示 + JS 側で `if (this.lockedValue) return`（Stimulus の `locked: Boolean` Value）+ サーバー側 `require_unlocked` の三重防御 |
+| 二重防御設計 | サーバー側の `sort` アクションは `require_unlocked` で保護されているため、JS を無効化しても操作不可 |
+| position NULL 対応 | scope :active の ORDER に `NULLS LAST` を指定（既存レコードの position が NULL でも末尾に表示） |
+
+<br>
+
+#### CDN 選定の経緯
+
+<br>
+
+| CDN | URL | 結果 |
+|:---|:---|:---:|
+| cdnjs.cloudflare.com | `.../Sortable/1.15.2/Sortable.esm.js` | ❌ 404（ESM 版が存在しない） |
+| cdn.jsdelivr.net | `.../sortablejs@1.15.0/modular/sortable.esm.js` | ✅ 200 OK |
+
+<br>
+
+importmap は ECMAScript Module（ESM）形式のみ対応。<br>
+`cdnjs` の `1.15.2` には ESM 版が存在しないため `jsdelivr` の `1.15.0` を採用した。
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `Gemfile` | `gem "acts_as_list"` 追加 |
+| `app/models/habit.rb` | `acts_as_list` 設定・`scope :active` order 変更・`color` / `icon` バリデーション追加 |
+| `app/controllers/habits_controller.rb` | `sort` アクション追加・`require_unlocked` に `:sort` 追加・`habit_params` に `:color` / `:icon` 追加 |
+| `config/routes.rb` | `collection do patch :sort end` を追加 |
+| `config/importmap.rb` | `pin "Sortable"` を jsdelivr CDN で追加 |
+| `app/javascript/controllers/habit_sort_controller.js` | 新規作成（SortableJS + fetch・`forceFallback: true`） |
+| `app/javascript/controllers/habit_form_controller.js` | `selectColor()` / `selectIcon()` / `syncInitialState()` 追加・`colorInput` / `colorSwatch` / `iconInput` / `iconButton` ターゲット追加 |
+| `app/views/habits/new.html.erb` | カラーピッカー・アイコン選択 UI 追加 |
+| `app/views/habits/edit.html.erb` | カラーピッカー・アイコン選択 UI 追加 |
+| `app/views/habits/index.html.erb` | Drag & Drop コンテナ設定・カラー左ボーダー・アイコン・ドラッグハンドル追加 |
+| `app/views/dashboards/index.html.erb` | アイコン表示・カラープログレスバー追加 |
+| `test/models/habit_sort_test.rb` | 新規作成（8件：カラー・アイコンバリデーション・acts_as_list 動作確認） |
+| `test/controllers/habits_sort_controller_test.rb` | 新規作成（3件：並び替え保存・未ログイン・不正ID混入） |
+
+<br>
+
+#### テスト結果
+
+<br>
+```
+B-6テスト: 11 runs, 0 failures, 0 errors, 0 skips
+全テスト:  369 runs, 929 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -2056,7 +2180,7 @@ end
 | Gemini API / Groq | AI分析（PMVV・週次振り返り） | #D-2 / #D-4 | ⬜ 未着手 |
 | Solid Cache | Redis不要のキャッシュ（Render構成最適化） | #I-6 | ⬜ 未着手 |
 | Sentry | エラー監視・本番ログ | #I-5 | ⬜ 未着手 |
-| acts_as_list | 習慣の並び替え | #B-6 | ⬜ 未着手 |
+| acts_as_list | 習慣の並び替え | #B-6 | ✅ 完了 |
 
 <br>
 
@@ -2516,10 +2640,11 @@ habitflow/
 │   │   └── ai_proposal_confirm_service.rb          # #A-7: AI提案確定フロー骨格（#D-3〜#D-4で本実装）
 │   ├── javascript/controllers/
 │   │   ├── habit_record_controller.js     # チェックボックス即時保存（変更: saveNumeric event.target方式に変更 #B-1）
-│   │   ├── habit_form_controller.js       # #B-1 追加: 習慣作成フォームの動的切り替え（測定タイプ/単位/目標値/ラジオボタンハイライト）
+│   │   ├── habit_form_controller.js       # #B-1 追加: 習慣作成フォームの動的切り替え（#B-6追記: selectColor/selectIcon/syncInitialState追加）
 │   │   ├── mobile_menu_controller.js      # ハンバーガーメニュー開閉
 │   │   ├── form_submit_controller.js      # フォーム送信ローディング・二重送信防止
-│   │   └── habit_menu_controller.js       # #B-5 新規: 習慣削除確認モーダル（⋯メニュー・デスクトップ/スマホ切替・オーバーレイクリック・Escape対応）
+│   │   ├── habit_menu_controller.js       # #B-5 新規: 習慣削除確認モーダル（⋯メニュー・デスクトップ/スマホ切替・オーバーレイクリック・Escape対応）
+│   │   └── habit_sort_controller.js       # #B-6 新規: 習慣一覧の Drag&Drop 並び替え（SortableJS + fetch・forceFallback対応）
 │   ├── jobs/
 │   │   ├── application_job.rb                          # 変更: retry_on / discard_on 追加（#A-3）
 │   │   ├── streak_calculation_job.rb                   # #A-3 #B-3: ストリーク計算（本実装完了）
@@ -2568,6 +2693,7 @@ habitflow/
 ├── config/
 │   ├── application.rb                     # アプリ設定（タイムゾーン・セッション）
 │   ├── routes.rb                          # ルーティング定義
+│   ├── importmap.rb                       # #B-6: Sortable.js を jsdelivr CDN でピン留め追加
 │   ├── initializers/
 │   │   ├── content_security_policy.rb     # CSP 設定（nonce 方式）
 │   │   ├── good_job.rb                    # #A-3: GoodJob設定（cron 4件・max_threads等）
@@ -2593,12 +2719,14 @@ habitflow/
     │   ├── habit_record_test.rb              # 変更: numeric_value バリデーション・Service経由保存テスト追加（#B-1）
     │   ├── habit_excluded_day_test.rb     # #B-2: 除外日モデルテスト（15件）
     │   ├── habit_streak_test.rb           # #B-3: ストリーク計算テスト（25件・境界値・除外日・お休みモード）
-    │   └── habit_archive_test.rb          # #B-4: アーカイブ機能テスト（22件：scope・状態遷移・状態ガード異常系）
+    │   ├── habit_archive_test.rb          # #B-4: アーカイブ機能テスト（22件：scope・状態遷移・状態ガード異常系）
+    │   └── habit_sort_test.rb             # #B-6: カラー・アイコンバリデーション・acts_as_list 動作確認（8件）
     ├── integration/
     │   └── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
     └── controllers/
         ├── habits_archive_controller_test.rb  # #B-4: アーカイブコントローラーテスト（6件：archived一覧・archive・unarchive・他ユーザー防止）
-        └── habits_menu_controller_test.rb   # #B-5: ⋯メニュー・モーダル・アーカイブ・削除・ロック状態テスト（14件）
+        ├── habits_menu_controller_test.rb   # #B-5: ⋯メニュー・モーダル・アーカイブ・削除・ロック状態テスト（14件）
+        └── habits_sort_controller_test.rb # #B-6: 並び替え保存・未ログイン・不正ID混入テスト（3件）
 ```
 
 <br>
@@ -2628,7 +2756,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-358 runs, 905 assertions, 0 failures, 0 errors, 0 skips
+369 runs, 929 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
@@ -2663,6 +2791,8 @@ docker compose exec web bin/rails test
 | `test/controllers/habits_menu_controller_test.rb` | コントローラー | ⋯メニュー表示・モーダルID属性・アーカイブ/削除動作・ロック状態・他ユーザー防止（#B-5・14件） |
 | `test/models/habit_excluded_day_test.rb` | モデル | 曜日依存バグ修正のため `travel_to` 追加（金曜固定・#B-5修正） |
 | `test/controllers/habits_controller_test.rb` | コントローラー | 曜日依存バグ修正のため `travel_to` 追加（水曜固定・#B-5修正） |
+| `test/models/habit_sort_test.rb` | モデル | カラー・アイコンバリデーション・acts_as_list 並び順・insert_at 動作確認（#B-6・8件） |
+| `test/controllers/habits_sort_controller_test.rb` | コントローラー | 並び替え保存・未ログイン防止・不正ID混入の安全処理（#B-6・3件） |
 
 <br>
 
@@ -3445,6 +3575,130 @@ test "3日分の記録が表示されること" do
     get habits_path
     assert_match(/3\/7日/, response.body)
   end
+end
+```
+
+<br>
+
+### Tailwind の動的クラスは JS や ERB 変数で生成してはいけない（#B-6）
+
+<br>
+
+Tailwind はビルド時にソースコードを静的解析して「使用するクラス一覧」を生成する。<br>
+`"bg-#{color}"` のような動的生成や `classList.add("hover:scale-110")` のような JS での動的追加は<br>
+Tailwind のビルド対象として認識されず、本番環境で CSS が当たらないバグになる。<br>
+動的な値（カラーコード・JS で操作するスタイル）はインラインスタイルか `style` 属性を使い、<br>
+`hover:` のような擬似クラスは HTML に直接記述してビルド対象に含めること。<br>
+```erb
+<%# ❌ 動的クラス → ビルド対象外 %>
+
+
+<%# ✅ インラインスタイル → 動的カラーコードを安全に適用 %>
+
+```
+
+<br>
+
+### CDN から importmap で ESM 形式を読み込む際はバージョンに注意すること（#B-6）
+
+<br>
+
+importmap は ECMAScript Module（ESM）形式のみ対応している。<br>
+`cdnjs.cloudflare.com` の SortableJS `1.15.2` には ESM 版が存在せず 404 になる。<br>
+CDN を変更する前に Network タブでステータスコードを確認し、<br>
+404 の場合は別の CDN（jsdelivr 等）または別バージョンを試すこと。<br>
+`cdn.jsdelivr.net/npm/sortablejs@1.15.0/modular/sortable.esm.js` が ESM 対応の安定版。
+
+<br>
+
+### `display: grid` のコンテナでは SortableJS に `forceFallback: true` が必要（#B-6）
+
+<br>
+
+SortableJS はデフォルトでブラウザのネイティブ Drag & Drop API を使用するが、<br>
+`display: grid` のコンテナではドラッグイベントが正常に発火しない場合がある。<br>
+`forceFallback: true` を設定することで SortableJS 独自の実装（マウスイベントベース）に切り替わり、<br>
+グリッドレイアウトでも正常にドラッグ操作が機能するようになる。<br>
+```javascript
+// ❌ display:grid では onStart/onEnd が発火しないことがある
+Sortable.create(element, { handle: "[data-sort-handle]" })
+
+// ✅ forceFallback: true でグリッドレイアウトに対応
+Sortable.create(element, {
+  handle: "[data-sort-handle]",
+  forceFallback: true,
+  fallbackClass: "opacity-75"
+})
+```
+
+<br>
+
+### Stimulus の Values API を必ず定義してから使うこと（#B-6）
+
+<br>
+
+`this.sortUrlValue` のように Stimulus の Values API を使う場合、<br>
+`static values = { sortUrl: String }` の定義が必ないと `undefined` になりエラーになる。<br>
+定義が漏れていると「コントローラーは connect されているのに動かない」という分かりにくいバグになる。<br>
+Boolean 型（`locked: Boolean`）を使うと HTML の `"true"/"false"` 文字列が自動で `true/false` に変換される。<br>
+```javascript
+// ❌ static values 未定義 → this.sortUrlValue が undefined
+export default class extends Controller {
+  connect() {
+    fetch(this.sortUrlValue, ...)  // undefined
+  }
+}
+
+// ✅ 使用する Value を必ず定義する
+export default class extends Controller {
+  static values = { sortUrl: String, locked: Boolean }
+  connect() {
+    if (this.lockedValue) return
+    fetch(this.sortUrlValue, ...)  // 正しく動作する
+  }
+}
+```
+
+<br>
+
+### ドラッグ&ドロップのロック制御はサーバー・JS・UI の三重防御にすること（#B-6）
+
+<br>
+
+PDCAロック中に並び替えを防止するには以下の三重防御が必要。<br>
+UI だけ（ハンドル非表示）では開発者ツールで DOM を操作されると突破できる。<br>
+JS だけでも Rails の PATCH エンドポイントに直接リクエストされると突破できる。<br>
+
+<br>
+
+| 防御層 | 実装 | 効果 |
+|:---|:---|:---|
+| UI 層 | `<% unless @locked %>` でハンドルボタンを出力しない | ユーザーにドラッグ操作の導線を見せない |
+| JS 層 | `if (this.lockedValue) return` で SortableJS を初期化しない | DOM 操作でハンドルを追加されても並び替え不可 |
+| サーバー層 | `before_action :require_unlocked, only: [:sort]` | 直接 HTTP リクエストを送っても 403/redirect |
+
+<br>
+
+### `insert_at` のインデックスは 1 始まりであることに注意すること（#B-6）
+
+<br>
+
+`each_with_index` のインデックスは 0 始まりだが、<br>
+`acts_as_list` の `insert_at(n)` は 1 始まりの position を設定する。<br>
+`habit.insert_at(index)` ではなく `habit.insert_at(index + 1)` とすること。<br>
+また `each_with_index` は `next` でスキップしてもインデックスは進む点に注意。<br>
+存在しない ID（99999 等）を混入させた場合、スキップされた分 position にギャップが生じる。<br>
+```ruby
+# ❌ 0始まりのまま渡す → position=0 は acts_as_list の想定外
+habit_ids.each_with_index do |id, index|
+  habit.insert_at(index)  # 0始まり
+end
+
+# ✅ +1 して 1始まりにする
+habit_ids.each_with_index do |id, index|
+  habit = current_user.habits.find_by(id: id)
+  next unless habit
+  habit.insert_at(index + 1)  # 1始まり
 end
 ```
 

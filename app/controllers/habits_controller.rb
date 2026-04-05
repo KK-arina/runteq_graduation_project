@@ -1,69 +1,39 @@
 # app/controllers/habits_controller.rb
+# （変更点のみ抜粋: sort アクション追加、habit_params に color/icon 追加）
 #
 # ==============================================================================
-# HabitsController（B-4: アーカイブ機能追加）
+# HabitsController（B-6: カラー・アイコン・並び替え追加）
 # ==============================================================================
 #
-# 【B-4 での変更内容】
+# 【B-6 での変更内容】
 #
-#   ① before_action :set_habit のみ対象アクションに :archive / :unarchive を追加
-#      理由: archive / unarchive アクションでも @habit を事前にセットする必要がある。
+#   ① sort アクションを新規追加（PATCH /habits/sort）
+#      Drag & Drop 後に Stimulus が AJAX で呼び出すエンドポイント。
+#      並び替え後の habit_ids 配列を受け取り、position を更新する。
 #
-#   ② require_unlocked の対象に :archive を追加
-#      理由: PDCAロック中はアーカイブ（= 習慣の状態変更）もできないようにする。
-#            unarchive（復元）はロック中でも許可する。
-#            「復元」はアクティブな習慣を増やす操作であり、
-#            「削除・追加」とは性質が異なるが、
-#            シンプルな設計として ISSUEリストの方針（ロック中は変更不可）に従う。
-#            ※ 要件に応じて unarchive をロック不要にする変更も容易。
+#   ② habit_params に :color / :icon を追加
+#      フォームから送られてくるカラーコードと絵文字アイコンを
+#      Strong Parameters で許可する。
 #
-#   ③ archive アクション（POST /habits/:id/archive）を新規追加
-#      対象習慣の archived_at に現在時刻をセットしてアーカイブする。
-#
-#   ④ unarchive アクション（PATCH /habits/:id/unarchive）を新規追加
-#      archived_at を nil に戻してアクティブ状態に復元する。
-#
-#   ⑤ archived アクション（GET /habits/archived）を新規追加
-#      アーカイブ済み習慣の一覧を表示する（8-2番画面）。
-#
-#   ⑥ set_habit を修正
-#      修正前: current_user.habits.active.find(params[:id])
-#      修正後: current_user.habits.find(params[:id])
-#      理由: archive / unarchive は active でも archived でもどちらの状態の習慣も
-#            操作対象になり得るため、スコープを外した状態で検索する。
-#            セキュリティは current_user. で絞り込む（他ユーザーの習慣は取得不可）。
+#   ③ require_unlocked の対象に :sort を追加
+#      PDCAロック中は並び替えも制限する。
 #
 # ==============================================================================
 
 class HabitsController < ApplicationController
   before_action :require_login
-
-  # require_unlocked の対象アクション（B-4 修正: :archive を追加）
-  # 【理由】
-  #   PDCAロック中は :create / :update / :destroy に加えて :archive も禁止する。
-  #   :unarchive（復元）はロック対象外とする（アクティブ習慣を増やす操作のため）。
-  before_action :require_unlocked, only: [ :create, :update, :destroy, :archive ]
-
-  # set_habit を対象とするアクション（B-4 修正: :archive / :unarchive を追加）
-  # 【理由】
-  #   archive・unarchive アクションでも @habit.id でアーカイブ対象を特定するため。
+  before_action :require_unlocked, only: [ :create, :update, :destroy, :archive, :sort ]
   before_action :set_habit, only: [ :edit, :update, :destroy, :archive, :unarchive ]
 
   # ============================================================
   # GET /habits
   # ============================================================
   def index
-    # includes(:habit_excluded_days)（B-2 追加）
-    # 【理由】
-    #   excluded_day_numbers メソッドと effective_weekly_target メソッドが
-    #   habit_excluded_days を参照する。
-    #   includes を付けないと @habits.each のループ内で習慣ごとに
-    #   SELECT * FROM habit_excluded_days WHERE habit_id = ? が発行され
-    #   N+1 問題が起きる。
-    #   includes を付けることで 1 クエリで全除外日を先読みできる。
     @habits = current_user.habits.active
                           .includes(:habit_excluded_days)
-                          .order(created_at: :desc)
+    # 注意: acts_as_list の scope :active に order(position ASC NULLS LAST) を
+    # 追加したため、ここでの order 指定は不要になった。
+    # モデルの scope :active が order を持っているので自動的に position 順になる。
 
     today = HabitRecord.today_for_record
     @today_records_hash = HabitRecord
@@ -75,22 +45,8 @@ class HabitsController < ApplicationController
   end
 
   # ============================================================
-  # GET /habits/archived（B-4 新規追加）
+  # GET /habits/archived（変更なし）
   # ============================================================
-  # 【役割】
-  #   8-2. 習慣アーカイブ一覧ページを表示する。
-  #
-  # 【scope :archived の利用】
-  #   Habit モデルに定義した scope :archived を使うことで
-  #   deleted_at: nil かつ archived_at が設定されている習慣だけを取得できる。
-  #
-  # 【order(archived_at: :desc)】
-  #   最近アーカイブした習慣から順に表示する（新しいものが上）。
-  #
-  # 【includes(:habit_excluded_days)】
-  #   アーカイブ一覧でも effective_weekly_target を使う可能性があるため
-  #   N+1 対策として先読みする。
-
   def archived
     @archived_habits = current_user.habits.archived
                                    .includes(:habit_excluded_days)
@@ -98,20 +54,20 @@ class HabitsController < ApplicationController
   end
 
   # ============================================================
-  # GET /habits/new
+  # GET /habits/new（変更なし）
   # ============================================================
   def new
     @habit = current_user.habits.build
   end
 
   # ============================================================
-  # GET /habits/:id/edit
+  # GET /habits/:id/edit（変更なし）
   # ============================================================
   def edit
   end
 
   # ============================================================
-  # PATCH /habits/:id
+  # PATCH /habits/:id（変更なし）
   # ============================================================
   def update
     result = ApplicationRecord.with_transaction do
@@ -127,14 +83,13 @@ class HabitsController < ApplicationController
       flash.now[:alert] = "習慣の更新に失敗しました"
       render :edit, status: :unprocessable_entity
     end
-
   rescue ActiveRecord::RecordInvalid => e
     flash.now[:alert] = "習慣の更新に失敗しました"
     render :edit, status: :unprocessable_entity
   end
 
   # ============================================================
-  # POST /habits
+  # POST /habits（変更なし）
   # ============================================================
   def create
     @habit = current_user.habits.build(habit_params)
@@ -152,14 +107,13 @@ class HabitsController < ApplicationController
       flash.now[:alert] = "習慣の登録に失敗しました"
       render :new, status: :unprocessable_entity
     end
-
   rescue ActiveRecord::RecordInvalid => e
     flash.now[:alert] = "習慣の登録に失敗しました"
     render :new, status: :unprocessable_entity
   end
 
   # ============================================================
-  # DELETE /habits/:id
+  # DELETE /habits/:id（変更なし）
   # ============================================================
   def destroy
     if @habit.soft_delete
@@ -172,25 +126,8 @@ class HabitsController < ApplicationController
   end
 
   # ============================================================
-  # POST /habits/:id/archive（B-4 新規追加）
+  # POST /habits/:id/archive（変更なし）
   # ============================================================
-  # 【役割】
-  #   習慣を「卒業アーカイブ」状態にする。
-  #   archived_at に現在時刻をセットする。
-  #
-  # 【HTTP メソッドを POST にする理由】
-  #   アーカイブはリソースの「状態変更」であり、
-  #   GET（参照）でも DELETE（削除）でもない。
-  #   Rails の慣例として「状態変更」には POST または PATCH を使う。
-  #   今回は既存リソースへの部分的な変更なので PATCH でも良いが、
-  #   ルーティングでは member do ... end 内で post :archive を使うことが多い。
-  #
-  # 【status: :see_other（303）を使う理由】
-  #   Turbo（Hotwire）では POST / PATCH / DELETE の後のリダイレクトに
-  #   302 ではなく 303 See Other を使う必要がある。
-  #   303 は「別の URL を GET で参照してください」という意味のステータスコードで、
-  #   Turbo が正しくリダイレクト後のページを GET で取得するために必要。
-
   def archive
     @habit.archive!
     flash[:notice] = "「#{@habit.name}」をアーカイブしました"
@@ -201,19 +138,8 @@ class HabitsController < ApplicationController
   end
 
   # ============================================================
-  # PATCH /habits/:id/unarchive（B-4 新規追加）
+  # PATCH /habits/:id/unarchive（変更なし）
   # ============================================================
-  # 【役割】
-  #   アーカイブを解除してアクティブ状態に復元する。
-  #   archived_at を nil に戻す。
-  #
-  # 【require_unlocked の対象外にした理由】
-  #   復元（unarchive）は「アクティブな習慣を増やす」操作だが、
-  #   PDCAロック中に習慣を「追加」するのと同等と見なせる場合は
-  #   ロック対象に含めることも検討できる。
-  #   今回は設計の一貫性よりも「卒業した習慣を間違えてアーカイブしてしまった場合に
-  #   すぐ戻せる」というUXを優先して、ロック対象外にしている。
-
   def unarchive
     @habit.unarchive!
     flash[:notice] = "「#{@habit.name}」を復元しました"
@@ -227,51 +153,83 @@ class HabitsController < ApplicationController
   end
 
   # ============================================================
+  # PATCH /habits/sort（B-6 新規追加）
+  # ============================================================
+  # 【役割】
+  #   Drag & Drop 後に Stimulus（habit_sort_controller.js）が
+  #   AJAX（fetch）で呼び出すエンドポイント。
+  #   ドラッグ後の習慣ID配列を受け取り、その順番で position を更新する。
+  #
+  # 【HTTP メソッドを PATCH にする理由】
+  #   並び替えは「既存リソースの部分的な更新」なので PATCH が適切。
+  #   POST（新規作成）でも DELETE（削除）でもない。
+  #
+  # 【params[:habit_ids] の構造】
+  #   Stimulus から送られてくる JSON:
+  #     { "habit_ids": ["3", "1", "2"] }
+  #   habit_ids は並び替え後の表示順（先頭から順）の ID 配列。
+  #
+  # 【each_with_index で position を更新する理由】
+  #   配列のインデックス（0始まり）に +1 した値を position にする。
+  #   例: ["3","1","2"] → habit_id=3 の position=1、id=1 は position=2...
+  #   acts_as_list は 1 始まりの連番を前提としているため +1 する。
+  #
+  # 【update_column を使う理由】
+  #   update_column は:
+  #     ① バリデーションをスキップする（position 変更だけのためバリデーション不要）
+  #     ② updated_at を更新しない（並び替えを「更新」として扱わないため）
+  #     ③ コールバックをスキップする（高速化）
+  #   並び替えは頻繁に呼ばれる可能性があるため、軽量な update_column が適切。
+  #
+  # 【セキュリティ: current_user で絞り込む理由】
+  #   他のユーザーの習慣 ID が habit_ids に混入しても
+  #   current_user.habits.find_by(id:) は nil を返すため安全。
+  #   他ユーザーの position は絶対に変更されない。
+  #
+  # 【head :ok を返す理由】
+  #   Stimulus（fetch）は成功したかどうかだけを確認したい。
+  #   レスポンスボディは不要なので head :ok（ボディなし 200 OK）を返す。
+  def sort
+    # params[:habit_ids] は "3", "1", "2" のような文字列配列。
+    # Array() でラップして nil の場合も安全に空配列にする。
+    habit_ids = Array(params[:habit_ids])
+
+    habit_ids.each_with_index do |habit_id, index|
+      # current_user.habits で絞り込むことで、
+      # 他ユーザーの習慣 ID が混入しても無視される（セキュリティ対策）。
+      habit = current_user.habits.find_by(id: habit_id)
+
+      # find_by は見つからなければ nil を返す。
+      # nil チェック（next）で存在しない ID を安全にスキップする。
+      next unless habit
+
+      # insert_at を使って position を更新する。
+      # acts_as_list の insert_at(n) は 1 始まりで position を設定する。
+      # index は 0 始まりなので +1 して 1 始まりに変換する。
+      habit.insert_at(index + 1)
+    end
+
+    # ボディなし 200 OK を返す。
+    # Stimulus の fetch 呼び出しは response.ok（true/false）だけを確認する。
+    head :ok
+  end
+
+  # ============================================================
   # Private メソッド
   # ============================================================
   private
 
+  # habit_params（B-6 変更: :color / :icon を追加）
+  # 【理由】
+  #   フォームから送られてくる color（カラーコード）と
+  #   icon（絵文字）を Strong Parameters で許可する。
+  #   Strong Parameters は「許可したパラメータ以外は無視する」Rails のセキュリティ機能。
+  #   .permit に追加しないとフォームから値が送られても保存されない。
   def habit_params
-    params.require(:habit).permit(:name, :weekly_target, :measurement_type, :unit)
+    params.require(:habit).permit(:name, :weekly_target, :measurement_type, :unit, :color, :icon)
   end
 
-  # set_habit（B-4 修正・再修正）
-  # ==============================================================================
-  # 【変更履歴】
-  #   MVP版:  current_user.habits.active.find(params[:id])
-  #           → active スコープ（deleted_at: nil, archived_at: nil）で検索
-  #
-  #   B-4 初版: current_user.habits.find(params[:id])
-  #           → スコープなしに変更（archive / unarchive 対応のため）
-  #           → 問題: 論理削除済み習慣も find できてしまい、
-  #                   「削除済み習慣は再削除できない」テストが失敗した
-  #
-  #   B-4 再修正: current_user.habits.where(deleted_at: nil).find(params[:id])
-  #           → deleted_at が nil のもの（削除されていない習慣）だけを対象にする
-  #           → archived_at は問わない
-  #             （アーカイブ済み・アクティブの両方を操作できるようにする）
-  #
-  # 【この設計の意図】
-  #   習慣の状態は3種類ある:
-  #     1. アクティブ:     deleted_at = nil, archived_at = nil
-  #     2. アーカイブ済み: deleted_at = nil, archived_at = 設定済み
-  #     3. 削除済み:       deleted_at = 設定済み
-  #
-  #   set_habit が取得すべき対象:
-  #     ・edit / update:   1 のみ（アクティブ）※ destroy も実質 1 のみ
-  #     ・archive:         1 のみ（アクティブを archive する）
-  #     ・unarchive:       2 のみ（アーカイブ済みを戻す）
-  #
-  #   1 と 2 はどちらも deleted_at = nil なので、
-  #   「deleted_at: nil で絞り込む」だけで両方カバーできる。
-  #   3（削除済み）は find 対象から外れるため、
-  #   削除済み習慣への操作は RecordNotFound → habits_path へリダイレクト される。
-  # ==============================================================================
-
   def set_habit
-    # where(deleted_at: nil) で削除済み習慣を除外する。
-    # archived_at は条件に含めない（アーカイブ済み習慣も操作対象のため）。
-    # current_user. で絞り込むことで他ユーザーの習慣は取得不可（セキュリティ）。
     @habit = current_user.habits.where(deleted_at: nil).find(params[:id])
   rescue ActiveRecord::RecordNotFound
     flash[:alert] = "習慣が見つかりませんでした"
@@ -281,12 +239,10 @@ class HabitsController < ApplicationController
   def save_excluded_days!(habit, excluded_day_params)
     habit.habit_excluded_days.destroy_all
     return if excluded_day_params.blank?
-
     day_numbers = Array(excluded_day_params)
                     .map(&:to_i)
                     .select { |d| d.between?(0, 6) }
                     .uniq
-
     day_numbers.each do |day|
       habit.habit_excluded_days.create!(day_of_week: day)
     end

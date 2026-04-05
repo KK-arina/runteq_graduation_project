@@ -187,6 +187,27 @@ group :development, :test do
   gem "minitest", "~> 5.1"
 end
 
+# ============================================================
+# Issue #B-6: acts_as_list（習慣の並び替え）
+# ============================================================
+#
+# 【acts_as_list とは何か】
+# DB テーブルの「position カラム」を使って、レコードの順番を管理するための gem。
+# リスト操作（上に移動・下に移動・先頭に移動）をシンプルなメソッドで実現できる。
+#
+# 【なぜ position カラムを直接操作しないのか】
+# 並び替えでは「他の行の position も一緒に更新する」必要がある。
+# 例: position=3 のアイテムを position=1 に移動するとき、
+#     もともと position=1 と position=2 だったアイテムを
+#     それぞれ 2 と 3 にずらさなければならない。
+# acts_as_list がこの複雑な更新を自動で行ってくれる。
+#
+# 【schema.rb との対応】
+# habits テーブルには既に position カラム（integer）が存在している。
+# (t.integer "position" および index ["user_id", "position"])
+# そのため、このタスクでは DB マイグレーションは不要。
+gem "acts_as_list"
+
 # ==================== 開発環境のみ ====================
 
 group :development do

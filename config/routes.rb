@@ -68,26 +68,27 @@ Rails.application.routes.draw do
   #   archive_habit_path(id)   → POST   /habits/:id/archive      → habits#archive
   #   unarchive_habit_path(id) → PATCH  /habits/:id/unarchive    → habits#unarchive
 
+  # 【B-6 での変更内容】
+  #   collection に patch :sort を追加。
+  #
+  # 【collection を使う理由】
+  #   sort は「特定の1件（:id）の操作」ではなく
+  #   「習慣コレクション全体の順序を更新する操作」なので collection が適切。
+  #   生成されるパスヘルパー: sort_habits_path → PATCH /habits/sort
+
   resources :habits, only: [ :index, :new, :create, :edit, :update, :destroy ] do
-    # collection: 特定IDなし、習慣の「一覧」に対する操作
     collection do
-      # GET /habits/archived → habits#archived
-      # アーカイブ済み習慣の一覧ページ（8-2番画面）
-      get :archived
+      get  :archived
+      # PATCH /habits/sort → habits#sort
+      # Drag & Drop 後に Stimulus が呼び出す並び替えエンドポイント。
+      patch :sort
     end
 
-    # member: 特定IDあり、個別習慣に対する操作
     member do
-      # POST /habits/:id/archive → habits#archive
-      # 指定した習慣をアーカイブする
-      post :archive
-
-      # PATCH /habits/:id/unarchive → habits#unarchive
-      # 指定した習慣のアーカイブを解除して復元する
+      post  :archive
       patch :unarchive
     end
 
-    # 除外日設定のためのネストルート（B-2 既存）
     resources :habit_records, only: [ :create, :update ]
   end
 
