@@ -2868,6 +2868,7 @@ docker compose exec web bin/rails db:test:prepare
 | `Missing secret_key_base` | `RAILS_MASTER_KEY` が未設定 | Render の Environment Variables に `config/master.key` の内容を設定 |
 | `PG::ConnectionBad` | `DATABASE_URL` が未設定 | `render.yaml` の `fromDatabase` 設定を確認 |
 | CSS が全く適用されない | `RAILS_SERVE_STATIC_FILES` が未設定 | Environment Variables に `RAILS_SERVE_STATIC_FILES=true` を追加 |
+| `acts_as_list` チェックサムエラー（frozen mode） | `Gemfile.lock` の `acts_as_list` エントリが空のまま push された | `docker compose exec web bundle install` を実行して `Gemfile.lock` を更新し再 push |
 
 <br>
 
@@ -3072,6 +3073,14 @@ docker compose up -d
 
 `bundle install` → `docker compose up -d`（再起動のみ）では gem が反映されない。<br>
 必ず `docker compose build --no-cache` でイメージを再ビルドすること。
+
+<br>
+
+また Render での本番ビルドは `--frozen` モードで `bundle install` を実行するため、<br>
+`Gemfile.lock` のチェックサムが不正（空エントリ）だとビルドが失敗する。<br>
+1.530 Your lockfile has an empty CHECKSUMS entry for "acts_as_list"
+このエラーが出た場合は `docker compose exec web bundle install` でローカルの `Gemfile.lock` を更新し、<br>
+更新された `Gemfile.lock` を必ずコミットして push すること。
 
 <br>
 
