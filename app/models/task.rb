@@ -115,6 +115,15 @@ class Task < ApplicationRecord
   }
 
   # ============================================================
+  # コールバック
+  # ============================================================
+
+  # before_validation :set_default_task_type
+  #   task_type が空または nil の場合に "normal" を自動設定する。
+  #   フォームで種別を選ばずに送信した場合の NOT NULL 制約違反を防ぐ。
+  before_validation :set_default_task_type
+  
+  # ============================================================
   # バリデーション
   # ============================================================
 
@@ -141,13 +150,14 @@ class Task < ApplicationRecord
               message: "優先度は Must / Should / Could から選択してください"
             }
 
-  # task_type の有効値チェック
-  #   フォームから不正な値が来ないよう制限する。
+  # task_type のバリデーション
+  # 【修正】presence は外したが allow_blank は付けない。
+  #   空文字が来た場合は before_validation で "normal" にデフォルト設定する。
+  #   DB は NOT NULL 制約があるため nil/空文字は通せない。
   validates :task_type,
-            presence:  true,
             inclusion: {
               in:      task_types.keys,
-              message: "タスク種別が不正です"
+              message: "が不正です"
             }
 
   # estimated_hours のバリデーション
@@ -277,5 +287,14 @@ class Task < ApplicationRecord
   #   ダッシュボードで「今日が期限」のバッジを表示するために使う。
   def due_today?
     due_date.present? && due_date == HabitRecord.today_for_record
+  end
+
+  private
+
+  # set_default_task_type
+  #   task_type が blank（nil または空文字）の場合に "normal" を設定する。
+  #   blank? は nil と "" の両方を true として扱う。
+  def set_default_task_type
+    self.task_type = "normal" if task_type.blank?
   end
 end

@@ -117,39 +117,69 @@
       </p>
 
       <%#
-        優先度の選択UI: ラジオボタンをカード形式で表示する。
-        各カードをクリックすると対応するラジオボタンが選択される。
-        CSS の has-[:checked] で選択状態を視覚的に表現する
-        （Tailwind v3.4+ の機能。has が使えない環境では Stimulus で代替可能）。
+        data-controller="priority-card":
+          priority_card_controller.js をこの div に紐付ける。
+          この div 内の全 label・card が Stimulus のターゲットとして管理される。
+
+        role="radiogroup" aria-label="...":
+          スクリーンリーダーに「これはラジオボタングループ」と伝える。
       %>
-      <div class="grid grid-cols-3 gap-3" role="radiogroup" aria-label="優先度を選択してください">
+      <div class="grid grid-cols-3 gap-3"
+           role="radiogroup"
+           aria-label="優先度を選択してください"
+           data-controller="priority-card">
+
         <%#
           Must カード
-          checked: @task.must?（デフォルトは should なので false）
-          バリデーションエラー後は送信した値が復元される。
+          data-priority-card-target="label": Stimulus がこの label を認識する
+          data-active-class: チェック時に card に追加するクラス
+          data-inactive-class: チェックが外れたときに card に追加するクラス
         %>
-        <label class="cursor-pointer">
+        <label class="cursor-pointer"
+               data-priority-card-target="label">
+          <%#
+            f.radio_button :priority, "must":
+              <input type="radio" name="task[priority]" value="must"> を生成する。
+              @task.priority == "must" なら checked 属性が自動で付く。
+              バリデーションエラー後も送信した値が復元される。
+
+            data-action="change->priority-card#select":
+              このラジオボタンの change イベントで priority-card コントローラーの
+              select メソッドを呼び出す。
+          %>
           <%= f.radio_button :priority, "must",
-                class: "sr-only peer",
-                id: "task_priority_must" %>
-          <div class="border-2 rounded-lg p-3 text-center transition-all
-                      border-gray-200 hover:border-red-300
-                      peer-checked:border-red-500 peer-checked:bg-red-50">
+                class: "sr-only",
+                id:    "task_priority_must",
+                data:  { action: "change->priority-card#select" } %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all"
+               data-priority-card-target="card"
+               data-active-class="border-red-500 bg-red-50"
+               data-inactive-class="border-gray-200">
             <div class="text-lg mb-1" aria-hidden="true">🔴</div>
-            <div class="text-sm font-bold text-gray-700 peer-checked:text-red-700">Must</div>
+            <div class="text-sm font-bold text-gray-700">Must</div>
             <div class="text-xs text-gray-400 mt-0.5">絶対にやる</div>
           </div>
         </label>
 
-        <%# Should カード（デフォルト選択） %>
-        <label class="cursor-pointer">
+        <%# Should カード（デフォルト選択・初期状態はアクティブクラスを付けておく） %>
+        <label class="cursor-pointer"
+               data-priority-card-target="label">
           <%= f.radio_button :priority, "should",
-                class: "sr-only peer",
-                id: "task_priority_should" %>
-          <div class="border-2 rounded-lg p-3 text-center transition-all
-                      border-blue-400 bg-blue-50
-                      hover:border-blue-400 peer-checked:border-blue-500 peer-checked:bg-blue-50
-                      [&:has(+div)]:border-blue-500">
+                class: "sr-only",
+                id:    "task_priority_should",
+                data:  { action: "change->priority-card#select" } %>
+          <%#
+            Should カードの初期スタイル:
+              @task.priority が "should"（デフォルト）なので
+              connect() 時に Stimulus が border-blue-500 bg-blue-50 を付ける。
+              初期表示を自然にするため、HTML 上は border-gray-200 をベースにしておく。
+              Stimulus の connect() が即座に updateCards() を呼ぶため
+              ページ表示時に正しいスタイルが適用される。
+          %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all"
+               data-priority-card-target="card"
+               data-active-class="border-blue-500 bg-blue-50"
+               data-inactive-class="border-gray-200">
             <div class="text-lg mb-1" aria-hidden="true">🔵</div>
             <div class="text-sm font-bold text-gray-700">Should</div>
             <div class="text-xs text-gray-400 mt-0.5">できればやる</div>
@@ -157,13 +187,16 @@
         </label>
 
         <%# Could カード %>
-        <label class="cursor-pointer">
+        <label class="cursor-pointer"
+               data-priority-card-target="label">
           <%= f.radio_button :priority, "could",
-                class: "sr-only peer",
-                id: "task_priority_could" %>
-          <div class="border-2 rounded-lg p-3 text-center transition-all
-                      border-gray-200 hover:border-green-300
-                      peer-checked:border-green-500 peer-checked:bg-green-50">
+                class: "sr-only",
+                id:    "task_priority_could",
+                data:  { action: "change->priority-card#select" } %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all"
+               data-priority-card-target="card"
+               data-active-class="border-green-500 bg-green-50"
+               data-inactive-class="border-gray-200">
             <div class="text-lg mb-1" aria-hidden="true">🟢</div>
             <div class="text-sm font-bold text-gray-700">Could</div>
             <div class="text-xs text-gray-400 mt-0.5">余裕があれば</div>
@@ -214,15 +247,15 @@
             class: "block text-sm font-bold text-gray-700 mb-1" %>
       <span class="text-xs text-gray-400 ml-1">任意</span>
       <%#
-        f.select :task_type:
-          <select name="task[task_type]"> を生成する。
-          Task.task_types は { "normal" => 0, "habit" => 1, "improve" => 2 } を返す。
-          選択肢のラベル（日本語）と値（英語キー）のペアを配列で渡す。
-          include_blank: "種別を選択（任意）" で最初の空白オプションを追加する。
+        include_blank を削除して selected: "normal" をデフォルトにする。
+        理由: include_blank で「未選択」を許すと空文字が送信され、
+              DB の NOT NULL 制約（task_type は null: false）に違反する。
+              task_type は「通常タスク」をデフォルトとして扱うため、
+              フォーム上でも最初から「通常タスク」を選択状態にする。
       %>
       <%= f.select :task_type,
             [["通常タスク", "normal"], ["習慣関連", "habit"], ["改善タスク", "improve"]],
-            { include_blank: "種別を選択（任意）", selected: "normal" },
+            { selected: @task.task_type.presence || "normal" },
             class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
                     bg-white" %>

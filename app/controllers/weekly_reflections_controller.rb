@@ -66,7 +66,7 @@ class WeeklyReflectionsController < ApplicationController
 
       if was_locked
         redirect_to dashboard_path,
-                    flash: { unlock: "🔓 振り返りが完了しました！PDCAロックが解除されました。今週も頑張りましょう！" }
+                    flash: { unlock: "振り返りが完了しました！PDCAロックが解除されました。今週も頑張りましょう！🔓" }
       else
         redirect_to weekly_reflections_path,
                     notice: "今週の振り返りを保存しました！お疲れ様でした🎉"
