@@ -63,7 +63,7 @@ flowchart LR
 [![B-5 削除確認モーダル](https://img.shields.io/badge/B--5_削除確認モーダル-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-5-habit-menu-modal)
 [![B-6 カラー・アイコン・並び替え](https://img.shields.io/badge/B--6_カラー・アイコン・並び替え-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-6-habit-color-icon-sort)
 [![B-7 日次メモ](https://img.shields.io/badge/B--7_日次メモ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-7-habit-record-memo)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-15%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-16%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -113,7 +113,7 @@ flowchart LR
 |:---|:---|:---:|:---:|:---:|
 | Week A | DB・インフラ基盤 | #A-1〜#A-7 | 24 | ✅ 完了 |
 | Week B | 習慣機能拡張 | #B-1〜#B-7 | 28 | ✅ 完了 |
-| Week C | タスク管理機能 | #C-1〜#C-7 | 28 | ⬜ 未着手 |
+| Week C | タスク管理機能 | #C-1〜#C-7 | 28 | 🟡 進行中 |
 | Week D | AI分析・PMVV機能 | #D-1〜#D-11 | 42 | ⬜ 未着手 |
 | Week E | 週次振り返り拡張 | #E-1〜#E-5 | 22 | ⬜ 未着手 |
 | Week F | 認証拡張 | #F-1〜#F-6 | 19 | ⬜ 未着手 |
@@ -144,6 +144,7 @@ flowchart LR
 | #B-5 | 習慣削除確認モーダル（M-1）⋯メニュー + デスクトップモーダル / スマホボトムシート | 2026-03-30 | feature/B-5-habit-menu-modal |
 | #B-6 | 習慣のカラー・アイコン・Drag&Drop 並び替え（acts_as_list + SortableJS） | 2026-04-05 | feature/B-6-habit-color-icon-sort |
 | #B-7 | habit_records.memo（日次メモ）機能 | 2026-04-06 | feature/B-7-habit-record-memo |
+| #C-1 | Task モデル・基本 CRUD（Must/Should/Could優先度・todo/done/archived状態管理） | 2026-04-07 | feature/C-1-task-model-crud |
 
 <br>
 
@@ -1784,6 +1785,136 @@ Turbo Stream の DOM 差し替えがブロックされていた。<br>
 ```
 B-7テスト: 14件（モデル8件・統合6件）
 全テスト:  383 runs, 953 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
+### #C-1: Task モデル・基本 CRUD
+
+<br>
+
+**ブランチ:** `feature/C-1-task-model-crud`<br>
+**完了日:** 2026-04-07<br>
+**概要:** tasks テーブルを使ったタスクの基本CRUD実装。<br>
+Must/Should/Could の優先度と todo/doing/done/archived の状態管理。<br>
+タスク一覧ページ（優先度別フィルタタブ）・新規作成ページ・ダッシュボード統合を実装。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Model | `Task` モデル作成（enum: priority/task_type/status・バリデーション・スコープ・インスタンスメソッド） |
+| Model | `User` に `has_many :tasks, dependent: :destroy` を追加 |
+| Model | `before_validation :set_default_task_type` を追加（NOT NULL 制約対応） |
+| Controller | `TasksController` 作成（index / new / create・Strong Parameters・ロックチェック） |
+| Controller | `DashboardsController` に `@today_tasks` を追加（今日が期限のタスク最大5件） |
+| Controller | `priority_counts` に `unscope(:order)` を追加（PG::GroupingError 修正） |
+| Route | `resources :tasks, only: [:index, :new, :create]` を追加 |
+| View | 9番: タスク一覧ページ（フィルタタブ5種・優先度別カラー・件数バッジ・Empty State） |
+| View | 10番: タスク新規作成ページ（優先度カード選択UI・バリデーション表示） |
+| View | ダッシュボードに「今日のタスク」セクションを追加 |
+| View | ヘッダーに「タスク管理」ナビリンクを追加（PC・モバイル両対応） |
+| JS | `priority_card_controller.js` を新規作成（Stimulus でカード選択状態を管理） |
+| i18n | `ja.yml` に Task モデルの属性名・エラーメッセージを追加 |
+| Test | Task モデルテスト17件・コントローラーテスト14件を追加 |
+
+<br>
+
+#### enum 設計
+
+<br>
+
+| enum | 値 | 設計意図 |
+|:---|:---|:---|
+| `priority` | `must:0 / should:1 / could:2` | ORDER BY priority ASC で重要度順に自動ソートできる |
+| `status` | `todo:0 / doing:1 / done:2 / archived:3` | done と archived を分離し「完了済み履歴」を保持 |
+| `task_type` | `normal:0 / habit:1 / improve:2` | AI 提案タスクと手動タスクを区別する |
+
+<br>
+
+#### scope 設計
+
+<br>
+
+| scope | 条件 | 用途 |
+|:---|:---|:---|
+| `active` | `deleted_at IS NULL ORDER BY priority ASC, due_date ASC NULLS LAST` | 通常の一覧表示（論理削除除外） |
+| `not_archived` | `status != archived` | アクティブタスクの表示（完了済みタブと分離） |
+| `today` | `due_date = HabitRecord.today_for_record` | ダッシュボードの「今日のタスク」 |
+| `overdue` | `due_date < 今日 AND status not in (done, archived)` | 期限切れタスクの強調表示 |
+| `must / should / could` | `priority = 対応値` | フィルタタブでの絞り込み |
+
+<br>
+
+#### 技術的なポイント
+
+<br>
+
+**① `unscope(:order)` による PG::GroupingError の解消**
+
+<br>
+
+`scope :active` に `ORDER BY due_date` が含まれているため、<br>
+`GROUP BY priority` と組み合わせると PostgreSQL が GroupingError を発生させる。<br>
+`priority_counts = base_tasks.not_archived.unscope(:order).group(:priority).count` とすることで<br>
+ORDER BY を除去してから GROUP BY を実行し、件数集計クエリを安定させた。
+
+<br>
+
+**② `NOT_PROVIDED` を使わずにデフォルト値を設定する方針**
+
+<br>
+
+`task_type` は NOT NULL 制約があるが、フォームの `include_blank` で空文字が送信される場合がある。<br>
+`before_validation :set_default_task_type` で空文字・nil を `"normal"` に変換することで<br>
+`PG::NotNullViolation` を防ぎ、フォームの利便性（任意選択）も保持した。
+
+<br>
+
+**③ Stimulus による優先度カード排他選択の実装**
+
+<br>
+
+Tailwind の `peer-checked` は「ラジオボタンが外れた状態」のスタイルを自動リセットしない。<br>
+3つのカードのうち1つを選択しても、他の2つのアクティブスタイルが残ってしまう問題があった。<br>
+`priority_card_controller.js` を作成し、全カードをリセットしてから選択カードだけをアクティブにする設計で解決した。<br>
+バリデーションエラー後のフォーム再表示時も `connect()` で選択状態を復元できる。
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `app/models/task.rb` | 新規作成（enum・バリデーション・スコープ・インスタンスメソッド・before_validation） |
+| `app/models/user.rb` | `has_many :tasks, dependent: :destroy` を追加 |
+| `app/controllers/tasks_controller.rb` | 新規作成（index / new / create・Strong Parameters・ロックチェック） |
+| `app/controllers/dashboards_controller.rb` | `@today_tasks` を追加 |
+| `config/routes.rb` | `resources :tasks, only: [:index, :new, :create]` を追加 |
+| `app/views/tasks/index.html.erb` | 新規作成（9番: タスク一覧ページ） |
+| `app/views/tasks/new.html.erb` | 新規作成（10番: タスク新規作成ページ） |
+| `app/views/dashboards/index.html.erb` | 「今日のタスク」セクションを追加 |
+| `app/views/shared/_header.html.erb` | 「タスク管理」ナビリンクを追加（PC・モバイル両対応） |
+| `app/javascript/controllers/priority_card_controller.js` | 新規作成（Stimulus: 優先度カード選択状態管理） |
+| `app/javascript/controllers/index.js` | `priority-card` コントローラーを登録 |
+| `config/locales/ja.yml` | Task モデルの属性名・エラーメッセージを追加 |
+| `test/models/task_test.rb` | 新規作成（17件: バリデーション・enum・スコープ・インスタンスメソッド） |
+| `test/controllers/tasks_controller_test.rb` | 新規作成（14件: index・new・create・ロックチェック・Strong Parameters） |
+
+<br>
+
+#### テスト結果
+
+<br>
+```
+C-1テスト: 31件（モデル17件・コントローラー14件）
+全テスト:  414 runs, 1042 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
