@@ -1,33 +1,29 @@
 // app/javascript/controllers/habit_record_controller.js
 // =============================================================
-// Stimulus コントローラー: 習慣記録の即時保存（B-1 レビュー修正版）
+// Stimulus コントローラー: 習慣記録の即時保存（B-7 最終修正版）
 // =============================================================
 //
-// 【レビュー指摘による修正内容】
+// 【修正内容】
 //
-//   ① saveNumeric で event.target を使うように変更（最重要修正）
-//      修正前: const input = this.numericInputTarget
-//             → Stimulus の Target は「最初にマッチした1つ」だけを返す
-//             → 複数の習慣が表示されている場合に、
-//               他の習慣の input を誤って参照する可能性がある
-//      修正後: async saveNumeric(event) { const input = event.target }
-//             → event.target は「実際に変更された input」を返す
-//             → 複数習慣が並んでいても正しい input に対して保存される
+//   ① 「変更項目だけ送る」設計に変更（最重要修正）
 //
-//   ② _setLoadingState に input 引数を追加
-//      修正前: this.numericInputTarget.disabled = isLoading
-//             → 全ての数値入力フィールドが一括でロックされる
-//      修正後: _setLoadingState(isLoading, targetInput = null)
-//             → 実際に操作している input のみロック
-//             → 他の習慣の入力は影響を受けない
+//      【修正前の問題】
+//        toggle() と saveNumeric() がメモの値も一緒に送っていた。
+//        これにより「チェックした瞬間に古いメモで上書き」が起きるリスクがあった。
 //
-// 【なぜ event.target が正しいのか（重要な設計の理由）】
-//   習慣が5件ある場合、data-controller="habit-record" を持つ要素が5つある。
-//   各 Stimulus コントローラーのインスタンスは独立しているため、
-//   「自分の要素配下の Target」しか認識しない。
-//   正しく DOM 構造が組まれていれば this.numericInputTarget でも動くが、
-//   event.target は「どの習慣の入力が変更されたか」を確実に把握できるため
-//   より安全・明示的な実装になる。
+//        例:
+//          ユーザーがメモを入力中（未保存）
+//          → チェックボックスを操作
+//          → 入力途中のメモが誤って保存される
+//
+//      【修正後の設計】
+//        toggle()     → completed だけ送る
+//        saveNumeric() → numeric_value だけ送る
+//        saveMemo()   → memo だけ送る
+//
+//        各操作は「自分の項目だけ」を更新する責務を持つ。
+//        Service 側が NOT_PROVIDED で区別するため、送らなかった項目はDBが変わらない。
+//
 // =============================================================
 
 import { Controller } from "@hotwired/stimulus"
@@ -37,36 +33,55 @@ export default class extends Controller {
   // Targets の定義
   // ===========================================================
   static targets = [
-    "checkbox",      // チェックボックス（チェック型習慣）
-    "loading",       // ローディングスピナー（共通）
-    "numericInput"   // 数値入力フィールド（数値型習慣）
+    "checkbox",     // チェックボックス（チェック型習慣）
+    "loading",      // ローディングスピナー（共通）
+    "numericInput", // 数値入力フィールド（数値型習慣）
+    "memoArea",     // メモ入力エリア全体（hidden クラスを切り替える）
+    "memoToggle",   // 💬 ボタン（アイコン色を変更する）
+    "memoTextarea", // メモのテキストエリア（入力値の取得・書き換え）
+    "memoCount"     // 文字数カウンター（xx/200 の表示）
   ]
 
   // ===========================================================
   // Values の定義
   // ===========================================================
   static values = {
-    createUrl: String,  // POST URL
-    updateUrl: String,  // PATCH URL
-    recordId:  Number   // 0 = 未存在 / 1以上 = 既存レコード ID
+    createUrl: String,
+    updateUrl: String,
+    recordId:  Number
+  }
+
+  // ===========================================================
+  // connect() ライフサイクルフック
+  // ===========================================================
+  connect() {
+    if (this.hasMemoTextareaTarget) {
+      this._originalMemo = this.memoTextareaTarget.value
+    }
   }
 
   // ===========================================================
   // toggle メソッド（チェック型専用）
   // ===========================================================
+  //
+  // 【修正内容】
+  //   メモを一緒に送るのをやめた。
+  //   completed だけを送ることで「チェック操作がメモを変更しない」を保証する。
+  //
+  // 【なぜ completed だけでよいのか】
+  //   Service 側が NOT_PROVIDED を使って「送られなかった項目は更新しない」
+  //   という部分更新設計になったため、memo を省略しても既存のメモは消えない。
   async toggle() {
     const checkbox  = this.checkboxTarget
     const completed = checkbox.checked
 
-    // チェックボックス単体をローディング状態にする
-    // null を渡すことで「checkbox 以外のターゲットはロックしない」
     this._setLoadingState(true, null)
 
     try {
+      // completed だけを送る（memo は送らない = DB の memo は変わらない）
       const body = `completed=${completed ? "1" : "0"}`
       await this._sendRequest(body)
     } catch (error) {
-      // 通信失敗 → チェックボックスを元の状態に戻す
       checkbox.checked = !completed
       console.error("チェック型保存エラー:", error)
     } finally {
@@ -75,65 +90,150 @@ export default class extends Controller {
   }
 
   // ===========================================================
-  // saveNumeric メソッド（数値型専用・レビュー修正版）
+  // saveNumeric メソッド（数値型専用）
   // ===========================================================
-  // 【修正ポイント】
-  //   引数に event を受け取り、event.target で「変更された input」を取得する。
-  //   this.numericInputTarget は「このコントローラー配下の最初の numericInput」
-  //   を返すが、event.target は「実際に操作された input 要素」を確実に返す。
   //
-  // 【呼び出しタイミング】
-  //   data-action="change->habit-record#saveNumeric" → フォーカスを外したとき
+  // 【修正内容】
+  //   メモを一緒に送るのをやめた。
+  //   numeric_value だけを送ることで「数値操作がメモを変更しない」を保証する。
   async saveNumeric(event) {
-    // event.target = 実際に変更された input 要素（確実に正しい要素を参照）
     const input = event.target
     const value = input.value.trim()
 
-    // 空文字は「未入力のまま」なので送信しない
     if (value === "") return
 
     const numericValue = parseFloat(value)
 
-    // 負の数や NaN は HTML 側の min="0" と二重チェック
     if (isNaN(numericValue) || numericValue < 0) {
       console.warn("無効な入力値:", value)
       input.value = ""
       return
     }
 
-    // ── 修正: 操作している input だけをロックする ──────────────────────────
-    // 第2引数に input を渡すことで「この input だけ disabled にする」
-    // 他の習慣の入力フィールドは影響を受けない
     this._setLoadingState(true, input)
-    // ────────────────────────────────────────────────────────────────────────
 
     try {
+      // numeric_value だけを送る（memo は送らない = DB の memo は変わらない）
       const body = `numeric_value=${encodeURIComponent(numericValue)}`
       await this._sendRequest(body)
 
-      // ── 成功時の視覚フィードバック（レビュー推奨の改善）──────────────────
-      // 保存成功を示すために一瞬だけ緑色にフラッシュする。
-      // CSS のクラス追加 → 800ms 後に削除という方法で実装する。
-      // transition-colors が適用されている場合は滑らかにアニメーションする。
       input.classList.add("bg-green-50", "border-green-400")
       setTimeout(() => {
         input.classList.remove("bg-green-50", "border-green-400")
       }, 800)
-      // ────────────────────────────────────────────────────────────────────────
 
     } catch (error) {
       console.error("数値型保存エラー:", error)
-      // 数値型はエラー時に入力値をリセットしない（ユーザーが再編集できるようにする）
     } finally {
       this._setLoadingState(false, input)
     }
   }
 
   // ===========================================================
+  // toggleMemo メソッド（B-7 追加）
+  // ===========================================================
+  toggleMemo() {
+    const area = this.memoAreaTarget
+    area.classList.toggle("hidden")
+
+    if (!area.classList.contains("hidden")) {
+      this.memoTextareaTarget.focus()
+    }
+  }
+
+// app/javascript/controllers/habit_record_controller.js
+// saveMemo メソッドのみ以下に差し替える
+
+  // ===========================================================
+  // saveMemo メソッド（B-7 追加）
+  // ===========================================================
+  //
+  // 【設計の核心】
+  //   memo だけを送る。completed も numeric_value も送らない。
+  //   Service 側が NOT_PROVIDED で区別するため、memo だけが更新される。
+  //
+  // 【Turbo Stream 差し替え後の問題と解決策】
+  //   _sendRequest 内で window.Turbo.renderStreamMessage が実行されると
+  //   この data-controller="habit-record" 要素全体が新しい HTML に差し替えられる。
+  //   差し替え後は this.memoAreaTarget や this.loadingTarget への参照が無効になる。
+  //
+  //   解決策:
+  //     ① _setLoadingState を呼ばない（loadingTarget への参照を避ける）
+  //     ② try/finally ではなく try/catch のみにする
+  //     ③ DOM差し替え後に古い要素を操作しない
+  async saveMemo() {
+    const memoValue = this.memoTextareaTarget.value
+
+    if (memoValue.length > 200) {
+      alert("メモは200文字以内で入力してください")
+      return
+    }
+
+    // 保存前にメモエリアを閉じる
+    // 【なぜ保存前に閉じるのか】
+    //   Turbo Stream の差し替え前に hidden にしておかないと、
+    //   差し替え後のレンダリングでエリアの開閉状態が崩れる場合がある。
+    //   メモが存在する場合は show_memo_area = true なので
+    //   サーバーから返ってくる HTML では展開状態で描画される。
+    this.memoAreaTarget.classList.add("hidden")
+
+    try {
+      // memo だけを送る
+      // completed も numeric_value も送らないことで
+      // 「メモ保存がチェック状態や数値を変更しない」を保証する
+      const body = `memo=${encodeURIComponent(memoValue)}`
+
+      // _sendRequest の中で Turbo.renderStreamMessage が実行され
+      // この要素（data-controller="habit-record"）全体が差し替えられる。
+      // 差し替え後は this への参照が無効になるため、
+      // await の後に this.xxx を呼んではいけない。
+      await this._sendRequest(body)
+
+      // ここに到達した時点でDOMは差し替え済み。
+      // this.memoToggleTarget や this.loadingTarget は存在しない。
+      // 何もしない（UIの更新はサーバーから返ったHTMLが担う）。
+
+    } catch (error) {
+      // エラー時のみメモエリアを再度開く
+      // エラーの場合は Turbo Stream が差し替えを実行しないため
+      // this.memoAreaTarget はまだ有効な要素を指している
+      if (this.hasMemoAreaTarget) {
+        this.memoAreaTarget.classList.remove("hidden")
+      }
+      console.error("メモ保存エラー:", error)
+      alert("メモの保存に失敗しました。もう一度お試しください。")
+    }
+
+    // 【finally を削除した理由】
+    //   finally ブロックで this._setLoadingState(false, null) を呼ぶと
+    //   this.loadingTarget にアクセスするが、
+    //   Turbo Stream の差し替え後はこの要素が存在しないためエラーになる。
+    //   loading の非表示はサーバーから返ってくる HTML（hidden 属性付き）が担う。
+  }
+
+  // ===========================================================
+  // cancelMemo メソッド（B-7 追加）
+  // ===========================================================
+  cancelMemo() {
+    if (this.hasMemoTextareaTarget) {
+      this.memoTextareaTarget.value = this._originalMemo || ""
+      this._updateMemoCount(this._originalMemo || "")
+    }
+    this.memoAreaTarget.classList.add("hidden")
+  }
+
+  // ===========================================================
+  // updateMemoCount メソッド（B-7 追加）
+  // ===========================================================
+  updateMemoCount(event) {
+    const text = event.target.value
+    this._updateMemoCount(text)
+  }
+
+  // ===========================================================
   // Private メソッド
   // ===========================================================
 
-  // _sendRequest: HTTP リクエストを送信して Turbo Stream レスポンスを反映する
   async _sendRequest(body) {
     const url    = this.recordIdValue === 0 ? this.createUrlValue : this.updateUrlValue
     const method = this.recordIdValue === 0 ? "POST" : "PATCH"
@@ -159,33 +259,81 @@ export default class extends Controller {
     window.Turbo.renderStreamMessage(responseText)
   }
 
-  // _setLoadingState（レビュー修正版）
-  // 【修正ポイント】
-  //   第2引数 targetInput を追加。
-  //   数値型: 実際に操作している input だけをロックする（他の習慣に影響しない）
-  //   チェック型: targetInput = null → checkbox のみロック
-  //
-  // 【引数】
-  //   isLoading:   true = ロード開始 / false = ロード終了
-  //   targetInput: 数値入力時に渡される input 要素（null の場合は無視）
   _setLoadingState(isLoading, targetInput = null) {
-    // チェックボックスが存在する場合（チェック型）はチェックボックスをロック
     if (this.hasCheckboxTarget) {
       this.checkboxTarget.disabled = isLoading
     }
-
-    // targetInput が指定された場合（数値型）はその input のみロック
-    // ── 修正前: this.numericInputTarget.disabled（全 input をロック）
-    // ── 修正後: targetInput のみロック（他の習慣の input は無影響）
     if (targetInput) {
       targetInput.disabled = isLoading
     }
-
-    // ローディングスピナーの表示切り替え（共通）
     if (isLoading) {
       this.loadingTarget.removeAttribute("hidden")
     } else {
       this.loadingTarget.setAttribute("hidden", "")
+    }
+  }
+
+// app/javascript/controllers/habit_record_controller.js
+// _updateMemoCount メソッドのみ修正する
+
+  // _updateMemoCount
+  // 【役割】
+  //   文字数カウンター（data-habit-record-target="memoCount"）を更新する。
+  //   200文字を超えたら保存ボタンを無効化する。
+  _updateMemoCount(text) {
+    if (!this.hasMemoCountTarget) return
+
+    const count = text.length
+    this.memoCountTarget.textContent = `${count}/200`
+
+    // 180文字以上で警告色（赤）にする
+    if (count >= 180) {
+      this.memoCountTarget.classList.add("text-red-500")
+      this.memoCountTarget.classList.remove("text-gray-400")
+    } else {
+      this.memoCountTarget.classList.add("text-gray-400")
+      this.memoCountTarget.classList.remove("text-red-500")
+    }
+
+    // ── 追加: 200文字超で保存ボタンを無効化 ────────────────────────────────
+    //
+    // 【なぜ保存ボタンを無効化するのか】
+    //   日本語入力（IME）では maxlength が変換確定前には効かない。
+    //   200文字を超えている状態で保存しようとすると
+    //   サーバーのバリデーションエラーになるため、
+    //   クライアント側でも事前に保存できないようにする。
+    //
+    // 【querySelectorAll を使う理由】
+    //   data-action="click->habit-record#saveMemo" を持つボタンを探す。
+    //   Stimulus の Target ではないため querySelector で直接取得する。
+    //   memoArea の中にある保存ボタンだけを対象にするため
+    //   this.memoAreaTarget.querySelector で絞り込む。
+    if (this.hasMemoAreaTarget) {
+      const saveButton = this.memoAreaTarget.querySelector('[data-action*="saveMemo"]')
+      if (saveButton) {
+        if (count > 200) {
+          saveButton.disabled = true
+          saveButton.classList.add("opacity-50", "cursor-not-allowed")
+          saveButton.classList.remove("hover:bg-blue-600")
+        } else {
+          saveButton.disabled = false
+          saveButton.classList.remove("opacity-50", "cursor-not-allowed")
+          saveButton.classList.add("hover:bg-blue-600")
+        }
+      }
+    }
+    // ────────────────────────────────────────────────────────────────────────
+  }
+
+  _updateMemoToggleStyle(hasMemo) {
+    if (!this.hasMemoToggleTarget) return
+
+    if (hasMemo) {
+      this.memoToggleTarget.classList.add("text-blue-500")
+      this.memoToggleTarget.classList.remove("text-gray-400")
+    } else {
+      this.memoToggleTarget.classList.add("text-gray-400")
+      this.memoToggleTarget.classList.remove("text-blue-500")
     }
   }
 }

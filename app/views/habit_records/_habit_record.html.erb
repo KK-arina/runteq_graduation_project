@@ -1,71 +1,56 @@
 <%# app/views/habit_records/_habit_record.html.erb %>
-<%# =============================================================
-    習慣の日次記録パーシャル（B-3: 表示状態ロジック更新）
+<%#
+  ===========================================================================
+  習慣の日次記録パーシャル（B-7 最終修正版）
 
-    渡されるローカル変数:
-      - habit        : Habit オブジェクト（必須）
-      - habit_record : HabitRecord オブジェクト（今日の記録。なければ nil）
+  渡されるローカル変数:
+    - habit        : Habit オブジェクト（必須）
+    - habit_record : HabitRecord オブジェクト（今日の記録。なければ nil）
 
-    【B-3 での変更内容】
-      ストリーク計算の追加に合わせて「記録の状態」表示を以下の5パターンに更新する:
+  【Turbo Stream 差し替え後の表示制御について】
+    saveMemo() 実行後に Turbo Stream がこのパーシャルを差し替える。
+    差し替え後の状態はサーバー側（このERB）が決定する。
 
-      1. habit_record が nil                 → 「未記録」（灰色）
-      2. habit_record.first_recorded_today?  → 「今日記録済み」（緑色）
-      3. habit_record.updated_today?         → 「今日更新済み」（青色）
-      4. 昨日以前に作成・今日未更新         → 「記録あり」（緑色：昨日以前の記録が残っている）
+    メモあり → show_memo_area = true → メモエリアを展開・💬を青色で表示
+    メモなし → show_memo_area = false → メモエリアを非表示・💬をグレーで表示
+  ===========================================================================
+%>
 
-    【なぜ表示状態を細かく分けるのか】
-      「昨日入力済み・今日未入力 → 記録済み（前の記録が残っている）」
-      「今日初入力 → 今日記録済み」
-      「今日変更 → 今日更新済み」
-      これらを区別することでユーザーが「今日の操作状況」を一目で把握できる。
-    ============================================================= %>
-
-<%# 今日の記録がない場合はデフォルト値（未完了・numeric_value なし）で初期化 %>
 <% record     = habit_record || HabitRecord.new(completed: false) %>
 <% create_url = habit_habit_records_path(habit) %>
 <% update_url = record.persisted? ? habit_habit_record_path(habit, record) : "" %>
 <% record_id  = record.persisted? ? record.id : 0 %>
+<% current_memo = record.persisted? ? record.memo.to_s : "" %>
 
-<%# ── B-3 追加: 表示状態を計算 ──────────────────────────────────────────────
-    habit_record が nil の場合は「未記録」。
-    persisted? = true（DBに保存済み）の場合のみ状態メソッドを呼ぶ。
-
-    record_status の値:
-      :not_recorded        → 未記録（habit_record が nil）
-      :recorded_today      → 今日初入力
-      :updated_today       → 今日更新済み
-      :previously_recorded → 昨日以前の記録が残っている
+<%#
+  show_memo_area:
+    メモが存在する場合は保存後もエリアを展開した状態でレンダリングする。
+    JS側でクラスを操作する代わりに、サーバー側でHTMLを生成することで
+    Turbo Stream 差し替え後も正しい表示状態になる。
 %>
+<% show_memo_area = current_memo.present? %>
+
 <% record_status =
      if habit_record.nil?
        :not_recorded
      elsif habit_record.updated_today?
-       # updated_today? を先に判定する理由:
-       #   first_recorded_today? が true でも、その後に更新されていれば
-       #   「更新済み」として表示するのが正しい。
-       #   updated_today? = updated_at が created_at より新しく、かつ今日
        :updated_today
      elsif habit_record.first_recorded_today?
        :recorded_today
      else
-       # 昨日以前に作成されていて、今日は更新していない
        :previously_recorded
      end %>
 
 <div id="habit_record_row_<%= habit.id %>"
-     class="flex items-center gap-3 py-3">
+     class="flex flex-col gap-2 py-3"
+     data-controller="habit-record"
+     data-habit-record-create-url-value="<%= create_url %>"
+     data-habit-record-update-url-value="<%= update_url %>"
+     data-habit-record-record-id-value="<%= record_id %>">
 
-  <div class="flex items-center gap-3 w-full"
-       data-controller="habit-record"
-       data-habit-record-create-url-value="<%= create_url %>"
-       data-habit-record-update-url-value="<%= update_url %>"
-       data-habit-record-record-id-value="<%= record_id %>">
+  <div class="flex items-center gap-3 w-full">
 
     <% if habit.check_type? %>
-      <%# ────────────────────────────────────────────────────────
-          チェック型: チェックボックス UI
-          ──────────────────────────────────────────────────────── %>
       <input type="checkbox"
              id="habit_checkbox_<%= habit.id %>"
              class="w-5 h-5 rounded accent-blue-600 cursor-pointer flex-shrink-0
@@ -78,21 +63,11 @@
       <label for="habit_checkbox_<%= habit.id %>"
              class="text-sm flex-1 cursor-pointer flex items-center gap-1.5
                     <%= record.completed ? 'line-through text-gray-400' : 'text-gray-700' %>">
-        <%#
-          B-6 追加: アイコン表示
-          habit.icon.presence || "📋" でデフォルトアイコンにフォールバック。
-          aria-hidden="true" でスクリーンリーダーには読まれない（装飾のため）。
-          line-through が適用されるときもアイコンごと打ち消し線になるが、
-          それが自然な見た目のため許容する。
-        %>
         <span aria-hidden="true"><%= habit.icon.presence || "📋" %></span>
         <%= habit.name %>
       </label>
 
     <% else %>
-      <%# ────────────────────────────────────────────────────────
-          数値型: 数値入力フィールド UI
-          ──────────────────────────────────────────────────────── %>
       <% numeric_value_display = record.numeric_value.present? ? format("%g", record.numeric_value.to_f) : "" %>
 
       <input type="number"
@@ -115,23 +90,11 @@
 
       <label for="habit_numeric_input_<%= habit.id %>"
              class="text-sm text-gray-700 flex-1 cursor-pointer flex items-center gap-1.5">
-        <%#
-          B-6 追加: アイコン表示（数値型）
-          チェック型と同じくデフォルトは "📋"。
-        %>
         <span aria-hidden="true"><%= habit.icon.presence || "📋" %></span>
         <%= habit.name %>
       </label>
     <% end %>
 
-    <%# ── B-3 更新: 状態バッジ（5パターン対応） ─────────────────────────────
-        record_status の値に応じてバッジの色とテキストを変える。
-
-        :not_recorded        → 表示なし（バッジは出さない）
-        :recorded_today      → 緑「✓ 今日記録済み」
-        :updated_today       → 青「↑ 今日更新済み」
-        :previously_recorded → 緑「✓ 記録済み」（昨日以前の記録が残っている）
-    %>
     <span id="habit_status_<%= habit.id %>"
           class="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0
                  <%= case record_status
@@ -148,7 +111,6 @@
           end %>
     </span>
 
-    <%# ローディングアイコン（共通） %>
     <div data-habit-record-target="loading"
          hidden
          role="status"
@@ -159,15 +121,95 @@
            fill="none"
            viewBox="0 0 24 24"
            aria-hidden="true">
-        <circle class="opacity-25"
-                cx="12" cy="12" r="10"
-                stroke="currentColor"
-                stroke-width="4"></circle>
-        <path class="opacity-75"
-              fill="currentColor"
+        <circle class="opacity-25" cx="12" cy="12" r="10"
+                stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor"
               d="M4 12a8 8 0 018-8V4a8 8 0 00-8 8z"></path>
       </svg>
     </div>
 
+    <%#
+      💬 メモトグルボタン
+      show_memo_area が true（メモあり）→ 青色
+      show_memo_area が false（メモなし）→ グレー
+    %>
+    <button type="button"
+            data-habit-record-target="memoToggle"
+            data-action="click->habit-record#toggleMemo"
+            aria-label="メモを<%= current_memo.present? ? '編集' : '追加' %>する"
+            class="flex-shrink-0 p-1 rounded transition-colors
+                   hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400
+                   <%= current_memo.present? ? 'text-blue-500' : 'text-gray-400' %>">
+      💬
+    </button>
+
   </div>
+
+  <%#
+    メモ入力エリア
+    show_memo_area が true → hidden なし（展開状態）
+    show_memo_area が false → hidden あり（非表示）
+
+    Turbo Stream 差し替え後もこのERBで生成された状態が表示されるため、
+    メモ保存後は自動的に展開・💬青色の状態になる。
+  %>
+  <div data-habit-record-target="memoArea"
+       class="pl-8 <%= show_memo_area ? '' : 'hidden' %>">
+
+    <div data-controller="voice-input"
+         class="flex flex-col gap-1.5">
+
+      <div class="flex items-start gap-2">
+        <textarea data-habit-record-target="memoTextarea"
+                  data-voice-input-target="field"
+                  data-action="input->habit-record#updateMemoCount"
+                  maxlength="200"
+                  rows="2"
+                  placeholder="今日の気づきや振り返りを入力（200文字以内）"
+                  class="flex-1 text-sm border border-gray-300 rounded-lg px-3 py-2
+                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                         resize-none placeholder-gray-400"
+                  aria-label="習慣メモ入力欄（<%= habit.name %>）"><%= current_memo %></textarea>
+
+        <button type="button"
+                data-voice-input-target="button"
+                data-action="click->voice-input#toggle"
+                aria-label="音声入力を開始する"
+                class="flex-shrink-0 mt-1 p-2 rounded-lg border border-gray-300
+                       text-gray-500 hover:bg-gray-50 hover:text-blue-500
+                       focus:outline-none focus:ring-2 focus:ring-blue-400
+                       transition-colors">
+          🎤
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <span data-habit-record-target="memoCount"
+              class="text-xs text-gray-400">
+          <%= current_memo.length %>/200
+        </span>
+
+        <div class="flex items-center gap-2">
+          <button type="button"
+                  data-action="click->habit-record#cancelMemo"
+                  class="text-xs text-gray-500 hover:text-gray-700
+                         focus:outline-none focus:ring-2 focus:ring-gray-400 rounded px-2 py-1
+                         transition-colors">
+            キャンセル
+          </button>
+
+          <button type="button"
+                  data-action="click->habit-record#saveMemo"
+                  class="text-xs font-bold text-white bg-blue-500 hover:bg-blue-600
+                         px-3 py-1 rounded-lg
+                         focus:outline-none focus:ring-2 focus:ring-blue-400
+                         transition-colors">
+            保存
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
 </div>
