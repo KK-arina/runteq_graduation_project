@@ -1,29 +1,18 @@
 # app/controllers/habit_records_controller.rb
 #
 # ==============================================================================
-# HabitRecordsController（B-1: レビュー修正版）
+# HabitRecordsController（B-7 最終修正版）
 # ==============================================================================
-# 【レビュー指摘による修正内容】
 #
-#   ① parse_numeric_value を安全な Float() 変換に変更（最重要修正）
-#      修正前: raw_value.to_f
-#             → "abc".to_f が 0.0 になる（不正な文字列が 0 として保存される）
-#      修正後: Float(raw_value) + rescue ArgumentError
-#             → "abc" は nil として扱い、サーバーで弾く
+# 【修正内容】
 #
-# 【Float() と .to_f の違い（重要）】
-#   "30.5".to_f  → 30.5    （OK）
-#   "abc".to_f   → 0.0     （サイレントに 0 になる = バグの温床）
-#   Float("30.5") → 30.5   （OK）
-#   Float("abc")  → ArgumentError が発生する
-#              → rescue で nil に変換 → モデルのバリデーションで弾かれる
+#   Service が NOT_PROVIDED を使った部分更新設計になったため、
+#   「送られてきた項目だけ」をサービスに渡す。
 #
-# 【なぜ Controller でバリデーションするのか】
-#   JS 側で min="0" や parseFloat チェックがあっても、
-#   curl などで直接 HTTP リクエストを送れば不正な値が届く。
-#   Controller で型変換エラーを nil に変換し、
-#   モデルのバリデーション（greater_than_or_equal_to: 0）で弾く。
-#   「フロント + Controller + Model」の三重防御が堅牢な設計。
+#   NOT_PROVIDED = :not_provided は HabitRecordSaveService で定義した定数。
+#   params にキー自体がない場合は NOT_PROVIDED を渡すことで
+#   「この項目は更新しない」という意図を Service に伝える。
+#
 # ==============================================================================
 
 class HabitRecordsController < ApplicationController
@@ -40,7 +29,8 @@ class HabitRecordsController < ApplicationController
       user:          current_user,
       habit:         @habit,
       completed:     service_params[:completed],
-      numeric_value: service_params[:numeric_value]
+      numeric_value: service_params[:numeric_value],
+      memo:          service_params[:memo]
     ).call
 
     if result[:success]
@@ -80,7 +70,8 @@ class HabitRecordsController < ApplicationController
       user:          current_user,
       habit:         @habit,
       completed:     service_params[:completed],
-      numeric_value: service_params[:numeric_value]
+      numeric_value: service_params[:numeric_value],
+      memo:          service_params[:memo]
     ).call
 
     if result[:success]
@@ -112,51 +103,56 @@ class HabitRecordsController < ApplicationController
     head :not_found and return
   end
 
-  # ── parse_service_params（レビュー修正版）──────────────────────────────────
+  # ── parse_service_params（最終修正版）──────────────────────────────────────
   #
-  # 【役割】params から必要な値を取り出し、型変換して返す。
+  # 【修正後の設計】
+  #   params にキーが存在するかどうかで「送られてきたか」を判断する。
+  #   params.key?(:memo) が false → memo は送られていない → NOT_PROVIDED を渡す
+  #   params.key?(:memo) が true  → memo が送られてきた  → その値を渡す
   #
-  # 【修正ポイント: parse_numeric_value メソッドを導入】
-  #   修正前: raw_value.to_f
-  #           → "abc".to_f が 0.0 になるため、不正な文字列が 0 として保存される
-  #   修正後: Float(raw_value) を使い、変換失敗時は nil を返す
-  #           → nil はモデルのバリデーションで弾かれる（三重防御）
+  # 【params.key? を使う理由】
+  #   params[:memo] だと、キーがない場合も nil が返るため
+  #   「送られなかった」と「空文字で送られた」の区別ができない。
+  #   params.key?(:memo) ならキー自体の有無を確認できる。
   def parse_service_params
-    if @habit.check_type?
-      {
-        completed:     params[:completed] == "1",
-        numeric_value: nil
-      }
-    else
-      {
-        completed:     false,
-        numeric_value: parse_numeric_value
-      }
-    end
-  end
+    # NOT_PROVIDED 定数を Service から参照する
+    not_provided = HabitRecordSaveService::NOT_PROVIDED
 
-  # parse_numeric_value
-  # 【役割】params[:numeric_value] を安全に Float へ変換する。
-  #
-  # 【Float() と .to_f の違い】
-  #   .to_f   : 変換失敗時にサイレントで 0.0 を返す（危険）
-  #   Float() : 変換失敗時に ArgumentError を発生させる（安全）
-  #
-  # 【rescue ArgumentError, TypeError の理由】
-  #   ArgumentError: "abc" など数値でない文字列が渡された場合
-  #   TypeError:     nil が渡された場合（Float(nil) は TypeError を発生させる）
-  #   どちらも「変換できない = 未入力扱い」として nil を返す。
-  #   nil は HabitRecord モデルの numeric_value_required_for_numeric_type
-  #   カスタムバリデーションでエラーになる。
+    # completed: チェック型でのみ送られてくる
+    completed =
+      if params.key?(:completed)
+        params[:completed] == "1"
+      else
+        not_provided
+      end
+
+    # numeric_value: 数値型でのみ送られてくる
+    numeric_value =
+      if params.key?(:numeric_value)
+        parse_numeric_value
+      else
+        not_provided
+      end
+
+    # memo: メモ保存操作のときのみ送られてくる
+    memo =
+      if params.key?(:memo)
+        # &.strip.presence で nil/空文字/スペースのみを nil に変換する
+        params[:memo]&.strip.presence
+      else
+        not_provided
+      end
+
+    { completed: completed, numeric_value: numeric_value, memo: memo }
+  end
+  # ────────────────────────────────────────────────────────────────────────────
+
   def parse_numeric_value
     raw = params[:numeric_value].presence
     return nil if raw.nil?
 
     Float(raw)
   rescue ArgumentError, TypeError
-    # 不正な文字列（例: "abc", "30abc"）は nil として扱う
-    # nil → モデルのバリデーションでエラー → クライアントに 422 が返る
     nil
   end
-  # ────────────────────────────────────────────────────────────────────────────
 end

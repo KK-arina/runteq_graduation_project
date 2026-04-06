@@ -4,19 +4,24 @@
 # HabitRecord（習慣日次記録）モデル
 # ==============================================================================
 #
-# 【B-3 での変更内容】
+# 【B-7 での変更内容】
 #
-#   ① recorded? メソッドを追加
+#   ① memo バリデーションを追加
+#      200文字以内。nil（未入力）は許容する。
+#      allow_blank: true を使う理由:
+#        メモは任意項目なので空文字や nil でも保存できるようにする。
+#        presence バリデーションを付けると「メモなし」で保存できなくなる。
+#
+# 【以前からの設計方針（変更なし）】
+#
+#   ② recorded? メソッド
 #      「今日の記録が存在するか（入力済みかどうか）」を返す。
-#      ビューで「未記録」と「記録済み」を判別するために使う。
 #
-#   ② first_recorded_today? メソッドを追加
+#   ③ first_recorded_today? メソッド
 #      「今日初めて記録されたか（created_at が今日か）」を返す。
-#      「今日初入力 → 記録済み」の表示ロジックに使う。
 #
-#   ③ updated_today? メソッドを追加
+#   ④ updated_today? メソッド
 #      「今日更新されたか（updated_at が today と created_at より新しいか）」を返す。
-#      「今日初入力→今日変更 → 更新済み」の表示ロジックに使う。
 #
 # 【表示ロジックの整理】
 #   habit_record が nil                  → 未記録
@@ -67,6 +72,23 @@ class HabitRecord < ApplicationRecord
 
   # 数値型習慣では numeric_value が必須（カスタムバリデーション）
   validate :numeric_value_required_for_numeric_type
+
+  # ── B-7 追加: memo バリデーション ─────────────────────────────────────────
+  #
+  # 【allow_blank: true を使う理由】
+  #   メモは任意項目なので、空文字や nil でも保存できる必要がある。
+  #   allow_blank: true を付けると「空文字・nil の場合はこのバリデーションをスキップ」
+  #   という意味になる。
+  #   付けない場合、空文字でも「最大200文字チェック」が走り問題はないが、
+  #   明示的に「任意項目」であることを示すために付けている。
+  #
+  # 【maximum: 200 の理由】
+  #   AIのroot_cause分析に使う短いメモを想定している。
+  #   長すぎるとプロンプトのトークン数が増えAIコストが上がるため200文字に制限する。
+  validates :memo,
+            length: { maximum: 200, message: "は200文字以内で入力してください" },
+            allow_blank: true
+  # ──────────────────────────────────────────────────────────────────────────
 
   # ============================================================
   # スコープ
@@ -158,19 +180,10 @@ class HabitRecord < ApplicationRecord
   # 【判定ロジック】
   #   チェック型: completed が true なら記録済みとみなす
   #   数値型:     numeric_value が存在して 0 より大きければ記録済みとみなす
-  #   （0 入力は「実績なし」として記録済み扱いにする設計もあるが、
-  #    ここでは「何か値を入れた」= recorded? としない。
-  #    0 は「今日はやったが実績ゼロ」なので、チェック型の未完了と同じ扱い）
-  #
-  # 【なぜ必要か】
-  #   ビューの _habit_record.html.erb で「未記録 / 記録済み / 更新済み」を
-  #   判定するために使う。habit_record オブジェクト自体が nil の場合は
-  #   ビュー側で nil チェックをしてこのメソッドを呼ばない。
   def recorded?
     if habit.check_type?
       completed
     else
-      # numeric_value が nil でなく、かつ 0 より大きい場合に記録済みとみなす
       numeric_value.present? && numeric_value > 0
     end
   end
@@ -178,38 +191,33 @@ class HabitRecord < ApplicationRecord
   # first_recorded_today?
   # 【役割】
   #   「今日初めて記録されたか（created_at が今日か）」を返す。
-  #
-  # 【仕組み】
-  #   created_at.to_date と today_for_record を比較する。
-  #   AM4:00 境界を考慮した today_for_record を使うことで
-  #   深夜の記録も正しく「今日」として判定できる。
-  #
-  # 【使い方】
-  #   habit_record.first_recorded_today? → true なら「今日初入力 → 記録済み」と表示する
   def first_recorded_today?
-    # created_at.to_date は UTC → JST 変換済みの日付を返す（Time.current 基準）
     created_at.in_time_zone.to_date == HabitRecord.today_for_record
   end
 
   # updated_today?
   # 【役割】
   #   「今日更新されたか（updated_at が created_at より新しく、かつ今日の日付か）」を返す。
-  #
-  # 【仕組み】
-  #   ① updated_at と created_at が異なる（= 更新が行われた）
-  #   ② updated_at.to_date が today_for_record と一致する（= 今日更新された）
-  #   この両方を満たすときに true を返す。
-  #
-  # 【使い方】
-  #   habit_record.updated_today? → true なら「更新済み」と表示する
-  #   「昨日入力済み→今日変更」のケースでも正しく検出できる。
   def updated_today?
-    # updated_at と created_at を秒単位で比較（ほぼ同時作成なら「更新なし」）
     return false if updated_at.to_i == created_at.to_i
-
-    # 今日の日付と updated_at の日付が一致するか確認
     updated_at.in_time_zone.to_date == HabitRecord.today_for_record
   end
+
+  # ── B-7 追加: メモ関連のインスタンスメソッド ──────────────────────────────
+
+  # has_memo?
+  # 【役割】
+  #   このレコードにメモが入力されているかどうかを返す。
+  #
+  # 【present? を使う理由】
+  #   memo が nil の場合も空文字 "" の場合も「メモなし」として扱いたい。
+  #   present? は nil と "" の両方に対して false を返すため、
+  #   両パターンを1行でカバーできる。
+  #   !memo.blank? と同義。
+  def has_memo?
+    memo.present?
+  end
+  # ──────────────────────────────────────────────────────────────────────────
 
   # ============================================================
   # Private メソッド

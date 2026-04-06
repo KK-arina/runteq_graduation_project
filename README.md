@@ -62,7 +62,8 @@ flowchart LR
 [![B-4 アーカイブ機能](https://img.shields.io/badge/B--4_アーカイブ機能-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-4-habit-archive)
 [![B-5 削除確認モーダル](https://img.shields.io/badge/B--5_削除確認モーダル-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-5-habit-menu-modal)
 [![B-6 カラー・アイコン・並び替え](https://img.shields.io/badge/B--6_カラー・アイコン・並び替え-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-6-habit-color-icon-sort)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-14%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![B-7 日次メモ](https://img.shields.io/badge/B--7_日次メモ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-7-habit-record-memo)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-15%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -111,7 +112,7 @@ flowchart LR
 | Week | テーマ | ISSUE | SP | 状態 |
 |:---|:---|:---:|:---:|:---:|
 | Week A | DB・インフラ基盤 | #A-1〜#A-7 | 24 | ✅ 完了 |
-| Week B | 習慣機能拡張 | #B-1〜#B-7 | 28 | 🟡 進行中 |
+| Week B | 習慣機能拡張 | #B-1〜#B-7 | 28 | ✅ 完了 |
 | Week C | タスク管理機能 | #C-1〜#C-7 | 28 | ⬜ 未着手 |
 | Week D | AI分析・PMVV機能 | #D-1〜#D-11 | 42 | ⬜ 未着手 |
 | Week E | 週次振り返り拡張 | #E-1〜#E-5 | 22 | ⬜ 未着手 |
@@ -142,6 +143,7 @@ flowchart LR
 | #B-4 | 習慣のアーカイブ機能（archived_at）| 2026-03-29 | feature/B-4-habit-archive |
 | #B-5 | 習慣削除確認モーダル（M-1）⋯メニュー + デスクトップモーダル / スマホボトムシート | 2026-03-30 | feature/B-5-habit-menu-modal |
 | #B-6 | 習慣のカラー・アイコン・Drag&Drop 並び替え（acts_as_list + SortableJS） | 2026-04-05 | feature/B-6-habit-color-icon-sort |
+| #B-7 | habit_records.memo（日次メモ）機能 | 2026-04-06 | feature/B-7-habit-record-memo |
 
 <br>
 
@@ -1636,6 +1638,156 @@ B-6テスト: 11 runs, 0 failures, 0 errors, 0 skips
 
 <br>
 
+### #B-7: habit_records.memo（日次メモ）機能
+
+<br>
+
+**ブランチ:** `feature/B-7-habit-record-memo`<br>
+**完了日:** 2026-04-06<br>
+**概要:** 各習慣の日次記録に定性メモを記録できる機能を追加。<br>
+AI分析の `root_cause` 精度向上に活用する。200文字以内・音声入力対応。<br>
+`NOT_PROVIDED` センチネル値による部分更新設計で、チェック/数値操作時にメモが消えない設計を実現。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Model | `HabitRecord` に `memo` バリデーション追加（最大200文字・任意・`allow_blank: true`） |
+| Model | `HabitRecord#has_memo?` インスタンスメソッドを追加（`memo.present?` を返す） |
+| Service | `HabitRecordSaveService` に `NOT_PROVIDED` センチネル値による部分更新設計を導入 |
+| Service | `initialize` の引数デフォルトを `NOT_PROVIDED` に変更し「送られなかった項目は更新しない」設計に |
+| Controller | `parse_service_params` を `params.key?` による送信有無判定に変更 |
+| Controller | `create` / `update` アクションに `memo: service_params[:memo]` を追加 |
+| View | `_habit_record.html.erb` に💬トグルボタン・テキストエリア・文字数カウンター・保存/キャンセルボタンを追加 |
+| View | `data-controller="habit-record"` を最外側 div に移動（Stimulus スコープ修正） |
+| View | `show_memo_area` 変数で Turbo Stream 差し替え後の展開状態をERB側で制御 |
+| JS | `habit_record_controller.js` にメモ関連メソッドを追加（`toggleMemo` / `saveMemo` / `cancelMemo` / `updateMemoCount`） |
+| JS | `toggle()` / `saveNumeric()` から `memo` の送信を削除（各操作が自分の項目だけを更新する設計） |
+| JS | `voice_input_controller.js` を新規作成（Web Speech API・graceful degradation対応） |
+| JS | `index.js` に `voice-input` コントローラーを登録 |
+| CSP | `content_security_policy.rb` の `nonce_directives` を `[]` に変更（Turbo Stream との競合を解消） |
+| Test | モデルテスト 8件・統合テスト 6件を追加（383 runs, 953 assertions） |
+
+<br>
+
+#### 設計上の判断
+
+<br>
+
+**① `NOT_PROVIDED` センチネル値による部分更新設計**
+
+<br>
+
+`memo: nil` が「メモを空にする操作」なのか「`memo` パラメータが送られなかった」なのかを<br>
+デフォルト値を `nil` にすると区別できない。<br>
+`:not_provided` シンボルをデフォルトにすることで<br>
+「送られなかった項目は DB を変更しない」という部分更新を実現した。<br>
+```ruby
+NOT_PROVIDED = :not_provided
+
+def initialize(user:, habit:, completed: NOT_PROVIDED, numeric_value: NOT_PROVIDED, memo: NOT_PROVIDED)
+  ...
+end
+
+update_params = {}
+update_params[:completed]     = @completed     unless @completed     == NOT_PROVIDED
+update_params[:numeric_value] = @numeric_value unless @numeric_value == NOT_PROVIDED
+update_params[:memo]          = @memo.presence unless @memo          == NOT_PROVIDED
+habit_record.update!(update_params)
+```
+
+<br>
+
+**② 各操作が「自分の項目だけ」送る設計**
+
+<br>
+
+`toggle()` → `completed` のみ送信<br>
+`saveNumeric()` → `numeric_value` のみ送信<br>
+`saveMemo()` → `memo` のみ送信<br>
+<br>
+操作ごとに担当項目を分離することで「チェックしたらメモが消えた」などの<br>
+サイレントデータ消失を防いでいる。
+
+<br>
+
+**③ Stimulus スコープ修正（`data-controller` の移動）**
+
+<br>
+
+`memoArea` ターゲットが `data-controller="habit-record"` のスコープ外にあったため<br>
+`Missing target element "memoArea"` エラーが発生していた。<br>
+`data-controller` を最外側の wrapper div（`id="habit_record_row_xxx"`）に移動し、<br>
+チェック行・メモ行の両方がスコープ内に入るよう修正した。
+
+<br>
+
+**④ Turbo Stream 差し替え後の表示制御はERB側で行う**
+
+<br>
+
+`saveMemo()` 実行後に Turbo Stream がパーシャル全体を差し替えるため、<br>
+JS側で `_updateMemoToggleStyle()` を呼んでも差し替え後は古い要素への参照が無効になる。<br>
+💬の青色化・メモエリアの展開状態は `show_memo_area = current_memo.present?` として<br>
+ERB側で制御することで、Turbo Stream 差し替え後も正しい状態で表示される。
+
+<br>
+
+**⑤ CSP の `nonce_directives` を `[]` に変更**
+
+<br>
+
+`nonce_directives = ["script-src"]` の設定では Turbo Drive のページ遷移時に<br>
+新しい body の `<script>` タグに古いページの nonce が引き継がれず<br>
+Turbo Stream の DOM 差し替えがブロックされていた。<br>
+`nonce_directives = []` に変更することで Turbo との競合を解消した。<br>
+`script_src :self, :https, :unsafe_inline` で外部スクリプトの制御は維持される。
+
+<br>
+
+**⑥ 音声入力の graceful degradation**
+
+<br>
+
+`SpeechRecognition` が存在しない場合（Firefox など）は<br>
+`connect()` 内で 🎤 ボタンを `display: none` にする。<br>
+「タップしても何も起きない」という混乱を防ぐ設計。
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `app/models/habit_record.rb` | `memo` バリデーション追加・`has_memo?` メソッド追加 |
+| `app/services/habit_record_save_service.rb` | `NOT_PROVIDED` センチネル値導入・部分更新設計に変更 |
+| `app/controllers/habit_records_controller.rb` | `parse_service_params` を `params.key?` 判定に変更・`memo:` を追加 |
+| `app/views/habit_records/_habit_record.html.erb` | メモUI追加・`data-controller` を最外側divに移動・`show_memo_area` 変数追加 |
+| `app/javascript/controllers/habit_record_controller.js` | メモ関連メソッド追加・`toggle`/`saveNumeric` から `memo` 送信を削除 |
+| `app/javascript/controllers/voice_input_controller.js` | 新規作成（Web Speech API） |
+| `app/javascript/controllers/index.js` | `voice-input` コントローラーを登録 |
+| `config/initializers/content_security_policy.rb` | `nonce_directives = []` に変更・`script_src` に `:unsafe_inline` 追加 |
+| `test/models/habit_record_memo_test.rb` | 新規作成（8件：バリデーション・`has_memo?`） |
+| `test/integration/memo_flow_test.rb` | 新規作成（6件：保存・部分更新・バリデーションエラー） |
+
+<br>
+
+#### テスト結果
+
+<br>
+```
+B-7テスト: 14件（モデル8件・統合6件）
+全テスト:  383 runs, 953 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -2641,12 +2793,13 @@ habitflow/
 │   │   ├── user_destroy_service.rb                 # #A-7: 退会処理フロー（個人情報匿名化）
 │   │   └── ai_proposal_confirm_service.rb          # #A-7: AI提案確定フロー骨格（#D-3〜#D-4で本実装）
 │   ├── javascript/controllers/
-│   │   ├── habit_record_controller.js     # チェックボックス即時保存（変更: saveNumeric event.target方式に変更 #B-1）
+│   │   ├── habit_record_controller.js     # チェックボックス即時保存（変更: saveNumeric event.target方式に変更 #B-1）（変更: メモ関連メソッド追加・NOT_PROVIDED部分更新対応 #B-7）
 │   │   ├── habit_form_controller.js       # #B-1 追加: 習慣作成フォームの動的切り替え（#B-6追記: selectColor/selectIcon/syncInitialState追加）
 │   │   ├── mobile_menu_controller.js      # ハンバーガーメニュー開閉
 │   │   ├── form_submit_controller.js      # フォーム送信ローディング・二重送信防止
 │   │   ├── habit_menu_controller.js       # #B-5 新規: 習慣削除確認モーダル（⋯メニュー・デスクトップ/スマホ切替・オーバーレイクリック・Escape対応）
-│   │   └── habit_sort_controller.js       # #B-6 新規: 習慣一覧の Drag&Drop 並び替え（SortableJS + fetch・forceFallback対応）
+│   │   ├── habit_sort_controller.js       # #B-6 新規: 習慣一覧の Drag&Drop 並び替え（SortableJS + fetch・forceFallback対応）
+│   │   └── voice_input_controller.js      # #B-7 新規: 音声入力（Web Speech API・graceful degradation対応・未対応ブラウザで🎤非表示）
 │   ├── jobs/
 │   │   ├── application_job.rb                          # 変更: retry_on / discard_on 追加（#A-3）
 │   │   ├── streak_calculation_job.rb                   # #A-3 #B-3: ストリーク計算（本実装完了）
@@ -2724,11 +2877,13 @@ habitflow/
     │   ├── habit_archive_test.rb          # #B-4: アーカイブ機能テスト（22件：scope・状態遷移・状態ガード異常系）
     │   └── habit_sort_test.rb             # #B-6: カラー・アイコンバリデーション・acts_as_list 動作確認（8件）
     ├── integration/
-    │   └── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
+    │   ├── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
+    │   └── memo_flow_test.rb              # #B-7: メモ保存・部分更新・バリデーションエラー・スペース変換テスト（6件）
     └── controllers/
         ├── habits_archive_controller_test.rb  # #B-4: アーカイブコントローラーテスト（6件：archived一覧・archive・unarchive・他ユーザー防止）
         ├── habits_menu_controller_test.rb   # #B-5: ⋯メニュー・モーダル・アーカイブ・削除・ロック状態テスト（14件）
-        └── habits_sort_controller_test.rb # #B-6: 並び替え保存・未ログイン・不正ID混入テスト（3件）
+        ├── habits_sort_controller_test.rb # #B-6: 並び替え保存・未ログイン・不正ID混入テスト（3件）
+        └── habit_record_memo_test.rb      # #B-7: memoバリデーション・has_memo?メソッドテスト（8件）
 ```
 
 <br>
@@ -2758,7 +2913,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-369 runs, 929 assertions, 0 failures, 0 errors, 0 skips
+383 runs, 953 assertions, 0 failures, 0 errors, 0 skips
 ```
 
 <br>
@@ -2795,6 +2950,8 @@ docker compose exec web bin/rails test
 | `test/controllers/habits_controller_test.rb` | コントローラー | 曜日依存バグ修正のため `travel_to` 追加（水曜固定・#B-5修正） |
 | `test/models/habit_sort_test.rb` | モデル | カラー・アイコンバリデーション・acts_as_list 並び順・insert_at 動作確認（#B-6・8件） |
 | `test/controllers/habits_sort_controller_test.rb` | コントローラー | 並び替え保存・未ログイン防止・不正ID混入の安全処理（#B-6・3件） |
+| `test/models/habit_record_memo_test.rb` | モデル | `memo` バリデーション（nil/空文字/200文字/201文字）・`has_memo?` メソッド（nil/空文字/存在/スペースのみ）（#B-7・8件） |
+| `test/integration/memo_flow_test.rb` | 統合 | メモ保存・空文字→nil変換・201文字バリデーションエラー・スペースのみ→nil・部分更新2件（#B-7・6件） |
 
 <br>
 
@@ -3711,6 +3868,95 @@ habit_ids.each_with_index do |id, index|
   next unless habit
   habit.insert_at(index + 1)  # 1始まり
 end
+```
+
+<br>
+
+### Turbo Stream 差し替え後はJS側の要素参照が無効になる（#B-7）
+
+<br>
+
+`window.Turbo.renderStreamMessage(responseText)` で DOM が差し替えられると、<br>
+差し替え前の `this.memoToggleTarget` などへの参照は無効になる。<br>
+差し替え後に `this.xxx` を呼ぶとエラーになるか、存在しない要素を操作するサイレントバグになる。<br>
+Turbo Stream 差し替え後の UI 状態（💬の色・メモエリアの展開状態）は<br>
+サーバーから返ってくる HTML（ERB）側で制御するのが正しい設計。<br>
+JS 側では「差し替えを依頼する」だけに留め、結果の反映はサーバーに任せること。
+
+<br>
+
+### Stimulus のターゲットは `data-controller` の子孫要素のみ認識される（#B-7）
+
+<br>
+
+`data-controller="habit-record"` が付いた要素の「外側（兄弟要素・親要素）」に<br>
+`data-habit-record-target="memoArea"` を置くと `Missing target element` エラーになる。<br>
+Stimulus のスコープルール: `data-controller` が付いた要素の**子孫要素のみ**がターゲットとして認識される。<br>
+メモエリアとチェック行を同じスコープに入れるには、両方を含む最外側の要素に `data-controller` を移動する。<br>
+```html
+
+  
+  チェック行（💬ボタン含む）
+  
+
+  
+  メモエリア（memoArea ターゲット）
+```
+
+<br>
+
+### CSP の `nonce_directives` と Turbo Drive は競合する（#B-7）
+
+<br>
+
+`nonce_directives = ["script-src"]` を設定すると、Turbo Drive がページ遷移時に<br>
+body を差し替えるとき新しい body の `<script>` タグに古いページの nonce が引き継がれず<br>
+`Executing inline script violates CSP` エラーで Turbo Stream の DOM 差し替えがブロックされる。<br>
+Rails 7 + Importmap + Turbo の構成では `nonce_directives = []` として nonce 制御を無効化し、<br>
+`script_src :self, :https, :unsafe_inline` で Importmap のインラインスクリプトを許可するのが現実的な解決策。<br>
+`script_src :self` を維持することで外部ドメインからのスクリプト注入は引き続きブロックされる。
+
+<br>
+
+### `NOT_PROVIDED` センチネル値で「未送信」と「nil送信」を区別する（#B-7）
+
+<br>
+
+デフォルト引数を `nil` にすると「引数が送られなかった（= 更新不要）」と<br>
+「`nil` が明示的に送られた（= 空で上書き）」を区別できない。<br>
+`:not_provided` シンボルをデフォルト値に使うことで<br>
+「この引数は送られなかった → DBを変更しない」という意図を明示できる。<br>
+```ruby
+NOT_PROVIDED = :not_provided
+
+def initialize(memo: NOT_PROVIDED)
+  @memo = memo
+end
+
+# NOT_PROVIDED のままなら update_params に含めない → DB は変更されない
+update_params[:memo] = @memo.presence unless @memo == NOT_PROVIDED
+```
+
+<br>
+
+### 各 Stimulus アクションは「自分の担当項目だけ」送ること（#B-7）
+
+<br>
+
+`toggle()`（チェック操作）時に `memo` も一緒に送ると、<br>
+ユーザーがメモを入力中（未保存）にチェックを操作した場合に入力途中のメモが誤って保存される。<br>
+`saveMemo()` 時に `completed` を送ると、メモ保存がチェック状態をリセットするバグになる。<br>
+各操作は「自分の担当項目だけ」を送り、サーバー側の `NOT_PROVIDED` 設計と組み合わせることで<br>
+「操作した項目だけが更新される」安全な部分更新を実現できる。<br>
+```javascript
+// toggle: completed だけ送る
+const body = `completed=${completed ? "1" : "0"}`
+
+// saveNumeric: numeric_value だけ送る
+const body = `numeric_value=${encodeURIComponent(numericValue)}`
+
+// saveMemo: memo だけ送る
+const body = `memo=${encodeURIComponent(memoValue)}`
 ```
 
 <br>

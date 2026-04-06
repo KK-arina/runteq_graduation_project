@@ -1,89 +1,137 @@
 # app/services/habit_record_save_service.rb
 #
 # ==============================================================================
-# HabitRecordSaveService（B-1: レビュー修正版）
+# HabitRecordSaveService（B-7 最終修正版）
 # ==============================================================================
-# 【レビュー指摘による修正内容】
 #
-#   ① nil と 0 の区別を明確化（最重要修正）
-#      修正前: @numeric_value.to_f → nil が 0.0 に変換されて「未入力と0入力」の区別が消えた
-#      修正後: nil は nil のまま扱い、意味を保持する
+# 【修正内容】
 #
-#   ② completed の判定ロジックを nil/0/正数の3パターンで明示
-#      nil → 未入力 → false
-#      0   → 実績なし → false
-#      >0  → 実績あり → true
+#   ① 「部分更新」設計に変更（最重要修正）
 #
-# 【nil と 0 の違いが重要な理由】
-#   nil = 「その日は記録しなかった」（未入力）
-#   0.0 = 「その日は記録したが実績ゼロ」（意図的な0入力）
-#   この区別があると将来の分析で「入力忘れ日」と「実績なし日」を分けられる。
+#      【修正前の問題】
+#        initialize の引数のデフォルトを nil にしていた。
+#        memo: nil を受け取ると「メモを nil で上書きする」という操作と
+#        「memo を送らなかった（更新不要）」の区別ができなかった。
+#
+#        例: チェックボックスを操作したとき
+#          JS が completed だけ送り、memo を送らない場合
+#          → memo: nil として扱われ、既存のメモが消えてしまう
+#
+#      【修正後の設計】
+#        引数のデフォルト値に :not_provided というシンボルを使う。
+#        Ruby のシンボルは「ユニークなオブジェクト」なので
+#        「送られなかった」という状態を nil と区別して表現できる。
+#
+#        :not_provided が渡されたとき  → update_params に含めない（更新しない）
+#        nil / "" が渡されたとき       → update_params に含める（nil/空で上書き）
+#        "文字列" が渡されたとき       → update_params に含める（文字列で上書き）
+#
+#   ② update_params ハッシュで更新対象を動的に構築
+#      「送られてきた項目だけ」を update! に渡す。
+#      送られなかった項目はハッシュに含まれないため、DBが変更されない。
+#
 # ==============================================================================
 
 class HabitRecordSaveService
+  # ── NOT_PROVIDED センチネル値の定義 ─────────────────────────────────────────
+  #
+  # 【なぜ :not_provided シンボルを使うのか】
+  #   nil は「値がない」という意味だが、
+  #   引数として nil を渡した場合も「デフォルト値の nil」と区別できない。
+  #
+  #   例えば memo: nil を受け取った場合、
+  #   「メモを空にする操作」なのか「memoパラメータ自体が送られなかった」のか
+  #   判断できない。
+  #
+  #   そこで :not_provided という専用のシンボルをデフォルト値にする。
+  #   シンボルは Ruby のオブジェクトなので nil とは別物として扱える。
+  #   「引数が渡されなかった」という状態を明示的に表現できる。
+  #
+  NOT_PROVIDED = :not_provided
+  # ──────────────────────────────────────────────────────────────────────────
+
   # initialize
   # 【引数】
   #   user:          ログインユーザー
-  #   habit:         対象の習慣（measurement_type を確認するため必要）
-  #   completed:     Boolean（チェック型で使用）
-  #   numeric_value: Float/nil（数値型で使用。nil = 未入力）
-  def initialize(user:, habit:, completed: false, numeric_value: nil)
+  #   habit:         対象の習慣
+  #   completed:     Boolean / NOT_PROVIDED（渡されなければ更新しない）
+  #   numeric_value: Float / nil / NOT_PROVIDED（渡されなければ更新しない）
+  #   memo:          String / nil / NOT_PROVIDED（渡されなければ更新しない）
+  #
+  # 【デフォルト値を NOT_PROVIDED にする理由】
+  #   チェック操作時は completed だけ送る。
+  #   数値操作時は numeric_value だけ送る。
+  #   メモ操作時は memo だけ送る。
+  #   それぞれ「送らなかった項目は更新しない」という動作を実現するため、
+  #   「送られなかった」= NOT_PROVIDED として区別する。
+  def initialize(user:, habit:, completed: NOT_PROVIDED, numeric_value: NOT_PROVIDED, memo: NOT_PROVIDED)
     @user          = user
     @habit         = habit
     @completed     = completed
     @numeric_value = numeric_value
+    @memo          = memo
   end
 
   # call
   # 【戻り値】
   #   成功: { success: true,  habit_record: HabitRecord, errors: [] }
   #   失敗: { success: false, habit_record: nil,         errors: [エラー文字列] }
-  #
-  # 【errors を配列で返す理由（レビュー提案による改善）】
-  #   フロント側でエラーを一覧表示しやすくするため。
-  #   単一の error 文字列より、配列の方が将来の拡張（複数エラー表示）に対応しやすい。
   def call
     ApplicationRecord.with_transaction do
       habit_record = HabitRecord.find_or_create_for(@user, @habit)
 
-      if @habit.check_type?
-        # チェック型: completed のみ更新
-        habit_record.update_completed!(@completed)
-      else
-        # 数値型: numeric_value を更新し、completed を自動計算する
-        #
-        # 【修正前の問題】
-        #   value = @numeric_value.to_f
-        #   → nil.to_f が 0.0 になり、「未入力」と「0入力」の区別が消えていた
-        #
-        # 【修正後】
-        #   nil は nil のまま保持する。
-        #   nil かどうかの判定を明示的に行い、意味のある区別を維持する。
-        value = @numeric_value.nil? ? nil : @numeric_value.to_f
+      # ── 部分更新パラメータの構築 ───────────────────────────────────────────
+      #
+      # update_params に「更新する項目だけ」を詰める。
+      # NOT_PROVIDED が渡された項目はハッシュに含めないことで
+      # その項目は DB で変更されない。
+      #
+      # 例:
+      #   completed: true が渡された場合  → { completed: true }
+      #   completed が NOT_PROVIDED の場合 → {} （completedはDBを変更しない）
+      update_params = {}
 
-        # completed の自動計算（3パターンを明示）
-        # nil  → 未入力     → false（記録していない）
-        # 0.0  → 実績ゼロ   → false（やったが実績なし）
-        # >0   → 実績あり   → true（何かを記録した）
-        completed =
-          if value.nil?
-            false       # nil（未入力）は未完了扱い
-          else
-            value > 0   # 0より大きければ完了、0なら未完了
-          end
-
-        habit_record.update!(
-          numeric_value: value,
-          completed:     completed
-        )
+      # ── completed の処理 ──────────────────────────────────────────────────
+      #
+      # 【チェック型の場合のみ completed を更新する理由】
+      #   数値型習慣では completed はサービス内で自動計算する。
+      #   フロントから completed を明示的に受け取るのはチェック型のみ。
+      #   数値型のとき completed: NOT_PROVIDED が渡るため、このブロックに入らない。
+      unless @completed == NOT_PROVIDED
+        update_params[:completed] = @completed
       end
+
+      # ── numeric_value と completed（数値型の自動計算）の処理 ───────────────
+      #
+      # 数値型の場合: numeric_value が送られてきたときだけ処理する
+      # NOT_PROVIDED のままなら numeric_value は変更しない
+      unless @numeric_value == NOT_PROVIDED
+        value = @numeric_value.nil? ? nil : @numeric_value.to_f
+        update_params[:numeric_value] = value
+
+        # 数値型では completed を numeric_value から自動計算する
+        # nil → false / 0 → false / 0より大きい → true
+        update_params[:completed] = value.nil? ? false : value > 0
+      end
+
+      # ── memo の処理 ────────────────────────────────────────────────────────
+      #
+      # memo が NOT_PROVIDED の場合はハッシュに含めない（メモを変更しない）
+      # nil / "" が渡された場合は presence で nil に変換してハッシュに含める
+      # 文字列が渡された場合はその値をハッシュに含める
+      unless @memo == NOT_PROVIDED
+        update_params[:memo] = @memo.presence
+      end
+      # ────────────────────────────────────────────────────────────────────────
+
+      # update_params が空の場合は更新しない
+      # （チェック型の新規作成直後など、何も送らないケースへの安全策）
+      habit_record.update!(update_params) unless update_params.empty?
 
       { success: true, habit_record: habit_record, errors: [] }
     end
 
   rescue ActiveRecord::RecordInvalid => e
-    # バリデーションエラー（例: numeric_value が負の数、数値型で nil）
-    # e.record.errors.full_messages で日本語エラーメッセージの配列を取得する
     errors = e.record&.errors&.full_messages || [ e.message ]
     { success: false, habit_record: nil, errors: errors }
 
