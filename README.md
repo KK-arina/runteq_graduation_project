@@ -63,6 +63,7 @@ flowchart LR
 [![B-5 削除確認モーダル](https://img.shields.io/badge/B--5_削除確認モーダル-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-5-habit-menu-modal)
 [![B-6 カラー・アイコン・並び替え](https://img.shields.io/badge/B--6_カラー・アイコン・並び替え-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-6-habit-color-icon-sort)
 [![B-7 日次メモ](https://img.shields.io/badge/B--7_日次メモ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-7-habit-record-memo)
+[![C-1 Task基本CRUD](https://img.shields.io/badge/C--1_Task基本CRUD-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-1-task-model-crud)
 [![本リリース進捗](https://img.shields.io/badge/本リリース進捗-16%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
@@ -2427,6 +2428,63 @@ end
 
 <br>
 
+### 17. GROUP BY と ORDER BY の競合と `unscope(:order)` による解消（#C-1）
+
+<br>
+
+`scope :active` に `ORDER BY due_date ASC NULLS LAST` を含めると、<br>
+`GROUP BY priority` と組み合わせたとき PostgreSQL が以下のエラーを発生させる。<br>
+```
+PG::GroupingError: column "tasks.due_date" must appear in the GROUP BY clause
+```
+
+<br>
+
+Rails の scope はチェーンすると ORDER BY が引き継がれるため、<br>
+`base_tasks.not_archived.group(:priority).count` は内部で<br>
+`GROUP BY priority ORDER BY priority, due_date` という不正な SQL になる。<br>
+`unscope(:order)` で ORDER BY 句だけを除去してから GROUP BY を実行することで解消できる。<br>
+WHERE 句（`deleted_at IS NULL` など）は `unscope(:order)` の影響を受けないため安全。<br>
+```ruby
+# ❌ scope :active の ORDER BY が引き継がれて GroupingError
+priority_counts = base_tasks.not_archived.group(:priority).count
+
+# ✅ unscope(:order) で ORDER BY を除去してから GROUP BY
+priority_counts = base_tasks.not_archived.unscope(:order).group(:priority).count
+```
+
+<br>
+
+### 18. Tailwind の peer-checked だけでは「外れた状態」をリセットできない（#C-1）
+
+<br>
+
+Tailwind の `peer-checked` は「ラジオボタンが checked 状態のとき」スタイルを適用するが、<br>
+「他のラジオボタンが選択されて checked が外れたとき」スタイルを自動的に元に戻さない。<br>
+3つのカード（Must/Should/Could）で1つを選ぶと他の2つの青枠が残ってしまうバグになる。<br>
+Stimulus コントローラーで全カードをリセット（非アクティブクラスを追加・アクティブクラスを削除）してから<br>
+選択カードだけをアクティブにすることで排他選択を確実に実現できる。<br>
+```javascript
+updateCards() {
+  this.labelTargets.forEach(label => {
+    const radio = label.querySelector("input[type='radio']")
+    const card  = label.querySelector("[data-priority-card-target='card']")
+    const activeClasses   = (card.dataset.activeClass   || "").split(" ").filter(Boolean)
+    const inactiveClasses = (card.dataset.inactiveClass || "").split(" ").filter(Boolean)
+
+    if (radio.checked) {
+      card.classList.add(...activeClasses)
+      card.classList.remove(...inactiveClasses)
+    } else {
+      card.classList.remove(...activeClasses)  // ← これが重要。外れた状態をリセット
+      card.classList.add(...inactiveClasses)
+    }
+  })
+}
+```
+
+<br>
+
 ---
 
 <br>
@@ -2829,7 +2887,7 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 
 | 機能 | 状態 | 予定 |
 |:---|:---|:---|
-| タスク管理 | 未実装 | 本リリースで追加予定 |
+| タスク管理（基本CRUD） | ✅ 実装済み（#C-1） | — |
 | AI 分析連携（自動パース） | 未実装 | 本リリースで追加予定 |
 | パスワードリセット | 未実装 | 本リリースで追加予定 |
 | オンボーディング（初回ガイド） | 未実装 | 本リリースで追加予定 |
@@ -2901,23 +2959,25 @@ habitflow/
 ├── app/
 │   ├── controllers/
 │   │   ├── application_controller.rb      # 認証・ロック判定・エラーハンドリングの共通処理
-│   │   ├── dashboards_controller.rb       # ダッシュボード（変更: includes・effective_weekly_target対応 #B-2）
+│   │   ├── dashboards_controller.rb       # ダッシュボード（変更: @today_tasks追加 #C-1）
 │   │   ├── habits_controller.rb           # 習慣の CRUD（変更: archive/unarchive/archived追加・set_habit修正 #B-4）
 │   │   ├── habit_records_controller.rb    # 習慣の日次記録（変更: Float() 安全変換・numeric_value 対応 #B-1）
 │   │   ├── weekly_reflections_controller.rb # 週次振り返り（変更: corrections 受け渡し・build_habit_stats 数値型対応 #B-1）
+│   │   ├── tasks_controller.rb            # #C-1: タスク管理（index / new / create・ロックチェック）
 │   │   ├── sessions_controller.rb         # ログイン・ログアウト
 │   │   ├── users_controller.rb            # ユーザー登録
 │   │   ├── errors_controller.rb           # カスタムエラーページ
 │   │   └── pages_controller.rb            # ランディングページ
 │   ├── models/
-│   │   ├── user.rb                        # ユーザー認証・has_many 設定
+│   │   ├── user.rb                        # ユーザー認証・has_many 設定（変更: has_many :tasks追加 #C-1）
 │   │   ├── habit.rb                       # 習慣・論理削除・週次進捗計算
 │   │   ├── habit_record.rb                # 日次記録・AM4:00 基準・UNIQUE 制約
 │   │   ├── weekly_reflection.rb           # 週次振り返り・complete! メソッド
 │   │   ├── weekly_reflection_habit_summary.rb # スナップショット・達成率計算
 │   │   ├── habit_template.rb                  # #A-5: オンボーディング用習慣テンプレートマスタ
 │   │   ├── habit_excluded_day.rb              # #B-2: 除外日モデル（DAY_NAMES定数・バリデーション）
-│   │   └── user_setting.rb                    # ユーザー設定（rest_mode_active?・#B-3で参照）
+│   │   ├── user_setting.rb                    # ユーザー設定（rest_mode_active?・#B-3で参照）
+│   │   └── task.rb                        # #C-1: タスクモデル（enum: priority/task_type/status・スコープ・before_validation）
 │   ├── services/
 │   │   ├── weekly_reflection_complete_service.rb  # #A-7 #B-1: 振り返り完了フロー（corrections引数・差分補正ロジック追加）
 │   │   ├── habit_record_save_service.rb            # #A-7 #B-1: 習慣記録保存フロー（数値型対応・errors:[]配列形式統一）
@@ -2930,6 +2990,7 @@ habitflow/
 │   │   ├── form_submit_controller.js      # フォーム送信ローディング・二重送信防止
 │   │   ├── habit_menu_controller.js       # #B-5 新規: 習慣削除確認モーダル（⋯メニュー・デスクトップ/スマホ切替・オーバーレイクリック・Escape対応）
 │   │   ├── habit_sort_controller.js       # #B-6 新規: 習慣一覧の Drag&Drop 並び替え（SortableJS + fetch・forceFallback対応）
+│   │   ├── priority_card_controller.js    # #C-1 新規: 優先度カード排他選択（Stimulus・全カードリセット→選択カードアクティブ化）
 │   │   └── voice_input_controller.js      # #B-7 新規: 音声入力（Web Speech API・graceful degradation対応・未対応ブラウザで🎤非表示）
 │   ├── jobs/
 │   │   ├── application_job.rb                          # 変更: retry_on / discard_on 追加（#A-3）
@@ -2941,12 +3002,13 @@ habitflow/
 │   │   ├── application_mailer.rb                       # #A-4: 全メール共通設定（fromアドレス）
 │   │   └── test_mailer.rb                              # #A-4: 動作確認用メイラー（将来のMailer実装の参考）
 │   └── views/
-│       ├── dashboards/                    # ダッシュボード画面（変更: 🔥ストリークバッジ追加 #B-3）
+│       ├── dashboards/                    # ダッシュボード画面（変更: 今日のタスクセクション追加 #C-1）
 │       ├── habits/                        # 習慣一覧・新規作成・編集・アーカイブ一覧画面（変更: ⋯メニュー置き換え・_habit_card_actions.html.erb追加 #B-5）
 │       ├── habit_records/                 # 習慣記録パーシャル（変更: 状態バッジ5パターン #B-3）
 │       ├── weekly_reflections/            # 振り返り一覧・入力・詳細画面（変更: リフレクション3項目・数値補正フィールド追加 #B-1）
 │       ├── shared/                        # ヘッダー・フッター・エラー表示パーシャル
 │       ├── errors/                        # 404・422・500 エラーページ
+│       ├── tasks/                         # #C-1: タスク一覧（9番）・新規作成（10番）画面
 │       └── layouts/
 │           └── application.html.erb  # 全ページ共通レイアウト（変更: yield :modals を</body>直前に追加 #B-5）
 ├── db/
@@ -2986,6 +3048,9 @@ habitflow/
 │   │   ├── resend.rb                      # #A-4: Resend APIキー初期化
 │   │   ├── bullet.rb                      # #A-6: N+1検出設定（development環境のみ）
 │   │   └── rack_mini_profiler.rb          # #A-6: クエリ数・実行時間可視化（development環境のみ）
+│   ├── locales/
+│   │   ├── en.yml                         # 英語ロケール
+│   │   └── ja.yml                         # 日本語ロケール（変更: Task属性名・エラーメッセージ追加 #C-1）
 │   └── environments/
 │       ├── development.rb                 # 変更: letter_opener設定追加（#A-4）
 │       └── production.rb                  # 変更: Action Mailer設定・GoodJob :async化（#A-4）
@@ -3006,7 +3071,8 @@ habitflow/
     │   ├── habit_excluded_day_test.rb     # #B-2: 除外日モデルテスト（15件）
     │   ├── habit_streak_test.rb           # #B-3: ストリーク計算テスト（25件・境界値・除外日・お休みモード）
     │   ├── habit_archive_test.rb          # #B-4: アーカイブ機能テスト（22件：scope・状態遷移・状態ガード異常系）
-    │   └── habit_sort_test.rb             # #B-6: カラー・アイコンバリデーション・acts_as_list 動作確認（8件）
+    │   ├── habit_sort_test.rb             # #B-6: カラー・アイコンバリデーション・acts_as_list 動作確認（8件）
+        └── task_test.rb                   # #C-1: バリデーション・enum・スコープ・インスタンスメソッド（17件）
     ├── integration/
     │   ├── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
     │   └── memo_flow_test.rb              # #B-7: メモ保存・部分更新・バリデーションエラー・スペース変換テスト（6件）
@@ -3014,7 +3080,8 @@ habitflow/
         ├── habits_archive_controller_test.rb  # #B-4: アーカイブコントローラーテスト（6件：archived一覧・archive・unarchive・他ユーザー防止）
         ├── habits_menu_controller_test.rb   # #B-5: ⋯メニュー・モーダル・アーカイブ・削除・ロック状態テスト（14件）
         ├── habits_sort_controller_test.rb # #B-6: 並び替え保存・未ログイン・不正ID混入テスト（3件）
-        └── habit_record_memo_test.rb      # #B-7: memoバリデーション・has_memo?メソッドテスト（8件）
+        ├── habit_record_memo_test.rb      # #B-7: memoバリデーション・has_memo?メソッドテスト（8件）
+        └── tasks_controller_test.rb       # #C-1: index・new・create・ロックチェック・Strong Parameters（14件）
 ```
 
 <br>
@@ -3044,7 +3111,8 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-383 runs, 953 assertions, 0 failures, 0 errors, 0 skips
+414 runs, 1042 assertions, 0 failures, 0 errors, 0 skips
+
 ```
 
 <br>
@@ -3083,6 +3151,8 @@ docker compose exec web bin/rails test
 | `test/controllers/habits_sort_controller_test.rb` | コントローラー | 並び替え保存・未ログイン防止・不正ID混入の安全処理（#B-6・3件） |
 | `test/models/habit_record_memo_test.rb` | モデル | `memo` バリデーション（nil/空文字/200文字/201文字）・`has_memo?` メソッド（nil/空文字/存在/スペースのみ）（#B-7・8件） |
 | `test/integration/memo_flow_test.rb` | 統合 | メモ保存・空文字→nil変換・201文字バリデーションエラー・スペースのみ→nil・部分更新2件（#B-7・6件） |
+| `test/models/task_test.rb` | モデル | Task enum・バリデーション・スコープ・overdue?/due_today?・soft_delete（#C-1・17件） |
+| `test/controllers/tasks_controller_test.rb` | コントローラー | index・new・create・ロックチェック・Strong Parameters拒否・travel_to+teardown方式（#C-1・14件） |
 
 <br>
 
@@ -4088,6 +4158,161 @@ const body = `numeric_value=${encodeURIComponent(numericValue)}`
 
 // saveMemo: memo だけ送る
 const body = `memo=${encodeURIComponent(memoValue)}`
+```
+
+<br>
+
+### Bullet の誤検知は `add_safelist` で抑制する（#C-1）
+
+<br>
+
+`includes` で先読みした関連を Ruby レベルの条件分岐後に参照する場合、<br>
+Bullet は「使っていない」と誤判定して `AVOID eager loading` 警告を出す。<br>
+`includes` を削除すると N+1 が発生するため削除してはいけない。<br>
+`Bullet.add_safelist` でモデルと関連名を指定して誤検知だけを抑制する。<br>
+```ruby
+# ❌ includes を削除 → チェック型習慣が増えると N+1 が発生する
+@habits = current_user.habits.active
+
+# ❌ unused_eager_loading_ignore= → Bullet にこのメソッドは存在しない
+Bullet.unused_eager_loading_ignore = { "Habit" => [:habit_excluded_days] }
+
+# ✅ add_safelist → 誤検知だけを抑制・N+1 監視は継続される
+Bullet.add_safelist(
+  type:        :unused_eager_loading,
+  class_name:  "Habit",
+  association: :habit_excluded_days
+)
+```
+正しいメソッド名は `Bullet.methods.grep(/safe|white|skip|allow/)` で確認できる。<br>
+`ignore` 系・`whitelist` 系のメソッド名は存在しないため注意すること。
+
+<br>
+
+### `travel_to` はブロックなし + `teardown` で `travel_back` すること（#C-1）
+
+<br>
+
+`setup` 内で `travel_to fixed_time do ... end` のブロック形式を使うと、<br>
+ブロックを抜けた瞬間に時間が元に戻り、テスト本体（`test "..." do`）はリアル時間で動いてしまう。<br>
+日付依存のテストが「ローカルでは通るが CI で落ちる」不安定なテストになる原因。<br>
+```ruby
+# ❌ ブロック形式 → setup を抜けると時間が戻る
+def setup
+  travel_to fixed_time do
+    @user = User.create!(...)  # ← ここは固定時間
+  end
+  # ← ここから先はリアル時間（テスト本体もリアル時間で動く）
+end
+
+# ✅ ブロックなし + teardown で travel_back
+def setup
+  travel_to fixed_time      # ← テスト全体で固定される
+  @user = User.create!(...)
+end
+
+def teardown
+  travel_back               # ← 次のテストに影響しないよう後始末
+end
+```
+
+<br>
+
+### `GROUP BY` と `ORDER BY` の競合は `unscope(:order)` で解消する（#C-1）
+
+<br>
+
+Rails の scope はチェーンすると `ORDER BY` が引き継がれる。<br>
+`scope :active` に `ORDER BY due_date` が含まれている場合、<br>
+`group(:priority).count` と組み合わせると PostgreSQL が以下のエラーを出す。<br>
+PG::GroupingError: column "tasks.due_date" must appear in the GROUP BY clause
+
+<br>
+
+`unscope(:order)` で `ORDER BY` 句だけを除去してから `GROUP BY` を実行することで解消できる。<br>
+`WHERE` 句（`deleted_at IS NULL` 等）は `unscope(:order)` の影響を受けないため安全。<br>
+```ruby
+# ❌ scope :active の ORDER BY が GROUP BY と競合
+priority_counts = base_tasks.not_archived.group(:priority).count
+
+# ✅ ORDER BY を除去してから GROUP BY
+priority_counts = base_tasks.not_archived.unscope(:order).group(:priority).count
+```
+
+<br>
+
+### Tailwind の `peer-checked` は「外れた状態」を自動リセットしない（#C-1）
+
+<br>
+
+`peer-checked` は「ラジオボタンが checked のとき」にスタイルを適用するが、<br>
+「他のラジオボタンが選ばれて checked が外れたとき」を自動で元に戻す機能はない。<br>
+3枚カード（Must/Should/Could）で1つを選ぶと他の2枚の選択スタイルが残るバグになる。<br>
+Stimulus コントローラーで全カードをリセットしてから選択カードだけをアクティブにすることで解決する。<br>
+```javascript
+// ✅ 全カードをリセット → 選択カードだけアクティブにする
+updateCards() {
+  this.labelTargets.forEach(label => {
+    const radio = label.querySelector("input[type='radio']")
+    const card  = label.querySelector("[data-priority-card-target='card']")
+    const activeClasses   = (card.dataset.activeClass   || "").split(" ").filter(Boolean)
+    const inactiveClasses = (card.dataset.inactiveClass || "").split(" ").filter(Boolean)
+    if (radio.checked) {
+      card.classList.add(...activeClasses)
+      card.classList.remove(...inactiveClasses)
+    } else {
+      card.classList.remove(...activeClasses)  // ← 外れた状態を確実にリセット
+      card.classList.add(...inactiveClasses)
+    }
+  })
+}
+```
+
+<br>
+
+### `before_validation` でデフォルト値を設定して NOT NULL 制約違反を防ぐ（#C-1）
+
+<br>
+
+フォームで `include_blank` を使うと未選択時に空文字が送信される。<br>
+enum カラムは空文字を `nil` に変換しようとするが、`NOT NULL` 制約があると `PG::NotNullViolation` になる。<br>
+`before_validation` で空文字・nil をデフォルト値に変換することで<br>
+DB制約を安全に満たしつつフォームの利便性（任意選択）も保持できる。<br>
+```ruby
+# ❌ include_blank + NOT NULL カラム → 未選択で PG::NotNullViolation
+f.select :task_type, [...], { include_blank: "選択してください" }
+
+# ✅ before_validation でデフォルトを設定
+before_validation :set_default_task_type
+
+def set_default_task_type
+  self.task_type = "normal" if task_type.blank?
+end
+```
+
+<br>
+
+### `has_many` の定義漏れは `NoMethodError` で気づく（#C-1）
+
+<br>
+
+`TasksController` で `current_user.tasks` を呼んでも `has_many :tasks` が `User` モデルに定義されていなければ<br>
+`NoMethodError: undefined method 'tasks' for an instance of User` が発生する。<br>
+テーブルが存在しアソシエーションの定義が漏れているだけのため、エラーメッセージから原因がわかりにくい。<br>
+モデルを追加したら必ず親モデル（`User`）に `has_many` / `belongs_to` を追加すること。<br>
+外部キー制約（`schema.rb` の `add_foreign_key`）はDB側の制約であり、Rails側の定義とは別物。<br>
+```ruby
+# ❌ user.rb に has_many がない → NoMethodError
+class User < ApplicationRecord
+  has_many :habits
+  # has_many :tasks が抜けている
+end
+
+# ✅ 忘れずに追加する
+class User < ApplicationRecord
+  has_many :habits
+  has_many :tasks, dependent: :destroy  # ← 追加
+end
 ```
 
 <br>
