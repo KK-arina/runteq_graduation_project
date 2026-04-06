@@ -124,6 +124,64 @@
     <% end %>
   </div>
 
+  <%#
+    ── 今日のタスクセクション（C-1 追加）──────────────────────────────────
+    今日が期限（due_date = 今日）のタスクを表示する。
+    DashboardsController に @today_tasks / @today_task_count を追加する必要がある。
+    ここでは @today_tasks を使う（コントローラー側も更新する）。
+  %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide">今日のタスク</h2>
+      <%= link_to "すべて見る →", tasks_path,
+            class: "text-xs text-blue-600 hover:underline" %>
+    </div>
+
+    <% if @today_tasks.empty? %>
+      <p class="text-sm text-gray-400">今日が期限のタスクはありません。</p>
+    <% else %>
+      <div class="space-y-2">
+        <% @today_tasks.each do |task| %>
+          <div class="flex items-center gap-3 py-2 border-b border-gray-100 last:border-b-0">
+            <%#
+              完了チェックボックス（C-2 で機能実装予定）
+              現時点では表示のみ（disabled）。
+            %>
+            <input type="checkbox"
+                   class="w-4 h-4 rounded border-gray-300 cursor-not-allowed"
+                   <%= "checked" if task.done? || task.archived? %>
+                   disabled
+                   aria-label="<%= task.title %>">
+
+            <%# 優先度バッジ %>
+            <span class="flex-shrink-0 text-xs font-bold px-1.5 py-0.5 rounded
+                         <%= task.must? ? 'bg-red-100 text-red-700' : task.should? ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700' %>">
+              <%= task.must? ? "Must" : task.should? ? "Should" : "Could" %>
+            </span>
+
+            <%# タスク名 %>
+            <span class="flex-1 text-sm text-gray-700 truncate
+                         <%= task.done? || task.archived? ? 'line-through text-gray-400' : '' %>">
+              <%= task.title %>
+            </span>
+
+            <%# 期限切れ表示 %>
+            <% if task.overdue? %>
+              <span class="flex-shrink-0 text-xs text-red-600 font-semibold">期限切れ</span>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% end %>
+
+    <% unless @locked %>
+      <div class="mt-3 pt-3 border-t border-gray-100">
+        <%= link_to "+ タスクを追加", new_task_path,
+              class: "text-xs text-blue-600 hover:underline" %>
+      </div>
+    <% end %>
+  </div>
+
   <%# クイックリンク（変更なし） %>
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
     <%= link_to habits_path,

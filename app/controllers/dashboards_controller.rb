@@ -15,11 +15,6 @@ class DashboardsController < ApplicationController
     @today      = HabitRecord.today_for_record
     @week_start = @today.beginning_of_week(:monday)
 
-    # includes(:habit_excluded_days)（B-2 追加）
-    # 【理由】
-    #   build_habit_stats 内の effective_weekly_target が
-    #   habit_excluded_days.size を呼ぶ。includes がないと
-    #   習慣ごとに追加 SQL が発行されて N+1 問題になる。
     @habits = current_user.habits.active
                           .includes(:habit_excluded_days)
                           .order(created_at: :desc)
@@ -34,6 +29,24 @@ class DashboardsController < ApplicationController
       (@habit_stats.values.map { |s| s[:rate] }.sum.to_f / @habit_stats.size).round
 
     @locked = locked?
+
+    # ── C-1 追加: 今日のタスク ──────────────────────────────────────────
+    # 今日が期限（due_date = 今日）のタスクを取得する。
+    # .active           → 論理削除されていないもの
+    # .not_archived     → アーカイブ済みを除く
+    # .today            → due_date = 今日（HabitRecord.today_for_record）
+    # .order(priority:) → 重要度順（must → should → could）
+    #
+    # なぜ today スコープを使うのか:
+    #   ダッシュボードには「今日やるべきタスク」のみ表示する。
+    #   due_date を持たないタスクや未来・過去のタスクは
+    #   タスク一覧ページ（/tasks）で管理する。
+    @today_tasks = current_user.tasks
+                                .active
+                                .not_archived
+                                .today
+                                .order(priority: :asc)
+                                .limit(5)  # ダッシュボードには最大5件表示
   end
 
   private

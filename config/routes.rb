@@ -44,6 +44,20 @@ Rails.application.routes.draw do
   get "dashboard", to: "dashboards#index", as: :dashboard
 
   # ---------------------------------------------------------------
+  # resources :tasks（C-1: タスク管理機能）
+  # ---------------------------------------------------------------
+  # only: [ :index, :new, :create ]:
+  #   C-1 では一覧・新規作成フォーム・作成処理の3つを実装する。
+  #   C-2 以降で完了チェック（toggle_complete）などのカスタムアクションを追加する。
+  #   C-3 で手動タスクの削除（destroy）を追加する。
+  #
+  # 生成されるルート:
+  #   GET  /tasks      → tasks#index  （一覧ページ）
+  #   GET  /tasks/new  → tasks#new    （新規作成フォーム）
+  #   POST /tasks      → tasks#create （作成処理）
+  resources :tasks, only: [ :index, :new, :create ]
+
+  # ---------------------------------------------------------------
   # resources :habits（B-4: アーカイブ関連ルートを追加）
   # ---------------------------------------------------------------
   # 【B-4 での変更点】

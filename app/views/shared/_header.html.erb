@@ -4,6 +4,15 @@
   全ページで使用される共通のナビゲーションバー。
   Issue #21 で「振り返り」ナビリンクを追加。
   Issue #26 でモバイル対応（ハンバーガーメニュー）を追加。
+  C-1 で「タスク管理」ナビリンクを追加。
+
+  【C-1 での変更点】
+  ① PC用ナビゲーションに「タスク管理」リンクを追加
+     「振り返り」リンクの直後に配置する。
+     controller_name == 'tasks' で現在ページ判定を行う。
+
+  ② モバイル用ドロップダウンメニューに「タスク管理」リンクを追加
+     PC用と同じ位置（「振り返り」の直後）に配置する。
 
   【PC版はIssue #24と完全一致】
   タグ      : <header>
@@ -22,34 +31,10 @@
 
   【Issue #33 での変更点（アクセシビリティ対応）】
   ① ナビゲーションを <nav> タグで囲み aria-label を追加
-     理由: <nav> タグは HTML5 のランドマーク要素。
-           "navigation" ランドマークとして認識され、
-           スクリーンリーダーユーザーが "N キー" でナビゲーションに素早くジャンプできる。
-           1ページに複数の <nav> がある場合、aria-label で区別する。
-
   ② PC用・モバイル用ナビリンクに aria-current を追加
-     理由: スクリーンリーダーのユーザーが「現在どのページにいるか」を
-           音声で確認できるようにするため。
-           aria-current="page" が設定されたリンクは
-           「現在のページ、ダッシュボード」のように読み上げられる。
-
   ③ ナビリンク・ボタンにフォーカスリングを追加
-     理由: キーボードのTabキーで移動したとき、どの要素にフォーカスがあるか
-           視覚的に分かるようにするため。WCAG 2.4.7（フォーカスの可視化）対応。
-
   ④ ユーザー名表示に aria-hidden="true" を追加
-     理由: ログアウトボタンの aria-label にユーザー名を含めているため、
-           「〇〇 さん」のspan を重複して読み上げないようにする。
-
   ⑤ ログアウトボタンに aria-label を追加
-     理由: 「ログアウト」だけでは「誰のアカウントからか」が不明。
-           ユーザー名を含めることで「自分のアカウント操作」と明確に伝わる。
-
-  ⑥ <header> の role="banner" は記述しない
-     理由: HTML5仕様では、ページ最上位に置かれた <header> は
-           自動的に role="banner" として認識されるため、
-           明示的に書くと「冗長なARIA」になる。
-           WAI-ARIA仕様の「ネイティブセマンティクスを優先する」原則に従う。
 
   【ERBコメントの制約（重要）】
   ERBコメントタグは Ruby コードとして処理される。
@@ -143,6 +128,28 @@
                       text-sm font-medium transition-colors
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
               aria: { current: controller_name == 'weekly_reflections' ? 'page' : false } %>
+
+          <%#
+            ── C-1 追加: タスク管理リンク（PC用）────────────────────────────
+            「振り返り」リンクの直後に配置する。
+
+            controller_name == 'tasks':
+              タスク一覧・新規作成ページ（TasksController）にいるとき
+              aria-current="page" を設定して現在ページを示す。
+              controller_name は Rails が自動で設定するヘルパーメソッド。
+              tasks_controller.rb の class TasksController から "tasks" が返る。
+
+            配置場所の理由:
+              「振り返り」の後、ユーザー名の前に置くことで
+              「習慣関連」→「タスク関連」→「振り返り関連」の
+              ワークフローの流れ（習慣管理→タスク管理→振り返り）に合わせている。
+          %>
+          <%= link_to "タスク管理", tasks_path,
+              class: "text-gray-600 hover:text-gray-900 px-3 py-2
+                      text-sm font-medium transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
+              aria: { current: controller_name == 'tasks' ? 'page' : false } %>
+          <%# ──────────────────────────────────────────────────────────────── %>
 
           <%#
             ユーザー名表示
@@ -301,6 +308,26 @@
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
               aria: { current: controller_name == 'weekly_reflections' ? 'page' : false } %>
+
+          <%#
+            ── C-1 追加: タスク管理リンク（モバイル用）──────────────────────
+            PC用ナビと同じ位置（「振り返り」の直後）に配置する。
+
+            block: ブロック要素として表示する。
+              モバイルメニューの各リンクは縦一列に並ぶため block が必要。
+              PC用ナビは flex 内のインライン要素なので block は不要だった。
+
+            controller_name == 'tasks':
+              PC用と同じ判定ロジックを使う。
+              コントローラー名が一致したとき aria-current="page" を設定する。
+          %>
+          <%= link_to "タスク管理", tasks_path,
+              class: "block px-3 py-2 rounded-md text-sm font-medium
+                      text-gray-600 hover:text-gray-900 hover:bg-gray-100
+                      transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
+              aria: { current: controller_name == 'tasks' ? 'page' : false } %>
+          <%# ──────────────────────────────────────────────────────────────── %>
 
           <div class="border-t border-gray-200 mt-1 pt-1">
             <%# aria-hidden="true": ユーザー名はログアウトボタンのaria-labelで伝えるため非表示 %>

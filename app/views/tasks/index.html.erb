@@ -1,0 +1,332 @@
+<%# app/views/tasks/index.html.erb %>
+<%#
+  ==============================================================================
+  タスク一覧ページ（C-1: 基本CRUD実装）
+  ==============================================================================
+  【このファイルの役割】
+    登録されたタスクを優先度別（Must/Should/Could）のタブで
+    フィルタリングして一覧表示する。
+
+  【C-1 の実装範囲】
+    - タブによるフィルタリング表示
+    - タスクカードの表示（タイトル・優先度・期限・種別）
+    - 「+ タスクを追加」ボタン（ロック中は非活性）
+    - 完了チェックは C-2 で実装するため今回は表示のみ
+
+  【使用するインスタンス変数（TasksController#index で設定）】
+    @tasks        : 表示するタスクの一覧
+    @current_tab  : 現在選択中のタブ名（"all" / "must" / "should" / "could" / "done"）
+    @must_count   : Must タスクの件数（タブバッジ用）
+    @should_count : Should タスクの件数（タブバッジ用）
+    @could_count  : Could タスクの件数（タブバッジ用）
+    @all_count    : 未完了タスクの合計件数（タブバッジ用）
+    @locked       : PDCAロック中かどうか
+==============================================================================
+%>
+<% content_for :title, "タスク管理 | HabitFlow" %>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <%#
+    ── PDCA強制ロック警告バナー ────────────────────────────────────────────
+    @locked が true のときのみ表示する。
+    ロック中はタスクの新規追加・削除ができない。
+    完了チェックはロック中でも可能（C-2 で実装）。
+  %>
+  <% if @locked %>
+    <div class="mb-6 bg-orange-50 border border-orange-200 border-l-4 border-l-orange-500 rounded-lg p-4">
+      <div class="flex items-start gap-3">
+        <svg class="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+        <div class="flex-1">
+          <p class="text-sm font-bold text-orange-800">⚠️ ロック中：新規追加・削除はできません</p>
+          <p class="text-xs text-orange-700 mt-1">先週の振り返りを完了すると解除されます。</p>
+          <%= link_to "振り返りページへ →", new_weekly_reflection_path,
+                class: "mt-2 inline-block text-xs font-bold text-white bg-orange-500 hover:bg-orange-600 px-4 py-2 rounded transition-colors" %>
+        </div>
+      </div>
+    </div>
+  <% end %>
+
+  <%# ── ページヘッダー ─────────────────────────────────────────────────── %>
+  <div class="flex flex-wrap justify-between items-center mb-6 gap-3">
+    <h1 class="text-2xl font-bold text-gray-900">タスク管理</h1>
+
+    <%#
+      「+ タスクを追加」ボタン
+      ロック中（@locked = true）は cursor-not-allowed で操作できない見た目にし、
+      クリックしても遷移しないよう href を "#" にした span タグで代替する。
+      ロック解除中は通常のリンクとして new_task_path に遷移する。
+    %>
+    <% if @locked %>
+      <span class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+                   bg-gray-200 text-gray-400 cursor-not-allowed"
+            aria-disabled="true"
+            title="先週の振り返りを完了するとタスクを追加できます">
+        🔒 + タスクを追加
+      </span>
+    <% else %>
+      <%= link_to new_task_path,
+            class: "inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium
+                    bg-blue-600 text-white hover:bg-blue-700 transition-colors" do %>
+        + タスクを追加
+      <% end %>
+    <% end %>
+  </div>
+
+  <%#
+    ── フィルタタブ ──────────────────────────────────────────────────────────
+    各タブは link_to で tasks_path(tab: "xxx") にリンクしている。
+    @current_tab と一致するタブをアクティブスタイル（青・太字）で表示する。
+
+    tab_class ヘルパーメソッド（インライン）:
+      三項演算子で現在タブかどうかを判定してクラスを返す。
+      選択中: bg-blue-600 text-white（青背景・白文字）
+      非選択: bg-white text-gray-600 hover（白背景・グレー文字）
+  %>
+  <div class="flex gap-2 mb-6 overflow-x-auto pb-1" role="tablist" aria-label="タスクのフィルタタブ">
+
+    <%# all タブ %>
+    <%= link_to tasks_path(tab: "all"),
+          class: "flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                  #{ @current_tab == 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' }",
+          role: "tab",
+          aria: { selected: @current_tab == "all" } do %>
+      全て
+      <% if @all_count > 0 %>
+        <%#
+          件数バッジ: タスクが何件あるか数字で表示する。
+          タブがアクティブなら白文字バッジ、非アクティブなら青バッジ。
+        %>
+        <span class="ml-1.5 inline-flex items-center justify-center
+                     w-5 h-5 rounded-full text-xs font-bold
+                     #{ @current_tab == 'all' ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-700' }">
+          <%= @all_count %>
+        </span>
+      <% end %>
+    <% end %>
+
+    <%# Must タブ %>
+    <%= link_to tasks_path(tab: "must"),
+          class: "flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                  #{ @current_tab == 'must' ? 'bg-red-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' }",
+          role: "tab",
+          aria: { selected: @current_tab == "must" } do %>
+      <span class="inline-flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-red-500 #{ @current_tab == 'must' ? 'bg-white' : '' }"></span>
+        Must
+        <% if @must_count > 0 %>
+          <span class="inline-flex items-center justify-center
+                       w-5 h-5 rounded-full text-xs font-bold
+                       #{ @current_tab == 'must' ? 'bg-white text-red-600' : 'bg-red-100 text-red-700' }">
+            <%= @must_count %>
+          </span>
+        <% end %>
+      </span>
+    <% end %>
+
+    <%# Should タブ %>
+    <%= link_to tasks_path(tab: "should"),
+          class: "flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                  #{ @current_tab == 'should' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' }",
+          role: "tab",
+          aria: { selected: @current_tab == "should" } do %>
+      <span class="inline-flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-blue-500 #{ @current_tab == 'should' ? 'bg-white' : '' }"></span>
+        Should
+        <% if @should_count > 0 %>
+          <span class="inline-flex items-center justify-center
+                       w-5 h-5 rounded-full text-xs font-bold
+                       #{ @current_tab == 'should' ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-700' }">
+            <%= @should_count %>
+          </span>
+        <% end %>
+      </span>
+    <% end %>
+
+    <%# Could タブ %>
+    <%= link_to tasks_path(tab: "could"),
+          class: "flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                  #{ @current_tab == 'could' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' }",
+          role: "tab",
+          aria: { selected: @current_tab == "could" } do %>
+      <span class="inline-flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-green-500 #{ @current_tab == 'could' ? 'bg-white' : '' }"></span>
+        Could
+        <% if @could_count > 0 %>
+          <span class="inline-flex items-center justify-center
+                       w-5 h-5 rounded-full text-xs font-bold
+                       #{ @current_tab == 'could' ? 'bg-white text-green-600' : 'bg-green-100 text-green-700' }">
+            <%= @could_count %>
+          </span>
+        <% end %>
+      </span>
+    <% end %>
+
+    <%# 完了済みタブ %>
+    <%= link_to tasks_path(tab: "done"),
+          class: "flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                  #{ @current_tab == 'done' ? 'bg-gray-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' }",
+          role: "tab",
+          aria: { selected: @current_tab == "done" } do %>
+      完了済み ✓
+    <% end %>
+  </div>
+
+  <%#
+    ── タスク一覧 ────────────────────────────────────────────────────────────
+    @tasks が空のとき: Empty State を表示する。
+    @tasks があるとき: タスクカードを一覧表示する。
+  %>
+  <% if @tasks.empty? %>
+    <%# Empty State: タスクが存在しないときに表示する案内 %>
+    <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
+      <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+        <span class="text-3xl" aria-hidden="true">✅</span>
+      </div>
+      <% if @current_tab == "done" %>
+        <p class="text-gray-500 mb-2">完了済みのタスクはまだありません</p>
+        <p class="text-sm text-gray-400">タスクを完了すると、ここに表示されます</p>
+      <% else %>
+        <p class="text-gray-500 mb-4">
+          <%= @current_tab == "all" ? "タスクはまだ登録されていません" : "#{@current_tab.capitalize} のタスクはありません" %>
+        </p>
+        <% unless @locked %>
+          <%= link_to "+ タスクを追加する", new_task_path,
+                class: "px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors" %>
+        <% end %>
+      <% end %>
+    </div>
+
+  <% else %>
+    <%# タスクカード一覧 %>
+    <div class="space-y-3">
+      <% @tasks.each do |task| %>
+        <%#
+          タスクカード
+          bg-white border rounded-xl: カードスタイル
+          hover:shadow-md: ホバー時に影を付けて浮き上がったように見せる
+          border-l-4: 左ボーダーで優先度カラーを表示する
+
+          優先度カラーの設定:
+            must   → 赤（border-red-500）
+            should → 青（border-blue-500）
+            could  → 緑（border-green-500）
+          done / archived → グレー（border-gray-300）、テキストを薄く
+        %>
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow
+                    border-l-4 <%= task.done? || task.archived? ? 'border-l-gray-300' : task.must? ? 'border-l-red-500' : task.should? ? 'border-l-blue-500' : 'border-l-green-500' %>">
+          <div class="flex items-start gap-3 p-4">
+
+            <%#
+              完了チェックボックス（C-2 で実装するため今は表示のみ）
+              C-2 実装後は data-controller="task-toggle" などに置き換える。
+              disabled: true で今はクリックしても何も起きない。
+            %>
+            <div class="flex-shrink-0 mt-0.5">
+              <input type="checkbox"
+                     class="w-5 h-5 rounded border-gray-300 text-blue-600 cursor-not-allowed"
+                     <%= "checked" if task.done? || task.archived? %>
+                     disabled
+                     aria-label="<%= task.title %>を完了にする（近日実装予定）">
+            </div>
+
+            <%# タスクの詳細情報 %>
+            <div class="flex-1 min-w-0">
+
+              <%# タイトルと優先度バッジ %>
+              <div class="flex items-start gap-2 flex-wrap">
+                <%#
+                  優先度バッジ
+                  must: 赤背景・白文字
+                  should: 青背景・白文字
+                  could: 緑背景・白文字
+                %>
+                <span class="flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded
+                             <%= task.must? ? 'bg-red-100 text-red-700' : task.should? ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700' %>">
+                  <%= task.must? ? "Must" : task.should? ? "Should" : "Could" %>
+                </span>
+
+                <%# タスクタイトル %>
+                <h3 class="text-sm font-semibold text-gray-800 leading-snug flex-1
+                           <%= task.done? || task.archived? ? 'line-through text-gray-400' : '' %>">
+                  <%= task.title %>
+                </h3>
+              </div>
+
+              <%# メタ情報（期限・種別・見積時間）のエリア %>
+              <div class="flex items-center gap-3 mt-1.5 flex-wrap">
+
+                <%# 期限日の表示 %>
+                <% if task.due_date.present? %>
+                  <span class="text-xs flex items-center gap-1
+                               <%= task.overdue? ? 'text-red-600 font-bold' : task.due_today? ? 'text-orange-600 font-semibold' : 'text-gray-400' %>">
+                    <%#
+                      カレンダーアイコン（SVG）
+                      aria-hidden="true": スクリーンリーダーには読み上げさせない装飾アイコン
+                    %>
+                    <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    <% if task.overdue? %>
+                      期限切れ（<%= task.due_date.strftime("%-m/%-d") %>）
+                    <% elsif task.due_today? %>
+                      今日期限
+                    <% else %>
+                      <%= task.due_date.strftime("%-m/%-d") %>
+                    <% end %>
+                  </span>
+                <% end %>
+
+                <%# タスク種別（AI生成フラグ）の表示 %>
+                <% if task.ai_generated? %>
+                  <span class="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+                    🤖 AI生成
+                  </span>
+                <% end %>
+
+                <%# 見積時間の表示 %>
+                <% if task.estimated_hours.present? %>
+                  <span class="text-xs text-gray-400 flex items-center gap-1">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                    <%#
+                      format("%g", ...): 小数点以下の不要なゼロを削除して表示する。
+                      例: 2.0 → "2"、2.5 → "2.5"
+                    %>
+                    <%= format("%g", task.estimated_hours) %>時間
+                  </span>
+                <% end %>
+
+                <%# 完了済みバッジ %>
+                <% if task.archived? %>
+                  <span class="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                    アーカイブ済み
+                  </span>
+                <% end %>
+              </div>
+            </div>
+
+            <%#
+              ⋯ メニューボタン（C-3 で実装するため今は非表示）
+              C-3 で手動タスクの削除機能と合わせて実装する。
+              ロック中は非表示。ai_generated のタスクには表示しない。
+              今は「近日実装」のプレースホルダーとして空のスペースを残す。
+            %>
+          </div>
+        </div>
+      <% end %>
+    </div>
+
+    <%# タスク件数表示 %>
+    <div class="mt-4 text-center text-xs text-gray-400">
+      <%= @tasks.count %>件のタスク
+    </div>
+  <% end %>
+
+</div>
