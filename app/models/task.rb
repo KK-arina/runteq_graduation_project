@@ -1,12 +1,13 @@
 # app/models/task.rb
 #
 # ==============================================================================
-# Task（タスク）モデル（C-1: 基本CRUD実装）
+# Task（タスク）モデル（C-2: 完了チェック・ステータス管理を追加）
 # ==============================================================================
 #
-# 【このファイルの役割】
-#   タスクの登録・管理に関するデータ構造とビジネスロジックを定義する。
-#   Must/Should/Could の優先度と、todo/doing/done/archived の状態を管理する。
+# 【C-2 での変更点】
+#   インスタンスメソッドに以下を追加:
+#     toggle_complete! → 完了↔未完了を切り替える（completed_at も同時更新）
+#     archive!         → status を archived に変更する
 #
 # 【テーブル構成（schema.rb より）】
 #   tasks テーブルは A-1 のマイグレーションで既に作成済み。
@@ -25,15 +26,6 @@
 #     completed_at   : 完了日時（任意）
 #     ai_generated   : AI生成フラグ（デフォルト false）
 #     deleted_at     : 論理削除日時（任意）
-#
-# 【enum の設計方針】
-#   enum は整数値と文字列を対応させる仕組み。
-#   DB には整数が保存され、アプリ内では "must" などの文字列で扱う。
-#   priority のデフォルトが 1（should）なのは schema.rb で定義されている。
-#
-# 【scope の設計方針】
-#   スコープはよく使う検索条件をメソッドとして定義したもの。
-#   コントローラーで毎回 where を書く代わりに scope を使う。
 # ==============================================================================
 
 class Task < ApplicationRecord
@@ -84,10 +76,6 @@ class Task < ApplicationRecord
   #   0:normal   → 通常のタスク（ユーザーが手動で作成）
   #   1:habit    → 習慣関連タスク（habit_id と紐付く）
   #   2:improve  → 改善タスク（AI 提案から生成）
-  #
-  #   なぜ task_type という名前にするのか:
-  #     Rails の enum は内部で "type" という名前のカラムをポリモーフィックとして
-  #     特別扱いする場合がある。混乱を避けるため "task_type" という名前にしている。
   enum :task_type, {
     normal:  0,
     habit:   1,
@@ -101,12 +89,6 @@ class Task < ApplicationRecord
   #   1:doing    → 進行中
   #   2:done     → 完了
   #   3:archived → アーカイブ（完了後に非表示にする）
-  #
-  #   なぜ archived を done と分けるのか:
-  #     done にしてもタスク一覧に残ると画面が煩雑になる。
-  #     archived にすることで「完了済みの履歴」として保持しつつ
-  #     通常の一覧から非表示にできる。
-  #     これは habits の deleted_at / archived_at の設計思想と同じ。
   enum :status, {
     todo:     0,
     doing:    1,
@@ -122,27 +104,15 @@ class Task < ApplicationRecord
   #   task_type が空または nil の場合に "normal" を自動設定する。
   #   フォームで種別を選ばずに送信した場合の NOT NULL 制約違反を防ぐ。
   before_validation :set_default_task_type
-  
+
   # ============================================================
   # バリデーション
   # ============================================================
 
-  # title の必須チェック・文字数制限
-  #   タスク名は必須で、100文字以内とする。
-  #   50文字に制限している習慣名（habit.name）より長くしているのは、
-  #   タスクはより具体的な行動を記述するため。
   validates :title,
             presence: { message: "タスク名を入力してください" },
             length:   { maximum: 100, message: "タスク名は100文字以内で入力してください" }
 
-  # priority の必須チェック・有効値チェック
-  #   schema.rb の default: 1（should）があるので基本的に nil にはならないが、
-  #   フォームから不正な値が送られた場合に備えてバリデーションを設ける。
-  #
-  #   inclusion: { in: priorities.keys }:
-  #     enum で定義したキー（"must", "should", "could"）の配列に含まれるか確認する。
-  #     priorities は Task.priorities で取得できるハッシュ。
-  #     .keys で ["must", "should", "could"] の配列になる。
   validates :priority,
             presence:  true,
             inclusion: {
@@ -150,20 +120,12 @@ class Task < ApplicationRecord
               message: "優先度は Must / Should / Could から選択してください"
             }
 
-  # task_type のバリデーション
-  # 【修正】presence は外したが allow_blank は付けない。
-  #   空文字が来た場合は before_validation で "normal" にデフォルト設定する。
-  #   DB は NOT NULL 制約があるため nil/空文字は通せない。
   validates :task_type,
             inclusion: {
               in:      task_types.keys,
               message: "が不正です"
             }
 
-  # estimated_hours のバリデーション
-  #   見積時間は任意だが、入力する場合は 0 より大きい正の数に制限する。
-  #   allow_nil: true で未入力（nil）を許容する。
-  #   numericality: { greater_than: 0 } で 0 以下の値を拒否する。
   validates :estimated_hours,
             numericality: {
               greater_than: 0,
@@ -177,13 +139,6 @@ class Task < ApplicationRecord
 
   # scope :active
   #   論理削除されていない（deleted_at が nil）タスクを取得する。
-  #   deleted_at は「完全に削除した」タスクに日時が入る。
-  #   通常の一覧表示では論理削除されたタスクは表示しない。
-  #
-  #   ORDER BY の設計:
-  #     ① priority ASC → must(0) が先、could(2) が後の重要度順
-  #     ② due_date ASC NULLS LAST → 期限が近い順、期限なしは末尾
-  #     ③ created_at ASC → 作成順（最終的な並び順の安定化）
   scope :active, -> {
     where(deleted_at: nil)
       .order(Arel.sql("priority ASC, due_date ASC NULLS LAST, created_at ASC"))
@@ -191,46 +146,19 @@ class Task < ApplicationRecord
 
   # scope :not_archived
   #   アーカイブ（status=3）されていないタスクを取得する。
-  #   active スコープと組み合わせて使う:
-  #     current_user.tasks.active.not_archived → 通常の一覧表示
-  #
-  #   なぜ active に含めないのか:
-  #     アーカイブ一覧（完了済みタスク履歴）を表示するときに
-  #     active.archived（status=3 のみ）として使いたいから。
-  #     active の中に not_archived を含めてしまうと、
-  #     アーカイブ一覧が取得できなくなる。
   scope :not_archived, -> { where.not(status: Task.statuses[:archived]) }
 
   # scope :must / :should / :could
-  #   enum が自動生成するスコープと同じだが、
-  #   明示的に定義することでコードの意図が明確になる。
-  #   実際には enum の自動生成スコープ（Task.must など）で十分だが、
-  #   チェーンしやすいようにここで明示する。
-  #
-  #   使用例: current_user.tasks.active.not_archived.must
   scope :must,   -> { where(priority: priorities[:must]) }
   scope :should, -> { where(priority: priorities[:should]) }
   scope :could,  -> { where(priority: priorities[:could]) }
 
   # scope :today
   #   今日が期限（due_date）のタスクを取得する。
-  #   ダッシュボードの「今日のタスク」セクションで使う。
-  #
-  #   HabitRecord.today_for_record:
-  #     AM4:00 基準の「今日の日付」を返すメソッド。
-  #     習慣記録と同じ基準日で「今日」を定義することで
-  #     深夜のタスク管理も一貫した体験になる。
-  #
-  #   due_date: HabitRecord.today_for_record:
-  #     due_date が今日の日付と一致するレコードのみ取得する。
   scope :today, -> { where(due_date: HabitRecord.today_for_record) }
 
   # scope :overdue
   #   期限が過ぎている（due_date < 今日）かつ未完了のタスクを取得する。
-  #   一覧ページで期限切れの強調表示に使う。
-  #
-  #   where.not(status: [statuses[:done], statuses[:archived]]):
-  #     完了済み・アーカイブ済みは期限切れとして扱わない。
   scope :overdue, -> {
     where(due_date: ...(HabitRecord.today_for_record))
       .where.not(status: [ statuses[:done], statuses[:archived] ])
@@ -242,19 +170,12 @@ class Task < ApplicationRecord
 
   # soft_delete
   #   論理削除（deleted_at に現在時刻を設定する）。
-  #   物理削除（destroy）と異なり、データは DB に残る。
-  #   削除後も「どんなタスクを作っていたか」の履歴が保持される。
-  #
-  #   touch(:deleted_at):
-  #     deleted_at カラムに現在時刻を設定し、保存する。
-  #     バリデーションをスキップする（touch は rails 内部の高速更新メソッド）。
   def soft_delete
     touch(:deleted_at)
   end
 
   # active?
   #   論理削除されていないか判定する。
-  #   deleted_at.nil? が true → まだ削除されていない（active）。
   def active?
     deleted_at.nil?
   end
@@ -267,14 +188,6 @@ class Task < ApplicationRecord
 
   # overdue?
   #   期限切れか判定する（due_date が今日より前 かつ 未完了）。
-  #   ビューで期限切れを赤文字で表示するために使う。
-  #
-  #   due_date.present?:
-  #     due_date が nil のタスクは期限なし → 期限切れにならない。
-  #   due_date < HabitRecord.today_for_record:
-  #     due_date が今日より前 → 期限切れ。
-  #   !done? && !archived?:
-  #     完了済み・アーカイブ済みは期限切れとして扱わない。
   def overdue?
     due_date.present? &&
       due_date < HabitRecord.today_for_record &&
@@ -284,16 +197,74 @@ class Task < ApplicationRecord
 
   # due_today?
   #   今日が期限か判定する。
-  #   ダッシュボードで「今日が期限」のバッジを表示するために使う。
   def due_today?
     due_date.present? && due_date == HabitRecord.today_for_record
+  end
+
+  # ----------------------------------------------------------
+  # C-2 追加: toggle_complete!
+  # ----------------------------------------------------------
+  # 完了↔未完了を切り替えるメソッド。
+  #
+  # 【なぜモデルにロジックを書くのか】
+  #   コントローラーに書くと「どんな操作をしているか」がわかりにくくなる。
+  #   モデルにメソッドとして定義することで、
+  #   「タスクの完了切り替え」という意図が明確になり、
+  #   テストも書きやすくなる（Fat Controller を避ける設計原則）。
+  #
+  # 【動作の流れ】
+  #   現在の status が done → todo に戻す（completed_at も nil に）
+  #   現在の status が todo / doing → done にする（completed_at に現在時刻を設定）
+  #
+  # 【update! を使う理由】
+  #   update! はバリデーションを通過した場合のみ保存する。
+  #   保存失敗時は ActiveRecord::RecordInvalid 例外を発生させるため、
+  #   コントローラー側で rescue して適切なエラー処理ができる。
+  #   （save は失敗時に false を返すだけで例外を投げない）
+  #
+  # 【archived? のガード】
+  #   アーカイブ済みのタスクはチェックボックスで操作しない設計にする。
+  #   誤ってアーカイブ済みが toggle されるのを防ぐ。
+  def toggle_complete!
+    # アーカイブ済みは操作しない
+    return if archived?
+
+    if done?
+      # 完了済み → 未完了（todo）に戻す
+      # completed_at も nil にリセットする
+      update!(status: :todo, completed_at: nil)
+    else
+      # 未完了（todo / doing）→ 完了（done）にする
+      # completed_at に現在時刻を設定する
+      # Time.current: Rails のタイムゾーン設定（config.time_zone）を考慮した現在時刻
+      #   Time.now だとサーバーのローカル時刻になるため、
+      #   必ず Time.current を使うこと（JST が正しく記録される）
+      update!(status: :done, completed_at: Time.current)
+    end
+  end
+
+  # ============================================================
+  # C-2 修正: archive!
+  # ============================================================
+  # 【修正内容】
+  #   done? のガードを追加する。
+  #   done 以外のタスク（todo / doing / archived）は archive! できない。
+  #
+  # 【なぜ done? ガードが必要か】
+  #   UI 側では「アーカイブ」ボタンを done タスクにのみ表示しているが、
+  #   直接 PATCH リクエストを送れば todo タスクをアーカイブできてしまう。
+  #   サーバー側でもガードすることで「done のみアーカイブ可能」を保証する。
+  def archive!
+    return if archived?   # 二重アーカイブ防止
+    return unless done?   # done 以外は操作しない（C-2 修正追加）
+
+    update!(status: :archived)
   end
 
   private
 
   # set_default_task_type
   #   task_type が blank（nil または空文字）の場合に "normal" を設定する。
-  #   blank? は nil と "" の両方を true として扱う。
   def set_default_task_type
     self.task_type = "normal" if task_type.blank?
   end
