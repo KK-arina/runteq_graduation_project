@@ -282,4 +282,143 @@ class TaskTest < ActiveSupport::TestCase
     @valid_task.due_date = HabitRecord.today_for_record + 1.day
     assert_not @valid_task.due_today?, "明日が期限なのに due_today? が true を返した"
   end
+
+  # ============================================================
+  # C-2 追加テスト: toggle_complete!
+  # ============================================================
+
+  test "toggle_complete!: todo タスクを done にできる" do
+    travel_to Time.zone.local(2026, 4, 8, 10, 0, 0) do
+      task = Task.new(
+        user:     users(:one),
+        title:    "完了テスト",
+        priority: :must,
+        status:   :todo
+      )
+      task.save!
+
+      task.toggle_complete!
+
+      assert task.done?, "status が done になること"
+      assert_not_nil task.completed_at, "completed_at が設定されること"
+    end
+  end
+
+  test "toggle_complete!: done タスクを todo に戻せる" do
+    travel_to Time.zone.local(2026, 4, 8, 10, 0, 0) do
+      task = Task.new(
+        user:         users(:one),
+        title:        "未完了に戻すテスト",
+        priority:     :should,
+        status:       :done,
+        completed_at: Time.current
+      )
+      task.save!
+
+      task.toggle_complete!
+
+      assert task.todo?, "status が todo に戻ること"
+      assert_nil task.completed_at, "completed_at が nil になること"
+    end
+  end
+
+  test "toggle_complete!: archived タスクは操作されない" do
+    travel_to Time.zone.local(2026, 4, 8, 10, 0, 0) do
+      task = Task.new(
+        user:         users(:one),
+        title:        "アーカイブ済みテスト",
+        priority:     :could,
+        status:       :archived,
+        completed_at: Time.current
+      )
+      task.save!
+
+      task.toggle_complete!
+
+      # archived のまま変わらない
+      assert task.archived?, "archived のままであること"
+    end
+  end
+
+  test "archive!: done タスクを archived にできる" do
+    travel_to Time.zone.local(2026, 4, 8, 10, 0, 0) do
+      task = Task.new(
+        user:         users(:one),
+        title:        "アーカイブテスト",
+        priority:     :must,
+        status:       :done,
+        completed_at: Time.current
+      )
+      task.save!
+
+      task.archive!
+
+      assert task.archived?, "status が archived になること"
+      assert_not_nil task.completed_at, "completed_at は保持されること"
+    end
+  end
+
+  test "archive!: すでに archived のタスクは二重にアーカイブされない" do
+    travel_to Time.zone.local(2026, 4, 8, 10, 0, 0) do
+      task = Task.new(
+        user:         users(:one),
+        title:        "二重アーカイブ防止テスト",
+        priority:     :must,
+        status:       :archived,
+        completed_at: Time.current
+      )
+      task.save!
+
+      original_updated_at = task.updated_at
+
+      task.archive!
+
+      task.reload
+      # updated_at が変わっていないことを確認（DB更新が起きていない）
+      assert_equal original_updated_at, task.updated_at, "二重アーカイブは発生しないこと"
+    end
+  end
+
+  # ============================================================
+  # C-2 修正追加テスト: archive! のガード
+  # ============================================================
+
+  test "archive!: todo タスクはアーカイブできない" do
+    travel_to Time.zone.local(2026, 4, 8, 10, 0, 0) do
+      task = Task.new(
+        user:     users(:one),
+        title:    "未完了アーカイブ禁止テスト",
+        priority: :must,
+        status:   :todo
+      )
+      task.save!
+
+      original_status = task.status
+
+      # todo タスクに archive! を呼ぶ
+      task.archive!
+
+      # status が変わっていないことを確認
+      task.reload
+      assert_equal original_status, task.status,
+                  "todo タスクは archive! しても status が変わらないこと"
+    end
+  end
+
+  test "archive!: doing タスクはアーカイブできない" do
+    travel_to Time.zone.local(2026, 4, 8, 10, 0, 0) do
+      task = Task.new(
+        user:     users(:one),
+        title:    "進行中アーカイブ禁止テスト",
+        priority: :should,
+        status:   :doing
+      )
+      task.save!
+
+      task.archive!
+
+      task.reload
+      assert task.doing?, "doing タスクは archive! しても doing のままであること"
+    end
+  end
 end

@@ -1,0 +1,125 @@
+<%# app/views/tasks/_task_row.html.erb %>
+<%#
+  ==============================================================================
+  未完了タスク行パーシャル（C-2: 完了チェック・ステータス管理）
+  ==============================================================================
+  【このファイルの役割】
+    タスク一覧ページの「未完了タスク」を1行分描画するパーシャル。
+    Turbo Stream で個別に差し替えられるため、単独ファイルに分離している。
+
+  【受け取るローカル変数】
+    task   : Task インスタンス
+    locked : ロック中かどうか（Boolean）
+
+  【dom_id(task) について】
+    dom_id は Rails のヘルパーメソッド。
+    Task インスタンスを渡すと "task_1"（id が 1 のとき）という文字列を返す。
+    これが Turbo Stream の replace/remove のターゲット id になる。
+    Turbo Stream 側で turbo_stream.replace(dom_id(@task), ...) と書いているため、
+    ここの id と完全に一致させる必要がある。
+  ==============================================================================
+%>
+
+<div id="<%= dom_id(task) %>"
+     class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow
+            border-l-4 <%= task.must? ? 'border-l-red-500' : task.should? ? 'border-l-blue-500' : 'border-l-green-500' %>">
+  <div class="flex items-start gap-3 p-4">
+
+    <%#
+      完了チェックボックス（C-2 実装）
+      ================================================================
+      data-controller="task-toggle":
+        task_toggle_controller.js をこの要素に紐付ける。
+        この div の中の要素すべてが Stimulus のスコープになる。
+
+      data-task-toggle-url-value:
+        Stimulus の Values API を使って、
+        fetch 先の URL をコントローラーに渡す。
+        toggle_complete_task_path(task) で
+        "/tasks/1/toggle_complete" のようなURLを生成する。
+
+      data-task-toggle-task-id-value:
+        タスクの ID を Stimulus に渡す（デバッグやログ用）。
+
+      なぜ form_with ではなく Stimulus fetch を使うのか:
+        form_with の POST は Turbo Drive がページ全体を置き換える。
+        チェックボックスのような「行だけ更新したい」操作では
+        Turbo Stream（差分更新）のほうが UX が良い。
+        Stimulus の fetch から turbo-stream ヘッダーを付けて送ることで
+        コントローラー側の format.turbo_stream が発動する。
+    %>
+    <div class="flex-shrink-0 mt-0.5"
+         data-controller="task-toggle"
+         data-task-toggle-url-value="<%= toggle_complete_task_path(task) %>"
+         data-task-toggle-task-id-value="<%= task.id %>">
+
+      <%#
+        チェックボックス本体
+        data-action="change->task-toggle#toggle":
+          チェックボックスの change イベント（チェックした/外した）が発生したとき
+          task_toggle_controller.js の toggle メソッドを呼び出す。
+
+        aria-label:
+          スクリーンリーダーに「○○を完了にする」と読み上げさせる。
+          チェックボックスの目的を音声で伝えるために必要。
+      %>
+      <input type="checkbox"
+             class="w-5 h-5 rounded border-gray-300 text-blue-600 cursor-pointer
+                    focus:ring-2 focus:ring-blue-500"
+             data-action="change->task-toggle#toggle"
+             aria-label="<%= task.title %>を完了にする">
+    </div>
+
+    <%# タスクの詳細情報 %>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-start gap-2 flex-wrap">
+        <%# 優先度バッジ %>
+        <span class="flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded
+                     <%= task.must? ? 'bg-red-100 text-red-700' : task.should? ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700' %>">
+          <%= task.must? ? "Must" : task.should? ? "Should" : "Could" %>
+        </span>
+
+        <%# タスクタイトル %>
+        <h3 class="text-sm font-semibold text-gray-800 leading-snug flex-1">
+          <%= task.title %>
+        </h3>
+      </div>
+
+      <%# メタ情報（期限・種別・見積時間） %>
+      <div class="flex items-center gap-3 mt-1.5 flex-wrap">
+        <% if task.due_date.present? %>
+          <span class="text-xs flex items-center gap-1
+                       <%= task.overdue? ? 'text-red-600 font-bold' : task.due_today? ? 'text-orange-600 font-semibold' : 'text-gray-400' %>">
+            <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <% if task.overdue? %>
+              期限切れ（<%= task.due_date.strftime("%-m/%-d") %>）
+            <% elsif task.due_today? %>
+              今日期限
+            <% else %>
+              <%= task.due_date.strftime("%-m/%-d") %>
+            <% end %>
+          </span>
+        <% end %>
+
+        <% if task.ai_generated? %>
+          <span class="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
+            🤖 AI生成
+          </span>
+        <% end %>
+
+        <% if task.estimated_hours.present? %>
+          <span class="text-xs text-gray-400 flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <%= format("%g", task.estimated_hours) %>時間
+          </span>
+        <% end %>
+      </div>
+    </div>
+  </div>
+</div>

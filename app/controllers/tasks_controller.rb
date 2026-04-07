@@ -1,215 +1,432 @@
 # app/controllers/tasks_controller.rb
 #
 # ==============================================================================
-# TasksController（C-1: 基本CRUD実装）
+# TasksController（C-2: 完了チェック・ステータス管理を追加）
 # ==============================================================================
 #
-# 【このファイルの役割】
-#   タスクの一覧表示・新規作成を担当するコントローラー。
+# 【C-2 エラー修正】
+#   dom_id / content_tag はビューヘルパーメソッドのため、
+#   コントローラーからそのまま呼ぶと NoMethodError になる。
 #
-# 【C-1 で実装するアクション】
-#   index  → GET  /tasks        → タスク一覧ページ（9番画面）
-#   new    → GET  /tasks/new    → タスク新規作成ページ（10番画面）
-#   create → POST /tasks        → タスク作成処理
+#   解決方法: 必要なヘルパーモジュールを include する。
 #
-# 【before_action の設計】
-#   require_login:
-#     ApplicationController で定義済み。
-#     未ログインユーザーをログインページにリダイレクトする。
-#     全アクションに適用（only: は指定しない）。
+#   ActionView::RecordIdentifier:
+#     dom_id / dom_class を提供するモジュール。
+#     dom_id(@task) → "task_1" のような文字列を生成する。
+#     Turbo Stream の replace / remove のターゲット id に使う。
 #
-# 【セキュリティ設計】
-#   current_user.tasks で検索することで、
-#   他のユーザーのタスクには絶対にアクセスできない設計にする。
-#   tasks.find(id) ではなく current_user.tasks.find(id) を使う。
+#   ActionView::Helpers::TagHelper:
+#     content_tag を提供するモジュール。
+#     content_tag(:p, "テキスト", class: "...") → <p class="...">テキスト</p>
+#     archive_all_done の Turbo Stream レスポンスで空状態のHTMLを生成するために使う。
+#
+#   なぜコントローラーに include するのか:
+#     Rails のコントローラーはデフォルトでビューヘルパーを持っていない。
+#     ビューヘルパーはビューファイル（.html.erb）でのみ自動で使える。
+#     コントローラーのアクション内で使うには明示的に include が必要。
 # ==============================================================================
 
 class TasksController < ApplicationController
-  # before_action :require_login
-  #   全アクション実行前にログイン確認を行う。
-  #   ログインしていない場合は require_login がリダイレクトして
-  #   アクションの処理を中断する。
+  # ============================================================
+  # ビューヘルパーの include（C-2 追加）
+  # ============================================================
+
+  # ActionView::RecordIdentifier を include することで
+  # dom_id / dom_class がコントローラー内で使えるようになる
+  include ActionView::RecordIdentifier
+
+  # ActionView::Helpers::TagHelper を include することで
+  # content_tag がコントローラー内で使えるようになる
+  include ActionView::Helpers::TagHelper
+
   before_action :require_login
+  before_action :set_task, only: [ :toggle_complete, :archive ]
 
   # ============================================================
-  # index アクション
+  # index アクション（C-1 から変更なし）
   # ============================================================
-  # GET /tasks
-  # タスク一覧ページを表示する（9番画面）。
-  #
-  # 【フィルタタブの実装方針】
-  #   params[:tab] でどのタブが選択されているかを判断する。
-  #   タブ: all（全て）/ must / should / could / done（完了済み）
-  #   デフォルトは "all"。
-  #
-  # 【@tasks の取得設計】
-  #   current_user.tasks → 自分のタスクのみ（他ユーザーのタスクは取得しない）
-  #   .active            → 論理削除されていないもの
-  #   タブに応じてさらに絞り込む。
   def index
     @locked = locked?
-
-    # 選択中のタブを params[:tab] から取得する。
-    # params[:tab] が nil（タブ未指定）の場合は "all" をデフォルトにする。
-    # || "all": params[:tab] が nil または空文字の場合に "all" を使う Ruby の演算子。
     @current_tab = params[:tab] || "all"
 
-    # ベースとなるタスクのクエリを組み立てる。
-    # current_user.tasks:
-    #   has_many :tasks で定義された関連を使い、ログイン中ユーザーのタスクのみを取得する。
-    #   SQL: WHERE user_id = current_user.id
-    #
-    # .active:
-    #   Task モデルの scope :active → WHERE deleted_at IS NULL ORDER BY priority, due_date, created_at
     base_tasks = current_user.tasks.active
 
-    # タブに応じてクエリを絞り込む。
-    # case 文で @current_tab の値に応じて異なるスコープを適用する。
     @tasks = case @current_tab
-             when "must"
-               # Must（絶対にやる）タスクのみ表示。
-               # .not_archived で完了・アーカイブ済みを除外する。
-               base_tasks.not_archived.must
-             when "should"
-               # Should（できればやる）タスクのみ表示。
-               base_tasks.not_archived.should
-             when "could"
-               # Could（余裕があればやる）タスクのみ表示。
-               base_tasks.not_archived.could
-             when "done"
-               # 完了済み（done または archived）タスクを表示する。
-               # not_archived は適用しない（完了タブなのでアーカイブも含める）。
-               base_tasks.where(status: [ Task.statuses[:done], Task.statuses[:archived] ])
-             else
-               # "all"（デフォルト）: 未完了・進行中のタスクを表示する。
-               # done と archived は「完了済みタブ」に移動するので通常の一覧には含めない。
-               base_tasks.not_archived
-             end
+            when "must"
+              base_tasks.not_archived.must
+            when "should"
+              base_tasks.not_archived.should
+            when "could"
+              base_tasks.not_archived.could
+            when "done"
+              # 【C-2 修正】done のみ（archived を除外する）
+              # 修正前: where(status: [done, archived])
+              # 修正後: where(status: :done) のみ
+              #
+              # 理由:
+              #   archived タスクは「非表示」が正しい設計（パターンA採用）。
+              #   done タブに archived を混ぜると
+              #   「アーカイブボタンが出ない archived タスク」が表示されて混乱する。
+              #   archived は DB に保持するが UI からは見えなくする。
+              base_tasks.where(status: Task.statuses[:done])
+            else
+              base_tasks.not_archived
+            end
 
-    # タスクの件数をタブごとに集計する。
-    # タブのバッジ（件数表示）に使う。
-    #
-    # 【修正理由】
-    # base_tasks は scope :active を含んでおり、
-    # ORDER BY priority ASC, due_date ASC NULLS LAST が付いている。
-    # PostgreSQL では GROUP BY priority のとき、
-    # SELECT / ORDER BY に含まれるカラムは GROUP BY にも含める必要がある。
-    # due_date が ORDER BY に含まれているため PG::GroupingError が発生する。
-    #
-    # 【解決方法】
-    # unscope(:order) で scope :active が付けた ORDER BY を除去してから
-    # GROUP BY を実行する。
-    # unscope(:order) は ORDER BY 句だけを取り除き、WHERE 句は保持する。
-    # そのため「deleted_at IS NULL」「status != archived」の絞り込みは維持される。
     priority_counts = base_tasks.not_archived.unscope(:order).group(:priority).count
 
-    # priority_counts は { 0 => 3, 1 => 2 } のような整数キーのハッシュになるため、
-    # Task.priorities で整数に変換してアクセスする。
-    # Task.priorities は { "must" => 0, "should" => 1, "could" => 2 } を返す。
     @must_count   = priority_counts[Task.priorities[:must]]   || 0
     @should_count = priority_counts[Task.priorities[:should]] || 0
     @could_count  = priority_counts[Task.priorities[:could]]  || 0
-
-    # 未完了タスクの合計件数（all タブのバッジ用）
-    @all_count = @must_count + @should_count + @could_count
+    @all_count    = @must_count + @should_count + @could_count
   end
 
   # ============================================================
-  # new アクション
+  # new アクション（C-1 から変更なし）
   # ============================================================
-  # GET /tasks/new
-  # タスク新規作成フォームを表示する（10番画面）。
-  #
-  # @task = Task.new:
-  #   空の Task インスタンスを作成してビューに渡す。
-  #   form_with model: @task はこのインスタンスを元に
-  #   <form action="/tasks" method="post"> を生成する。
-  #   （@task が保存済みなら action="/tasks/1" method="patch" になる）
-  #
-  # require_unlocked を before_action に追加しない理由:
-  #   new アクション（フォーム表示）は参照のみなのでロックに関係なく表示する。
-  #   create アクション（保存処理）にのみロックチェックを入れる。
   def new
     @task = Task.new
-    # デフォルトの優先度を should にしておく（schema.rb の default に合わせる）
     @task.priority = :should
   end
 
   # ============================================================
-  # create アクション
+  # create アクション（C-1 から変更なし）
   # ============================================================
-  # POST /tasks
-  # フォームから送信されたデータでタスクを作成する。
-  #
-  # require_unlocked（ロックチェック）:
-  #   ロック中は create アクション実行前に ApplicationController の
-  #   require_unlocked が呼ばれてリダイレクトされる。
-  #   before_action として定義せず、アクション内で直接呼び出す理由:
-  #     index / new はロックに関係なく表示するが、
-  #     create のみロックを適用したいから。
-  #     before_action で only: [:create] と書いても同じだが、
-  #     アクション内に書く方がロックの対象範囲が明確になる。
   def create
-    # ロックチェック。ロック中は require_unlocked がリダイレクトして
-    # この行以降のコードは実行されない。
     return if require_unlocked
 
-    # Task.new(task_params):
-    #   Strong Parameters（task_params メソッド）で許可したパラメータのみで
-    #   Task オブジェクトを作成する。
-    #   current_user を設定することで、必ずログイン中ユーザーのタスクになる。
     @task = current_user.tasks.build(task_params)
 
     if @task.save
-      # 保存成功: タスク一覧ページにリダイレクトする。
-      # flash[:notice] でトースト通知（「タスクを作成しました」）を表示する。
       redirect_to tasks_path, notice: "タスクを作成しました"
     else
-      # 保存失敗: フォームを再表示してエラーメッセージを見せる。
-      # render :new → app/views/tasks/new.html.erb を描画する。
-      # status: :unprocessable_entity:
-      #   HTTP ステータス 422 を返す。
-      #   Turbo Drive はこのステータスを見てページ遷移せずに
-      #   フォームを再描画するための挙動をとる。
       render :new, status: :unprocessable_entity
     end
   end
 
   # ============================================================
-  # private メソッド
+  # C-2 修正: toggle_complete アクション
   # ============================================================
+  # 【修正内容】
+  #   「全て」タブでチェックしたとき、行が消えてしまう問題を修正する。
+  #
+  # 【問題の原因】
+  #   done タブにいないとき id="done-tasks-list" が存在しないため
+  #   prepend は何も起きない。しかし remove は成功してしまい
+  #   タスク行が消えるだけになっていた。
+  #
+  # 【修正方針】
+  #   現在のタブによって動作を分岐する:
+  #
+  #   done タブを見ているとき（toggle で未完了→完了）:
+  #     → remove + prepend（done リストに移動）
+  #
+  #   done タブ以外を見ているとき（toggle で未完了→完了）:
+  #     → その場で replace（取り消し線付きに変える）のみ
+  #     → 行を消さない。完了タブへの移動はタブ遷移で確認できる。
+  #
+  #   done タブで完了→未完了に戻すとき:
+  #     → remove（done リストから削除）+ prepend（active リストに追加）
+  def toggle_complete
+    @task.toggle_complete!
+    recalculate_counts
+
+    current_tab = params[:tab] || "all"
+
+    respond_to do |format|
+      format.turbo_stream do
+        streams = []
+
+        if @task.done?
+          # ────────────────────────────────────────────────────
+          # 未完了 → 完了 の場合
+          # ────────────────────────────────────────────────────
+          if current_tab == "done"
+            # done タブで操作することは通常ないが念のため対処
+            streams << turbo_stream.remove(dom_id(@task))
+          else
+            # 「全て」「Must」「Should」「Could」タブのとき:
+            #   行をその場で「完了タスク行」に replace する（消さない）。
+            #   ページリロードなしで取り消し線・チェック済みの見た目に変わる。
+            #   ユーザーが「完了済み」タブに切り替えると移動したタスクが見える。
+            #
+            #   【なぜ remove + prepend にしないのか】
+            #     done タブにいないため id="done-tasks-list" が存在せず
+            #     prepend の行先が見つからない。
+            #     remove だけ成功してタスクが消えるより、
+            #     その場で完了の見た目に変えるほうが UX が良い。
+            streams << turbo_stream.replace(
+              dom_id(@task),
+              partial: "tasks/done_task_row",
+              locals:  { task: @task, locked: locked? }
+            )
+          end
+        else
+          # ────────────────────────────────────────────────────
+          # 完了 → 未完了 の場合
+          # ────────────────────────────────────────────────────
+          if current_tab == "done"
+            # done タブで完了を外した場合:
+            #   done リストから削除して active リストに戻す。
+            #   ただし active リストは別タブにあるため prepend 先が存在しない。
+            #   remove だけ実行してタスクを done タブから消す。
+            #   ユーザーが「全て」タブに戻るとタスクが復元されている。
+            streams << turbo_stream.remove(dom_id(@task))
+          else
+            # 「全て」等のタブで完了を外した場合（通常は完了タスクが表示されている状態）:
+            #   その場で「未完了タスク行」に replace する。
+            streams << turbo_stream.replace(
+              dom_id(@task),
+              partial: "tasks/task_row",
+              locals:  { task: @task, locked: locked? }
+            )
+          end
+        end
+
+        # タブ件数バッジを更新する
+        streams << turbo_stream.replace(
+          "task-tab-counts",
+          partial: "tasks/tab_counts",
+          locals:  {
+            current_tab:  current_tab,
+            must_count:   @must_count,
+            should_count: @should_count,
+            could_count:  @could_count,
+            all_count:    @all_count
+          }
+        )
+
+        # ────────────────────────────────────────────────────
+        # タスク件数表示（「○件のタスク」）を更新する
+        # ────────────────────────────────────────────────────
+        # 【問題の原因】
+        #   「○件のタスク」はビュー上の @tasks.count を表示しているが、
+        #   @tasks はこのアクションでは存在しない。
+        #   Turbo Stream で件数テキストも同時に更新する必要がある。
+        #
+        # 【修正方針】
+        #   id="task-count-display" の要素を Turbo Stream で更新する。
+        #   index.html.erb 側でこの id を付ける（後述）。
+        #
+        # 現在表示中のタスク件数を計算する
+        current_count = case current_tab
+                        when "must"   then current_user.tasks.active.not_archived.must.count
+                        when "should" then current_user.tasks.active.not_archived.should.count
+                        when "could"  then current_user.tasks.active.not_archived.could.count
+                        when "done"   then current_user.tasks.active.where(status: Task.statuses[:done]).count
+                        else               current_user.tasks.active.not_archived.count
+                        end
+
+        streams << turbo_stream.replace(
+          "task-count-display",
+          html: content_tag(:div,
+                            "#{current_count}件のタスク",
+                            id: "task-count-display",
+                            class: "mt-4 text-center text-xs text-gray-400")
+        )
+
+        render turbo_stream: streams
+      end
+
+      format.html do
+        redirect_to tasks_path(tab: params[:tab]),
+                    notice: @task.done? ? "タスクを完了しました" : "タスクを未完了に戻しました"
+      end
+    end
+  rescue ActiveRecord::RecordInvalid => e
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: turbo_stream.replace(
+          "flash-messages",
+          html: content_tag(:p, "更新に失敗しました: #{e.message}", class: "text-red-600 text-sm p-4")
+        )
+      end
+      format.html { redirect_to tasks_path, alert: "更新に失敗しました" }
+    end
+  end
+
+  # ============================================================
+  # archive アクション（C-2 追加）
+  # ============================================================
+  # PATCH /tasks/:id/archive
+  #
+  # 【概要】
+  #   完了タスクの「アーカイブ」ボタンを押すと呼ばれるアクション。
+  #   @task.status を archived（3）に変更する。
+  #
+  # 【ロック制限について】
+  #   アーカイブはロック中でも可能な設計にする。
+  #   完了したタスクを整理する操作なので、
+  #   ロックの「新規追加・編集・削除をブロック」には該当しない。
+  #
+  # 【Turbo Stream の動作】
+  #   アーカイブしたタスクを一覧から消す（remove）。
+  #   タブの件数バッジは変わらないが（archived は done タブに残るため）
+  #   表示上の「完了タブ」の行が消えた際の空判定を更新する。
+  def archive
+    @task.archive!
+    recalculate_counts
+
+    current_tab = params[:tab] || "done"
+
+    # アーカイブ後の done タスク件数
+    done_count = current_user.tasks.active.where(status: Task.statuses[:done]).count
+
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: [
+          turbo_stream.remove(dom_id(@task)),
+
+          turbo_stream.replace(
+            "task-tab-counts",
+            partial: "tasks/tab_counts",
+            locals:  {
+              current_tab:  current_tab,
+              must_count:   @must_count,
+              should_count: @should_count,
+              could_count:  @could_count,
+              all_count:    @all_count
+            }
+          ),
+
+          # 件数表示を更新する
+          turbo_stream.replace(
+            "task-count-display",
+            html: content_tag(:div,
+                              "#{done_count}件のタスク",
+                              id: "task-count-display",
+                              class: "mt-4 text-center text-xs text-gray-400")
+          )
+        ]
+      end
+
+      format.html do
+        redirect_to tasks_path(tab: "done"), notice: "タスクをアーカイブしました"
+      end
+    end
+  end
+
+  # ============================================================
+  # archive_all_done アクション（C-2 追加）
+  # ============================================================
+  # PATCH /tasks/archive_all_done
+  #
+  # 【概要】
+  #   「すべてアーカイブ」ボタンを押すと呼ばれるアクション。
+  #   ログイン中ユーザーの完了済み（done）タスクを一括で archived に変更する。
+  #
+  # 【update_all を使う理由】
+  #   each do |task| task.archive! end と書くと
+  #   タスクの件数分だけ UPDATE SQL が発行される（N+1）。
+  #   update_all を使うと1回の SQL で全件更新できる（高速・効率的）。
+  #
+  #   注意: update_all はコールバック・バリデーションをスキップする。
+  #   今回は status カラムの変更のみなので問題ない。
+  #   completed_at は変更しない（完了日時の記録を保持する）。
+  #
+  # 【Turbo Stream の動作】
+  #   完了タブ全体のタスク一覧を再描画する代わりに、
+  #   個別行を remove するのではなく完了タブの空状態を表示する。
+  #   id="done-tasks-list" の要素を空のHTMLで置き換える。
+  # archive_all_done アクション（修正版）
+  #
+  # 【修正内容】
+  #   「すべてアーカイブ」後に「○件のタスク」が更新されない問題を修正する。
+  #
+  # 【問題の原因】
+  #   archive_all_done では id="task-count-display" の Turbo Stream 更新が
+  #   実装されていなかった。
+  #   toggle_complete / archive には追加したが、
+  #   archive_all_done への追加を漏らしていた。
+  def archive_all_done
+    count = current_user.tasks
+                        .active
+                        .where(status: Task.statuses[:done])
+                        .update_all(status: Task.statuses[:archived])
+
+    recalculate_counts
+
+    respond_to do |format|
+      format.turbo_stream do
+        render turbo_stream: [
+          # 完了タスク一覧エリアを空の状態に置き換える
+          turbo_stream.replace(
+            "done-tasks-list",
+            html: content_tag(
+              :p,
+              "完了済みのタスクはありません",
+              class: "text-sm text-gray-400 py-8 text-center"
+            )
+          ),
+
+          # タブ件数バッジを更新する
+          turbo_stream.replace(
+            "task-tab-counts",
+            partial: "tasks/tab_counts",
+            locals:  {
+              current_tab:  "done",
+              must_count:   @must_count,
+              should_count: @should_count,
+              could_count:  @could_count,
+              all_count:    @all_count
+            }
+          ),
+
+          # ────────────────────────────────────────────────────
+          # 「○件のタスク」件数表示を更新する（修正追加）
+          # ────────────────────────────────────────────────────
+          # すべてアーカイブ後は done タスクが 0 件になるため
+          # 件数表示を 0 に更新する。
+          turbo_stream.replace(
+            "task-count-display",
+            html: content_tag(:div,
+                              "0件のタスク",
+                              id: "task-count-display",
+                              class: "mt-4 text-center text-xs text-gray-400")
+          )
+        ]
+      end
+
+      format.html do
+        redirect_to tasks_path(tab: "done"),
+                    notice: "#{count}件のタスクをアーカイブしました"
+      end
+    end
+  end
+
   private
 
-  # task_params（Strong Parameters）
-  #   フォームから受け取るパラメータを明示的に許可する。
-  #   ホワイトリスト方式: ここで許可したパラメータのみが
-  #   Task.new() に渡される。
-  #   許可していないパラメータ（例: ai_generated: true）は無視される。
+  # set_task
+  #   before_action で呼ばれる。
+  #   params[:id] に対応するタスクを @task にセットする。
   #
-  # params.require(:task):
-  #   フォームデータが { task: { title: "...", priority: "..." } } の形式で
-  #   送られてくることを期待する。
-  #   :task キーが存在しない場合は ActionController::ParameterMissing エラーになる。
+  #   current_user.tasks.find(params[:id]):
+  #     current_user.tasks → ログイン中ユーザーのタスクのみを対象にする。
+  #     .find(params[:id]) → id が一致するタスクを取得する。
+  #     他ユーザーのタスクはこのスコープに含まれないため、
+  #     アクセスしようとすると ActiveRecord::RecordNotFound が発生し、
+  #     ApplicationController の rescue_from で 404 が返る（セキュリティ）。
+  def set_task
+    @task = current_user.tasks.find(params[:id])
+  end
+
+  # recalculate_counts
+  #   タブの件数バッジを Turbo Stream で更新するための再計算メソッド。
+  #   toggle_complete / archive / archive_all_done の後に呼ぶ。
   #
-  # .permit(...):
-  #   許可するカラム名を列挙する。
-  #
-  # 許可するパラメータの説明:
-  #   :title          → タスク名（必須）
-  #   :priority       → 優先度（must/should/could）
-  #   :task_type      → 種別（normal/habit/improve）
-  #   :due_date       → 期限日（任意）
-  #   :estimated_hours→ 見積時間（任意）
-  #   :scheduled_at   → 実施予定日時（任意）
-  #   :alarm_enabled  → アラームON/OFF（任意）
-  #   :alarm_minutes_before → 何分前に通知するか（任意）
-  #
-  # 許可しないパラメータ（セキュリティ上の理由）:
-  #   :ai_generated → AI 生成フラグ。ユーザーが直接設定できないようにする。
-  #   :status       → タスクの状態。作成時は todo が自動設定される。
-  #   :completed_at → 完了日時。完了操作（C-2）で別途設定する。
-  #   :deleted_at   → 論理削除。削除操作（C-3）で別途設定する。
-  #   :habit_id     → AI 提案から設定されるもの。ユーザーが直接設定しない。
+  #   なぜ再計算が必要か:
+  #     タスクの status が変わると、各タブの件数も変わる。
+  #     Turbo Stream でタブバッジを更新するためにインスタンス変数に格納する。
+  def recalculate_counts
+    base_tasks = current_user.tasks.active
+    priority_counts = base_tasks.not_archived.unscope(:order).group(:priority).count
+
+    @must_count   = priority_counts[Task.priorities[:must]]   || 0
+    @should_count = priority_counts[Task.priorities[:should]] || 0
+    @could_count  = priority_counts[Task.priorities[:could]]  || 0
+    @all_count    = @must_count + @should_count + @could_count
+  end
+
   def task_params
     params.require(:task).permit(
       :title,

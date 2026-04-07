@@ -1,0 +1,135 @@
+<%# app/views/tasks/_done_task_row.html.erb %>
+<%#
+  ==============================================================================
+  完了タスク行パーシャル（C-2: 完了チェック・ステータス管理）
+  ==============================================================================
+  【このファイルの役割】
+    タスク一覧ページの「完了済みタスク」を1行分描画するパーシャル。
+    未完了タスク行（_task_row）と分けている理由:
+      ① チェックボックスが「チェック済み」状態になる
+      ② タイトルに取り消し線が付く
+      ③ 「アーカイブ」ボタンが追加される
+      ④ アーカイブ済みタスクにはチェックボックスを無効化する
+    これらの違いを条件分岐で書くより、パーシャルを分けるほうが見通しが良い。
+
+  【受け取るローカル変数】
+    task   : Task インスタンス（done または archived）
+    locked : ロック中かどうか（Boolean）
+  ==============================================================================
+%>
+
+<div id="<%= dom_id(task) %>"
+     class="bg-white border border-gray-200 rounded-xl shadow-sm
+            border-l-4 border-l-gray-300 opacity-80">
+  <div class="flex items-start gap-3 p-4">
+
+    <%#
+      完了チェックボックス
+      done タスク: チェック済み・クリックで未完了に戻せる（toggle_complete）
+      archived タスク: チェック済み・操作不可（disabled）
+
+      task.archived? の場合は disabled にする理由:
+        アーカイブ済みタスクは「完了の記録」として残す。
+        誤ってチェックを外して未完了に戻してしまうことを防ぐ。
+    %>
+    <div class="flex-shrink-0 mt-0.5">
+      <% if task.done? %>
+        <%#
+          done タスクのチェックボックス
+          checked 状態で表示し、クリックすると未完了（todo）に戻る
+        %>
+        <div data-controller="task-toggle"
+             data-task-toggle-url-value="<%= toggle_complete_task_path(task) %>"
+             data-task-toggle-task-id-value="<%= task.id %>">
+          <input type="checkbox"
+                 class="w-5 h-5 rounded border-gray-300 text-blue-600 cursor-pointer
+                        focus:ring-2 focus:ring-blue-500"
+                 checked
+                 data-action="change->task-toggle#toggle"
+                 aria-label="<%= task.title %>を未完了に戻す">
+        </div>
+      <% else %>
+        <%# archived タスクのチェックボックス: 操作不可 %>
+        <input type="checkbox"
+               class="w-5 h-5 rounded border-gray-300 text-gray-400 cursor-not-allowed"
+               checked
+               disabled
+               aria-label="<%= task.title %>（アーカイブ済み）">
+      <% end %>
+    </div>
+
+    <%# タスクの詳細情報 %>
+    <div class="flex-1 min-w-0">
+      <div class="flex items-start gap-2 flex-wrap">
+        <%# 優先度バッジ（完了・アーカイブはグレー） %>
+        <span class="flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-500">
+          <%= task.must? ? "Must" : task.should? ? "Should" : "Could" %>
+        </span>
+
+        <%# タイトル（取り消し線・グレー） %>
+        <h3 class="text-sm font-semibold text-gray-400 leading-snug flex-1 line-through">
+          <%= task.title %>
+        </h3>
+      </div>
+
+      <%# 完了日時とアーカイブ状態 %>
+      <div class="flex items-center gap-3 mt-1.5 flex-wrap">
+        <% if task.completed_at.present? %>
+          <span class="text-xs text-gray-400">
+            <%#
+              completed_at の表示フォーマット:
+              strftime("%-m/%-d %H:%M") → "3/15 14:30" のような形式
+              %-m: 先頭ゼロなしの月、%-d: 先頭ゼロなしの日
+            %>
+            完了: <%= task.completed_at.strftime("%-m/%-d %H:%M") %>
+          </span>
+        <% end %>
+
+        <% if task.archived? %>
+          <span class="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+            アーカイブ済み
+          </span>
+        <% end %>
+
+        <% if task.ai_generated? %>
+          <span class="text-xs text-purple-400 bg-purple-50 px-1.5 py-0.5 rounded">
+            🤖 AI生成
+          </span>
+        <% end %>
+      </div>
+    </div>
+
+    <%#
+      アーカイブボタン（done タスクのみ表示）
+      ================================================================
+      なぜ button_to を使うのか:
+        link_to は GET リクエストを送る。
+        button_to は内部で <form method="post"> を生成するため、
+        PATCH リクエストを確実に送れる（Rails の REST 設計に従う）。
+
+      data: { turbo_stream: true }:
+        Turbo に「このリクエストは Turbo Stream で処理する」と伝える属性。
+        これにより form のレスポンスを Turbo Stream として処理する。
+
+      method: :patch:
+        HTTP メソッドを PATCH に指定する。
+        Rails は <form method="post"> に hidden input _method="patch" を
+        自動で付けて送信する（ブラウザは POST しか送れないため）。
+
+      form: { style: "display:inline" }:
+        button_to が生成する <form> タグはブロック要素なので、
+        他のボタンと横並びにするためにインラインスタイルを指定する。
+    %>
+    <% if task.done? %>
+      <%= button_to "アーカイブ",
+            archive_task_path(task),
+            method: :patch,
+            data:   { turbo_stream: true },
+            form:   { style: "display:inline" },
+            params: { tab: "done" },
+            class:  "flex-shrink-0 text-xs text-gray-500 bg-gray-100
+                     hover:bg-gray-200 px-3 py-1.5 rounded-lg transition-colors
+                     border border-gray-200 cursor-pointer" %>
+    <% end %>
+  </div>
+</div>

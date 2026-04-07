@@ -47,19 +47,24 @@ application.register("mobile-menu", MobileMenuController)
 //   ケバブケース（voice-input）に変換されてHTMLの属性名になる。
 import VoiceInputController from "./voice_input_controller"
 application.register("voice-input", VoiceInputController)
-// ──────────────────────────────────────────────────────────────────────────
 
 // ── C-1 追加: priority-card コントローラーを登録する ─────────────────────────
 //
 // 【このコントローラーの役割】
 //   タスク作成フォームの優先度カード（Must/Should/Could）の
 //   選択状態をビジュアルで切り替える。
-//   Tailwind の peer-checked だけでは「チェックが外れた状態」のリセットができないため
-//   Stimulus で明示的にクラスを管理する。
-//
-// 【登録名 "priority-card" について】
-//   ファイル名 priority_card_controller.js が
-//   ケバブケース priority-card に変換されて HTML の data-controller 値になる。
 import PriorityCardController from "./priority_card_controller"
 application.register("priority-card", PriorityCardController)
-// ──────────────────────────────────────────────────────────────────────────
+
+// ── C-2 追加: task-toggle コントローラーを登録する ───────────────────────────
+//
+// 【このコントローラーの役割】
+//   タスクの完了チェックボックスをクリックしたとき、
+//   Turbo Stream でページリロードなしに status を切り替える。
+//
+// 【登録名 "task-toggle" について】
+//   HTML 側の data-controller="task-toggle" と対応する。
+//   ファイル名 task_toggle_controller.js が
+//   ケバブケース task-toggle に変換されてHTMLの属性名になる。
+import TaskToggleController from "./task_toggle_controller"
+application.register("task-toggle", TaskToggleController)

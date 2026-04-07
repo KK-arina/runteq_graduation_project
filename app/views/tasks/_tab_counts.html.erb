@@ -1,0 +1,111 @@
+<%# app/views/tasks/_tab_counts.html.erb %>
+<%#
+  ==============================================================================
+  タブ件数バッジパーシャル（C-2: 完了チェック・ステータス管理）
+  ==============================================================================
+  【このファイルの役割】
+    タスク一覧ページのフィルタタブ部分を描画するパーシャル。
+    Turbo Stream でタスクの状態が変わったとき、
+    このパーシャルだけを差し替えてタブの件数バッジを更新する。
+
+  【id="task-tab-counts" について】
+    Turbo Stream 側で
+      turbo_stream.replace("task-tab-counts", partial: "tasks/tab_counts", ...)
+    と指定しているため、この div の id と完全に一致させる必要がある。
+
+  【受け取るローカル変数】
+    current_tab  : 現在選択中のタブ名（"all" / "must" / "should" / "could" / "done"）
+    must_count   : Must タスクの件数
+    should_count : Should タスクの件数
+    could_count  : Could タスクの件数
+    all_count    : 未完了タスクの合計件数
+  ==============================================================================
+%>
+
+<div id="task-tab-counts"
+     class="flex gap-2 mb-6 overflow-x-auto pb-1"
+     role="tablist"
+     aria-label="タスクのフィルタタブ">
+
+  <%# ── all タブ ──────────────────────────────────────────────────────── %>
+  <%= link_to tasks_path(tab: "all"),
+        class: "flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                #{ current_tab == 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' }",
+        role: "tab",
+        aria: { selected: current_tab == "all" } do %>
+    全て
+    <% if all_count > 0 %>
+      <span class="ml-1.5 inline-flex items-center justify-center
+                   w-5 h-5 rounded-full text-xs font-bold
+                   #{ current_tab == 'all' ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-700' }">
+        <%= all_count %>
+      </span>
+    <% end %>
+  <% end %>
+
+  <%# ── Must タブ ─────────────────────────────────────────────────────── %>
+  <%= link_to tasks_path(tab: "must"),
+        class: "flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                #{ current_tab == 'must' ? 'bg-red-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' }",
+        role: "tab",
+        aria: { selected: current_tab == "must" } do %>
+    <span class="inline-flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full #{ current_tab == 'must' ? 'bg-white' : 'bg-red-500' }"></span>
+      Must
+      <% if must_count > 0 %>
+        <span class="inline-flex items-center justify-center
+                     w-5 h-5 rounded-full text-xs font-bold
+                     #{ current_tab == 'must' ? 'bg-white text-red-600' : 'bg-red-100 text-red-700' }">
+          <%= must_count %>
+        </span>
+      <% end %>
+    </span>
+  <% end %>
+
+  <%# ── Should タブ ───────────────────────────────────────────────────── %>
+  <%= link_to tasks_path(tab: "should"),
+        class: "flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                #{ current_tab == 'should' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' }",
+        role: "tab",
+        aria: { selected: current_tab == "should" } do %>
+    <span class="inline-flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full #{ current_tab == 'should' ? 'bg-white' : 'bg-blue-500' }"></span>
+      Should
+      <% if should_count > 0 %>
+        <span class="inline-flex items-center justify-center
+                     w-5 h-5 rounded-full text-xs font-bold
+                     #{ current_tab == 'should' ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-700' }">
+          <%= should_count %>
+        </span>
+      <% end %>
+    </span>
+  <% end %>
+
+  <%# ── Could タブ ─────────────────────────────────────────────────────── %>
+  <%= link_to tasks_path(tab: "could"),
+        class: "flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                #{ current_tab == 'could' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' }",
+        role: "tab",
+        aria: { selected: current_tab == "could" } do %>
+    <span class="inline-flex items-center gap-1.5">
+      <span class="w-2 h-2 rounded-full #{ current_tab == 'could' ? 'bg-white' : 'bg-green-500' }"></span>
+      Could
+      <% if could_count > 0 %>
+        <span class="inline-flex items-center justify-center
+                     w-5 h-5 rounded-full text-xs font-bold
+                     #{ current_tab == 'could' ? 'bg-white text-green-600' : 'bg-green-100 text-green-700' }">
+          <%= could_count %>
+        </span>
+      <% end %>
+    </span>
+  <% end %>
+
+  <%# ── 完了済みタブ ────────────────────────────────────────────────────── %>
+  <%= link_to tasks_path(tab: "done"),
+        class: "flex-shrink-0 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+                #{ current_tab == 'done' ? 'bg-gray-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50' }",
+        role: "tab",
+        aria: { selected: current_tab == "done" } do %>
+    完了済み ✓
+  <% end %>
+</div>
