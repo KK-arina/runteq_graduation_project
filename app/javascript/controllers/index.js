@@ -48,3 +48,18 @@ application.register("mobile-menu", MobileMenuController)
 import VoiceInputController from "./voice_input_controller"
 application.register("voice-input", VoiceInputController)
 // ──────────────────────────────────────────────────────────────────────────
+
+// ── C-1 追加: priority-card コントローラーを登録する ─────────────────────────
+//
+// 【このコントローラーの役割】
+//   タスク作成フォームの優先度カード（Must/Should/Could）の
+//   選択状態をビジュアルで切り替える。
+//   Tailwind の peer-checked だけでは「チェックが外れた状態」のリセットができないため
+//   Stimulus で明示的にクラスを管理する。
+//
+// 【登録名 "priority-card" について】
+//   ファイル名 priority_card_controller.js が
+//   ケバブケース priority-card に変換されて HTML の data-controller 値になる。
+import PriorityCardController from "./priority_card_controller"
+application.register("priority-card", PriorityCardController)
+// ──────────────────────────────────────────────────────────────────────────

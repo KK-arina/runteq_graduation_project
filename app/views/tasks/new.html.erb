@@ -1,0 +1,281 @@
+<%# app/views/tasks/new.html.erb %>
+<%#
+  ==============================================================================
+  タスク新規作成ページ（C-1: 基本CRUD実装）
+  ==============================================================================
+  【このファイルの役割】
+    タスクを新規登録するフォームを表示する。
+    バリデーションエラー時はこのページを再表示してエラーメッセージを見せる。
+
+  【フォームの構成】
+    ① タスク名（必須）
+    ② 優先度（Must/Should/Could の選択）
+    ③ 期限日（任意）
+    ④ 見積時間（任意）
+    ⑤ タスク種別（任意）
+
+  【使用するインスタンス変数（TasksController#new / #create で設定）】
+    @task: Task.new で作成した空のインスタンス
+           バリデーションエラー時は入力値とエラーメッセージを保持している
+==============================================================================
+%>
+<% content_for :title, "タスクを追加 | HabitFlow" %>
+
+<div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <%# ── ページヘッダー ─────────────────────────────────────────────────── %>
+  <div class="flex items-center gap-3 mb-6">
+    <%# 「← タスク一覧」戻るリンク %>
+    <%= link_to tasks_path,
+          class: "text-gray-400 hover:text-gray-600 transition-colors",
+          aria: { label: "タスク一覧に戻る" } do %>
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+    <% end %>
+    <h1 class="text-2xl font-bold text-gray-900">タスクを追加</h1>
+  </div>
+
+  <%#
+    ── バリデーションエラーメッセージ ─────────────────────────────────────
+    @task.errors.any?:
+      バリデーションエラーが1件以上あるかどうかを true/false で返す。
+    @task.errors.full_messages:
+      エラーメッセージの配列。例: ["タスク名を入力してください"]
+    div[role="alert"]:
+      スクリーンリーダーにエラーメッセージを通知するための ARIA 属性。
+  %>
+  <% if @task.errors.any? %>
+    <div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4" role="alert">
+      <div class="flex items-center gap-2 mb-2">
+        <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <p class="text-sm font-bold text-red-800">入力内容に問題があります</p>
+      </div>
+      <ul class="list-disc list-inside space-y-1">
+        <% @task.errors.full_messages.each do |message| %>
+          <li class="text-sm text-red-700"><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <%#
+    ── フォーム ─────────────────────────────────────────────────────────────
+    form_with model: @task:
+      @task が新規（未保存）のインスタンスなので、
+      action="/tasks" method="POST" のフォームを生成する。
+      @task が保存済みなら action="/tasks/1" method="PATCH" になる（Rails の規約）。
+
+    local: true:
+      Turbo Drive のデフォルト動作（非同期送信）を無効にして
+      通常の HTML フォーム送信を行う。
+      C-1 の段階では Turbo Stream は使わないため local: true にする。
+      ※ C-2 以降で Turbo Stream を使う場合は local: true を外す。
+  %>
+  <%= form_with model: @task, local: true,
+        class: "bg-white border border-gray-200 rounded-xl shadow-sm p-6" do |f| %>
+
+    <%# ── ① タスク名 ──────────────────────────────────────────────────── %>
+    <div class="mb-5">
+      <%#
+        f.label :title, "タスク名":
+          <label for="task_title">タスク名</label> を生成する。
+          for 属性が input の id と一致することで、
+          ラベルをクリックすると input にフォーカスが当たる（アクセシビリティ）。
+      %>
+      <%= f.label :title, "タスク名",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <span class="text-red-500 text-xs ml-1" aria-hidden="true">必須</span>
+
+      <%#
+        f.text_field :title:
+          <input type="text" name="task[title]" id="task_title" value="..."> を生成する。
+          value は @task.title の値が自動で入る（バリデーションエラー後の入力値復元）。
+
+        aria-required="true":
+          スクリーンリーダーに「必須フィールドです」と伝える。
+
+        aria-describedby="title-hint":
+          id="title-hint" の要素の内容をこの input の補足説明として読み上げる。
+      %>
+      <%= f.text_field :title,
+            placeholder: "例: 企画書作成、メール返信",
+            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                    #{ @task.errors[:title].any? ? 'border-red-400 bg-red-50' : '' }",
+            maxlength: 100,
+            aria: { required: true, describedby: "title-hint" } %>
+      <p id="title-hint" class="mt-1 text-xs text-gray-400">100文字以内</p>
+    </div>
+
+    <%# ── ② 優先度（Must/Should/Could）──────────────────────────────── %>
+    <div class="mb-5">
+      <p class="block text-sm font-bold text-gray-700 mb-2">
+        優先度 <span class="text-red-500 text-xs ml-1" aria-hidden="true">必須</span>
+      </p>
+
+      <%#
+        data-controller="priority-card":
+          priority_card_controller.js をこの div に紐付ける。
+          この div 内の全 label・card が Stimulus のターゲットとして管理される。
+
+        role="radiogroup" aria-label="...":
+          スクリーンリーダーに「これはラジオボタングループ」と伝える。
+      %>
+      <div class="grid grid-cols-3 gap-3"
+           role="radiogroup"
+           aria-label="優先度を選択してください"
+           data-controller="priority-card">
+
+        <%#
+          Must カード
+          data-priority-card-target="label": Stimulus がこの label を認識する
+          data-active-class: チェック時に card に追加するクラス
+          data-inactive-class: チェックが外れたときに card に追加するクラス
+        %>
+        <label class="cursor-pointer"
+               data-priority-card-target="label">
+          <%#
+            f.radio_button :priority, "must":
+              <input type="radio" name="task[priority]" value="must"> を生成する。
+              @task.priority == "must" なら checked 属性が自動で付く。
+              バリデーションエラー後も送信した値が復元される。
+
+            data-action="change->priority-card#select":
+              このラジオボタンの change イベントで priority-card コントローラーの
+              select メソッドを呼び出す。
+          %>
+          <%= f.radio_button :priority, "must",
+                class: "sr-only",
+                id:    "task_priority_must",
+                data:  { action: "change->priority-card#select" } %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all"
+               data-priority-card-target="card"
+               data-active-class="border-red-500 bg-red-50"
+               data-inactive-class="border-gray-200">
+            <div class="text-lg mb-1" aria-hidden="true">🔴</div>
+            <div class="text-sm font-bold text-gray-700">Must</div>
+            <div class="text-xs text-gray-400 mt-0.5">絶対にやる</div>
+          </div>
+        </label>
+
+        <%# Should カード（デフォルト選択・初期状態はアクティブクラスを付けておく） %>
+        <label class="cursor-pointer"
+               data-priority-card-target="label">
+          <%= f.radio_button :priority, "should",
+                class: "sr-only",
+                id:    "task_priority_should",
+                data:  { action: "change->priority-card#select" } %>
+          <%#
+            Should カードの初期スタイル:
+              @task.priority が "should"（デフォルト）なので
+              connect() 時に Stimulus が border-blue-500 bg-blue-50 を付ける。
+              初期表示を自然にするため、HTML 上は border-gray-200 をベースにしておく。
+              Stimulus の connect() が即座に updateCards() を呼ぶため
+              ページ表示時に正しいスタイルが適用される。
+          %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all"
+               data-priority-card-target="card"
+               data-active-class="border-blue-500 bg-blue-50"
+               data-inactive-class="border-gray-200">
+            <div class="text-lg mb-1" aria-hidden="true">🔵</div>
+            <div class="text-sm font-bold text-gray-700">Should</div>
+            <div class="text-xs text-gray-400 mt-0.5">できればやる</div>
+          </div>
+        </label>
+
+        <%# Could カード %>
+        <label class="cursor-pointer"
+               data-priority-card-target="label">
+          <%= f.radio_button :priority, "could",
+                class: "sr-only",
+                id:    "task_priority_could",
+                data:  { action: "change->priority-card#select" } %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all"
+               data-priority-card-target="card"
+               data-active-class="border-green-500 bg-green-50"
+               data-inactive-class="border-gray-200">
+            <div class="text-lg mb-1" aria-hidden="true">🟢</div>
+            <div class="text-sm font-bold text-gray-700">Could</div>
+            <div class="text-xs text-gray-400 mt-0.5">余裕があれば</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <%# ── ③ 期限日 ──────────────────────────────────────────────────────── %>
+    <div class="mb-5">
+      <%= f.label :due_date, "期限日",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <%#
+        f.date_field :due_date:
+          <input type="date" name="task[due_date]"> を生成する。
+          ブラウザのネイティブな日付ピッカーが表示される。
+          min: Date.today.to_s で過去の日付を選べなくする。
+          （厳密には AM4:00 基準の今日にすべきだが、
+           フォームの利便性を優先して今日の日付にする）
+      %>
+      <%= f.date_field :due_date,
+            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+            min: Date.current.to_s %>
+    </div>
+
+    <%# ── ④ 見積時間 ────────────────────────────────────────────────────── %>
+    <div class="mb-5">
+      <%= f.label :estimated_hours, "見積時間（時間）",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <%#
+        step: "0.5" → 0.5 刻みで入力できる（0.5, 1.0, 1.5, 2.0...）
+        min: "0.5"  → 0 以下の入力を防ぐ（HTML バリデーション）
+      %>
+      <%= f.number_field :estimated_hours,
+            placeholder: "例: 1.5",
+            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+            step: "0.5",
+            min: "0.5" %>
+    </div>
+
+    <%# ── ⑤ タスク種別 ────────────────────────────────────────────────── %>
+    <div class="mb-6">
+      <%= f.label :task_type, "タスク種別",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <%#
+        include_blank を削除して selected: "normal" をデフォルトにする。
+        理由: include_blank で「未選択」を許すと空文字が送信され、
+              DB の NOT NULL 制約（task_type は null: false）に違反する。
+              task_type は「通常タスク」をデフォルトとして扱うため、
+              フォーム上でも最初から「通常タスク」を選択状態にする。
+      %>
+      <%= f.select :task_type,
+            [["通常タスク", "normal"], ["習慣関連", "habit"], ["改善タスク", "improve"]],
+            { selected: @task.task_type.presence || "normal" },
+            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                    bg-white" %>
+    </div>
+
+    <%# ── 送信ボタンエリア ────────────────────────────────────────────── %>
+    <div class="flex gap-3">
+      <%# キャンセルボタン: フォームを閉じてタスク一覧に戻る %>
+      <%= link_to "キャンセル", tasks_path,
+            class: "flex-1 text-center px-4 py-2.5 border border-gray-300 rounded-lg
+                    text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors" %>
+
+      <%#
+        保存ボタン
+        data-controller="form-submit" はすでに実装済みの FormSubmitController を使う。
+        フォーム送信中にボタンをローディング状態にして二重送信を防止する。
+      %>
+      <%= f.submit "タスクを保存する",
+            class: "flex-2 flex-grow px-6 py-2.5 bg-blue-600 text-white rounded-lg
+                    text-sm font-bold hover:bg-blue-700 transition-colors cursor-pointer" %>
+    </div>
+  <% end %>
+</div>
