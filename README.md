@@ -64,7 +64,8 @@ flowchart LR
 [![B-6 カラー・アイコン・並び替え](https://img.shields.io/badge/B--6_カラー・アイコン・並び替え-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-6-habit-color-icon-sort)
 [![B-7 日次メモ](https://img.shields.io/badge/B--7_日次メモ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/B-7-habit-record-memo)
 [![C-1 Task基本CRUD](https://img.shields.io/badge/C--1_Task基本CRUD-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-1-task-model-crud)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-16%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![C-2 タスク完了チェック](https://img.shields.io/badge/C--2_タスク完了チェック-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-2-task-toggle-status)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-17%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -146,6 +147,7 @@ flowchart LR
 | #B-6 | 習慣のカラー・アイコン・Drag&Drop 並び替え（acts_as_list + SortableJS） | 2026-04-05 | feature/B-6-habit-color-icon-sort |
 | #B-7 | habit_records.memo（日次メモ）機能 | 2026-04-06 | feature/B-7-habit-record-memo |
 | #C-1 | Task モデル・基本 CRUD（Must/Should/Could優先度・todo/done/archived状態管理） | 2026-04-07 | feature/C-1-task-model-crud |
+| #C-2 | タスクの完了チェック・ステータス管理（toggle_complete/archive/archive_all_done・Turbo Stream） | 2026-04-07 | feature/C-2-task-toggle-status |
 
 <br>
 
@@ -1920,6 +1922,103 @@ C-1テスト: 31件（モデル17件・コントローラー14件）
 
 <br>
 
+### #C-2: タスクの完了チェック・ステータス管理
+
+<br>
+
+**ブランチ:** `feature/C-2-task-toggle-status`<br>
+**完了日:** 2026-04-07<br>
+**概要:** チェックボックスで即時完了（status=done）。Turbo Stream + Stimulus でページリロードなしに<br>
+完了タブへの移動・アーカイブボタン・「すべてアーカイブ」機能を実装。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Model | `Task#toggle_complete!` を追加（done↔todo切り替え・completed_at同時更新・archived?ガード） |
+| Model | `Task#archive!` を追加（done?ガード・二重アーカイブ防止・completed_at保持） |
+| Controller | `toggle_complete` アクション追加（PATCH /tasks/:id/toggle_complete・Turbo Stream・ロック中でも操作可） |
+| Controller | `archive` アクション追加（PATCH /tasks/:id/archive・Turbo Stream） |
+| Controller | `archive_all_done` アクション追加（PATCH /tasks/archive_all_done・update_allでN+1回避） |
+| Controller | `include ActionView::RecordIdentifier` / `include ActionView::Helpers::TagHelper` を追加（dom_id/content_tag解決） |
+| Controller | `recalculate_counts` private メソッドを追加（タブ件数の再集計） |
+| Route | `member: toggle_complete/archive`・`collection: archive_all_done` を追加 |
+| View | `index.html.erb` をパーシャル化・リストIDを `active-tasks-list-{tab}` / `done-tasks-list` に統一 |
+| View | `_task_row.html.erb` を新規作成（未完了タスク行・Stimulus task-toggle接続） |
+| View | `_done_task_row.html.erb` を新規作成（完了タスク行・アーカイブボタン・disabled切り替え） |
+| View | `_tab_counts.html.erb` を新規作成（タブ件数バッジ・Turbo Streamで差し替え対象） |
+| View | `task-count-display` IDを追加（「○件のタスク」のTurbo Stream更新対象） |
+| JS | `task_toggle_controller.js` を新規作成（fetch + Turbo.renderStreamMessage・tab パラメータ送信・エラーロールバック） |
+| JS | `index.js` に `task-toggle` コントローラーを登録 |
+| Test | モデルテスト7件・コントローラーテスト13件を追加（420 runs, 1049 assertions） |
+
+<br>
+
+#### Turbo Stream の動作設計
+
+<br>
+
+| 操作 | Turbo Stream の動作 |
+|:---|:---|
+| 未完了→完了（done タブ以外） | `replace(dom_id(@task))` で行をその場で完了行に変更 |
+| 完了→未完了（done タブ） | `remove(dom_id(@task))` で done リストから削除 |
+| 個別アーカイブ | `remove(dom_id(@task))` で行を削除 |
+| 一括アーカイブ | `replace("done-tasks-list")` で空状態のHTMLに置き換え |
+| 件数バッジ更新 | `replace("task-tab-counts")` でタブ全体を差し替え |
+| 件数テキスト更新 | `replace("task-count-display")` で「○件のタスク」を更新 |
+
+<br>
+
+#### 設計上の判断
+
+<br>
+
+**① ロック中でもチェック操作は可能な設計**
+
+<br>
+
+`toggle_complete` アクションには `require_unlocked` を適用しない。<br>
+ロックは「新規追加・削除・編集」を制限するものであり、<br>
+既存タスクの完了チェックはロック中でも継続できる設計にする（習慣の日次記録と同じ方針）。
+
+<br>
+
+**② タブに応じた Turbo Stream の動作分岐**
+
+<br>
+
+チェックボックス操作時、現在見ているタブによって Turbo Stream の動作を変える。<br>
+「全て」「Must」「Should」「Could」タブでは `replace` でその場で見た目を変える（消えないようにする）。<br>
+「完了済み」タブでは `remove` で行を消す（別タブに遷移すると復元が確認できる）。<br>
+Stimulus の fetch 時に `?tab=` パラメータを URL SearchParams で取得してサーバーに送ることで<br>
+コントローラー側で現在のタブを把握できる設計にした。
+
+<br>
+
+**③ archived は done タブに表示しない（パターンA採用）**
+
+<br>
+
+done タブのクエリを `where(status: :done)` のみに限定し、`archived` は除外する。<br>
+アーカイブ = 「完了タブからも非表示にする整理操作」と定義し、<br>
+データはDBに保持するが UI からは見えなくする（習慣のアーカイブと同じ設計思想）。
+
+<br>
+
+#### テスト結果
+
+<br>
+```
+C-2テスト: 20件（モデル7件・コントローラー13件）
+全テスト:  420 runs, 1049 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -2485,6 +2584,114 @@ updateCards() {
 
 <br>
 
+### 19. Turbo Stream でビューヘルパーをコントローラーから使うには include が必要（#C-2）
+
+<br>
+
+`dom_id` / `content_tag` はビューヘルパーメソッドであり、<br>
+コントローラーからそのまま呼ぶと `NoMethodError: undefined method 'dom_id'` になる。<br>
+```ruby
+# ❌ include なし → NoMethodError
+class TasksController < ApplicationController
+  def toggle_complete
+    turbo_stream.replace(dom_id(@task), ...)  # NoMethodError
+  end
+end
+
+# ✅ 必要なヘルパーモジュールを include する
+class TasksController < ApplicationController
+  include ActionView::RecordIdentifier    # dom_id / dom_class を提供
+  include ActionView::Helpers::TagHelper  # content_tag を提供
+end
+```
+
+<br>
+
+`ActionView::RecordIdentifier`: `dom_id(@task)` → `"task_1"` を生成する。<br>
+Turbo Stream の `replace` / `remove` のターゲット ID として使用する。<br>
+`ActionView::Helpers::TagHelper`: `content_tag(:p, "テキスト", class: "...")` を提供する。<br>
+`archive_all_done` の空状態HTMLをコントローラー内で生成するために必要。
+
+<br>
+
+### 20. チェックボックスの即時更新は Stimulus fetch + Turbo.renderStreamMessage が最適（#C-2）
+
+<br>
+
+`form_with` + `data: { turbo: true }` でも Turbo Stream リクエストを送れるが、<br>
+チェックボックスの `change` イベントに直接バインドする場合は Stimulus fetch の方が制御しやすい。<br>
+fetch に `Accept: text/vnd.turbo-stream.html` を付けることでコントローラーの `format.turbo_stream` が発動し、<br>
+返ってきた Turbo Stream HTML を `Turbo.renderStreamMessage(html)` で処理することで<br>
+ページリロードなしに DOM を差し替えられる。<br>
+fetch が失敗した場合は `checkbox.checked = !checkbox.checked` でロールバックして<br>
+「操作が失敗した」ことをユーザーに視覚的に伝える設計にする。<br>
+```javascript
+// ✅ Stimulus fetch + Turbo.renderStreamMessage の組み合わせ
+async toggle(event) {
+  const checkbox = event.target
+  const currentTab = new URLSearchParams(window.location.search).get("tab") || "all"
+  try {
+    const response = await fetch(this.urlValue, {
+      method: "PATCH",
+      headers: {
+        "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').content,
+        "Accept":       "text/vnd.turbo-stream.html",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: `tab=${encodeURIComponent(currentTab)}`
+    })
+    if (response.ok) {
+      Turbo.renderStreamMessage(await response.text())
+    } else {
+      checkbox.checked = !checkbox.checked  // ロールバック
+    }
+  } catch (error) {
+    checkbox.checked = !checkbox.checked    // ロールバック
+  }
+}
+```
+
+<br>
+
+### 21. Turbo Stream でタブをまたいだ「移動」を replace ではなく remove + prepend で実現する（#C-2）
+
+<br>
+
+`turbo_stream.replace(dom_id(@task), ...)` はその場でHTMLを差し替えるため「移動」にはならない。<br>
+「done タブの行を消して active リストの先頭に追加する」には `remove` + `prepend` を組み合わせる。<br>
+ただし移動先リストが現在表示されていない場合（別タブを見ているとき）は `prepend` 先が存在しないため<br>
+Turbo がスキップする動作になる。これは意図した挙動として許容し、<br>
+「タブを切り替えると復元されている」UX で対応する設計にした。<br>
+```ruby
+# done タブで完了を外すとき: done リストから消す
+streams << turbo_stream.remove(dom_id(@task))
+# → done タブから行が消える
+# → 「全て」タブに切り替えると未完了タスクとして表示されている
+```
+
+<br>
+
+### 22. update_all でN+1なしに一括更新する（#C-2）
+
+<br>
+
+`current_user.tasks.each { |t| t.archive! }` は件数分の UPDATE SQL を発行する（N+1更新）。<br>
+`update_all` を使うと1回の SQL で全件更新でき、件数が増えてもパフォーマンスが劣化しない。<br>
+注意点: `update_all` はコールバック・バリデーションをスキップする。<br>
+今回は `status` カラムの変更のみのため問題ないが、コールバックに依存する処理がある場合は使えない。<br>
+```ruby
+# ❌ N+1更新: 件数分のUPDATE SQL が発行される
+current_user.tasks.where(status: :done).each { |t| t.archive! }
+
+# ✅ 1回のUPDATEで全件更新（N+1なし）
+count = current_user.tasks
+                    .active
+                    .where(status: Task.statuses[:done])
+                    .update_all(status: Task.statuses[:archived])
+```
+
+<br>
+
 ---
 
 <br>
@@ -2963,7 +3170,7 @@ habitflow/
 │   │   ├── habits_controller.rb           # 習慣の CRUD（変更: archive/unarchive/archived追加・set_habit修正 #B-4）
 │   │   ├── habit_records_controller.rb    # 習慣の日次記録（変更: Float() 安全変換・numeric_value 対応 #B-1）
 │   │   ├── weekly_reflections_controller.rb # 週次振り返り（変更: corrections 受け渡し・build_habit_stats 数値型対応 #B-1）
-│   │   ├── tasks_controller.rb            # #C-1: タスク管理（index / new / create・ロックチェック）
+│   │   ├── tasks_controller.rb            # 変更: toggle_complete/archive/archive_all_done追加・include RecordIdentifier/TagHelper・recalculate_counts追加（#C-2）
 │   │   ├── sessions_controller.rb         # ログイン・ログアウト
 │   │   ├── users_controller.rb            # ユーザー登録
 │   │   ├── errors_controller.rb           # カスタムエラーページ
@@ -2977,7 +3184,7 @@ habitflow/
 │   │   ├── habit_template.rb                  # #A-5: オンボーディング用習慣テンプレートマスタ
 │   │   ├── habit_excluded_day.rb              # #B-2: 除外日モデル（DAY_NAMES定数・バリデーション）
 │   │   ├── user_setting.rb                    # ユーザー設定（rest_mode_active?・#B-3で参照）
-│   │   └── task.rb                        # #C-1: タスクモデル（enum: priority/task_type/status・スコープ・before_validation）
+│   │   └── task.rb                        # 変更: toggle_complete!/archive! メソッド追加・done?ガード（#C-2）
 │   ├── services/
 │   │   ├── weekly_reflection_complete_service.rb  # #A-7 #B-1: 振り返り完了フロー（corrections引数・差分補正ロジック追加）
 │   │   ├── habit_record_save_service.rb            # #A-7 #B-1: 習慣記録保存フロー（数値型対応・errors:[]配列形式統一）
@@ -2991,6 +3198,7 @@ habitflow/
 │   │   ├── habit_menu_controller.js       # #B-5 新規: 習慣削除確認モーダル（⋯メニュー・デスクトップ/スマホ切替・オーバーレイクリック・Escape対応）
 │   │   ├── habit_sort_controller.js       # #B-6 新規: 習慣一覧の Drag&Drop 並び替え（SortableJS + fetch・forceFallback対応）
 │   │   ├── priority_card_controller.js    # #C-1 新規: 優先度カード排他選択（Stimulus・全カードリセット→選択カードアクティブ化）
+│   │   ├── task_toggle_controller.js      # #C-2 新規: タスク完了チェックボックス（fetch + Turbo.renderStreamMessage・tabパラメータ送信・エラーロールバック）
 │   │   └── voice_input_controller.js      # #B-7 新規: 音声入力（Web Speech API・graceful degradation対応・未対応ブラウザで🎤非表示）
 │   ├── jobs/
 │   │   ├── application_job.rb                          # 変更: retry_on / discard_on 追加（#A-3）
@@ -3008,7 +3216,7 @@ habitflow/
 │       ├── weekly_reflections/            # 振り返り一覧・入力・詳細画面（変更: リフレクション3項目・数値補正フィールド追加 #B-1）
 │       ├── shared/                        # ヘッダー・フッター・エラー表示パーシャル
 │       ├── errors/                        # 404・422・500 エラーページ
-│       ├── tasks/                         # #C-1: タスク一覧（9番）・新規作成（10番）画面
+│       ├── tasks/                         # 変更: index.html.erbをパーシャル化・_task_row/_done_task_row/_tab_counts追加・リストID統一・task-count-display追加（#C-2）
 │       └── layouts/
 │           └── application.html.erb  # 全ページ共通レイアウト（変更: yield :modals を</body>直前に追加 #B-5）
 ├── db/
@@ -3072,7 +3280,7 @@ habitflow/
     │   ├── habit_streak_test.rb           # #B-3: ストリーク計算テスト（25件・境界値・除外日・お休みモード）
     │   ├── habit_archive_test.rb          # #B-4: アーカイブ機能テスト（22件：scope・状態遷移・状態ガード異常系）
     │   ├── habit_sort_test.rb             # #B-6: カラー・アイコンバリデーション・acts_as_list 動作確認（8件）
-        └── task_test.rb                   # #C-1: バリデーション・enum・スコープ・インスタンスメソッド（17件）
+    │   └── task_test.rb                   # 変更: toggle_complete!/archive!・doneガード・archivedガード・二重アーカイブ防止テスト追加（#C-2・計24件）
     ├── integration/
     │   ├── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
     │   └── memo_flow_test.rb              # #B-7: メモ保存・部分更新・バリデーションエラー・スペース変換テスト（6件）
@@ -3111,7 +3319,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-414 runs, 1042 assertions, 0 failures, 0 errors, 0 skips
+420 runs, 1049 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -3153,6 +3361,8 @@ docker compose exec web bin/rails test
 | `test/integration/memo_flow_test.rb` | 統合 | メモ保存・空文字→nil変換・201文字バリデーションエラー・スペースのみ→nil・部分更新2件（#B-7・6件） |
 | `test/models/task_test.rb` | モデル | Task enum・バリデーション・スコープ・overdue?/due_today?・soft_delete（#C-1・17件） |
 | `test/controllers/tasks_controller_test.rb` | コントローラー | index・new・create・ロックチェック・Strong Parameters拒否・travel_to+teardown方式（#C-1・14件） |
+| `test/models/task_test.rb` | モデル | `toggle_complete!`（todo→done・done→todo・archived操作不可）・`archive!`（done→archived・archived二重防止・todo/doing操作不可）（#C-2・7件追加・計24件） |
+| `test/controllers/tasks_controller_test.rb` | コントローラー | `toggle_complete`（未完了→完了・完了→未完了・ロック中チェック可・未ログイン防止・他ユーザー防止）・`archive`（完了→アーカイブ・未ログイン防止）・`archive_all_done`（一括アーカイブ・他ユーザー非影響）（#C-2・13件追加・計13件） |
 
 <br>
 
@@ -4382,6 +4592,75 @@ Rails アプリでは必ず `Date.current` を使い、`config.time_zone` の設
 
 <%# ✅ Date.current → config.time_zone（Tokyo）を参照する %>
 <%= f.date_field :due_date, min: Date.current.to_s %>
+```
+
+<br>
+
+### Turbo Stream でコントローラーからビューヘルパーを使うには include が必要（#C-2）
+
+<br>
+
+`dom_id` / `content_tag` は `ActionView` のモジュールに属するため、<br>
+コントローラーには自動で include されない。<br>
+`include ActionView::RecordIdentifier` と `include ActionView::Helpers::TagHelper` を<br>
+コントローラーの先頭に追加することで使用できるようになる。<br>
+Turbo Stream を多用するコントローラーでは定型的に必要になるため覚えておくこと。
+
+<br>
+
+### SessionsController のパラメータ構造をテストで合わせること（#C-2修正）
+
+<br>
+
+`SessionsController#create` が `params[:session][:email]` でメールを取得する設計の場合、<br>
+テストのログイン処理を `params: { email: ..., password: ... }` で書くと<br>
+`params[:session]` が `nil` になり `NoMethodError: undefined method '[]' for nil` が発生する。<br>
+フォームの `form_with model: :session` に合わせて<br>
+`params: { session: { email: ..., password: ... } }` と入れ子にすること。<br>
+```ruby
+# ❌ params[:session] が nil → NoMethodError
+post login_path, params: { email: @user.email, password: "password" }
+
+# ✅ :session キーで入れ子にする
+post login_path, params: { session: { email: @user.email, password: "password" } }
+```
+
+<br>
+
+### rescue_from がある場合は assert_raises ではなく assert_response :not_found を使う（#C-2修正）
+
+<br>
+
+`ApplicationController` に `rescue_from ActiveRecord::RecordNotFound, with: :render_404` がある場合、<br>
+例外はコントローラー内でキャッチされて404レスポンスとして返される。<br>
+テストで `assert_raises(ActiveRecord::RecordNotFound)` を使うと例外が伝播しないためテストが失敗する。<br>
+代わりに `assert_response :not_found` でHTTPステータス404を確認すること。<br>
+```ruby
+# ❌ rescue_from がある場合は例外がテストに伝播しない
+assert_raises(ActiveRecord::RecordNotFound) do
+  patch toggle_complete_task_path(other_task), ...
+end
+
+# ✅ レスポンスコードで確認する
+patch toggle_complete_task_path(other_task), ...
+assert_response :not_found
+```
+
+<br>
+
+### Turbo の確認ダイアログは data-turbo-confirm を使う（#C-2修正）
+
+<br>
+
+Rails 7 + Turbo 環境では確認ダイアログのキーが変わっている。<br>
+`data: { confirm: "..." }` は Rails 6 以前の書き方で Turbo を使う環境では動作しない。<br>
+`data: { turbo_confirm: "..." }` を使うことで Turbo が提供するネイティブの confirm ダイアログが表示される。<br>
+```erb
+<%# ❌ Rails 6 の書き方 → Turbo 環境では動作しない %>
+<%= button_to "すべてアーカイブ", path, data: { confirm: "本当に？" } %>
+
+<%# ✅ Turbo の書き方 %>
+<%= button_to "すべてアーカイブ", path, data: { turbo_confirm: "本当に？" } %>
 ```
 
 <br>
