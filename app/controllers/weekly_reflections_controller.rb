@@ -65,8 +65,8 @@ class WeeklyReflectionsController < ApplicationController
       current_user.reload
 
       if was_locked
-        redirect_to dashboard_path,
-                    flash: { unlock: "振り返りが完了しました！PDCAロックが解除されました。今週も頑張りましょう！🔓" }
+        flash[:unlock] = "振り返りが完了しました！PDCAロックが解除されました。今週も頑張りましょう！🔓"
+        redirect_to dashboard_path
       else
         redirect_to weekly_reflections_path,
                     notice: "今週の振り返りを保存しました！お疲れ様でした🎉"
@@ -86,10 +86,11 @@ class WeeklyReflectionsController < ApplicationController
   end
 
   def show
+    # habit_name はスナップショット列のため habit の eager loading は不要
+    # .to_a で配列化し .count / .size がメモリ上で完結するようにする
     @habit_summaries = @weekly_reflection.habit_summaries
-                                         .includes(:habit)
-                                         .order(achievement_rate: :desc)
-
+                                        .order(achievement_rate: :desc)
+                                        .to_a
     @overall_achievement_rate = calculate_overall_achievement_rate
   end
 

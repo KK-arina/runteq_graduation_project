@@ -4317,6 +4317,75 @@ end
 
 <br>
 
+### `includes` した関連を `.to_a` で配列化してビューの `.count` を SQL なしにする（#C-1修正）
+
+<br>
+
+`includes` で関連を先読みしていても、ビューで `.count` を呼ぶと Bullet が<br>
+`Need Counter Cache with Active Record size` 警告を出す場合がある。<br>
+`.count` は常に `SELECT COUNT(*)` を DB に発行するため、<br>
+`includes` 済みのデータでも SQL が追加発行されてしまう。<br>
+コントローラーで `.to_a` を付けて配列化し、ビューでは `.size` を使うことで<br>
+全ての計算がメモリ上で完結し SQL が発行されなくなる。<br>
+```ruby
+# ❌ includes 済みでも .count は COUNT(*) SQL を発行する
+@habit_summaries = @weekly_reflection.habit_summaries
+                                     .includes(:habit)
+                                     .order(achievement_rate: :desc)
+# ビューで summaries.count → SQL 発行
+
+# ✅ .to_a で配列化 → ビューの .size はメモリ上でカウント
+@habit_summaries = @weekly_reflection.habit_summaries
+                                     .order(achievement_rate: :desc)
+                                     .to_a
+# ビューで @habit_summaries.size → SQL なし
+```
+`.count` と `.size` の使い分け: `count` は常にDB問い合わせ、`size` はロード済みならメモリ参照。<br>
+ブロック付きの `.count { |s| s.rate >= 100 }` はRubyの列挙メソッドのためSQLを発行しない。
+
+<br>
+
+### `redirect_to` の `flash:` オプションは Rails では機能しない（#C-1修正）
+
+<br>
+
+`redirect_to path, flash: { unlock: "..." }` と書くと `flash[:flash]` として設定されてしまい、<br>
+`flash[:unlock]` として参照しても値が取り出せないバグになる。<br>
+`flash` はリダイレクト前に別途セットし、`redirect_to` と2行に分けて書くのが正しい。<br>
+```ruby
+# ❌ redirect_to の flash: オプション → flash[:flash] に格納されてしまう
+redirect_to dashboard_path,
+            flash: { unlock: "ロックが解除されました！🔓" }
+
+# ✅ flash を先にセットしてから redirect_to
+flash[:unlock] = "ロックが解除されました！🔓"
+redirect_to dashboard_path
+```
+なお `notice:` / `alert:` は Rails が特別に処理するショートカットのため<br>
+`redirect_to path, notice: "..."` は正しく動作する。<br>
+カスタムキー（`unlock` 等）は必ず2行に分けること。
+
+<br>
+
+### 期限日フォームの `min` には `Date.today` ではなく `Date.current` を使う（#C-1修正）
+
+<br>
+
+`min: Date.today.to_s` はサーバーの OS ローカル時刻（UTC）を参照するため、<br>
+JST（UTC+9）環境では「今日」が最大9時間ズレる。<br>
+深夜0時〜AM4:00 の時間帯に「昨日」の日付が `min` として設定され、<br>
+ユーザーが過去日を選択できてしまうバグが発生する。<br>
+Rails アプリでは必ず `Date.current` を使い、`config.time_zone` の設定を正しく参照させること。<br>
+```erb
+<%# ❌ Date.today → UTC基準のため JST で最大9時間ズレる %>
+<%= f.date_field :due_date, min: Date.today.to_s %>
+
+<%# ✅ Date.current → config.time_zone（Tokyo）を参照する %>
+<%= f.date_field :due_date, min: Date.current.to_s %>
+```
+
+<br>
+
 ---
 
 <br>
