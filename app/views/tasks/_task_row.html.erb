@@ -157,252 +157,29 @@
     <% end %>
 
     <%#
-      ── モーダル・ボトムシートの HTML を content_for :modals に追加 ──────
-      【なぜ content_for :modals に追加するのか】
-        このパーシャルは transition-shadow を持つ div の中にある。
-        CSSの仕様により、transition プロパティを持つ祖先要素の子孫 fixed 要素は
-        「画面全体」ではなく「その祖先要素」を基準に配置されてしまう。
-        content_for :modals で収集して application.html.erb の </body> 直前に
-        出力することで、transition の影響を受けない正しい全画面表示になる。
+      ── モーダル・ボトムシートの出力（バグ修正）────────────────────────
+      【変更前】
+        content_for :modals do
+          ... モーダル HTML ...
+        end
 
-      【タスクごとに別モーダルを出力する設計について】
-        「多重レンダリング問題」として指摘を受けたが、この設計は意図的なもの。
-        タスクが5件あれば5つのモーダルHTMLが出力される。
-        理由: タスクごとに削除URLが異なるため、
-        共通モーダル1つにすると削除ボタンの action URL を
-        JS で動的に書き換える複雑な処理が必要になる。
-        モーダルHTML自体は軽量（数百バイト）のため、
-        タスク数十件程度ならDOMの肥大化は実用上問題ない。
-        タスクが数百件になる場合は共通モーダル化を検討する。
+      【変更後】
+        = render "tasks/task_modal", task: task
 
-      【手動タスクのみモーダルを出力する】
-        AI生成タスクには「⋯」メニューがないので、モーダルも不要。
-        パフォーマンスのためにモーダルHTMLも条件分岐で出力を省略する。
+      【変更理由】
+        content_for :modals は Turbo Stream の replace では
+        yield :modals に反映されない。
+        toggle_complete 後にモーダル HTML が DOM から消え、
+        document.getElementById("task-modal-#{task.id}") が null を返すため
+        「⋯」ボタンを押してもモーダルが開かなくなっていた。
+
+        _task_modal パーシャルに切り出してインラインで出力することで、
+        フルレンダリング時は _task_row の一部として直接DOMに出力される。
+        toggle_complete 後は tasks_controller.rb から
+        turbo_stream.replace("task-modal-#{@task.id}", ...) で再注入される。
     %>
     <% unless task.ai_generated? %>
-      <% content_for :modals do %>
-
-        <%#
-          ====================================================
-          デスクトップ用: 中央モーダル（768px 以上で表示）
-          ====================================================
-          id="task-modal- = task.id ":
-            task_menu_controller.js で
-            document.getElementById(`task-modal-${this.taskIdValue}`) として取得する。
-            task.id ごとにユニークな ID にすることで、
-            タスクが複数あっても正しいモーダルを開ける。
-
-          style="display: none;":
-            初期状態を非表示にする。
-            Tailwind の hidden クラス（display: none !important）ではなく
-            インラインスタイルを使う理由:
-            hidden クラスは !important のため JS の style.display="flex" で上書きできない。
-            インラインスタイルなら JS の style.display 操作が有効になる。
-
-          fixed inset-0:
-            画面全体（上下左右 0）を覆う固定配置。
-            content_for :modals で body 直前に出力するため正しく機能する。
-
-          bg-black/50:
-            半透明の黒背景（オーバーレイ）。背後のページが薄く見える。
-
-          items-center justify-center:
-            フレックスコンテナで中央に配置する。
-
-          z-50:
-            他の要素より前面に表示する（z-index: 50）。
-        %>
-        <div id="task-modal-<%= task.id %>"
-             class="fixed inset-0 bg-black/50 items-center justify-center z-50 p-4"
-             style="display: none;"
-             role="dialog"
-             aria-modal="true"
-             aria-labelledby="task-modal-title-<%= task.id %>">
-
-          <%#
-            モーダルパネル（白い部分）
-            id="task-modal-panel- = task.id":
-              _setupListeners() でパネル内クリックの
-              stopPropagation リスナーを設定するために必要。
-
-            max-w-sm w-full:
-              最大幅 384px、幅は親要素に合わせる。スマホでも崩れない。
-
-            border-t-4 border-red-500:
-              モーダル上部に赤いボーダーを付けて「危険な操作」を視覚的に示す。
-          %>
-          <div id="task-modal-panel-<%= task.id %>"
-               class="bg-white rounded-xl shadow-2xl max-w-sm w-full border-t-4 border-red-500 p-6">
-
-            <%# モーダルタイトル %>
-            <h2 id="task-modal-title-<%= task.id %>"
-                class="js-task-menu-title text-lg font-bold text-gray-900 mb-3">
-              <%#
-                js-task-menu-title クラス:
-                  _updateModalTitle() で
-                  document.querySelector(".js-task-menu-title") として取得する。
-                  タスク名をここにセットする。
-                  初期値はダミーテキスト（JSで上書きされる）。
-              %>
-              タスクを削除しますか？
-            </h2>
-
-            <%# 警告メッセージ %>
-            <p class="text-sm text-gray-600 mb-6">
-              削除したタスクは復元できません。
-              <br>
-              ※ AI生成タスクはAI提案モーダルからのみ削除できます。
-            </p>
-
-            <%# ボタン群 %>
-            <div class="flex gap-3">
-
-              <%#
-                キャンセルボタン
-                id="task-modal-cancel- = task.id":
-                  _setupListeners() でクリックリスナーを設定するために必要。
-                  クリックで closeMenu() を呼び出す。
-              %>
-              <button type="button"
-                      id="task-modal-cancel-<%= task.id %>"
-                      class="flex-1 px-4 py-2 text-sm font-medium text-gray-700
-                             bg-white border border-gray-300 rounded-lg
-                             hover:bg-gray-50 transition-colors">
-                キャンセル
-              </button>
-
-              <%#
-                削除ボタン
-                button_to を使う理由:
-                  link_to は GET リクエストを送る。
-                  button_to は <form method="post"> を内部で生成するため、
-                  method: :delete と組み合わせることで
-                  Rails が _method=delete パラメータを付与して
-                  DELETE /tasks/:id を送信できる。
-
-                data: { turbo_stream: true }:
-                  Turbo に「このリクエストは Turbo Stream で処理する」と伝える。
-                  これによりコントローラーの format.turbo_stream が発動する。
-
-                data: { turbo_submits_with: "削除中..." }:
-                  【レビュー指摘④対応】
-                  Turbo が提供する二重送信防止機能。
-                  フォーム送信中はボタンテキストを「削除中...」に変更し、
-                  ボタンを disabled にする。
-                  これにより連打による二重送信（二重削除）を防ぐ。
-
-                form: { id: "task-delete-form-#{task.id}" }:
-                  フォームに ID を付ける。
-                  task_menu_controller.js の _injectTabToForms() で
-                  このフォームを getElementById で取得して
-                  tab の hidden input を動的に追加するために必要。
-              %>
-              <%= button_to "🗑️ 削除する",
-                    task_path(task),
-                    method: :delete,
-                    data:   {
-                      turbo_stream: true,
-                      turbo_submits_with: "削除中..."
-                    },
-                    form:   {
-                      style: "display:inline",
-                      id:    "task-delete-form-#{task.id}"
-                    },
-                    class:  "flex-1 px-4 py-2 text-sm font-bold text-white
-                             bg-red-600 hover:bg-red-700 rounded-lg
-                             transition-colors cursor-pointer" %>
-            </div>
-          </div>
-        </div>
-
-        <%#
-          ====================================================
-          スマホ用: ボトムシート（768px 未満で表示）
-          ====================================================
-          id="task-sheet- = task.id":
-            task_menu_controller.js の _getSheet() で取得する。
-
-          items-end:
-            フレックスコンテナで下端に配置する（ボトムシートが画面下から出る）。
-        %>
-        <div id="task-sheet-<%= task.id %>"
-             class="fixed inset-0 bg-black/50 items-end z-50"
-             style="display: none;"
-             role="dialog"
-             aria-modal="true"
-             aria-labelledby="task-sheet-title-<%= task.id %>">
-
-          <%#
-            ボトムシートパネル
-            id="task-sheet-panel- = task.id":
-              _openBottomSheet() / _closeBottomSheet() で
-              translate-y-full / translate-y-0 クラスを付け替えてアニメーションする。
-
-            translate-y-full:
-              初期状態: 要素の高さ分だけ下にずらして画面外（下）に隠す。
-
-            transition-transform duration-300:
-              transform の変化を 300ms でアニメーションする。
-
-            rounded-t-2xl:
-              上部の角を丸くして「下から出てきた」ボトムシートらしく見せる。
-          %>
-          <div id="task-sheet-panel-<%= task.id %>"
-               class="bg-white rounded-t-2xl w-full p-6 pb-8
-                      transform translate-y-full transition-transform duration-300
-                      border-t-4 border-red-500">
-
-            <%# ドラッグハンドル（ボトムシートらしい外観） %>
-            <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5" aria-hidden="true"></div>
-
-            <%# ボトムシートタイトル %>
-            <h2 id="task-sheet-title-<%= task.id %>"
-                class="js-task-menu-title text-lg font-bold text-gray-900 mb-2">
-              タスクを削除しますか？
-            </h2>
-
-            <%# 警告メッセージ %>
-            <p class="text-sm text-gray-600 mb-6">
-              削除したタスクは復元できません。
-            </p>
-
-            <%# ボタン群（縦並び） %>
-            <div class="flex flex-col gap-3">
-
-              <%#
-                削除ボタン（スマホ用）
-                デスクトップ用と同じく turbo_submits_with で二重送信を防ぐ。
-                form id は "task-delete-sheet-form-{id}" として
-                デスクトップ用フォーム ID と区別する。
-              %>
-              <%= button_to "🗑️ 削除する",
-                    task_path(task),
-                    method: :delete,
-                    data:   {
-                      turbo_stream: true,
-                      turbo_submits_with: "削除中..."
-                    },
-                    form:   {
-                      style: "display:block",
-                      id:    "task-delete-sheet-form-#{task.id}"
-                    },
-                    class:  "w-full px-4 py-3 text-sm font-bold text-white
-                             bg-red-600 hover:bg-red-700 rounded-xl
-                             transition-colors cursor-pointer" %>
-
-              <%# キャンセルボタン %>
-              <button type="button"
-                      id="task-sheet-cancel-<%= task.id %>"
-                      class="w-full px-4 py-3 text-sm font-medium text-gray-700
-                             bg-white border border-gray-300 rounded-xl
-                             hover:bg-gray-50 transition-colors">
-                キャンセル
-              </button>
-            </div>
-          </div>
-        </div>
-
-      <% end %><%# content_for :modals の終わり %>
+      <%= render "tasks/task_modal", task: task %>
     <% end %><%# unless task.ai_generated? の終わり %>
 
   </div>

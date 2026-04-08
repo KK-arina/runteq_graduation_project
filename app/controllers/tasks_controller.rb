@@ -112,6 +112,36 @@ class TasksController < ApplicationController
               partial: "tasks/task_row",
               locals:  { task: @task, locked: locked? }
             )
+
+            # ----------------------------------------------------------------
+            # 【バグ修正】チェックを外した後にモーダルが開かない問題の修正
+            #
+            # 【原因】
+            #   _task_row 内の content_for :modals は Turbo Stream の replace では
+            #   yield :modals に反映されない（content_for はサーバーサイドの
+            #   フルレンダリング時にのみ動作するため）。
+            #   replace 後に document.getElementById("task-modal-#{@task.id}") が
+            #   null を返し、openMenu() が何もできなくなっていた。
+            #
+            # 【修正内容】
+            #   _task_row を replace した直後に、そのタスクのモーダル HTML を
+            #   turbo_stream.replace で DOM に再注入する。
+            #
+            # 【turbo_stream.replace の挙動】
+            #   指定した id の要素が DOM に存在する場合: その要素を新しい HTML で置換
+            #   存在しない場合: 何もしない（エラーにならない）
+            #
+            # 【ai_generated? タスクにはモーダルがない】
+            #   AI生成タスクには「⋯」メニューもモーダルも存在しないため
+            #   再注入は手動タスク（!ai_generated?）のみ行う。
+            # ----------------------------------------------------------------
+            unless @task.ai_generated?
+              streams << turbo_stream.replace(
+                "task-modal-#{@task.id}",
+                partial: "tasks/task_modal",
+                locals:  { task: @task }
+              )
+            end
           end
         end
 
