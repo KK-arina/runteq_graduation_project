@@ -1,0 +1,68 @@
+<%# app/views/shared/_flash_message.html.erb %>
+<%#
+  ==============================================================================
+  Turbo Stream 用フラッシュメッセージパーシャル（C-3 追加）
+  ==============================================================================
+  【このファイルの役割】
+    destroy アクションの Turbo Stream レスポンスから呼ばれる。
+    通常の flash.each（application.html.erb）とは別に、
+    Turbo Stream で動的にメッセージを追加するためのパーシャル。
+
+  【受け取るローカル変数】
+    type    : メッセージの種類（"notice" / "alert"）
+    message : 表示するメッセージ文字列
+
+  【application.html.erb の flash.each との関係】
+    application.html.erb の flash.each は Rails の redirect_to 時に使う。
+    この パーシャルは Turbo Stream（非同期通信）のとき動的に挿入するために使う。
+    どちらも同じ Stimulus flash コントローラーで自動消去される。
+
+  【data-controller="flash" について】
+    application.html.erb にある既存の flash コントローラーと同じ仕組み。
+    一定時間後に自動でフェードアウト・削除される。
+  ==============================================================================
+%>
+
+<div class="max-w-7xl mx-auto px-4 mt-4"
+     data-controller="flash"
+     data-flash-target="message"
+     data-flash-duration-value="<%= type == 'alert' ? 6000 : 4000 %>"
+     role="alert"
+     aria-live="polite">
+  <%#
+    メッセージタイプに応じた背景色・テキストカラーを設定する。
+    notice（成功）: 青系
+    alert（エラー）: 赤系
+  %>
+  <div class="relative px-4 py-3 rounded-lg border pr-10
+    <%= type == 'notice' ? 'bg-blue-50 border-blue-200 text-blue-900' : 'bg-red-50 border-red-200 text-red-900' %>">
+
+    <div class="flex items-start gap-2">
+      <%# アイコン（スクリーンリーダーには読み上げない） %>
+      <span class="flex-shrink-0" aria-hidden="true">
+        <%= type == 'notice' ? '✅' : '❌' %>
+      </span>
+      <span class="text-sm leading-relaxed"><%= message %></span>
+    </div>
+
+    <%#
+      閉じるボタン
+      data-action="flash#dismiss":
+        flash_controller.js の dismiss() を呼び出す。
+    %>
+    <button type="button"
+            data-action="flash#dismiss"
+            class="absolute top-2 right-2 p-1 rounded
+                   opacity-60 hover:opacity-100 transition-opacity
+                   focus:outline-none focus:ring-2 focus:ring-offset-1
+                   focus:ring-current"
+            aria-label="通知を閉じる">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+
+  </div>
+</div>

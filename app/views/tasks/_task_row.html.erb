@@ -1,22 +1,20 @@
 <%# app/views/tasks/_task_row.html.erb %>
 <%#
   ==============================================================================
-  未完了タスク行パーシャル（C-2: 完了チェック・ステータス管理）
+  未完了タスク行パーシャル（C-3修正版: レビュー指摘対応）
   ==============================================================================
-  【このファイルの役割】
-    タスク一覧ページの「未完了タスク」を1行分描画するパーシャル。
-    Turbo Stream で個別に差し替えられるため、単独ファイルに分離している。
+  【C-3修正での変更点】
+    レビュー指摘④対応:
+    button_to に data: { turbo_submits_with: "削除中..." } を追加する。
 
-  【受け取るローカル変数】
-    task   : Task インスタンス
-    locked : ロック中かどうか（Boolean）
+    【turbo_submits_with とは】
+      Turbo が提供するフォーム送信時のボタン制御機能。
+      送信中はボタンのテキストを指定した文字列に変更し、
+      同時にボタンを disabled にする。
+      これにより連打（二重送信）を防ぐことができる。
 
-  【dom_id(task) について】
-    dom_id は Rails のヘルパーメソッド。
-    Task インスタンスを渡すと "task_1"（id が 1 のとき）という文字列を返す。
-    これが Turbo Stream の replace/remove のターゲット id になる。
-    Turbo Stream 側で turbo_stream.replace(dom_id(@task), ...) と書いているため、
-    ここの id と完全に一致させる必要がある。
+      turbo_confirm と組み合わせることも可能だが、
+      今回はモーダルで確認するため turbo_confirm は使わない。
   ==============================================================================
 %>
 
@@ -26,27 +24,14 @@
   <div class="flex items-start gap-3 p-4">
 
     <%#
-      完了チェックボックス（C-2 実装）
-      ================================================================
+      ── 完了チェックボックス ────────────────────────────────────────────────
       data-controller="task-toggle":
-        task_toggle_controller.js をこの要素に紐付ける。
-        この div の中の要素すべてが Stimulus のスコープになる。
-
+        task_toggle_controller.js をこの div に紐付ける。
       data-task-toggle-url-value:
-        Stimulus の Values API を使って、
-        fetch 先の URL をコントローラーに渡す。
-        toggle_complete_task_path(task) で
-        "/tasks/1/toggle_complete" のようなURLを生成する。
-
+        Stimulus Values API で fetch 先の URL を渡す。
+        toggle_complete_task_path(task) → "/tasks/1/toggle_complete"
       data-task-toggle-task-id-value:
-        タスクの ID を Stimulus に渡す（デバッグやログ用）。
-
-      なぜ form_with ではなく Stimulus fetch を使うのか:
-        form_with の POST は Turbo Drive がページ全体を置き換える。
-        チェックボックスのような「行だけ更新したい」操作では
-        Turbo Stream（差分更新）のほうが UX が良い。
-        Stimulus の fetch から turbo-stream ヘッダーを付けて送ることで
-        コントローラー側の format.turbo_stream が発動する。
+        タスクIDをデバッグ・ログ用に渡す。
     %>
     <div class="flex-shrink-0 mt-0.5"
          data-controller="task-toggle"
@@ -56,12 +41,9 @@
       <%#
         チェックボックス本体
         data-action="change->task-toggle#toggle":
-          チェックボックスの change イベント（チェックした/外した）が発生したとき
-          task_toggle_controller.js の toggle メソッドを呼び出す。
-
+          change イベント発生時に task_toggle_controller.js の toggle() を呼ぶ。
         aria-label:
-          スクリーンリーダーに「○○を完了にする」と読み上げさせる。
-          チェックボックスの目的を音声で伝えるために必要。
+          スクリーンリーダー向けに「○○を完了にする」と読み上げさせる。
       %>
       <input type="checkbox"
              class="w-5 h-5 rounded border-gray-300 text-blue-600 cursor-pointer
@@ -70,10 +52,11 @@
              aria-label="<%= task.title %>を完了にする">
     </div>
 
-    <%# タスクの詳細情報 %>
+    <%# ── タスク詳細情報 ──────────────────────────────────────────────────── %>
     <div class="flex-1 min-w-0">
       <div class="flex items-start gap-2 flex-wrap">
-        <%# 優先度バッジ %>
+
+        <%# 優先度バッジ（Must=赤 / Should=青 / Could=緑） %>
         <span class="flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded
                      <%= task.must? ? 'bg-red-100 text-red-700' : task.should? ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700' %>">
           <%= task.must? ? "Must" : task.should? ? "Should" : "Could" %>
@@ -85,7 +68,7 @@
         </h3>
       </div>
 
-      <%# メタ情報（期限・種別・見積時間） %>
+      <%# メタ情報（期限・AI生成フラグ・見積時間） %>
       <div class="flex items-center gap-3 mt-1.5 flex-wrap">
         <% if task.due_date.present? %>
           <span class="text-xs flex items-center gap-1
@@ -105,6 +88,11 @@
         <% end %>
 
         <% if task.ai_generated? %>
+          <%#
+            AI生成バッジ
+            このバッジが表示されているタスクには「⋯」メニューが表示されない。
+            AI生成タスクはAI提案モーダル経由でのみ削除できる設計。
+          %>
           <span class="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
             🤖 AI生成
           </span>
@@ -121,5 +109,301 @@
         <% end %>
       </div>
     </div>
+
+    <%#
+      ── C-3: 「⋯」メニューボタン ─────────────────────────────────────────
+      表示条件: 手動作成タスク（!ai_generated?）かつロック解除中（!locked）
+
+      【data-controller="task-menu" の配置について】
+        チェックボックスの div とは別に独立して配置する。
+        Stimulus のスコープはこのボタン要素のみに適用される。
+
+      【data-task-menu-task-id-value】
+        モーダル・ボトムシートの DOM ID 構築に使う。
+        例: task.id=1 → モーダルID "task-modal-1"、シートID "task-sheet-1"
+
+      【data-task-menu-task-title-value】
+        モーダルのタイトルに「「○○を削除しますか？」と表示するためのタスク名。
+
+      【data-action="keydown@window->task-menu#keydown"】
+        ウィンドウ全体のキーボードイベントを監視する。
+        Escape キーが押されたときに task_menu_controller.js の keydown() を呼び出す。
+        @window を使うことでモーダル外にフォーカスがあっても Escape で閉じられる。
+    %>
+    <% unless task.ai_generated? || locked %>
+      <div data-controller="task-menu"
+           data-task-menu-task-id-value="<%= task.id %>"
+           data-task-menu-task-title-value="<%= task.title %>"
+           data-action="keydown@window->task-menu#keydown">
+
+        <%#
+          「⋯」ボタン
+          クリックで openMenu() を呼び出してモーダルまたはボトムシートを開く。
+          aria-label: スクリーンリーダーに「メニューを開く」と伝える。
+          aria-haspopup="dialog": このボタンがダイアログ（モーダル）を開くことを伝える。
+        %>
+        <button type="button"
+                data-action="click->task-menu#openMenu"
+                class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600
+                       hover:bg-gray-100 transition-colors flex-shrink-0"
+                aria-label="<%= task.title %>のメニューを開く"
+                aria-haspopup="dialog">
+          <%# 縦3点ドット（⋯）アイコン %>
+          <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/>
+          </svg>
+        </button>
+      </div>
+    <% end %>
+
+    <%#
+      ── モーダル・ボトムシートの HTML を content_for :modals に追加 ──────
+      【なぜ content_for :modals に追加するのか】
+        このパーシャルは transition-shadow を持つ div の中にある。
+        CSSの仕様により、transition プロパティを持つ祖先要素の子孫 fixed 要素は
+        「画面全体」ではなく「その祖先要素」を基準に配置されてしまう。
+        content_for :modals で収集して application.html.erb の </body> 直前に
+        出力することで、transition の影響を受けない正しい全画面表示になる。
+
+      【タスクごとに別モーダルを出力する設計について】
+        「多重レンダリング問題」として指摘を受けたが、この設計は意図的なもの。
+        タスクが5件あれば5つのモーダルHTMLが出力される。
+        理由: タスクごとに削除URLが異なるため、
+        共通モーダル1つにすると削除ボタンの action URL を
+        JS で動的に書き換える複雑な処理が必要になる。
+        モーダルHTML自体は軽量（数百バイト）のため、
+        タスク数十件程度ならDOMの肥大化は実用上問題ない。
+        タスクが数百件になる場合は共通モーダル化を検討する。
+
+      【手動タスクのみモーダルを出力する】
+        AI生成タスクには「⋯」メニューがないので、モーダルも不要。
+        パフォーマンスのためにモーダルHTMLも条件分岐で出力を省略する。
+    %>
+    <% unless task.ai_generated? %>
+      <% content_for :modals do %>
+
+        <%#
+          ====================================================
+          デスクトップ用: 中央モーダル（768px 以上で表示）
+          ====================================================
+          id="task-modal- = task.id ":
+            task_menu_controller.js で
+            document.getElementById(`task-modal-${this.taskIdValue}`) として取得する。
+            task.id ごとにユニークな ID にすることで、
+            タスクが複数あっても正しいモーダルを開ける。
+
+          style="display: none;":
+            初期状態を非表示にする。
+            Tailwind の hidden クラス（display: none !important）ではなく
+            インラインスタイルを使う理由:
+            hidden クラスは !important のため JS の style.display="flex" で上書きできない。
+            インラインスタイルなら JS の style.display 操作が有効になる。
+
+          fixed inset-0:
+            画面全体（上下左右 0）を覆う固定配置。
+            content_for :modals で body 直前に出力するため正しく機能する。
+
+          bg-black/50:
+            半透明の黒背景（オーバーレイ）。背後のページが薄く見える。
+
+          items-center justify-center:
+            フレックスコンテナで中央に配置する。
+
+          z-50:
+            他の要素より前面に表示する（z-index: 50）。
+        %>
+        <div id="task-modal-<%= task.id %>"
+             class="fixed inset-0 bg-black/50 items-center justify-center z-50 p-4"
+             style="display: none;"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="task-modal-title-<%= task.id %>">
+
+          <%#
+            モーダルパネル（白い部分）
+            id="task-modal-panel- = task.id":
+              _setupListeners() でパネル内クリックの
+              stopPropagation リスナーを設定するために必要。
+
+            max-w-sm w-full:
+              最大幅 384px、幅は親要素に合わせる。スマホでも崩れない。
+
+            border-t-4 border-red-500:
+              モーダル上部に赤いボーダーを付けて「危険な操作」を視覚的に示す。
+          %>
+          <div id="task-modal-panel-<%= task.id %>"
+               class="bg-white rounded-xl shadow-2xl max-w-sm w-full border-t-4 border-red-500 p-6">
+
+            <%# モーダルタイトル %>
+            <h2 id="task-modal-title-<%= task.id %>"
+                class="js-task-menu-title text-lg font-bold text-gray-900 mb-3">
+              <%#
+                js-task-menu-title クラス:
+                  _updateModalTitle() で
+                  document.querySelector(".js-task-menu-title") として取得する。
+                  タスク名をここにセットする。
+                  初期値はダミーテキスト（JSで上書きされる）。
+              %>
+              タスクを削除しますか？
+            </h2>
+
+            <%# 警告メッセージ %>
+            <p class="text-sm text-gray-600 mb-6">
+              削除したタスクは復元できません。
+              <br>
+              ※ AI生成タスクはAI提案モーダルからのみ削除できます。
+            </p>
+
+            <%# ボタン群 %>
+            <div class="flex gap-3">
+
+              <%#
+                キャンセルボタン
+                id="task-modal-cancel- = task.id":
+                  _setupListeners() でクリックリスナーを設定するために必要。
+                  クリックで closeMenu() を呼び出す。
+              %>
+              <button type="button"
+                      id="task-modal-cancel-<%= task.id %>"
+                      class="flex-1 px-4 py-2 text-sm font-medium text-gray-700
+                             bg-white border border-gray-300 rounded-lg
+                             hover:bg-gray-50 transition-colors">
+                キャンセル
+              </button>
+
+              <%#
+                削除ボタン
+                button_to を使う理由:
+                  link_to は GET リクエストを送る。
+                  button_to は <form method="post"> を内部で生成するため、
+                  method: :delete と組み合わせることで
+                  Rails が _method=delete パラメータを付与して
+                  DELETE /tasks/:id を送信できる。
+
+                data: { turbo_stream: true }:
+                  Turbo に「このリクエストは Turbo Stream で処理する」と伝える。
+                  これによりコントローラーの format.turbo_stream が発動する。
+
+                data: { turbo_submits_with: "削除中..." }:
+                  【レビュー指摘④対応】
+                  Turbo が提供する二重送信防止機能。
+                  フォーム送信中はボタンテキストを「削除中...」に変更し、
+                  ボタンを disabled にする。
+                  これにより連打による二重送信（二重削除）を防ぐ。
+
+                form: { id: "task-delete-form-#{task.id}" }:
+                  フォームに ID を付ける。
+                  task_menu_controller.js の _injectTabToForms() で
+                  このフォームを getElementById で取得して
+                  tab の hidden input を動的に追加するために必要。
+              %>
+              <%= button_to "🗑️ 削除する",
+                    task_path(task),
+                    method: :delete,
+                    data:   {
+                      turbo_stream: true,
+                      turbo_submits_with: "削除中..."
+                    },
+                    form:   {
+                      style: "display:inline",
+                      id:    "task-delete-form-#{task.id}"
+                    },
+                    class:  "flex-1 px-4 py-2 text-sm font-bold text-white
+                             bg-red-600 hover:bg-red-700 rounded-lg
+                             transition-colors cursor-pointer" %>
+            </div>
+          </div>
+        </div>
+
+        <%#
+          ====================================================
+          スマホ用: ボトムシート（768px 未満で表示）
+          ====================================================
+          id="task-sheet- = task.id":
+            task_menu_controller.js の _getSheet() で取得する。
+
+          items-end:
+            フレックスコンテナで下端に配置する（ボトムシートが画面下から出る）。
+        %>
+        <div id="task-sheet-<%= task.id %>"
+             class="fixed inset-0 bg-black/50 items-end z-50"
+             style="display: none;"
+             role="dialog"
+             aria-modal="true"
+             aria-labelledby="task-sheet-title-<%= task.id %>">
+
+          <%#
+            ボトムシートパネル
+            id="task-sheet-panel- = task.id":
+              _openBottomSheet() / _closeBottomSheet() で
+              translate-y-full / translate-y-0 クラスを付け替えてアニメーションする。
+
+            translate-y-full:
+              初期状態: 要素の高さ分だけ下にずらして画面外（下）に隠す。
+
+            transition-transform duration-300:
+              transform の変化を 300ms でアニメーションする。
+
+            rounded-t-2xl:
+              上部の角を丸くして「下から出てきた」ボトムシートらしく見せる。
+          %>
+          <div id="task-sheet-panel-<%= task.id %>"
+               class="bg-white rounded-t-2xl w-full p-6 pb-8
+                      transform translate-y-full transition-transform duration-300
+                      border-t-4 border-red-500">
+
+            <%# ドラッグハンドル（ボトムシートらしい外観） %>
+            <div class="w-10 h-1 bg-gray-300 rounded-full mx-auto mb-5" aria-hidden="true"></div>
+
+            <%# ボトムシートタイトル %>
+            <h2 id="task-sheet-title-<%= task.id %>"
+                class="js-task-menu-title text-lg font-bold text-gray-900 mb-2">
+              タスクを削除しますか？
+            </h2>
+
+            <%# 警告メッセージ %>
+            <p class="text-sm text-gray-600 mb-6">
+              削除したタスクは復元できません。
+            </p>
+
+            <%# ボタン群（縦並び） %>
+            <div class="flex flex-col gap-3">
+
+              <%#
+                削除ボタン（スマホ用）
+                デスクトップ用と同じく turbo_submits_with で二重送信を防ぐ。
+                form id は "task-delete-sheet-form-{id}" として
+                デスクトップ用フォーム ID と区別する。
+              %>
+              <%= button_to "🗑️ 削除する",
+                    task_path(task),
+                    method: :delete,
+                    data:   {
+                      turbo_stream: true,
+                      turbo_submits_with: "削除中..."
+                    },
+                    form:   {
+                      style: "display:block",
+                      id:    "task-delete-sheet-form-#{task.id}"
+                    },
+                    class:  "w-full px-4 py-3 text-sm font-bold text-white
+                             bg-red-600 hover:bg-red-700 rounded-xl
+                             transition-colors cursor-pointer" %>
+
+              <%# キャンセルボタン %>
+              <button type="button"
+                      id="task-sheet-cancel-<%= task.id %>"
+                      class="w-full px-4 py-3 text-sm font-medium text-gray-700
+                             bg-white border border-gray-300 rounded-xl
+                             hover:bg-gray-50 transition-colors">
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+
+      <% end %><%# content_for :modals の終わり %>
+    <% end %><%# unless task.ai_generated? の終わり %>
+
   </div>
 </div>

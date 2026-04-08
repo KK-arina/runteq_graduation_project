@@ -24,42 +24,24 @@ Rails.application.routes.draw do
   # ---------------------------------------------------------------
   # resources :tasks（C-2: 完了チェック・アーカイブ機能を追加）
   # ---------------------------------------------------------------
-  # 【C-2 での変更点】
-  #   C-1 では only: [:index, :new, :create] だったが、
-  #   C-2 で以下のカスタムアクションを member に追加する。
-  #
-  # 【member を使う理由】
-  #   「特定の1件（:id）」に対する操作なので member が適切。
-  #   collection は「コレクション全体」に対する操作（例: 並び替え）に使う。
-  #
-  # 【生成されるルートとパスヘルパー】
-  #   PATCH /tasks/:id/toggle_complete → tasks#toggle_complete
-  #     → toggle_complete_task_path(task)
-  #     → チェックボックスで完了↔未完了を切り替える
-  #
-  #   PATCH /tasks/:id/archive         → tasks#archive
-  #     → archive_task_path(task)
-  #     → 完了タスクを個別にアーカイブする
-  #
-  #   PATCH /tasks/archive_all_done    → tasks#archive_all_done
-  #     → archive_all_done_tasks_path
-  #     → 完了タスクを一括アーカイブする
-  #     → collection を使う理由: 特定の1件ではなく
-  #       「完了済み全件」に対する操作だから
-  resources :tasks, only: [ :index, :new, :create ] do
+  # 【C-3 変更点】
+  #   only に :destroy を追加した。
+  #   生成されるルート:
+  #     DELETE /tasks/:id → tasks#destroy
+  #     → task_path(task) で "/tasks/1" のようなURLを生成する
+  #     → button_to task_path(task), method: :delete で呼び出す
+
+  resources :tasks, only: [ :index, :new, :create, :destroy ] do
     member do
-      # PATCH /tasks/:id/toggle_complete
-      # チェックボックスタップで todo ↔ done を切り替える
+      # PATCH /tasks/:id/toggle_complete → タスクの完了↔未完了を切り替える
       patch :toggle_complete
 
-      # PATCH /tasks/:id/archive
-      # 個別アーカイブボタンで status を archived に変更する
+      # PATCH /tasks/:id/archive → 完了タスクを個別にアーカイブする
       patch :archive
     end
 
     collection do
-      # PATCH /tasks/archive_all_done
-      # 「すべてアーカイブ」ボタンで完了済み全件を一括アーカイブ
+      # PATCH /tasks/archive_all_done → 完了タスクを一括アーカイブする
       patch :archive_all_done
     end
   end

@@ -421,4 +421,60 @@ class TaskTest < ActiveSupport::TestCase
       assert task.doing?, "doing タスクは archive! しても doing のままであること"
     end
   end
+
+  # ============================================================
+  # C-3: soft_delete / ai_generated のテスト（修正版）
+  # ============================================================
+  #
+  # 【@task を使わない理由】
+  #   task_test.rb の setup に @task の定義がないため
+  #   @task を使うと NoMethodError: undefined method '...' for nil になる。
+  #   各テスト内で Task.create! してローカル変数として使う。
+
+  test "soft_delete は deleted_at を現在時刻に設定する" do
+    task = Task.create!(
+      user:     users(:one),
+      title:    "soft_delete テスト",
+      priority: :must
+    )
+
+    # 作成直後は deleted_at が nil のはず
+    assert_nil task.deleted_at
+
+    task.soft_delete
+
+    # reload でDBから最新値を取得する
+    # soft_delete は touch(:deleted_at) を実行するが
+    # Rubyオブジェクトのキャッシュは自動更新されないため reload が必要
+    assert_not_nil task.reload.deleted_at
+  end
+
+  test "soft_delete 後のタスクは active スコープに含まれない" do
+    task = Task.create!(
+      user:     users(:one),
+      title:    "soft_delete スコープテスト",
+      priority: :must
+    )
+
+    task.soft_delete
+
+    # Task.active は deleted_at: nil のもののみ返す
+    assert_not_includes Task.active, task.reload
+  end
+
+  test "ai_generated が true のタスクは ai_generated? が true を返す" do
+    # tasks.yml の ai_generated_task フィクスチャを使う
+    ai_task = tasks(:ai_generated_task)
+    assert ai_task.ai_generated?
+  end
+
+  test "ai_generated が false のタスクは ai_generated? が false を返す" do
+    task = Task.create!(
+      user:         users(:one),
+      title:        "手動タスク",
+      priority:     :must,
+      ai_generated: false
+    )
+    assert_not task.ai_generated?
+  end
 end
