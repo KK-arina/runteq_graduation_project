@@ -275,6 +275,20 @@
       </div>
     <% end %>
 
+    <%# ── C-3 追加: Turbo Stream フラッシュ通知の挿入先 ──────────────────── %>
+    <%#
+      id="flash-area":
+        TasksController#destroy の Turbo Stream レスポンスで
+        turbo_stream.prepend("flash-area", partial: "shared/flash_message", ...)
+        として指定するターゲット要素。
+        この div の先頭（prepend）にフラッシュメッセージが動的挿入される。
+
+      【なぜ空の div で良いのか】
+        prepend はこの div の「子要素として先頭に追加」する。
+        初期状態は空で問題ない。Turbo Stream で通知が来るたびに子要素が増える。
+    %>
+    <div id="flash-area"></div>
+
     <%#
       <main id="main-content">:
         【Issue #33 追加・変更】
@@ -304,6 +318,15 @@
     %>
     <main id="main-content" class="flex-1" tabindex="-1">
       <%= yield %>
+      <%# ── C-3 追加: Turbo Stream フラッシュ通知の挿入先 ──────────────────── %>
+      <%#
+        id="flash-area":
+          destroy アクションの Turbo Stream で
+          turbo_stream.prepend("flash-area", partial: "shared/flash_message", ...)
+          と指定したとき、この div の先頭にメッセージが挿入される。
+          prepend を使うことで複数の通知が積み重なって表示される。
+      %>
+      <div id="flash-area"></div>
     </main>
 
     <%= render "shared/footer" %>

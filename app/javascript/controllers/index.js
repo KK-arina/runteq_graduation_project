@@ -68,3 +68,17 @@ application.register("priority-card", PriorityCardController)
 //   ケバブケース task-toggle に変換されてHTMLの属性名になる。
 import TaskToggleController from "./task_toggle_controller"
 application.register("task-toggle", TaskToggleController)
+
+// ── C-3 追加: task-menu コントローラーを登録する ─────────────────────────────
+//
+// 【このコントローラーの役割】
+//   タスク一覧の「⋯」ボタンをクリックしたとき、
+//   削除確認モーダル（デスクトップ）またはボトムシート（スマホ）を表示する。
+//   手動作成タスク（ai_generated=false）のみ「⋯」ボタンを表示する。
+//
+// 【登録名 "task-menu" について】
+//   HTML 側の data-controller="task-menu" と対応する。
+//   ファイル名 task_menu_controller.js が
+//   ケバブケース task-menu に変換されてHTMLの属性名になる。
+import TaskMenuController from "./task_menu_controller"
+application.register("task-menu", TaskMenuController)

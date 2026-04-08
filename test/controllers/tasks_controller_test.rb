@@ -253,4 +253,141 @@ class TasksControllerTest < ActionDispatch::IntegrationTest
     other_done.reload
     assert other_done.done?, "他ユーザーのタスクは done のままであること"
   end
+
+  # ============================================================
+  # C-3: destroy アクションのテスト（修正版）
+  # ============================================================
+  #
+  # 【travel_to ブロックを使わない理由】
+  #   ActionDispatch::IntegrationTest のセッションは
+  #   travel_to ブロックをまたぐと引き継がれないことがある。
+  #   setup で行った post login_path が無効になり未ログイン扱いになるため、
+  #   require_login が先に動いて 302 が返り期待するステータスが確認できない。
+  #
+  #   setup で travel_to Time.zone.local(2026, 4, 8, 10, 0, 0) 済み。
+  #   4月8日（水曜日）は locked? が false になるため追加の travel_to は不要。
+  #
+  # 【例外: ロック中テストのみ travel_to ブロック内で再ログインする】
+  #   月曜日への時刻移動が必要なため travel_to ブロックを使うが、
+  #   ブロック内で post login_path を呼んで再ログインする。
+
+  test "手動タスクを削除できる（HTML形式）" do
+    # setup の時刻（2026/4/8 水曜）をそのまま使う
+    # travel_to ブロックを使わないのでセッションが正常に引き継がれる
+    task = Task.create!(
+      user:         @user,
+      title:        "削除テストタスク",
+      priority:     :must,
+      ai_generated: false
+    )
+
+    # soft_delete により deleted_at がセットされる
+    # Task.active は deleted_at: nil のもののみ返すため -1 になる
+    assert_difference "Task.active.count", -1 do
+      delete task_path(task)
+    end
+
+    assert_redirected_to tasks_path(tab: "all")
+    assert_equal "タスクを削除しました", flash[:notice]
+  end
+
+  test "AI生成タスクは削除できない（403を返す）" do
+    # travel_to ブロックを使わない
+    # setup の時刻（2026/4/8 水曜）はロックなし状態なので
+    # destroy アクション内の ai_generated チェックが確実に最初に実行される
+    #
+    # 【なぜ travel_to ブロックを使ってはいけないか】
+    #   travel_to ブロック内ではセッションが引き継がれず未ログイン扱いになる
+    #   → require_login が先に動いて 302 が返る
+    #   → 期待している 403 が確認できない
+    ai_task = Task.create!(
+      user:         @user,
+      title:        "AI生成タスク",
+      priority:     :must,
+      ai_generated: true
+    )
+
+    # DELETE リクエストを送っても論理削除されない
+    assert_no_difference "Task.active.count" do
+      delete task_path(ai_task)
+    end
+
+    # destroy アクション内の ai_generated チェックで 403 が返る
+    assert_response :forbidden
+  end
+
+  test "他ユーザーのタスクは削除できない（404を返す）" do
+    # @other_user は setup で users(:two) として定義済み
+    # travel_to ブロックを使わないのでセッションが正常に引き継がれる
+    other_task = Task.create!(
+      user:         @other_user,
+      title:        "他ユーザーのタスク",
+      priority:     :must,
+      ai_generated: false
+    )
+
+    # current_user.tasks.find(params[:id]) で RecordNotFound → 404
+    assert_no_difference "Task.active.count" do
+      delete task_path(other_task)
+    end
+
+    assert_response :not_found
+  end
+
+  test "ロック中は手動タスクも削除できない" do
+    # locked? の条件:
+    #   ① 今が月曜日のAM4:00以降
+    #   ② 前週の振り返りが未完了
+    #
+    # setup の時刻（2026/4/8 水曜）は条件①を満たさないため
+    # 月曜日（2026/4/13）に時刻を移動する
+    travel_to Time.zone.local(2026, 4, 13, 10, 0, 0) do
+      # 前週（4/6〜4/12）の振り返りを未完了状態で作成する
+      # completed_at: nil → locked? = true になる
+      WeeklyReflection.create!(
+        user:            @user,
+        week_start_date: Date.new(2026, 4, 6),
+        week_end_date:   Date.new(2026, 4, 12),
+        year:            2026,
+        week_number:     15
+        # completed_at は nil のまま（未完了）
+      )
+
+      task = Task.create!(
+        user:         @user,
+        title:        "ロック中の削除テスト",
+        priority:     :must,
+        ai_generated: false
+      )
+
+      # travel_to ブロック内では setup のセッションが失われるため再ログインする
+      post login_path, params: { session: { email: @user.email, password: "password" } }
+
+      assert_no_difference "Task.active.count" do
+        delete task_path(task)
+      end
+
+      # destroy アクション内の require_unlocked により redirect（302）が返る
+      assert_response :redirect
+    end
+  end
+
+  test "未ログイン状態では削除できない" do
+    # ログアウトしてセッションを破棄する
+    delete logout_path
+
+    task = Task.create!(
+      user:         @user,
+      title:        "未ログインテスト",
+      priority:     :must,
+      ai_generated: false
+    )
+
+    assert_no_difference "Task.active.count" do
+      delete task_path(task)
+    end
+
+    # require_login によりログインページへリダイレクト
+    assert_redirected_to login_path
+  end
 end

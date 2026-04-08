@@ -1,0 +1,13 @@
+# test/fixtures/tasks.yml への追記（C-3 追加分）
+#
+# 既存のフィクスチャファイルに ai_generated: true のタスクを追加する。
+# テストで Task.create! を使うため、フィクスチャは最小限でよい。
+# ただし ai_generated_task フィクスチャはモデルテストで参照するため追加する。
+
+ai_generated_task:
+  user: one
+  title: "AI生成タスクのサンプル"
+  priority: 0
+  task_type: 0
+  status: 0
+  ai_generated: true
