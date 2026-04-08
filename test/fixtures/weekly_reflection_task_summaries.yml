@@ -1,0 +1,27 @@
+# test/fixtures/weekly_reflection_task_summaries.yml
+#
+# ==============================================================================
+# WeeklyReflectionTaskSummary フィクスチャ
+# ==============================================================================
+#
+# 【フィクスチャの役割】
+#   モデルテストで「既存スナップショット」として参照するサンプルデータを定義する。
+#
+# 【UNIQUE 制約への対応】
+#   DBレベルの UNIQUE(weekly_reflection_id, task_id) 制約（task_id IS NOT NULL）があるため、
+#   同じ weekly_reflection × task の組み合わせを重複させてはいけない。
+#
+# 【使用している fixture の組み合わせ】
+#   completed_one (weekly_reflection) × ai_generated_task (task) → summary_one
+#   ここで使っていない組み合わせはテスト内で自由に使える。
+# ==============================================================================
+
+summary_one:
+  weekly_reflection: completed_one
+  task: ai_generated_task
+  title: "AI生成タスクのサンプル"
+  priority: 0
+  task_type: 0
+  was_completed: true
+  completed_at: "2026-01-10 15:00:00"
+  due_date: "2026-01-10"

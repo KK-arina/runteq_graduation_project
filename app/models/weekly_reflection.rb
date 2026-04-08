@@ -32,6 +32,20 @@ class WeeklyReflection < ApplicationRecord
            class_name: "WeeklyReflectionHabitSummary",
            dependent: :destroy
 
+  # ── C-4 追加 ───────────────────────────────────────────────────────────────
+  # has_many :task_summaries
+  #   このアソシエーションを追加する理由:
+  #     WeeklyReflectionTaskSummary.create_all_for_reflection! の中で
+  #     weekly_reflection.task_summaries.exists? や
+  #     weekly_reflection.task_summaries.build を使うため。
+  #     dependent: :destroy を指定することで、
+  #     振り返りが削除されたときにタスクスナップショットも自動削除される
+  #     （DB側の on_delete: :cascade と二重に保護する）。
+  has_many :task_summaries,
+           class_name: "WeeklyReflectionTaskSummary",
+           dependent: :destroy
+  # ────────────────────────────────────────────────────────────────────────────
+
   # ============================================================
   # コールバック
   # ============================================================

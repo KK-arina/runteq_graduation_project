@@ -89,8 +89,25 @@ class WeeklyReflectionsController < ApplicationController
     # habit_name はスナップショット列のため habit の eager loading は不要
     # .to_a で配列化し .count / .size がメモリ上で完結するようにする
     @habit_summaries = @weekly_reflection.habit_summaries
-                                        .order(achievement_rate: :desc)
-                                        .to_a
+                                         .order(achievement_rate: :desc)
+                                         .to_a
+
+    # ── C-4 追加 ──────────────────────────────────────────────────────────────
+    # @task_summaries: タスクスナップショットを優先度昇順（must→should→could）で取得
+    #
+    # .by_priority スコープを使う理由:
+    #   must(0) < should(1) < could(2) の数値順で ORDER BY priority ASC になるため、
+    #   重要度の高いタスクが先頭に並ぶ。
+    #
+    # .to_a で配列化する理由:
+    #   ビューで .select / .count / .size を複数回呼ぶ場合、
+    #   .to_a でメモリに読み込んでおくことで毎回 SQL が発行されるのを防ぐ。
+    #   N+1 クエリを防ぎパフォーマンスを向上させる。
+    @task_summaries = @weekly_reflection.task_summaries
+                                         .by_priority
+                                         .to_a
+    # ──────────────────────────────────────────────────────────────────────────
+
     @overall_achievement_rate = calculate_overall_achievement_rate
   end
 
