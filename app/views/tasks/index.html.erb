@@ -175,4 +175,22 @@
     </div>
   <% end %>
 
-</div>
+</div><%# max-w-7xl mx-auto の閉じタグ %>
+
+<%#
+  モーダル専用コンテナ
+  ────────────────────────────────────────────────────────────────
+  【役割】
+    _task_row から render される _task_modal のモーダル HTML は
+    フルレンダリング時にここではなくインラインで出力される。
+
+    toggle_complete の Turbo Stream で
+    turbo_stream.replace("task-modal-#{@task.id}", ...) を発行するとき、
+    DOM に task-modal-#{id} 要素が存在しないケース（初回toggle時）に備えて
+    このコンテナを upsert 先として使う。
+
+    また fixed inset-0 のモーダルが正しく全画面表示されるよう、
+    transition / transform を持つ祖先要素の外に置く必要があるため
+    max-w-7xl div の外側に配置する。
+%>
+<div id="task-modals-container"></div>

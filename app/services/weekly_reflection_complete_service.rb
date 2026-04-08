@@ -40,6 +40,26 @@ class WeeklyReflectionCompleteService
       @reflection.save!
       apply_numeric_corrections! unless @corrections.blank?
       WeeklyReflectionHabitSummary.create_all_for_reflection!(@reflection)
+
+      # ── C-4 追加 ──────────────────────────────────────────────────────────
+      # WeeklyReflectionTaskSummary.create_all_for_reflection!(@reflection)
+      #
+      # 【追加する理由】
+      #   習慣スナップショット（WeeklyReflectionHabitSummary）と同じタイミングで
+      #   タスクスナップショットも保存する。
+      #
+      # 【トランザクション内に含める理由】
+      #   ApplicationRecord.with_transaction ブロック内に書くことで、
+      #   習慣スナップショット保存とタスクスナップショット保存が
+      #   「全部成功 or 全部ロールバック」となる。
+      #   どちらか一方だけ保存されるという中途半端な状態を防ぐ。
+      #
+      # 【呼び出し順序について】
+      #   WeeklyReflectionHabitSummary の直後に呼ぶことで、
+      #   習慣・タスクの両スナップショットが同じトランザクションで完結する。
+      WeeklyReflectionTaskSummary.create_all_for_reflection!(@reflection)
+      # ──────────────────────────────────────────────────────────────────────
+
       @reflection.complete!
       complete_last_week_reflection! if @was_locked
     end

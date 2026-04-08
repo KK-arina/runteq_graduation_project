@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_03_24_000000) do
+ActiveRecord::Schema[7.2].define(version: 2026_04_08_103105) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -334,6 +334,22 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_24_000000) do
     t.index ["weekly_reflection_id"], name: "idx_on_weekly_reflection_id_641bf747c5"
   end
 
+  create_table "weekly_reflection_task_summaries", force: :cascade do |t|
+    t.bigint "weekly_reflection_id", null: false
+    t.bigint "task_id"
+    t.string "title", null: false
+    t.integer "priority", default: 1, null: false
+    t.integer "task_type", default: 0, null: false
+    t.boolean "was_completed", default: false, null: false
+    t.datetime "completed_at"
+    t.date "due_date"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["task_id"], name: "index_weekly_reflection_task_summaries_on_task_id"
+    t.index ["weekly_reflection_id", "task_id"], name: "idx_wr_task_summaries_on_wr_id_and_task_id", unique: true, where: "(task_id IS NOT NULL)"
+    t.index ["weekly_reflection_id"], name: "index_weekly_reflection_task_summaries_on_weekly_reflection_id"
+  end
+
   create_table "weekly_reflections", force: :cascade do |t|
     t.bigint "user_id", null: false
     t.date "week_start_date", null: false
@@ -370,5 +386,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_03_24_000000) do
   add_foreign_key "user_settings", "users", on_delete: :cascade
   add_foreign_key "weekly_reflection_habit_summaries", "habits", on_delete: :nullify
   add_foreign_key "weekly_reflection_habit_summaries", "weekly_reflections", on_delete: :cascade
+  add_foreign_key "weekly_reflection_task_summaries", "tasks", on_delete: :nullify
+  add_foreign_key "weekly_reflection_task_summaries", "weekly_reflections", on_delete: :cascade
   add_foreign_key "weekly_reflections", "users", on_delete: :cascade
 end
