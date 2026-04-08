@@ -66,7 +66,8 @@ flowchart LR
 [![C-1 Task基本CRUD](https://img.shields.io/badge/C--1_Task基本CRUD-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-1-task-model-crud)
 [![C-2 タスク完了チェック](https://img.shields.io/badge/C--2_タスク完了チェック-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-2-task-toggle-status)
 [![C-3 タスク削除確認モーダル](https://img.shields.io/badge/C--3_タスク削除確認モーダル-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-3-task-delete-modal)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-18%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![C-4 週次振り返りタスクスナップショット](https://img.shields.io/badge/C--4_週次振り返りタスクスナップショット-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-4-weekly-reflection-task-summary)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-19%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -150,6 +151,7 @@ flowchart LR
 | #C-1 | Task モデル・基本 CRUD（Must/Should/Could優先度・todo/done/archived状態管理） | 2026-04-07 | feature/C-1-task-model-crud |
 | #C-2 | タスクの完了チェック・ステータス管理（toggle_complete/archive/archive_all_done・Turbo Stream） | 2026-04-07 | feature/C-2-task-toggle-status |
 | #C-3 | タスク削除確認モーダル（M-2）・手動タスク削除（ai_generated=false のみ削除可・デスクトップ中央モーダル/スマホボトムシート・Turbo Stream削除・トースト通知） | 2026-04-08 | feature/C-3-task-delete-modal |
+| #C-4 | 週次振り返りのタスクスナップショット保存（weekly_reflection_task_summaries・was_completedフラグ・優先度別表示・toggle後モーダル再注入バグ修正） | 2026-04-08 | feature/C-4-weekly-reflection-task-summary |
 
 <br>
 
@@ -2120,6 +2122,112 @@ C-3テスト: 9件（モデル4件・コントローラー5件）
 
 <br>
 
+### #C-4: 週次振り返りのタスクスナップショット保存
+
+<br>
+
+**ブランチ:** `feature/C-4-weekly-reflection-task-summary`<br>
+**完了日:** 2026-04-08<br>
+**概要:** 振り返り完了時に当週のタスク実績を `weekly_reflection_task_summaries` にスナップショット保存。<br>
+後からタスクを削除しても振り返り詳細ページにタスク実績が正確に表示される。<br>
+合わせて toggle_complete 後にモーダルが開かなくなる既存バグを修正した。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Migration | `weekly_reflection_task_summaries` テーブルを新規作成（task_id: on_delete: :nullify / weekly_reflection_id: on_delete: :cascade / title / priority / task_type / was_completed / completed_at / due_date） |
+| Migration | UNIQUE 部分インデックス `idx_wr_task_summaries_on_wr_id_and_task_id`（WHERE task_id IS NOT NULL）を追加 |
+| Model | `WeeklyReflectionTaskSummary` モデルを新規作成（enum: priority/task_type・バリデーション・スコープ・`create_all_for_reflection!`・`build_from_task`・`priority_label`・`priority_color_class`） |
+| Model | `WeeklyReflection` に `has_many :task_summaries, class_name: "WeeklyReflectionTaskSummary", dependent: :destroy` を追加 |
+| Service | `WeeklyReflectionCompleteService#call` のトランザクション内に `WeeklyReflectionTaskSummary.create_all_for_reflection!(@reflection)` を追加 |
+| Controller | `WeeklyReflectionsController#show` に `@task_summaries = @weekly_reflection.task_summaries.by_priority.to_a` を追加 |
+| View | `weekly_reflections/show.html.erb` のセクション②とセクション③の間にタスク実績セクションを追加（優先度別プログレスバー・was_completedフラグによる✅/⬜表示・打ち消し線・完了件数メッセージ） |
+| View | `_task_modal.html.erb` を新規作成（モーダルHTMLをパーシャルに切り出し） |
+| View | `_task_row.html.erb` の `content_for :modals` を `render "tasks/task_modal"` に変更（toggle後モーダル消失バグ修正） |
+| Controller | `TasksController#toggle_complete` の Turbo Stream レスポンスにモーダル再注入（`turbo_stream.replace("task-modal-#{@task.id}", ...)`）を追加（バグ修正） |
+| Layout | `application.html.erb` の重複 `id="flash-area"` を削除（`<main>` 外の1箇所を削除し `<main>` 内の1箇所に統一） |
+| Test | `WeeklyReflectionTaskSummary` モデルテストを新規作成（21件） |
+
+<br>
+
+#### スナップショット設計の核心
+
+<br>
+
+| 設計 | 内容 |
+|:---|:---|
+| `task_id` の `on_delete: :nullify` | タスクが削除されると `task_id` が NULL になるが、`title` 等のスナップショットは保持される |
+| `was_completed` フラグ | `task.done? \|\| task.archived?` を振り返り時点での完了状態として記録。後からタスクの状態が変わっても振り返り時点の事実が保たれる |
+| UNIQUE 部分インデックス | `WHERE task_id IS NOT NULL` とすることで PostgreSQL の「NULL 同士は等しくない」仕様に対応 |
+| プレースホルダー形式の OR クエリ | Arel を廃止し named bind variables（`:start / :end / :start_dt / :end_dt`）による SQL プレースホルダー形式を採用（可読性・SQLインジェクション対策） |
+| `find_each` によるメモリ最適化 | `tasks.each` から `tasks.find_each` に変更。1000件ずつバッチ処理してメモリ効率を向上 |
+
+<br>
+
+#### toggle 後にモーダルが開かないバグの修正
+
+<br>
+
+**問題の原因:**<br>
+`content_for :modals` はサーバーサイドのフルレンダリング時にのみ動作する。<br>
+`toggle_complete` の Turbo Stream で `_task_row` を `replace` すると、<br>
+パーシャル内の `content_for :modals` が `yield :modals` に反映されずモーダル HTML が DOM から消える。<br>
+結果として `document.getElementById("task-modal-${id}")` が `null` を返し、<br>
+`openMenu()` が何もできなくなっていた。
+
+<br>
+
+**修正内容:**
+
+<br>
+
+| 修正 | 内容 |
+|:---|:---|
+| `_task_modal.html.erb` を新規作成 | `_task_row.html.erb` のモーダルHTMLを独立したパーシャルに切り出す |
+| `_task_row.html.erb` を修正 | `content_for :modals do...end` を `render "tasks/task_modal", task: task` に変更。フルレンダリング時はインラインで直接DOMに出力される |
+| `toggle_complete` アクションを修正 | 未完了に戻す `else` ブロックに `turbo_stream.replace("task-modal-#{@task.id}", partial: "tasks/task_modal", ...)` を追加。DOM に再注入することで `openMenu()` が正常に動作する |
+| `application.html.erb` を修正 | `<main>` 外の重複 `id="flash-area"` を削除。同一 ID が2つあると Turbo のDOM整合性が崩れる |
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `db/migrate/YYYYMMDDHHMMSS_create_weekly_reflection_task_summaries.rb` | 新規作成 |
+| `app/models/weekly_reflection_task_summary.rb` | 新規作成 |
+| `app/models/weekly_reflection.rb` | `has_many :task_summaries` を追加 |
+| `app/services/weekly_reflection_complete_service.rb` | トランザクション内に `WeeklyReflectionTaskSummary.create_all_for_reflection!` を追加 |
+| `app/controllers/weekly_reflections_controller.rb` | `show` アクションに `@task_summaries` を追加 |
+| `app/views/weekly_reflections/show.html.erb` | タスク実績セクションを追加 |
+| `app/views/tasks/_task_modal.html.erb` | 新規作成（モーダルHTMLパーシャル分離） |
+| `app/views/tasks/_task_row.html.erb` | `content_for :modals` → `render "tasks/task_modal"` に変更 |
+| `app/views/tasks/index.html.erb` | `task-modals-container` コンテナを追加 |
+| `app/controllers/tasks_controller.rb` | `toggle_complete` にモーダル再注入を追加 |
+| `app/views/layouts/application.html.erb` | `<main>` 外の重複 `id="flash-area"` を削除 |
+| `test/fixtures/weekly_reflection_task_summaries.yml` | 新規作成 |
+| `test/models/weekly_reflection_task_summary_test.rb` | 新規作成（21件） |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+C-4テスト: 21 runs, 46 assertions, 0 failures, 0 errors, 0 skips
+全テスト:  450 runs, 1119 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -2957,6 +3065,101 @@ end
 
 <br>
 
+### 29. content_for は Turbo Stream の replace では yield に反映されない（#C-4）
+
+<br>
+
+`content_for :modals do...end` はサーバーサイドのフルレンダリング時にのみ動作する。<br>
+Turbo Stream の `replace` でパーシャルを差し替えると、<br>
+パーシャル内の `content_for :modals` は `yield :modals`（`</body>` 直前）に反映されず<br>
+モーダル HTML が DOM から消えてしまう。<br>
+これによって `document.getElementById("task-modal-${id}")` が `null` を返し、<br>
+「⋯」ボタンを押してもモーダルが開かなくなる。<br>
+
+<br>
+
+**解決策:**<br>
+モーダル HTML を独立したパーシャル（`_task_modal.html.erb`）に切り出し、<br>
+`_task_row.html.erb` からインラインで `render` する設計に変更する。<br>
+加えて `toggle_complete` の Turbo Stream レスポンスに<br>
+`turbo_stream.replace("task-modal-#{@task.id}", partial: "tasks/task_modal", ...)` を追加することで<br>
+タスク行の差し替え後もモーダル HTML が DOM に存在し続ける。<br>
+
+<br>
+
+```ruby
+# ❌ content_for :modals → Turbo Stream replace 後に yield :modals から消える
+<% content_for :modals do %>
+  ...
+<% end %>
+
+# ✅ パーシャルとしてインライン出力 → DOM に直接残り続ける
+<%= render "tasks/task_modal", task: task %>
+
+# コントローラーで toggle 後にモーダルを再注入する
+streams << turbo_stream.replace(
+  "task-modal-#{@task.id}",
+  partial: "tasks/task_modal",
+  locals:  { task: @task }
+)
+```
+
+<br>
+
+### 30. 同一 id が2箇所存在すると Turbo の DOM 整合性が崩れる（#C-4）
+
+<br>
+
+HTML の仕様では同一ページに同じ `id` を持つ要素は1つだけでなければならない。<br>
+重複した `id` が存在すると `document.getElementById()` が最初に見つかった要素だけを返し、<br>
+Turbo Stream の `prepend("flash-area", ...)` が意図しない要素を操作する場合がある。<br>
+`application.html.erb` に `id="flash-area"` が `<main>` の外と中に2箇所あった場合、<br>
+Turbo のイベント処理で DOM の整合性が崩れ、モーダルの表示等に影響する。<br>
+`id` は必ずページ全体で一意にすること。重複を発見したら一方を削除するか別の `id` を付ける。<br>
+
+<br>
+
+```html
+
+    の外 -->
+
+  <%= yield %>
+     の中 -->
+
+
+
+
+  <%= yield %>
+  
+
+```
+
+<br>
+
+### 31. タスクスナップショットは `on_delete: :nullify` で「参照」と「記録」を分離する（#C-4）
+
+<br>
+
+習慣スナップショット（`WeeklyReflectionHabitSummary`）と同じ「スナップショット設計」を採用する。<br>
+`task_id` は `on_delete: :nullify`（タスク削除時に NULL になる）とし、<br>
+`title` / `priority` / `was_completed` 等のスナップショットカラムは保持する。<br>
+これによりタスクを削除しても振り返り詳細ページが正確に表示され続ける。<br>
+
+<br>
+
+| 外部キー設計 | 動作 | 採用理由 |
+|:---|:---|:---|
+| `on_delete: :cascade` | タスク削除時にスナップショットも削除 | ❌ 振り返り詳細が壊れる |
+| `on_delete: :nullify` | タスク削除時は task_id を NULL に更新 | ✅ スナップショット（title等）は残り続ける |
+
+<br>
+
+`was_completed` フラグが「スナップショット設計の核心」であり、<br>
+`task.done? || task.archived?` を振り返り完了時点での完了状態として記録する。<br>
+後からタスクの状態が変わっても振り返り時点の事実が保たれる。
+
+<br>
+
 ---
 
 <br>
@@ -3434,8 +3637,8 @@ habitflow/
 │   │   ├── dashboards_controller.rb       # ダッシュボード（変更: @today_tasks追加 #C-1）
 │   │   ├── habits_controller.rb           # 習慣の CRUD（変更: archive/unarchive/archived追加・set_habit修正 #B-4）
 │   │   ├── habit_records_controller.rb    # 習慣の日次記録（変更: Float() 安全変換・numeric_value 対応 #B-1）
-│   │   ├── weekly_reflections_controller.rb # 週次振り返り（変更: corrections 受け渡し・build_habit_stats 数値型対応 #B-1）
-│   │   ├── tasks_controller.rb            # 変更: destroy追加（ai_generated=true は403・ロック中は302・論理削除）・before_action :require_unlocked を外しアクション内で順序制御（#C-3）
+│   │   ├── weekly_reflections_controller.rb # 変更: show に @task_summaries 追加（#C-4）
+│   │   ├── tasks_controller.rb            # 変更: toggle_complete にモーダル再注入追加・destroy追加（#C-3/#C-4バグ修正）
 │   │   ├── sessions_controller.rb         # ログイン・ログアウト
 │   │   ├── users_controller.rb            # ユーザー登録
 │   │   ├── errors_controller.rb           # カスタムエラーページ
@@ -3444,14 +3647,15 @@ habitflow/
 │   │   ├── user.rb                        # ユーザー認証・has_many 設定（変更: has_many :tasks追加 #C-1）
 │   │   ├── habit.rb                       # 習慣・論理削除・週次進捗計算
 │   │   ├── habit_record.rb                # 日次記録・AM4:00 基準・UNIQUE 制約
-│   │   ├── weekly_reflection.rb           # 週次振り返り・complete! メソッド
+│   │   ├── weekly_reflection.rb           # 週次振り返り・complete! メソッド（変更: has_many :task_summaries 追加 #C-4）
 │   │   ├── weekly_reflection_habit_summary.rb # スナップショット・達成率計算
+│   │   ├── weekly_reflection_task_summary.rb  # #C-4 新規: タスクスナップショット（was_completedフラグ・priority_label/color_class・create_all_for_reflection!）
 │   │   ├── habit_template.rb                  # #A-5: オンボーディング用習慣テンプレートマスタ
 │   │   ├── habit_excluded_day.rb              # #B-2: 除外日モデル（DAY_NAMES定数・バリデーション）
 │   │   ├── user_setting.rb                    # ユーザー設定（rest_mode_active?・#B-3で参照）
 │   │   └── task.rb                        # 変更: toggle_complete!/archive! メソッド追加・done?ガード（#C-2）
 │   ├── services/
-│   │   ├── weekly_reflection_complete_service.rb  # #A-7 #B-1: 振り返り完了フロー（corrections引数・差分補正ロジック追加）
+│   │   ├── weekly_reflection_complete_service.rb  # 変更: WeeklyReflectionTaskSummary.create_all_for_reflection! 追加（#C-4）
 │   │   ├── habit_record_save_service.rb            # #A-7 #B-1: 習慣記録保存フロー（数値型対応・errors:[]配列形式統一）
 │   │   ├── user_destroy_service.rb                 # #A-7: 退会処理フロー（個人情報匿名化）
 │   │   └── ai_proposal_confirm_service.rb          # #A-7: AI提案確定フロー骨格（#D-3〜#D-4で本実装）
@@ -3479,12 +3683,12 @@ habitflow/
 │       ├── dashboards/                    # ダッシュボード画面（変更: 今日のタスクセクション追加 #C-1）
 │       ├── habits/                        # 習慣一覧・新規作成・編集・アーカイブ一覧画面（変更: ⋯メニュー置き換え・_habit_card_actions.html.erb追加 #B-5）
 │       ├── habit_records/                 # 習慣記録パーシャル（変更: 状態バッジ5パターン #B-3）
-│       ├── weekly_reflections/            # 振り返り一覧・入力・詳細画面（変更: リフレクション3項目・数値補正フィールド追加 #B-1）
+│       ├── weekly_reflections/            # 変更: show.html.erb にタスク実績セクション追加（#C-4）
 │       ├── shared/                        # 変更: _flash_message.html.erb を新規作成（Turbo Stream用トースト通知パーシャル・#C-3）
 │       ├── errors/                        # 404・422・500 エラーページ
-│       ├── tasks/                         # 変更: _task_row.html.erbに⋯メニューボタン追加・content_for :modalsでモーダルHTML出力・_tab_counts.html.erb の複数行#{}を文字列結合に修正（#C-3）
+│       ├── tasks/                         # 変更: _task_modal.html.erb 新規作成（モーダルHTML分離）・_task_row.html.erb の content_for :modals を render に変更・index.html.erb に task-modals-container 追加（#C-4バグ修正）
 │       └── layouts/
-│           └── application.html.erb  # 変更: yield :modals を</body>直前に追加（#B-5）・id="flash-area" div を追加（Turbo Stream prepend の挿入先・#C-3）
+│           └── application.html.erb  # 変更: yield :modals を</body>直前に追加（#B-5）・重複 id="flash-area" を1箇所に統一（#C-4バグ修正）
 ├── db/
 │   ├── migrate/
 │   │   ├── （MVP既存マイグレーション群）
@@ -3508,7 +3712,8 @@ habitflow/
 │   │   ├── YYYYMMDDHHMMSS_remove_extraneous_finished_at_index.rb  # #A-3
 │   │   ├── YYYYMMDDHHMMSS_create_good_jobs.rb              # #A-3
 │   │   ├── YYYYMMDDHHMMSS_add_missing_indexes_for_performance.rb  # #A-6: 不足インデックス2種追加
-│   │   └── YYYYMMDDHHMMSS_add_next_action_to_weekly_reflections.rb  # #B-1: からの？カラム追加（text型・null許可）
+│   │   ├── YYYYMMDDHHMMSS_add_next_action_to_weekly_reflections.rb  # #B-1: からの？カラム追加（text型・null許可）
+│   │   └── YYYYMMDDHHMMSS_create_weekly_reflection_task_summaries.rb  # #C-4: タスクスナップショットテーブル（on_delete: :nullify・UNIQUE部分インデックス）
 │   ├── explain_analyze_audit.sql          # #A-6: インデックス監査用SQLスクリプト（7クエリ）
 │   ├── schema.rb                          # 現在のDBスキーマ（自動生成）
 │   └── seeds.rb                           # デモ用サンプルデータ
@@ -3540,13 +3745,16 @@ habitflow/
     │   ├── application_record_with_transaction_test.rb  # #A-7: with_transaction の動作確認（5テスト）
     │   ├── weekly_reflection_complete_service_test.rb   # 変更: 補正ロジック・再補正・セキュリティテスト追加（#B-1）
     │   └── habit_record_save_service_test.rb            # #A-7: 習慣記録フローのテスト（3テスト）
+    ├── fixtures/
+    │   └── weekly_reflection_task_summaries.yml  # #C-4 新規
     ├── models/
     │   ├── habit_record_test.rb              # 変更: numeric_value バリデーション・Service経由保存テスト追加（#B-1）
     │   ├── habit_excluded_day_test.rb     # #B-2: 除外日モデルテスト（15件）
     │   ├── habit_streak_test.rb           # #B-3: ストリーク計算テスト（25件・境界値・除外日・お休みモード）
     │   ├── habit_archive_test.rb          # #B-4: アーカイブ機能テスト（22件：scope・状態遷移・状態ガード異常系）
     │   ├── habit_sort_test.rb             # #B-6: カラー・アイコンバリデーション・acts_as_list 動作確認（8件）
-    │   └── task_test.rb                   # 変更: soft_delete・ai_generated? テスト4件追加（#C-3・計28件）
+    │   ├── task_test.rb                   # 変更: soft_delete・ai_generated? テスト4件追加（#C-3・計28件）
+    │   └── weekly_reflection_task_summary_test.rb  # #C-4 新規（21件：バリデーション・UNIQUE制約・アソシエーション・クラスメソッド・スコープ・インスタンスメソッド）
     ├── integration/
     │   ├── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
     │   └── memo_flow_test.rb              # #B-7: メモ保存・部分更新・バリデーションエラー・スペース変換テスト（6件）
@@ -3585,7 +3793,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-429 runs, 1073 assertions, 0 failures, 0 errors, 0 skips
+450 runs, 1119 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -3631,6 +3839,8 @@ docker compose exec web bin/rails test
 | `test/controllers/tasks_controller_test.rb` | コントローラー | `toggle_complete`（未完了→完了・完了→未完了・ロック中チェック可・未ログイン防止・他ユーザー防止）・`archive`（完了→アーカイブ・未ログイン防止）・`archive_all_done`（一括アーカイブ・他ユーザー非影響）（#C-2・13件追加・計13件） |
 | `test/models/task_test.rb` | モデル | `soft_delete`（deleted_at設定・activeスコープ除外）・`ai_generated?`（true/false判定）（#C-3・4件追加・計28件） |
 | `test/controllers/tasks_controller_test.rb` | コントローラー | `destroy`（手動タスク削除・AI生成403・他ユーザー404・ロック中302・未ログイン302）（#C-3・5件追加・計18件） |
+| `test/fixtures/weekly_reflection_task_summaries.yml` | フィクスチャ | `completed_one × ai_generated_task` のサンプルデータ（#C-4） |
+| `test/models/weekly_reflection_task_summary_test.rb` | モデル | バリデーション・UNIQUE制約（task_id IS NOT NULL部分インデックス対応）・アソシエーション（on_delete: :nullify でタスク削除後もスナップショット保持）・`create_all_for_reflection!`（冪等性・対象タスク選定）・`by_priority` スコープ・`priority_label` / `priority_color_class`（#C-4・21件） |
 
 <br>
 
@@ -5003,6 +5213,57 @@ travel_to Time.zone.local(2026, 4, 13, 10, 0, 0) do
   delete task_path(task)
   assert_response :redirect
 end
+```
+
+<br>
+
+### content_for は Turbo Stream では機能しない。パーシャル分離で対応する（#C-4）
+
+<br>
+
+`content_for` はサーバーサイドのフルレンダリング時にのみ機能する。<br>
+Turbo Stream で部分更新するとパーシャル内の `content_for` は `yield` に反映されず、<br>
+モーダルや特定のDOMが消えるバグになる。<br>
+モーダルのような「複数箇所から参照される UI」は最初から独立したパーシャルとして設計し、<br>
+`content_for` に頼らずインライン出力する設計にすること。<br>
+Turbo Stream で差し替える場合はコントローラーからそのパーシャルを `turbo_stream.replace` で再注入する。
+
+<br>
+
+### 同一 id は必ずページ全体で1つにする（#C-4）
+
+<br>
+
+HTML 仕様では同一ページに同じ `id` は1つだけ許可される。<br>
+重複した `id` は `document.getElementById()` の返り値が不定になり、<br>
+Turbo Stream / Stimulus のターゲット操作が意図しない要素に当たるバグになる。<br>
+`flash-area` のような共通 ID は `application.html.erb` 内で必ず1箇所だけにする。<br>
+レビューや実装追加時に「既存の同名 ID がないか」を常に確認すること。
+
+<br>
+
+### Arel は使わず SQL プレースホルダー形式を使う（#C-4）
+
+<br>
+
+Arel の `.constraints.reduce(:or)` のような書き方は可読性が低く、<br>
+Rails のバージョンアップで挙動が変わる内部 API のため避けるべき。<br>
+OR 条件は named bind variables（`:start` / `:end` 形式）を使ったプレースホルダー形式で書く。<br>
+同じ値を複数箇所で使い回せて SQLインジェクション対策も自動で行われる。<br>
+
+```ruby
+# ❌ Arel を使う → バージョン差異で壊れるリスクあり・可読性低
+tasks.where(
+  user.tasks.where(due_date: week_range).arel.constraints.reduce(:or).or(...)
+)
+
+# ✅ プレースホルダー形式 → シンプル・安全・Rails 標準
+tasks.where(
+  "due_date BETWEEN :start AND :end
+   OR created_at BETWEEN :start_dt AND :end_dt",
+  start: week_start, end: week_end,
+  start_dt: week_start.beginning_of_day, end_dt: week_end.end_of_day
+)
 ```
 
 <br>
