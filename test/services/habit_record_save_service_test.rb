@@ -1,23 +1,12 @@
 # test/services/habit_record_save_service_test.rb
+# 日付を未来（フィクスチャと衝突しない日付）に変更する
 #
-# ============================================================
-# 【テスト失敗修正】
-#
-# 【問題】
-#   3つのテストが同じ日付（2026-03-22）を使っていたため、
-#   テスト実行順序によってレコードが重複し UNIQUE 制約違反が発生していた。
-#   Rails の Minitest はテストをランダム順で実行するため、
-#   同じ日付・同じ習慣のレコードが別テストで作成済みになる場合がある。
-#
-# 【修正方針】
-#   各テストに異なる日付を割り当てる（1日ずつずらす）。
-#   これにより UNIQUE(user_id, habit_id, record_date) 制約の衝突を回避する。
-#   テスト1: 2026-04-10（既存のテストと重複しない未来日付）
-#   テスト2: 2026-04-11
-#   テスト3: 2026-04-12
-#   ※ 2026-03-22 は他のテストで使われている可能性があるため使用しない
-# ============================================================
-
+# 【修正理由】
+#   フィクスチャ habit_records.yml が 2.days.ago（2026-04-10）と
+#   3.days.ago（2026-04-09）を使っている。
+#   テスト1が travel_to 2026-04-10 を使っていたため
+#   UNIQUE(user_id, habit_id, record_date) 制約が衝突していた。
+#   未来日付（フィクスチャが絶対に使わない日付）に変更することで解決する。
 require "test_helper"
 
 class HabitRecordSaveServiceTest < ActiveSupport::TestCase
@@ -27,9 +16,9 @@ class HabitRecordSaveServiceTest < ActiveSupport::TestCase
   end
 
   # 【テスト1】正常に習慣記録が保存されること
-  # 日付: 2026-04-10（他テストと重複しない日付を使用）
+  # 日付を未来（2030-01-01）に変更してフィクスチャと衝突しないようにする
   test "call が成功すると HabitRecord が作成されること" do
-    travel_to Time.zone.local(2026, 4, 10, 10, 0, 0) do
+    travel_to Time.zone.local(2030, 1, 1, 10, 0, 0) do
       assert_difference "HabitRecord.count", 1 do
         result = HabitRecordSaveService.new(
           user:      @user,
@@ -44,18 +33,15 @@ class HabitRecordSaveServiceTest < ActiveSupport::TestCase
   end
 
   # 【テスト2】既存レコードの更新
-  # 日付: 2026-04-11（テスト1と異なる日付）
+  # 日付を未来（2030-01-02）に変更してテスト1とも衝突しないようにする
   test "既存の HabitRecord がある場合は更新されること" do
-    travel_to Time.zone.local(2026, 4, 11, 10, 0, 0) do
-      # 事前に今日の記録を作成する
+    travel_to Time.zone.local(2030, 1, 2, 10, 0, 0) do
       existing = HabitRecord.create!(
         user:        @user,
         habit:       @habit,
         record_date: HabitRecord.today_for_record,
         completed:   false
       )
-
-      # 件数が増えないことを確認（新規作成ではなく更新）
       assert_no_difference "HabitRecord.count" do
         result = HabitRecordSaveService.new(
           user:      @user,
@@ -72,9 +58,9 @@ class HabitRecordSaveServiceTest < ActiveSupport::TestCase
   end
 
   # 【テスト3】成功時の戻り値
-  # 日付: 2026-04-12（テスト1・2と異なる日付）
+  # 日付を未来（2030-01-03）に変更してテスト1・2とも衝突しないようにする
   test "成功時は { success: true, habit_record: ... } を返すこと" do
-    travel_to Time.zone.local(2026, 4, 12, 10, 0, 0) do
+    travel_to Time.zone.local(2030, 1, 3, 10, 0, 0) do
       result = HabitRecordSaveService.new(
         user:      @user,
         habit:     @habit,

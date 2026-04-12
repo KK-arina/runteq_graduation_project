@@ -1,0 +1,234 @@
+<%# app/views/tasks/edit.html.erb %>
+<%#
+  ==============================================================================
+  タスク編集ページ（C-5 追加: アラーム再スケジュールのために新規作成）
+  ==============================================================================
+  【このファイルの役割】
+    既存タスクの内容（実施予定日時・アラーム設定など）を編集するフォームを表示する。
+    バリデーションエラー時はこのページを再表示してエラーメッセージを見せる。
+
+  【new.html.erb との違い】
+    @task が保存済みインスタンスのため、
+    form_with が自動的に action="/tasks/:id" method="PATCH" のフォームを生成する。
+    各フィールドには @task の現在の値が初期値として表示される。
+
+  【使用するインスタンス変数（TasksController#edit / #update で設定）】
+    @task: current_user.tasks.find(params[:id]) で取得した既存のタスク
+==============================================================================
+%>
+<% content_for :title, "タスクを編集 | HabitFlow" %>
+
+<div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <%# ── ページヘッダー ─────────────────────────────────────────────────── %>
+  <div class="flex items-center gap-3 mb-6">
+    <%= link_to tasks_path,
+          class: "text-gray-400 hover:text-gray-600 transition-colors",
+          aria: { label: "タスク一覧に戻る" } do %>
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+    <% end %>
+    <h1 class="text-2xl font-bold text-gray-900">タスクを編集</h1>
+  </div>
+
+  <%# ── バリデーションエラーメッセージ ───────────────────────────────────── %>
+  <% if @task.errors.any? %>
+    <div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4" role="alert">
+      <div class="flex items-center gap-2 mb-2">
+        <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <p class="text-sm font-bold text-red-800">入力内容に問題があります</p>
+      </div>
+      <ul class="list-disc list-inside space-y-1">
+        <% @task.errors.full_messages.each do |message| %>
+          <li class="text-sm text-red-700"><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <%#
+    form_with model: @task:
+      @task が保存済み（id あり）のため
+      action="/tasks/:id" method="PATCH" のフォームを自動生成する。
+      local: true で通常の HTML フォーム送信を行う。
+  %>
+  <%= form_with model: @task, local: true,
+        class: "bg-white border border-gray-200 rounded-xl shadow-sm p-6" do |f| %>
+
+    <%# ── ① タスク名 ──────────────────────────────────────────────────── %>
+    <div class="mb-5">
+      <%= f.label :title, "タスク名",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <span class="text-red-500 text-xs ml-1" aria-hidden="true">必須</span>
+      <%= f.text_field :title,
+            placeholder: "例: 企画書作成、メール返信",
+            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                    #{ @task.errors[:title].any? ? 'border-red-400 bg-red-50' : '' }",
+            maxlength: 100,
+            aria: { required: true } %>
+    </div>
+
+    <%# ── ② 優先度（Must/Should/Could）──────────────────────────────── %>
+    <div class="mb-5">
+      <p class="block text-sm font-bold text-gray-700 mb-2">
+        優先度 <span class="text-red-500 text-xs ml-1" aria-hidden="true">必須</span>
+      </p>
+      <div class="grid grid-cols-3 gap-3"
+           role="radiogroup"
+           aria-label="優先度を選択してください"
+           data-controller="priority-card">
+        <label class="cursor-pointer" data-priority-card-target="label">
+          <%= f.radio_button :priority, "must",
+                class: "sr-only",
+                id:    "task_priority_must",
+                data:  { action: "change->priority-card#select" } %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all"
+               data-priority-card-target="card"
+               data-active-class="border-red-500 bg-red-50"
+               data-inactive-class="border-gray-200">
+            <div class="text-lg mb-1" aria-hidden="true">🔴</div>
+            <div class="text-sm font-bold text-gray-700">Must</div>
+            <div class="text-xs text-gray-400 mt-0.5">絶対にやる</div>
+          </div>
+        </label>
+        <label class="cursor-pointer" data-priority-card-target="label">
+          <%= f.radio_button :priority, "should",
+                class: "sr-only",
+                id:    "task_priority_should",
+                data:  { action: "change->priority-card#select" } %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all"
+               data-priority-card-target="card"
+               data-active-class="border-blue-500 bg-blue-50"
+               data-inactive-class="border-gray-200">
+            <div class="text-lg mb-1" aria-hidden="true">🔵</div>
+            <div class="text-sm font-bold text-gray-700">Should</div>
+            <div class="text-xs text-gray-400 mt-0.5">できればやる</div>
+          </div>
+        </label>
+        <label class="cursor-pointer" data-priority-card-target="label">
+          <%= f.radio_button :priority, "could",
+                class: "sr-only",
+                id:    "task_priority_could",
+                data:  { action: "change->priority-card#select" } %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all"
+               data-priority-card-target="card"
+               data-active-class="border-green-500 bg-green-50"
+               data-inactive-class="border-gray-200">
+            <div class="text-lg mb-1" aria-hidden="true">🟢</div>
+            <div class="text-sm font-bold text-gray-700">Could</div>
+            <div class="text-xs text-gray-400 mt-0.5">余裕があれば</div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <%# ── ③ 期限日 ──────────────────────────────────────────────────────── %>
+    <div class="mb-5">
+      <%= f.label :due_date, "期限日",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <%= f.date_field :due_date,
+            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" %>
+    </div>
+
+    <%# ── ④ 見積時間 ────────────────────────────────────────────────────── %>
+    <div class="mb-5">
+      <%= f.label :estimated_hours, "見積時間（時間）",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <%= f.number_field :estimated_hours,
+            placeholder: "例: 1.5",
+            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+            step: "0.5",
+            min: "0.5" %>
+    </div>
+
+    <%# ── ⑤ タスク種別 ────────────────────────────────────────────────── %>
+    <div class="mb-5">
+      <%= f.label :task_type, "タスク種別",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <%= f.select :task_type,
+            [["通常タスク", "normal"], ["習慣関連", "habit"], ["改善タスク", "improve"]],
+            { selected: @task.task_type.presence || "normal" },
+            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                    bg-white" %>
+    </div>
+
+    <%#
+      ── ⑥ 実施予定日時（C-5 追加）────────────────────────────────────────
+      【scheduled_at の表示について】
+        DB には UTC で保存されているため、ユーザーのタイムゾーン（JST）に
+        変換してから datetime-local フィールドの value に渡す。
+    %>
+    <div class="mb-5">
+      <%= f.label :scheduled_at, "実施予定日時",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <%
+        tz = current_user.user_setting&.time_zone || "Asia/Tokyo"
+        scheduled_at_value = @task.scheduled_at&.in_time_zone(tz)&.strftime("%Y-%m-%dT%H:%M")
+      %>
+      <%= f.datetime_local_field :scheduled_at,
+            value: scheduled_at_value,
+            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" %>
+      <p class="mt-1 text-xs text-gray-400">
+        アラームを使う場合は必ず日時を設定してください
+      </p>
+    </div>
+
+    <%# ── ⑦ アラーム設定（C-5 追加）──────────────────────────────────── %>
+    <div class="mb-6 bg-gray-50 border border-gray-200 rounded-lg p-4"
+         data-controller="alarm-toggle">
+      <p class="text-sm font-bold text-gray-700 mb-3">🔔 アラーム設定</p>
+
+      <div class="flex items-center gap-3 mb-3">
+        <%= f.check_box :alarm_enabled,
+              class: "w-4 h-4 text-blue-600 border-gray-300 rounded
+                      focus:ring-2 focus:ring-blue-500",
+              id: "task_alarm_enabled",
+              data: {
+                alarm_toggle_target: "checkbox",
+                action: "change->alarm-toggle#toggle"
+              } %>
+        <%= f.label :alarm_enabled, "アラーム通知を ON にする",
+              class: "text-sm text-gray-700 cursor-pointer",
+              for: "task_alarm_enabled" %>
+      </div>
+
+      <div class="ml-7">
+        <%= f.label :alarm_minutes_before, "何分前に通知するか",
+              class: "block text-sm text-gray-600 mb-1" %>
+        <div class="flex items-center gap-2">
+          <%= f.number_field :alarm_minutes_before,
+                placeholder: "例: 30",
+                class: "w-32 px-3 py-2 border border-gray-300 rounded-lg text-sm
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
+                min: "0",
+                step: "1",
+                data: { alarm_toggle_target: "minutesInput" } %>
+          <span class="text-sm text-gray-500">分前</span>
+        </div>
+        <p class="mt-1 text-xs text-gray-400">0 を設定すると予定時刻ちょうどに通知されます</p>
+      </div>
+    </div>
+
+    <%# ── 送信ボタンエリア ────────────────────────────────────────────── %>
+    <div class="flex gap-3">
+      <%= link_to "キャンセル", tasks_path,
+            class: "flex-1 text-center px-4 py-2.5 border border-gray-300 rounded-lg
+                    text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors" %>
+      <%= f.submit "変更を保存する",
+            class: "flex-2 flex-grow px-6 py-2.5 bg-blue-600 text-white rounded-lg
+                    text-sm font-bold hover:bg-blue-700 transition-colors cursor-pointer" %>
+    </div>
+  <% end %>
+</div>
