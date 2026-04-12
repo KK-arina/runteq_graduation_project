@@ -1,0 +1,24 @@
+<%# app/views/task_mailer/alarm_notification.text.erb %>
+<%#
+  タスクアラーム通知メールのテキストビュー
+
+  【このファイルが必要な理由】
+    HTML メールに対応していないメールクライアントや
+    テキスト形式を好むユーザーのために、
+    プレーンテキスト版のメール本文も用意する。
+    Action Mailer は html.erb と text.erb が両方あると
+    自動的に multipart/alternative 形式（HTML + テキスト）で送信する。
+%>
+<%= @user.name %> さん、こんにちは。
+
+以下のタスクの予定時刻が近づいています。
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+タスク名: <%= @task.title %>
+実施予定: <%= l @scheduled_at_local, format: :long %>
+<% if @task.due_date.present? %>期限日  : <%= l @task.due_date, format: :long %>
+<% end %>━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+タスクを確認する: <%= tasks_url %>
+
+このメールは HabitFlow から自動送信されています。
