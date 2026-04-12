@@ -67,7 +67,8 @@ flowchart LR
 [![C-2 タスク完了チェック](https://img.shields.io/badge/C--2_タスク完了チェック-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-2-task-toggle-status)
 [![C-3 タスク削除確認モーダル](https://img.shields.io/badge/C--3_タスク削除確認モーダル-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-3-task-delete-modal)
 [![C-4 週次振り返りタスクスナップショット](https://img.shields.io/badge/C--4_週次振り返りタスクスナップショット-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-4-weekly-reflection-task-summary)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-19%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![C-5 タスクアラーム通知](https://img.shields.io/badge/C--5_タスクアラーム通知-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-5-task-alarm-job)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-20%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -152,6 +153,7 @@ flowchart LR
 | #C-2 | タスクの完了チェック・ステータス管理（toggle_complete/archive/archive_all_done・Turbo Stream） | 2026-04-07 | feature/C-2-task-toggle-status |
 | #C-3 | タスク削除確認モーダル（M-2）・手動タスク削除（ai_generated=false のみ削除可・デスクトップ中央モーダル/スマホボトムシート・Turbo Stream削除・トースト通知） | 2026-04-08 | feature/C-3-task-delete-modal |
 | #C-4 | 週次振り返りのタスクスナップショット保存（weekly_reflection_task_summaries・was_completedフラグ・優先度別表示・toggle後モーダル再注入バグ修正） | 2026-04-08 | feature/C-4-weekly-reflection-task-summary |
+| #C-5 | タスクアラーム通知（GoodJob + メール）・NotificationLogモデル・TaskAlarmJob・TaskMailer・alarm_enabled/scheduled_at/alarm_minutes_beforeフィールド追加・update時の再スケジュール・AlarmToggleController | 2026-04-12 | feature/C-5-task-alarm-job |
 
 <br>
 
@@ -2228,6 +2230,150 @@ C-4テスト: 21 runs, 46 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
+### #C-5: タスクのアラーム通知（GoodJob + メール）
+
+<br>
+
+**ブランチ:** `feature/C-5-task-alarm-job`<br>
+**完了日:** 2026-04-12<br>
+**概要:** `scheduled_at` と `alarm_enabled=true` のタスクに対して、`alarm_minutes_before` 分前に<br>
+GoodJob でジョブをスケジュールし、LINE またはメールで通知を送信する機能を実装。<br>
+通知履歴を `notification_logs` に記録し、日次通知上限チェックを実装。<br>
+タスク作成・更新フォームにアラーム設定 UI（実施予定日時・アラーム ON/OFF・分数入力）を追加。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Model | `NotificationLog` モデルを新規作成（enum: notification_type/channel/status・record_success/record_failure/record_skip クラスメソッド） |
+| Mailer | `TaskMailer#alarm_notification` を新規作成（HTML + テキスト両形式・ユーザーのタイムゾーンで時刻表示） |
+| Job | `TaskAlarmJob` を新規作成（スキップ条件5種・メール送信・ログ記録・daily_notification_count のatomic更新） |
+| Controller | `TasksController#create` にアラームジョブエンキュー処理（`enqueue_alarm_job_if_needed`）を追加 |
+| Controller | `TasksController#update` を新規追加（古いジョブを JSONB `@>` 演算子で安全削除・再スケジュール） |
+| Controller | `TasksController#edit` を新規追加・`routes.rb` に `:edit` / `:update` を追加 |
+| View | `tasks/new.html.erb` に実施予定日時（datetime-local）・アラーム設定 UI を追加 |
+| View | `tasks/edit.html.erb` を新規作成（scheduled_at を JST で表示・アラーム設定 UI） |
+| View | `tasks/_task_modal.html.erb` に「✏️ 編集する」リンクを追加（デスクトップ・スマホ両対応） |
+| JS | `alarm_toggle_controller.js` を新規作成（アラームOFF時に分数入力欄を disabled にする） |
+| JS | `index.js` に `alarm-toggle` コントローラーを登録 |
+| i18n | `config/locales/ja.yml` に `date.formats.long` / `time.formats.long` を追加 |
+| Test | `TaskAlarmJobTest`（8ケース）・`TaskMailerTest` を追加 |
+| Fix | `test/fixtures/notification_logs.yml` を削除（NOT NULL 違反の根本解決） |
+| Fix | `HabitRecordSaveServiceTest` の日付を未来日付に変更（フィクスチャとの衝突解消） |
+
+<br>
+
+#### スキップ条件（TaskAlarmJob）
+
+<br>
+
+| 条件 | 処理 |
+|:---|:---|
+| `alarm_enabled = false` | return（ログなし） |
+| `scheduled_at = nil` | return（ログなし） |
+| `status = done / archived` | return（ログなし） |
+| `notification_enabled = false` | return（ログなし） |
+| `daily_notification_count >= daily_notification_limit` | `NotificationLog.record_skip` して return |
+
+<br>
+
+#### 通知チャネルの優先順位
+
+<br>
+
+| 優先順位 | チャネル | 条件 |
+|:---|:---|:---|
+| 1位 | LINE | `line_notification_enabled = true` かつ `line_user_id` が存在する |
+| 2位 | メール | `email_notification_enabled = true`（LINE 未設定時のフォールバック） |
+
+<br>
+
+LINE 通知は G-1（LINE Messaging API 通知基盤）実装後に有効化予定。<br>
+現在は LINE が設定されていても自動的にメール通知にフォールバックする。
+
+<br>
+
+#### cancel_existing_alarm_jobs の設計
+
+<br>
+
+update 時の古いジョブ削除に PostgreSQL の JSONB `@>`（containment）演算子を使用。
+
+<br>
+
+```ruby
+GoodJob::Job
+  .where(job_class: "TaskAlarmJob")
+  .where(finished_at: nil)
+  .where("serialized_params @> ?", { arguments: [task.id] }.to_json)
+  .delete_all
+```
+
+<br>
+
+| 方式 | 問題点 |
+|:---|:---|
+| `LIKE "%#{task.id}%"` | task.id=1 が id=10, 100 にもマッチする誤削除リスク |
+| JSONB `@>` 演算子 | arguments 配列の値を正確に一致させるため誤削除なし・インデックスも有効 |
+
+<br>
+
+#### daily_notification_count の atomic 更新
+
+<br>
+
+```ruby
+# ❌ Ruby 側で計算 → 同時実行でカウントがズレる
+user_setting.update_columns(daily_notification_count: user_setting.daily_notification_count + 1)
+
+# ✅ DB 側で計算 → 原子的操作で競合しない
+UserSetting.where(id: user_setting.id)
+           .update_all("daily_notification_count = daily_notification_count + 1")
+```
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `app/models/notification_log.rb` | 新規作成（enum定義・record_success/failure/skip） |
+| `app/mailers/task_mailer.rb` | 新規作成（alarm_notification） |
+| `app/views/task_mailer/alarm_notification.html.erb` | 新規作成（HTMLメール本文） |
+| `app/views/task_mailer/alarm_notification.text.erb` | 新規作成（テキストメール本文） |
+| `app/jobs/task_alarm_job.rb` | 新規作成（GoodJobジョブ本体） |
+| `app/controllers/tasks_controller.rb` | create/update にエンキュー処理・edit/update アクション追加 |
+| `app/views/tasks/new.html.erb` | scheduled_at・アラーム設定 UI 追加 |
+| `app/views/tasks/edit.html.erb` | 新規作成 |
+| `app/views/tasks/_task_modal.html.erb` | 「✏️ 編集する」リンクを追加 |
+| `app/javascript/controllers/alarm_toggle_controller.js` | 新規作成 |
+| `app/javascript/controllers/index.js` | alarm-toggle コントローラーを登録 |
+| `config/locales/ja.yml` | date/time の :long フォーマットを追加 |
+| `config/routes.rb` | :edit / :update を追加 |
+| `test/jobs/task_alarm_job_test.rb` | 新規作成（8ケース） |
+| `test/mailers/task_mailer_test.rb` | 自動生成から修正（引数なし呼び出しを修正） |
+| `test/fixtures/notification_logs.yml` | 削除（NOT NULL 違反の根本解決） |
+| `test/services/habit_record_save_service_test.rb` | 日付を未来日付（2030-01-01〜03）に変更（フィクスチャ衝突解消） |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+C-5テスト: 9件（JobTest 8件・MailerTest 1件）
+全テスト:  459 runs, 1150 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -3160,6 +3306,102 @@ Turbo のイベント処理で DOM の整合性が崩れ、モーダルの表示
 
 <br>
 
+### 32. GoodJob の wait_until でアラームを指定時刻にスケジュールする（#C-5）
+
+<br>
+
+`TaskAlarmJob.set(wait_until: notify_at).perform_later(task.id)` と書くことで、<br>
+`notify_at`（= `scheduled_at - alarm_minutes_before 分`）になったときにジョブが自動実行される。<br>
+GoodJob は `good_jobs` テーブルの `scheduled_at` カラムを参照し、<br>
+ポーリング（30秒ごと）または PostgreSQL の LISTEN/NOTIFY でその時刻を検知して実行する。<br>
+
+<br>
+
+```ruby
+# スケジュール計算（UTC で統一）
+minutes_before = task.alarm_minutes_before.to_i
+notify_at      = task.scheduled_at - minutes_before.minutes
+
+# 未来の日時のみスケジュール（過去日時は GoodJob が即時実行してしまうため除外）
+return unless notify_at > Time.current
+
+TaskAlarmJob.set(wait_until: notify_at).perform_later(task.id)
+```
+
+<br>
+
+### 33. update 時のジョブ再スケジュールは JSONB @> 演算子で安全に削除する（#C-5）
+
+<br>
+
+タスクの `scheduled_at` を変更した場合、古いジョブをそのまま残すと<br>
+「変更前の時刻に通知が届く」「二重通知になる」事故が起きる。<br>
+update 時に既存ジョブを削除してから新しいジョブを登録することで解消する。<br>
+
+<br>
+
+**なぜ LIKE 検索（`LIKE "%#{task.id}%"`）を使わないのか:**
+
+<br>
+
+| 方式 | 問題点 |
+|:---|:---|
+| `LIKE "%1%"` | task.id=1 が id=10, 100, 1000 にもマッチして別タスクのジョブを誤削除 |
+| JSONB `@>` 演算子 | `{"arguments":[1]}` を厳密に一致させるため誤削除ゼロ・インデックスも有効 |
+
+<br>
+
+```ruby
+GoodJob::Job
+  .where(job_class: "TaskAlarmJob")
+  .where(finished_at: nil)
+  .where("serialized_params @> ?", { arguments: [task.id] }.to_json)
+  .delete_all
+```
+
+<br>
+
+### 34. deliver_now vs deliver_later の使い分け（#C-5）
+
+<br>
+
+`TaskAlarmJob` はすでに GoodJob のバックグラウンドジョブとして実行されているため、<br>
+その中でメールを `deliver_later` すると「ジョブの中でさらにジョブを積む」二重非同期になる。<br>
+ジョブ内ではメールを同期送信（`deliver_now`）するのが正しい設計。<br>
+
+<br>
+
+| 呼び出し場所 | 使うメソッド | 理由 |
+|:---|:---|:---|
+| コントローラー・モデル | `deliver_later` | バックグラウンドで非同期送信（リクエストを止めない） |
+| GoodJob ジョブ内 | `deliver_now` | すでにバックグラウンド実行中のため二重非同期は不要 |
+
+<br>
+
+### 35. フィクスチャの自動生成は NOT NULL 違反の温床（#C-5）
+
+<br>
+
+`bin/rails generate model NotificationLog --skip-migration` を実行すると<br>
+`--skip-migration` を指定していても `test/fixtures/notification_logs.yml` が自動生成される。<br>
+`one: {}` は全カラムが nil のレコードを意味するため、<br>
+`user_id` の NOT NULL 制約に違反してテスト全体がクラッシュする。<br>
+setup で動的にデータを作成する方式のテストではフィクスチャファイル自体が不要なため、<br>
+モデル生成後は必ずフィクスチャファイルの内容を確認して不要なら削除すること。<br>
+
+<br>
+
+```bash
+# 確認
+docker compose exec web cat test/fixtures/notification_logs.yml
+
+# 不要なら削除
+rm test/fixtures/notification_logs.yml
+docker compose exec web bin/rails db:test:prepare
+```
+
+<br>
+
 ---
 
 <br>
@@ -3669,16 +3911,19 @@ habitflow/
 │   │   ├── priority_card_controller.js    # #C-1 新規: 優先度カード排他選択（Stimulus・全カードリセット→選択カードアクティブ化）
 │   │   ├── task_toggle_controller.js      # #C-2 新規: タスク完了チェックボックス（fetch + Turbo.renderStreamMessage・tabパラメータ送信・エラーロールバック）
 │   │   ├── task_menu_controller.js        # #C-3 新規: タスク削除確認モーダル（⋯メニュー・デスクトップ中央モーダル/スマホボトムシート・turbo:submit-end でクローズ・_injectTabToForms タブ維持）
-│   │   └── voice_input_controller.js      # #B-7 新規: 音声入力（Web Speech API・graceful degradation対応・未対応ブラウザで🎤非表示）
+│   │   ├── voice_input_controller.js      # #B-7 新規: 音声入力（Web Speech API・graceful degradation対応・未対応ブラウザで🎤非表示）
+│   │   └── alarm_toggle_controller.js                  # #C-5 新規: アラームOFF時に分数入力欄をdisabledにする
 │   ├── jobs/
 │   │   ├── application_job.rb                          # 変更: retry_on / discard_on 追加（#A-3）
 │   │   ├── streak_calculation_job.rb                   # #A-3 #B-3: ストリーク計算（本実装完了）
 │   │   ├── daily_notification_count_reset_job.rb       # #A-3: 日次通知カウントリセット
 │   │   ├── monthly_ai_count_reset_job.rb               # #A-3: 月次AI使用回数リセット
-│   │   └── hello_good_job.rb                           # #A-3: 動作確認用（確認後削除可）
+│   │   ├── hello_good_job.rb                           # #A-3: 動作確認用（確認後削除可）
+│   │   └── task_alarm_job.rb                           # #C-5 新規: アラーム通知ジョブ（スキップ条件5種・メール送信・ログ記録・atomic更新）
 │   ├── mailers/
 │   │   ├── application_mailer.rb                       # #A-4: 全メール共通設定（fromアドレス）
-│   │   └── test_mailer.rb                              # #A-4: 動作確認用メイラー（将来のMailer実装の参考）
+│   │   ├── test_mailer.rb                              # #A-4: 動作確認用メイラー
+│   │   └── task_mailer.rb                              # #C-5 新規: タスクアラーム通知メイラー（HTML+テキスト・タイムゾーン変換）
 │   └── views/
 │       ├── dashboards/                    # ダッシュボード画面（変更: 今日のタスクセクション追加 #C-1）
 │       ├── habits/                        # 習慣一覧・新規作成・編集・アーカイブ一覧画面（変更: ⋯メニュー置き換え・_habit_card_actions.html.erb追加 #B-5）
@@ -3686,7 +3931,10 @@ habitflow/
 │       ├── weekly_reflections/            # 変更: show.html.erb にタスク実績セクション追加（#C-4）
 │       ├── shared/                        # 変更: _flash_message.html.erb を新規作成（Turbo Stream用トースト通知パーシャル・#C-3）
 │       ├── errors/                        # 404・422・500 エラーページ
-│       ├── tasks/                         # 変更: _task_modal.html.erb 新規作成（モーダルHTML分離）・_task_row.html.erb の content_for :modals を render に変更・index.html.erb に task-modals-container 追加（#C-4バグ修正）
+│       ├── task_mailer/                                # #C-5 新規: アラーム通知メールビュー
+│       │   ├── alarm_notification.html.erb             # HTMLメール本文
+│       │   └── alarm_notification.text.erb             # テキストメール本文
+│       ├── tasks/                                      # 変更: edit.html.erb 新規作成・new.html.erb にアラームUI追加・_task_modal.html.erb に編集リンク追加（#C-5）
 │       └── layouts/
 │           └── application.html.erb  # 変更: yield :modals を</body>直前に追加（#B-5）・重複 id="flash-area" を1箇所に統一（#C-4バグ修正）
 ├── db/
@@ -3793,7 +4041,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-450 runs, 1119 assertions, 0 failures, 0 errors, 0 skips
+459 runs, 1150 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -3841,6 +4089,8 @@ docker compose exec web bin/rails test
 | `test/controllers/tasks_controller_test.rb` | コントローラー | `destroy`（手動タスク削除・AI生成403・他ユーザー404・ロック中302・未ログイン302）（#C-3・5件追加・計18件） |
 | `test/fixtures/weekly_reflection_task_summaries.yml` | フィクスチャ | `completed_one × ai_generated_task` のサンプルデータ（#C-4） |
 | `test/models/weekly_reflection_task_summary_test.rb` | モデル | バリデーション・UNIQUE制約（task_id IS NOT NULL部分インデックス対応）・アソシエーション（on_delete: :nullify でタスク削除後もスナップショット保持）・`create_all_for_reflection!`（冪等性・対象タスク選定）・`by_priority` スコープ・`priority_label` / `priority_color_class`（#C-4・21件） |
+| `test/jobs/task_alarm_job_test.rb` | ジョブ | メール送信確認・notification_logs記録・スキップ条件（alarm_disabled/完了済み/上限超過/通知無効）・discard_on 動作確認（8件）（#C-5） |
+| `test/mailers/task_mailer_test.rb` | メイラー | alarm_notification の件名・宛先・送信元確認（自動生成から修正）（#C-5） |
 
 <br>
 
@@ -5264,6 +5514,87 @@ tasks.where(
   start: week_start, end: week_end,
   start_dt: week_start.beginning_of_day, end_dt: week_end.end_of_day
 )
+```
+
+<br>
+
+### ジョブ引数は ID（整数）で渡す。インスタンスは渡せない（#C-5）
+
+<br>
+
+GoodJob はジョブの引数を JSON 形式で `good_jobs.serialized_params` に保存する。<br>
+ActiveRecord のインスタンスは JSON シリアライズできないため、<br>
+ジョブの引数には必ず id（整数）を渡し、`perform` 内で `find` して再取得する設計にする。<br>
+`find` は対象が存在しない場合に `RecordNotFound` を発生させるため、<br>
+`ApplicationJob` の `discard_on ActiveRecord::RecordNotFound` と組み合わせることで<br>
+タスク削除後に残ったジョブを自動破棄できる。<br>
+
+<br>
+
+```ruby
+# ❌ インスタンスを渡す → JSON シリアライズできない
+TaskAlarmJob.perform_later(task)
+
+# ✅ id を渡して perform 内で再取得する
+TaskAlarmJob.perform_later(task.id)
+
+def perform(task_id)
+  task = Task.find(task_id)  # 存在しない場合は RecordNotFound → discard_on で自動破棄
+  ...
+end
+```
+
+<br>
+
+### カウントの並行更新には update_all の DB 側計算を使う（#C-5）
+
+<br>
+
+`user_setting.update_columns(daily_notification_count: user_setting.daily_notification_count + 1)` は<br>
+「Ruby が DB から値を読んで計算して書き込む」3ステップのため、<br>
+同時実行時に複数プロセスが同じ値を読んでそれぞれ +1 すると実質 +1 しかされない競合が発生する。<br>
+`update_all("daily_notification_count = daily_notification_count + 1")` は<br>
+DB が直接計算するため原子的操作（atomic）になり競合しない。<br>
+カウンターや合計値のような累積計算には必ず DB 側計算方式を使うこと。<br>
+
+<br>
+
+### フィクスチャの自動生成ファイルはモデル作成後すぐに確認・削除する（#C-5）
+
+<br>
+
+`bin/rails generate model` は自動でフィクスチャファイルを生成する。<br>
+`one: {}` のまま放置すると全テストが `PG::NotNullViolation` でクラッシュする。<br>
+モデル生成後は必ず `cat test/fixtures/モデル名.yml` で内容を確認し、<br>
+setup で動的にデータを作成する方式なら即座に削除すること。<br>
+B-2・B-3・C-5 で同じ失敗を繰り返したため、これは「生成したら即確認」を鉄則にする。
+
+<br>
+
+### discard_on は例外を外に伝播させない（テストの期待値に注意）（#C-5）
+
+<br>
+
+`ApplicationJob` に `discard_on ActiveRecord::RecordNotFound` があると、<br>
+`RecordNotFound` が発生してもジョブが静かに破棄されるだけで例外は外に出ない。<br>
+テストで `assert_raises(ActiveRecord::RecordNotFound)` を使うと<br>
+「例外が来るはずなのに来ない」としてテストが失敗する。<br>
+正しくは `assert_nothing_raised` で「例外が外に出ないこと」を確認し、<br>
+`assert_equal 0, ActionMailer::Base.deliveries.size` で副作用がないことを確認する。<br>
+
+<br>
+
+```ruby
+# ❌ discard_on がある場合は例外が外に伝播しない
+assert_raises(ActiveRecord::RecordNotFound) do
+  TaskAlarmJob.perform_now(999_999)
+end
+
+# ✅ 例外が外に出ないことを確認する
+assert_nothing_raised do
+  TaskAlarmJob.perform_now(999_999)
+end
+assert_equal 0, ActionMailer::Base.deliveries.size
 ```
 
 <br>
