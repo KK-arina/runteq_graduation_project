@@ -1,9 +1,19 @@
 <%# app/views/dashboards/index.html.erb %>
+<%#
+  ダッシュボード画面。
+  今週の習慣達成率・今日の習慣チェック・タスク優先度別達成率・今日のタスクを表示する。
+
+  【C-6 変更点】
+    「今週のタスク達成率」セクションを追加。
+    @task_priority_stats を使い Must / Should / Could の達成率プログレスバーを表示する。
+    total が 0 の優先度は行ごと非表示。全て 0 件の場合はカード全体を非表示にする。
+    data-testid 属性を各要素に付与してテストから正確に参照できるようにする。
+%>
 <% content_for :title, "ダッシュボード | HabitFlow" %>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-  <%# PDCA強制ロック警告バナー（変更なし） %>
+  <%# ── PDCA強制ロック警告バナー ──────────────────────────────────────── %>
   <% if @locked %>
     <div class="mb-6 bg-orange-50 border border-orange-200 border-l-4 border-l-orange-500 rounded-lg p-4">
       <div class="flex items-start gap-3">
@@ -23,10 +33,10 @@
 
   <h1 class="text-2xl font-bold text-gray-900 mb-6">ダッシュボード</h1>
 
-  <%# 今週の達成率サマリーカード %>
+  <%# ── 今週の習慣達成率サマリーカード ──────────────────────────────── %>
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
     <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">
-      今週の達成率（月曜〜今日）
+      今週の習慣達成率（月曜〜今日）
     </h2>
 
     <% if @habits.empty? %>
@@ -54,10 +64,6 @@
         <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
         <div class="mb-3">
           <div class="flex justify-between items-center mb-1 gap-2">
-            <%#
-              B-6 変更: 習慣名の前にアイコンを追加する
-              habit.icon.presence || "📋" でデフォルトアイコンにフォールバック。
-            %>
             <span class="text-sm text-gray-700 flex-1 min-w-0 flex items-center gap-2">
               <span aria-hidden="true" class="flex-shrink-0"><%= habit.icon.presence || "📋" %></span>
               <span class="truncate"><%= habit.name %></span>
@@ -76,12 +82,6 @@
               <% end %>
             </span>
           </div>
-
-          <%#
-            B-6 変更: プログレスバーの色に habit.color を反映する。
-            インラインスタイルで background-color を直接指定。
-            habit.color が nil の場合は Tailwind クラスのフォールバック色を使う。
-          %>
           <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
                role="progressbar"
                aria-valuenow="<%= stats[:rate] %>"
@@ -98,7 +98,140 @@
     <% end %>
   </div>
 
-  <%# 今日の習慣チェックリスト（変更なし） %>
+  <%# ================================================================== %>
+  <%# ── C-6: 今週のタスク達成率（Must/Should/Could 別）──────────────── %>
+  <%# ================================================================== %>
+  <%#
+    @task_priority_stats には優先度別の統計情報が入っている。
+    構造例: { "must" => { total: 3, done: 2, rate: 66 }, ... }
+
+    any? { |_, s| s[:total] > 0 } で「1件でも表示対象があるか」を判定する。
+    _ はハッシュのキー（使わないので _ で捨てる）、
+    s は統計ハッシュ（{ total:, done:, rate: }）。
+    全て 0 件の場合はカード全体を非表示にする。
+
+    data-testid="task-priority-stats-section" をカード外枠に付与することで
+    テストからセクション全体の表示・非表示を正確に検証できる。
+  %>
+  <% if @task_priority_stats.any? { |_, s| s[:total] > 0 } %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6"
+         data-testid="task-priority-stats-section">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide">
+          今週のタスク達成率
+        </h2>
+        <%= link_to "すべて見る →", tasks_path,
+              class: "text-xs text-blue-600 hover:underline" %>
+      </div>
+
+      <%#
+        優先度ごとの表示設定を定義するハッシュ。
+        label      : 画面に表示するラベル文字列
+        bar_color  : プログレスバーの色（インラインスタイルで使用）
+        badge_class: 優先度バッジの Tailwind クラス
+        testid     : data-testid の suffix（テストで各行を識別するために使う）
+
+        Tailwind は動的なクラス名をビルド時に静的解析するため、
+        変数を使った動的クラスは生成できない。
+        そのため badge_class には完全なクラス文字列を直接書く。
+        bar_color は CSS の color 値なのでインラインスタイルで指定する。
+      %>
+      <% priority_display = {
+           "must"   => { label: "Must",   bar_color: "#ef4444", badge_class: "bg-red-100 text-red-700",   testid: "must" },
+           "should" => { label: "Should", bar_color: "#3b82f6", badge_class: "bg-blue-100 text-blue-700", testid: "should" },
+           "could"  => { label: "Could",  bar_color: "#10b981", badge_class: "bg-green-100 text-green-700", testid: "could" }
+         } %>
+
+      <% priority_display.each do |priority_key, display| %>
+        <%#
+          修正④: nil 安全化。
+          @task_priority_stats[priority_key] が nil の場合に備えて
+          || でデフォルト値を設定する。
+          通常は必ず値が入るが、将来のバグ防止のために書いておく。
+        %>
+        <% stats = @task_priority_stats[priority_key] || { total: 0, done: 0, rate: 0 } %>
+
+        <%#
+          total が 0 の優先度はスキップする（行ごと非表示）。
+          今週このカテゴリのタスクがない場合はプログレスバーを出さない。
+          next はブロックの残り処理をスキップして次のループに進む。
+        %>
+        <% next if stats[:total].zero? %>
+
+        <%#
+          data-testid を各行の外枠 div に付与する。
+          例: data-testid="priority-row-must"
+          テストでは "[data-testid='priority-row-must']" で行全体を特定できる。
+        %>
+        <div class="mb-4 last:mb-0"
+             data-testid="priority-row-<%= display[:testid] %>">
+          <div class="flex justify-between items-center mb-1 gap-2">
+
+            <%#
+              優先度ラベルのバッジ。
+              data-testid="priority-badge-must" などを付与することで
+              テストから「Must バッジが表示されているか」を正確に検証できる。
+              "span" だけのセレクタだとページ全体の span にマッチしてしまうため
+              data-testid による絞り込みが必要。
+            %>
+            <span class="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0
+                         <%= display[:badge_class] %>"
+                  data-testid="priority-badge-<%= display[:testid] %>">
+              <%= display[:label] %>
+            </span>
+
+            <%#
+              達成件数と総件数を表示する（例: 2/3件 完了）。
+              data-testid="priority-count-must" で件数表示を特定できる。
+            %>
+            <span class="text-sm text-gray-600 flex-1"
+                  data-testid="priority-count-<%= display[:testid] %>">
+              <%= stats[:done] %>/<%= stats[:total] %>件 完了
+            </span>
+
+            <%#
+              達成率を右端に表示する。
+              80% 以上は緑（順調）、50% 以上は青（普通）、未満は赤（要改善）で色分けする。
+              data-testid="priority-rate-must" で達成率テキストを特定できる。
+            %>
+            <span class="text-sm font-bold flex-shrink-0
+                         <%= stats[:rate] >= 80 ? 'text-green-600' : stats[:rate] >= 50 ? 'text-blue-600' : 'text-red-500' %>"
+                  data-testid="priority-rate-<%= display[:testid] %>">
+              <%= stats[:rate] %>%
+            </span>
+          </div>
+
+          <%#
+            プログレスバー本体。
+
+            外枠（グレーの背景）:
+              role="progressbar" → スクリーンリーダーに「進捗バー」であることを伝える。
+              aria-valuenow     → 現在の達成率をスクリーンリーダーに伝える。
+              aria-valuemin/max → 最小値0・最大値100を示す。
+              aria-label        → 何の達成率かをスクリーンリーダーに伝える。
+
+            内側（色付きバー）:
+              style="width: ..." → 達成率に応じてバーの幅を変える。
+              background-color  → 優先度ごとの色をインラインスタイルで指定する。
+              transition-all duration-500 → ページ読み込み時にバーが伸びるアニメーション。
+          %>
+          <div class="h-3 bg-gray-200 rounded-full overflow-hidden"
+               role="progressbar"
+               aria-valuenow="<%= stats[:rate] %>"
+               aria-valuemin="0"
+               aria-valuemax="100"
+               aria-label="<%= display[:label] %>タスクの達成率">
+            <div class="h-3 rounded-full transition-all duration-500"
+                 style="width: <%= stats[:rate] %>%;
+                        background-color: <%= display[:bar_color] %>;">
+            </div>
+          </div>
+        </div>
+      <% end %>
+    </div>
+  <% end %>
+
+  <%# ── 今日の習慣チェックリスト ──────────────────────────────────── %>
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide">今日の習慣チェック</h2>
@@ -124,12 +257,7 @@
     <% end %>
   </div>
 
-  <%#
-    ── 今日のタスクセクション（C-1 追加）──────────────────────────────────
-    今日が期限（due_date = 今日）のタスクを表示する。
-    DashboardsController に @today_tasks / @today_task_count を追加する必要がある。
-    ここでは @today_tasks を使う（コントローラー側も更新する）。
-  %>
+  <%# ── 今日のタスク（C-1 追加）────────────────────────────────────── %>
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide">今日のタスク</h2>
@@ -143,29 +271,19 @@
       <div class="space-y-2">
         <% @today_tasks.each do |task| %>
           <div class="flex items-center gap-3 py-2 border-b border-gray-100 last:border-b-0">
-            <%#
-              完了チェックボックス（C-2 で機能実装予定）
-              現時点では表示のみ（disabled）。
-            %>
             <input type="checkbox"
                    class="w-4 h-4 rounded border-gray-300 cursor-not-allowed"
                    <%= "checked" if task.done? || task.archived? %>
                    disabled
                    aria-label="<%= task.title %>">
-
-            <%# 優先度バッジ %>
             <span class="flex-shrink-0 text-xs font-bold px-1.5 py-0.5 rounded
                          <%= task.must? ? 'bg-red-100 text-red-700' : task.should? ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700' %>">
               <%= task.must? ? "Must" : task.should? ? "Should" : "Could" %>
             </span>
-
-            <%# タスク名 %>
             <span class="flex-1 text-sm text-gray-700 truncate
                          <%= task.done? || task.archived? ? 'line-through text-gray-400' : '' %>">
               <%= task.title %>
             </span>
-
-            <%# 期限切れ表示 %>
             <% if task.overdue? %>
               <span class="flex-shrink-0 text-xs text-red-600 font-semibold">期限切れ</span>
             <% end %>
@@ -182,7 +300,7 @@
     <% end %>
   </div>
 
-  <%# クイックリンク（変更なし） %>
+  <%# ── クイックリンク ──────────────────────────────────────────────── %>
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
     <%= link_to habits_path,
           class: "block bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition-shadow" do %>
