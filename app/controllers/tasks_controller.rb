@@ -1,14 +1,14 @@
 # app/controllers/tasks_controller.rb
 #
 # ==============================================================================
-# TasksController（C-5 変更: アラームジョブのエンキュー・再スケジュールを追加）
+# TasksController（C-7 変更: ai_edit / ai_update アクションを追加）
 # ==============================================================================
 #
-# 【C-5 での変更点】
-#   1. create アクション: タスク保存後にアラームジョブをエンキュー
-#   2. update アクション: 新規追加。タスク更新後に古いジョブを削除して再エンキュー
-#   3. enqueue_alarm_job_if_needed: アラーム条件チェックとジョブ予約
-#   4. cancel_existing_alarm_jobs: 既存ジョブの安全な削除
+# 【C-7 での変更点】
+#   1. before_action :set_task に :ai_edit / :ai_update を追加
+#   2. ai_edit アクション: AI提案モーダル経由のみアクセス可能なタスク編集フォームを表示
+#   3. ai_update アクション: ai_edit フォームの保存処理
+#   4. private に set_ai_context / verify_ai_context を追加
 # ==============================================================================
 
 class TasksController < ApplicationController
@@ -17,12 +17,16 @@ class TasksController < ApplicationController
 
   before_action :require_login
 
-  # before_action :set_task
-  # 【なぜ :update を追加するのか】
-  #   update アクションでも @task を事前に取得する必要がある。
-  #   current_user.tasks.find(params[:id]) とすることで
-  #   他ユーザーのタスクへのアクセスを RecordNotFound（404）で弾く。
-  before_action :set_task, only: [ :toggle_complete, :archive, :destroy, :update ]
+  # ============================================================
+  # before_action :set_task（C-7 変更: ai_edit / ai_update を追加）
+  # ============================================================
+  #
+  # 【なぜ ai_edit / ai_update にも set_task を追加するのか】
+  #   ai_edit と ai_update はどちらも params[:id] を使って
+  #   タスクを取得する必要がある。
+  #   set_task は current_user.tasks.find(params[:id]) で取得するため、
+  #   他ユーザーのタスクへのアクセスを RecordNotFound（404）で弾ける。
+  before_action :set_task, only: [ :toggle_complete, :archive, :destroy, :update, :ai_edit, :ai_update ]
 
   # ============================================================
   # index アクション（変更なし）
@@ -63,24 +67,15 @@ class TasksController < ApplicationController
   end
 
   # ============================================================
-  # create アクション（C-5 変更: ジョブエンキューを追加）
+  # create アクション（変更なし）
   # ============================================================
-  #
-  # 【C-5 での変更点】
-  #   タスク保存成功後、alarm_enabled=true かつ scheduled_at が設定されていれば
-  #   TaskAlarmJob をスケジュールする処理を追加した。
   def create
     return if require_unlocked
 
     @task = current_user.tasks.build(task_params)
 
     if @task.save
-      # --------------------------------------------------------
-      # C-5 追加: アラームジョブのエンキュー
-      # --------------------------------------------------------
-      # 条件を満たす場合のみジョブを予約する（詳細は enqueue_alarm_job_if_needed を参照）
       enqueue_alarm_job_if_needed(@task)
-
       redirect_to tasks_path, notice: "タスクを作成しました"
     else
       render :new, status: :unprocessable_entity
@@ -88,36 +83,118 @@ class TasksController < ApplicationController
   end
 
   # ============================================================
-  # update アクション（C-5 新規追加）
+  # update アクション（変更なし）
   # ============================================================
-  #
-  # 【なぜ update が必要か】
-  #   scheduled_at や alarm_minutes_before を後から変更した場合、
-  #   古い時刻でスケジュールされたジョブがそのまま残ってしまう。
-  #   → 「変更前の時刻に通知が届く」「二重通知になる」事故が起きる。
-  #
-  # 【対策】
-  #   更新前に古いジョブを削除し、更新後に新しいジョブを再登録する。
-  #
-  # 【ロック中でも update を許可するか】
-  #   タスクの内容変更（scheduled_at の変更）は「タスクの編集」に当たるため
-  #   ロック中は制限する（require_unlocked を通す）。
   def update
     return if require_unlocked
+
+    cancel_existing_alarm_jobs(@task)
+
+    if @task.update(task_params)
+      enqueue_alarm_job_if_needed(@task)
+      redirect_to tasks_path, notice: "タスクを更新しました"
+    else
+      render :edit, status: :unprocessable_entity
+    end
+  end
+
+  # ============================================================
+  # C-7 追加: ai_edit アクション
+  # ============================================================
+  #
+  # 【このアクションの役割】
+  #   AI提案モーダルの「✏️ 編集する」リンクをクリックしたときに呼ばれる。
+  #   11番（タスク編集ページ・AI経由限定）を表示する。
+  #
+  # 【アクセス制御の流れ】
+  #   Step 1: set_ai_context を呼んで session に ai_context フラグを立てる
+  #   Step 2: @task を表示用に準備して app/views/tasks/ai_edit.html.erb を描画する
+  #
+  # 【なぜ session を使うのか】
+  #   「AI提案モーダルから来たかどうか」をサーバー側で証明する手段が必要。
+  #   URL パラメータ（?from=ai_modal など）はユーザーが直接書き換えられるため不適切。
+  #   session はサーバーが暗号化して Cookie に保存するため改ざんできない。
+  #
+  # 【set_ai_context の呼び出しタイミング】
+  #   ai_edit（GET）を呼んだ時点で session にフラグを立てる。
+  #   その後 ai_update（PATCH）でフラグを検証する（verify_ai_context）。
+  #   ai_edit を経由せずに ai_update を直接叩いた場合、
+  #   session にフラグがないため 403 で弾かれる。
+  def ai_edit
+    # AI提案モーダル経由であることを session に記録する
+    # 詳細は private の set_ai_context を参照
+    set_ai_context
+
+    # @task は before_action :set_task で取得済み
+    # ai_edit.html.erb をレンダリングする
+  end
+
+  # ============================================================
+  # C-7 追加: ai_update アクション（修正版: アラームジョブ再スケジュールを追加）
+  # ============================================================
+  #
+  # 【このアクションの役割】
+  #   ai_edit フォームの送信先。
+  #   タスク名・期限・見積時間を保存して、タスク一覧に戻る。
+  #   （E-3実装後は AI提案モーダルに戻るよう変更する）
+  #
+  # 【アクセス制御の流れ】
+  #   Step 1: verify_ai_context で session のフラグを確認する
+  #           フラグなし → 403 Forbidden を返して処理を中断する
+  #   Step 2: cancel_existing_alarm_jobs で古いアラームジョブを削除する
+  #           【なぜ削除が必要か】
+  #           due_date が変更されると scheduled_at も変わる可能性がある。
+  #           古い時刻のジョブが残っていると「変更前の時刻に通知が届く」
+  #           「二重通知になる」事故が起きるため、更新前に必ず削除する。
+  #   Step 3: ai_update_params（限定パラメータ）で保存する
+  #           優先度（priority）は ai_update_params に含めないため変更不可
+  #   Step 4: 保存成功 → enqueue_alarm_job_if_needed でアラームを再スケジュール
+  #           session のフラグをクリアして tasks_path へリダイレクト
+  #           保存失敗 → ai_edit ビューを再描画してエラーを表示する
+  #
+  # 【アラームジョブの扱い】
+  #   ai_edit では scheduled_at / alarm_enabled フィールドを表示しないが、
+  #   タスクに既存のアラーム設定がある場合は:
+  #   ① 古いジョブを削除する（cancel_existing_alarm_jobs）
+  #   ② 保存後に現在の scheduled_at / alarm_enabled で再登録する（enqueue_alarm_job_if_needed）
+  #   この処理をしないと、既存のアラームが意図しない時刻に発火する恐れがある。
+  def ai_update
+    # AI提案モーダル経由かどうかを検証する
+    # session にフラグがない場合は 403 を返してここで処理が止まる
+    return if verify_ai_context
 
     # 更新前に既存のアラームジョブを削除する
     # 【なぜ update の前に削除するのか】
     #   update が成功するかどうかに関わらず古いジョブを消しておき、
-    #   update 成功時のみ新しいジョブを登録する（失敗時はジョブを登録しない）。
+    #   update 成功時のみ新しいジョブを登録する。
+    #   失敗時はジョブを登録しないため、古いアラームが残り続けることはない。
     cancel_existing_alarm_jobs(@task)
 
-    if @task.update(task_params)
-      # 更新後の内容でジョブを再スケジュールする
+    # ai_update_params: タスク名・期限・見積時間のみ許可
+    # priority は含めないため、どんなリクエストを送っても変更できない
+    if @task.update(ai_update_params)
+      # 保存成功後: 現在の scheduled_at / alarm_enabled 設定でアラームを再登録する
+      # ai_edit フォームでは scheduled_at を変更できないが、
+      # 既存設定のまま再スケジュールすることで整合性を保つ
       enqueue_alarm_job_if_needed(@task)
 
-      redirect_to tasks_path, notice: "タスクを更新しました"
+      # 保存成功: session のフラグをクリアしてタスク一覧へ遷移する
+      # 【なぜ clear_ai_context を呼ぶのか】
+      #   1回の編集が終わったら session のフラグを消す。
+      #   消さないと「次回も ai_update を直接叩けてしまう」状態が続く。
+      clear_ai_context
+
+      # 【E-3実装後の変更予定】
+      #   E-3（AI提案モーダル）が実装されたら
+      #   redirect_to ai_proposals_path に変更する。
+      #   現時点では AI提案モーダルのルートが存在しないため
+      #   tasks_path（タスク一覧）へリダイレクトする。
+      redirect_to tasks_path, notice: "タスクを更新しました（AI編集）"
     else
-      render :edit, status: :unprocessable_entity
+      # 保存失敗: ai_edit ビューを再描画してバリデーションエラーを表示する
+      # status: :unprocessable_entity → HTTP 422 を返す
+      # 422 を返す理由: フォームバリデーション失敗の標準的な HTTP ステータスコード
+      render :ai_edit, status: :unprocessable_entity
     end
   end
 
@@ -383,10 +460,16 @@ class TasksController < ApplicationController
 
   private
 
+  # ============================================================
+  # set_task（変更なし）
+  # ============================================================
   def set_task
     @task = current_user.tasks.find(params[:id])
   end
 
+  # ============================================================
+  # recalculate_counts（変更なし）
+  # ============================================================
   def recalculate_counts
     base_tasks = current_user.tasks.active
     priority_counts = base_tasks.not_archived.unscope(:order).group(:priority).count
@@ -398,83 +481,117 @@ class TasksController < ApplicationController
   end
 
   # ============================================================
-  # C-5 追加: enqueue_alarm_job_if_needed
+  # C-7 追加: set_ai_context
   # ============================================================
   #
   # 【役割】
-  #   アラーム条件を確認し、必要なら TaskAlarmJob をスケジュールする。
-  #   create と update の両方から呼び出す。
+  #   ai_edit アクション（GET）が呼ばれたとき、
+  #   session に ai_context フラグを立てる。
   #
-  # 【scheduled_at のタイムゾーンについて】
-  #   Rails は DB から取得した datetime を自動的に UTC の ActiveSupport::TimeWithZone
-  #   オブジェクトとして扱う。
-  #   Time.current も UTC ベースの ActiveSupport::TimeWithZone を返すため、
-  #   notify_at > Time.current の比較は同一基準で行われ正確に機能する。
-  #   「ユーザーのタイムゾーンで表示する」処理はメールビュー側（in_time_zone）で行う。
-  #   スケジュールの計算自体は UTC で統一するのが正しい設計。
-  def enqueue_alarm_job_if_needed(task)
-    # アラームが有効でない場合は何もしない
-    return unless task.alarm_enabled?
+  # 【session[:ai_context_task_id] に task_id を入れる理由】
+  #   単純に session[:ai_context] = true にすると
+  #   「どのタスクの ai_edit を経由したか」がわからなくなる。
+  #   task_id を保存することで、
+  #   「ai_edit で見ていたタスクとは別のタスクの ai_update を叩いた」
+  #   ケースも弾ける（verify_ai_context でチェックする）。
+  #
+  # 【session はどこに保存されるのか】
+  #   Rails のデフォルト設定では暗号化された Cookie として保存される。
+  #   ユーザーが Cookie を見ても中身を解読・改ざんできないため安全。
+  def set_ai_context
+    session[:ai_context_task_id] = @task.id
+  end
 
-    # scheduled_at が設定されていない場合は何もしない
+  # ============================================================
+  # C-7 追加: verify_ai_context（コメント修正版）
+  # ============================================================
+  #
+  # 【役割】
+  #   ai_update アクション（PATCH）が呼ばれたとき、
+  #   session の ai_context フラグを確認する。
+  #
+  # 【戻り値の設計（before_action 風に使うための工夫）】
+  #   return if verify_ai_context という使い方をするため、
+  #     - フラグなし（不正アクセスの場合）→ true を返す → ai_update の処理が止まる
+  #     - フラグあり（正常）             → false を返す → ai_update の処理が続く
+  #
+  # 【HTTP レスポンスについて】
+  #   format.html の redirect_to は常に HTTP 302 を返す。
+  #   status: :forbidden を渡してもリダイレクトのステータスには影響しない。
+  #   「アプリのロジック上は 403 相当の操作を拒否している」という意味で
+  #   flash[:alert] にメッセージを渡し、ユーザーに通知する。
+  #
+  # 【チェック内容】
+  #   ① session[:ai_context_task_id] が存在するか
+  #   ② session に保存された task_id が @task.id と一致するか
+  #   どちらかが満たされなければ不正アクセスとして処理を中断する。
+  def verify_ai_context
+    unless session[:ai_context_task_id] == @task.id
+      respond_to do |format|
+        format.html do
+          # redirect_to は HTTP 302 を返す（status: を渡しても 302 になる）
+          # flash[:alert] でユーザーに「不正アクセス」を通知する
+          redirect_to tasks_path,
+                      alert: "この操作はAI提案モーダル経由でのみ実行できます"
+        end
+        format.turbo_stream do
+          # Turbo Stream リクエスト（fetch 経由）の場合は 403 を返す
+          # head :forbidden はボディなしで HTTP 403 を返す
+          head :forbidden
+        end
+      end
+      # true を返すことで、呼び出し元の return if verify_ai_context が
+      # ai_update の後続処理を止められる設計にしている
+      return true
+    end
+
+    # 正常（フラグあり・task_id 一致）→ false を返して処理を続行する
+    false
+  end
+
+  # ============================================================
+  # C-7 追加: clear_ai_context
+  # ============================================================
+  #
+  # 【役割】
+  #   ai_update 保存成功後に session のフラグを削除する。
+  #
+  # 【なぜ必ず削除するのか】
+  #   session にフラグを残したままにすると、
+  #   別のタイミングで ai_update を直接叩いたときに
+  #   フラグが残っているため 403 で弾かれない状態になってしまう。
+  #   1回の ai_edit → ai_update のサイクルが完了したら
+  #   必ずフラグをクリアして「次回は ai_edit から入り直す」状態に戻す。
+  def clear_ai_context
+    session.delete(:ai_context_task_id)
+  end
+
+  # ============================================================
+  # enqueue_alarm_job_if_needed（変更なし）
+  # ============================================================
+  def enqueue_alarm_job_if_needed(task)
+    return unless task.alarm_enabled?
     return unless task.scheduled_at.present?
 
-    # alarm_minutes_before が未設定の場合は 0 として扱う
     minutes_before = task.alarm_minutes_before.to_i
-
-    # 通知時刻を計算する（UTC で計算する・Rails が自動で UTC 管理するため一致する）
     notify_at = task.scheduled_at - minutes_before.minutes
 
-    # 通知時刻が過去なら何もしない（過去時刻のアラームは不要）
     return unless notify_at > Time.current
 
-    # GoodJob でジョブを指定時刻にスケジュールする
-    # 【set(wait_until:) の意味】
-    #   notify_at の時刻が来たらジョブを実行するよう good_jobs テーブルに登録する。
-    #   GoodJob はポーリング（30秒ごと）または LISTEN/NOTIFY でこの時刻を検知して実行する。
     TaskAlarmJob.set(wait_until: notify_at).perform_later(task.id)
 
     Rails.logger.info "[TasksController] TaskAlarmJob をスケジュール: task_id=#{task.id}, notify_at=#{notify_at}"
   end
 
   # ============================================================
-  # C-5 追加: cancel_existing_alarm_jobs（update 時に使用）
+  # cancel_existing_alarm_jobs（変更なし）
   # ============================================================
-  #
-  # 【役割】
-  #   タスク更新時に、まだ実行されていない古いアラームジョブを削除する。
-  #
-  # 【なぜ LIKE 検索ではなく job_class + serialized_params を使うのか】
-  #   レビューで指摘のあった LIKE 検索（"%#{task.id}%"）には以下のリスクがある:
-  #   1. task.id が 1 の場合、id=10, 100 なども誤ってマッチする（誤削除）
-  #   2. 将来的に serialized_params の JSON 構造が変わるとマッチしなくなる
-  #
-  #   正しい方法は GoodJob の構造を利用して:
-  #   - job_class が "TaskAlarmJob" であること
-  #   - serialized_params の arguments に task_id が含まれること
-  #   - finished_at が nil（まだ実行されていない）であること
-  #   の3条件で絞り込む。
-  #
-  # 【serialized_params の構造（GoodJob が保存する JSON）】
-  #   {
-  #     "job_class": "TaskAlarmJob",
-  #     "arguments": [1],   ← task.id が入る
-  #     ...
-  #   }
-  #
-  # 【@>（JSONB containment operator）とは】
-  #   PostgreSQL の JSONB 型専用演算子。
-  #   左辺の JSONB が右辺の JSONB を「含む」かどうかを判定する。
-  #   例: '{"a":1,"b":2}'::jsonb @> '{"a":1}'::jsonb → true
-  #   LIKE よりも正確で、インデックスも効くため高速。
   def cancel_existing_alarm_jobs(task)
     deleted_count = GoodJob::Job
       .where(job_class: "TaskAlarmJob")
       .where(finished_at: nil)
       .where(
         "serialized_params @> ?",
-        # arguments 配列の最初の要素が task.id と一致するものを取得する
-        # to_json で正しい JSON 文字列 {"arguments":[1]} を生成する
         { arguments: [ task.id ] }.to_json
       )
       .delete_all
@@ -482,6 +599,9 @@ class TasksController < ApplicationController
     Rails.logger.info "[TasksController] 古いアラームジョブを削除: task_id=#{task.id}, 削除数=#{deleted_count}"
   end
 
+  # ============================================================
+  # task_params（変更なし）
+  # ============================================================
   def task_params
     params.require(:task).permit(
       :title,
@@ -492,6 +612,39 @@ class TasksController < ApplicationController
       :scheduled_at,
       :alarm_enabled,
       :alarm_minutes_before
+    )
+  end
+
+  # ============================================================
+  # C-7 追加: ai_update_params
+  # ============================================================
+  #
+  # 【役割】
+  #   ai_update アクション専用の Strong Parameters。
+  #   通常の task_params と異なり、以下のフィールドのみ許可する:
+  #     :title          → タスク名（変更可能）
+  #     :due_date       → 期限日（変更可能）
+  #     :estimated_hours → 見積時間（変更可能）
+  #
+  # 【意図的に除外しているフィールドとその理由】
+  #   :priority       → AI が決定した優先度をユーザーに変えさせない
+  #   :task_type      → AI 生成タスクの種別を変えると分類が壊れる
+  #   :status         → 完了・アーカイブ状態を編集フォームから変えない
+  #   :scheduled_at   → アラーム設定は ai_edit では扱わない
+  #   :alarm_enabled  → 同上
+  #   :alarm_minutes_before → 同上
+  #   :ai_generated   → 強制的に true のままにする（変更不要）
+  #
+  # 【二重防御の考え方】
+  #   ① UI（ai_edit.html.erb）で priority フィールドを読み取り専用表示にする（見た目の防御）
+  #   ② ai_update_params に :priority を含めない（サーバー側の防御）
+  #   どちらか一方だけでは不十分。直接 PATCH リクエストを送れば ① は無意味なため
+  #   ② のサーバー側防御が必須。
+  def ai_update_params
+    params.require(:task).permit(
+      :title,
+      :due_date,
+      :estimated_hours
     )
   end
 end
