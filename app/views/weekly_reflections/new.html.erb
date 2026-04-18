@@ -65,13 +65,12 @@
             <div class="bg-white border border-emerald-200 rounded-xl p-4 shadow-sm flex items-center justify-between gap-4">
               <div class="flex-1 min-w-0">
                 <p class="font-semibold text-gray-800 truncate"><%= habit.name %></p>
+                <%#
+                  【変更】habit_progress_text ヘルパーで表記を統一する。
+                  チェック型の分母が effective_weekly_target になり習慣管理と一致する。
+                %>
                 <p class="text-xs text-gray-500 mt-0.5">
-                  <% if habit.check_type? %>
-                    <%= stats[:completed_count] %> / <%= habit.weekly_target %> 日達成
-                  <% else %>
-                    <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %> /
-                    <%= habit.weekly_target %><%= habit.unit.presence || "回" %> 達成
-                  <% end %>
+                  <%= habit_progress_text(habit, stats) %>達成
                 </p>
               </div>
               <span class="flex-shrink-0 inline-block px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">
@@ -98,21 +97,21 @@
               <div class="flex items-center justify-between gap-4 mb-2">
                 <p class="font-semibold text-gray-800 truncate"><%= habit.name %></p>
 
-                <span class="flex-shrink-0 text-xs font-bold
-                             <%= stats[:rate] >= 50 ? 'text-yellow-600' : 'text-red-600' %>">
-                  <% if habit.check_type? %>
-                    <%= stats[:completed_count] %> / <%= habit.weekly_target %> 日 (<%= stats[:rate] %>%)
-                  <% else %>
-                    <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %> /
-                    <%= habit.weekly_target %><%= habit.unit.presence || "回" %>
-                    (<%= stats[:rate] %>%)
-                  <% end %>
+                <%#
+                  【変更1】動的クラスをインラインスタイルに変更。
+                  bg-= rate_color -500 は Tailwind ビルド時に検出されず CSS が生成されない。
+                  rate_hex_color でインラインスタイルに変更する。
+                  【変更2】habit_progress_text ヘルパーで表記を統一する。
+                %>
+                <span class="flex-shrink-0 text-xs font-bold"
+                      style="color: <%= rate_hex_color(stats[:rate]) %>">
+                  <%= habit_progress_text(habit, stats) %>
                 </span>
               </div>
-
               <div class="h-2 bg-gray-200 rounded-full overflow-hidden mb-3">
-                <div class="h-full rounded-full <%= stats[:rate] >= 50 ? 'bg-yellow-400' : 'bg-red-400' %>"
-                     style="width: <%= stats[:rate] %>%;"></div>
+                <div class="h-full rounded-full"
+                     style="width: <%= stats[:rate] %>%; background-color: <%= rate_hex_color(stats[:rate]) %>;">
+                </div>
               </div>
 
               <%# 数値型: 実績補正フィールド %>

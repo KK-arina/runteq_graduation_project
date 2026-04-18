@@ -6,6 +6,13 @@
       ① カラーの初期値は @habit.color.presence || "#3b82f6"（DB の値）
       ② アイコンの初期値は @habit.icon.presence || "📋"（DB の値）
       ③ measurement_type は変更不可のため radio ではなく hidden + 表示のみ
+
+    【C-6 追加修正】
+      ④ チェック型習慣の weekly_target フィールドを非表示にする。
+         チェック型は「やった/やらない」の記録なので週次目標値の入力は不要。
+         目標日数は除外日設定から自動計算される（7日 - 除外日数）。
+         数値型は目標値（例: 7冊）が必要なため表示を維持する。
+         hidden input で値を送信することでバリデーションエラーを防ぐ。
     ==============================================================================
 %>
 <% content_for :title, "習慣を編集 | HabitFlow" %>
@@ -26,7 +33,7 @@
                 class: "space-y-6",
                 data: { controller: "habit-form" } do |f| %>
 
-    <%# 習慣名（変更なし） %>
+    <%# 習慣名 %>
     <div>
       <%= f.label :name, "習慣名",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
@@ -38,7 +45,7 @@
                     transition-colors" %>
     </div>
 
-    <%# カラー選択（B-6 追加）- new.html.erb と同じ構成 %>
+    <%# カラー選択（B-6 追加） %>
     <div>
       <label class="block text-sm font-semibold text-gray-700 mb-1">カラー</label>
       <p class="text-xs text-gray-500 mb-3">習慣カードの左ボーダーの色を選択してください</p>
@@ -58,20 +65,6 @@
            { value: "#64748b", label: "スレート", bg: "bg-slate-500"  }
          ] %>
 
-      <%#
-        ============================================================
-        カラー選択（修正: 初期選択状態の付与方法）
-        ============================================================
-      <%#
-        【修正理由】
-        selected_color = @habit.color.presence || "#3b82f6" が
-        habit_colors.each ループの内側に書かれているため、
-        8回ループするたびに同じ値を再計算している（非効率だが動作はする）。
-        ループの外に出すことで1回だけ計算する（最適化）。
-        これが原因でバグが起きているわけではないが、
-        コードをクリーンにするために外に出す。
-      %>
-
       <% selected_color = @habit.color.presence || "#3b82f6" %>
       <div class="flex gap-3 flex-wrap">
         <% habit_colors.each do |color_item| %>
@@ -89,7 +82,7 @@
       </div>
     </div>
 
-    <%# アイコン選択（B-6 追加）- new.html.erb と同じ構成 %>
+    <%# アイコン選択（B-6 追加） %>
     <div>
       <label class="block text-sm font-semibold text-gray-700 mb-1">アイコン</label>
       <p class="text-xs text-gray-500 mb-3">習慣カードに表示する絵文字を選択してください</p>
@@ -119,7 +112,7 @@
       </div>
     </div>
 
-    <%# measurement_type（変更なし・変更不可） %>
+    <%# measurement_type（変更不可） %>
     <div>
       <label class="block text-sm font-semibold text-gray-700 mb-1">記録タイプ</label>
       <div class="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm text-gray-500">
@@ -129,7 +122,7 @@
       <%= f.hidden_field :measurement_type %>
     </div>
 
-    <%# unit（変更なし） %>
+    <%# unit（数値型のみ表示） %>
     <% if @habit.numeric_type? %>
       <div>
         <%= f.label :unit, "単位",
@@ -143,23 +136,40 @@
       </div>
     <% end %>
 
-    <%# 週次目標値（変更なし） %>
-    <div>
-      <%= f.label :weekly_target, "週次目標値",
-            class: "block text-sm font-semibold text-gray-700 mb-1" %>
-      <p class="text-xs text-gray-500 mb-2">
-        1週間の目標を設定してください
-        <%= @habit.check_type? ? "（1〜7回）" : "（単位: 1以上の数値）" %>
-      </p>
-      <%= f.number_field :weekly_target,
-            min: 1,
-            max: @habit.check_type? ? 7 : nil,
-            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
-                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                    transition-colors" %>
-    </div>
+    <%#
+      週次目標値
+      【変更】チェック型は非表示にする。
+        チェック型は「やった/やらない」の記録なので
+        週次目標値をユーザーが入力する必要はない。
+        目標日数は「7日 - 除外日数」で自動計算される。
+        （例: 土日を除外すると週5日が目標になる）
 
-    <%# 除外日（変更なし） %>
+        hidden input で weekly_target = 7 を送信することで
+        Rails のバリデーション（presence: true, numericality）を通過させる。
+        7 は1週間の最大日数であり、除外日設定で実際の目標日数が決まる。
+
+        数値型は目標値（例: 毎週7冊読む）が必要なため引き続き表示する。
+    %>
+    <% if @habit.check_type? %>
+      <%# チェック型: weekly_target を hidden で送信する（7固定）%>
+      <%= f.hidden_field :weekly_target, value: 7 %>
+    <% else %>
+      <%# 数値型: weekly_target の入力フィールドを表示する %>
+      <div>
+        <%= f.label :weekly_target, "週次目標値",
+              class: "block text-sm font-semibold text-gray-700 mb-1" %>
+        <p class="text-xs text-gray-500 mb-2">
+          1週間の目標を設定してください（単位: 1以上の数値）
+        </p>
+        <%= f.number_field :weekly_target,
+              min: 1,
+              class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                      transition-colors" %>
+      </div>
+    <% end %>
+
+    <%# 除外する曜日 %>
     <div>
       <label class="block text-sm font-semibold text-gray-700 mb-1">除外する曜日</label>
       <p class="text-xs text-gray-500 mb-3">実施しない曜日を選択してください（達成率の計算から除外されます）</p>
@@ -185,7 +195,7 @@
       <p class="text-xs text-gray-400 mt-2">※ 例: 土日を除外すると週5日が最大達成日数になります</p>
     </div>
 
-    <%# ボタンエリア（変更なし） %>
+    <%# ボタンエリア %>
     <div class="flex justify-end items-center gap-4 pt-2">
       <%= link_to "キャンセル", habits_path,
             class: "px-5 py-3 bg-white border border-gray-300 text-gray-700 text-sm font-semibold

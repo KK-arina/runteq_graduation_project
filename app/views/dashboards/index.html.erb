@@ -1,4 +1,5 @@
 <%# app/views/dashboards/index.html.erb %>
+<%# Tailwind の purge 対策: bg-green-500 bg-blue-500 bg-red-400 bg-red-500 text-green-600 text-blue-600 text-red-500 %>
 <%#
   ダッシュボード画面。
   今週の習慣達成率・今日の習慣チェック・タスク優先度別達成率・今日のタスクを表示する。
@@ -8,6 +9,10 @@
     @task_priority_stats を使い Must / Should / Could の達成率プログレスバーを表示する。
     total が 0 の優先度は行ごと非表示。全て 0 件の場合はカード全体を非表示にする。
     data-testid 属性を各要素に付与してテストから正確に参照できるようにする。
+
+  【C-6 追加修正】
+    習慣ごとのプログレスバー色・全体達成率の数字色を
+    rate_hex_color / rate_color ヘルパーで統一する。
 %>
 <% content_for :title, "ダッシュボード | HabitFlow" %>
 
@@ -45,7 +50,15 @@
       <div class="mb-4">
         <div class="flex justify-between items-center mb-1">
           <span class="text-sm text-gray-600">全体達成率</span>
-          <span class="text-sm font-bold text-blue-600"><%= @overall_rate %>%</span>
+          <%#
+            【変更】動的クラスをインラインスタイルに変更。
+            text-= rate_color -600 は Tailwind ビルド時に検出されないため
+            rate_hex_color でインラインスタイルに変更する。
+          %>
+          <span class="text-sm font-bold"
+                style="color: <%= rate_hex_color(@overall_rate) %>">
+            <%= @overall_rate %>%
+          </span>
         </div>
         <div class="h-3 bg-gray-200 rounded-full overflow-hidden"
              role="progressbar"
@@ -53,9 +66,11 @@
              aria-valuemin="0"
              aria-valuemax="100"
              aria-label="全体の習慣達成率">
-          <div class="h-3 rounded-full transition-all duration-300
-                      <%= @overall_rate >= 80 ? 'bg-green-500' : @overall_rate >= 50 ? 'bg-blue-500' : 'bg-red-400' %>"
-               style="width: <%= @overall_rate %>%">
+          <%#
+            【変更】動的クラスをインラインスタイルに変更。
+          %>
+          <div class="h-3 rounded-full transition-all duration-300"
+               style="width: <%= @overall_rate %>%; background-color: <%= rate_hex_color(@overall_rate) %>">
           </div>
         </div>
       </div>
@@ -75,13 +90,19 @@
               <% end %>
             </span>
             <span class="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
-              <% if habit.check_type? %>
-                <%= stats[:completed_count] %>/<%= habit.weekly_target %>日（<%= stats[:rate] %>%）
-              <% else %>
-                <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %>/<%= habit.weekly_target %><%= habit.unit.presence || "回" %>（<%= stats[:rate] %>%）
-              <% end %>
+              <%#
+                【変更】habit_progress_text ヘルパーで表記を統一する。
+                チェック型の分母が weekly_target から effective_weekly_target に変わり
+                習慣管理の「completed_count/effective_target日」と一致する。
+              %>
+              <%= habit_progress_text(habit, stats) %>
             </span>
           </div>
+
+          <%#
+            rate_hex_color を使ってインラインスタイルで色を指定する。
+            habit.color は使わず達成率のみで色を決定する。
+          %>
           <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
                role="progressbar"
                aria-valuenow="<%= stats[:rate] %>"
@@ -90,7 +111,7 @@
                aria-label="<%= habit.name %> の今週の達成率">
             <div class="h-2 rounded-full transition-all duration-300"
                  style="width: <%= stats[:rate] %>%;
-                        background-color: <%= habit.color.presence || (stats[:rate] >= 80 ? '#22c55e' : stats[:rate] >= 50 ? '#60a5fa' : '#f87171') %>">
+                        background-color: <%= rate_hex_color(stats[:rate]) %>">
             </div>
           </div>
         </div>
@@ -101,18 +122,6 @@
   <%# ================================================================== %>
   <%# ── C-6: 今週のタスク達成率（Must/Should/Could 別）──────────────── %>
   <%# ================================================================== %>
-  <%#
-    @task_priority_stats には優先度別の統計情報が入っている。
-    構造例: { "must" => { total: 3, done: 2, rate: 66 }, ... }
-
-    any? { |_, s| s[:total] > 0 } で「1件でも表示対象があるか」を判定する。
-    _ はハッシュのキー（使わないので _ で捨てる）、
-    s は統計ハッシュ（{ total:, done:, rate: }）。
-    全て 0 件の場合はカード全体を非表示にする。
-
-    data-testid="task-priority-stats-section" をカード外枠に付与することで
-    テストからセクション全体の表示・非表示を正確に検証できる。
-  %>
   <% if @task_priority_stats.any? { |_, s| s[:total] > 0 } %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6"
          data-testid="task-priority-stats-section">
@@ -124,97 +133,38 @@
               class: "text-xs text-blue-600 hover:underline" %>
       </div>
 
-      <%#
-        優先度ごとの表示設定を定義するハッシュ。
-        label      : 画面に表示するラベル文字列
-        bar_color  : プログレスバーの色（インラインスタイルで使用）
-        badge_class: 優先度バッジの Tailwind クラス
-        testid     : data-testid の suffix（テストで各行を識別するために使う）
-
-        Tailwind は動的なクラス名をビルド時に静的解析するため、
-        変数を使った動的クラスは生成できない。
-        そのため badge_class には完全なクラス文字列を直接書く。
-        bar_color は CSS の color 値なのでインラインスタイルで指定する。
-      %>
       <% priority_display = {
-           "must"   => { label: "Must",   bar_color: "#ef4444", badge_class: "bg-red-100 text-red-700",   testid: "must" },
-           "should" => { label: "Should", bar_color: "#3b82f6", badge_class: "bg-blue-100 text-blue-700", testid: "should" },
+           "must"   => { label: "Must",   bar_color: "#ef4444", badge_class: "bg-red-100 text-red-700",     testid: "must" },
+           "should" => { label: "Should", bar_color: "#3b82f6", badge_class: "bg-blue-100 text-blue-700",   testid: "should" },
            "could"  => { label: "Could",  bar_color: "#10b981", badge_class: "bg-green-100 text-green-700", testid: "could" }
          } %>
 
       <% priority_display.each do |priority_key, display| %>
-        <%#
-          修正④: nil 安全化。
-          @task_priority_stats[priority_key] が nil の場合に備えて
-          || でデフォルト値を設定する。
-          通常は必ず値が入るが、将来のバグ防止のために書いておく。
-        %>
         <% stats = @task_priority_stats[priority_key] || { total: 0, done: 0, rate: 0 } %>
-
-        <%#
-          total が 0 の優先度はスキップする（行ごと非表示）。
-          今週このカテゴリのタスクがない場合はプログレスバーを出さない。
-          next はブロックの残り処理をスキップして次のループに進む。
-        %>
         <% next if stats[:total].zero? %>
 
-        <%#
-          data-testid を各行の外枠 div に付与する。
-          例: data-testid="priority-row-must"
-          テストでは "[data-testid='priority-row-must']" で行全体を特定できる。
-        %>
         <div class="mb-4 last:mb-0"
              data-testid="priority-row-<%= display[:testid] %>">
           <div class="flex justify-between items-center mb-1 gap-2">
-
-            <%#
-              優先度ラベルのバッジ。
-              data-testid="priority-badge-must" などを付与することで
-              テストから「Must バッジが表示されているか」を正確に検証できる。
-              "span" だけのセレクタだとページ全体の span にマッチしてしまうため
-              data-testid による絞り込みが必要。
-            %>
             <span class="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0
                          <%= display[:badge_class] %>"
                   data-testid="priority-badge-<%= display[:testid] %>">
               <%= display[:label] %>
             </span>
-
-            <%#
-              達成件数と総件数を表示する（例: 2/3件 完了）。
-              data-testid="priority-count-must" で件数表示を特定できる。
-            %>
             <span class="text-sm text-gray-600 flex-1"
                   data-testid="priority-count-<%= display[:testid] %>">
               <%= stats[:done] %>/<%= stats[:total] %>件 完了
             </span>
-
             <%#
-              達成率を右端に表示する。
-              80% 以上は緑（順調）、50% 以上は青（普通）、未満は赤（要改善）で色分けする。
-              data-testid="priority-rate-must" で達成率テキストを特定できる。
+              【変更】動的クラスをインラインスタイルに変更。
             %>
-            <span class="text-sm font-bold flex-shrink-0
-                         <%= stats[:rate] >= 80 ? 'text-green-600' : stats[:rate] >= 50 ? 'text-blue-600' : 'text-red-500' %>"
+            <span class="text-sm font-bold flex-shrink-0"
+                  style="color: <%= rate_hex_color(stats[:rate]) %>"
                   data-testid="priority-rate-<%= display[:testid] %>">
               <%= stats[:rate] %>%
             </span>
           </div>
 
-          <%#
-            プログレスバー本体。
-
-            外枠（グレーの背景）:
-              role="progressbar" → スクリーンリーダーに「進捗バー」であることを伝える。
-              aria-valuenow     → 現在の達成率をスクリーンリーダーに伝える。
-              aria-valuemin/max → 最小値0・最大値100を示す。
-              aria-label        → 何の達成率かをスクリーンリーダーに伝える。
-
-            内側（色付きバー）:
-              style="width: ..." → 達成率に応じてバーの幅を変える。
-              background-color  → 優先度ごとの色をインラインスタイルで指定する。
-              transition-all duration-500 → ページ読み込み時にバーが伸びるアニメーション。
-          %>
           <div class="h-3 bg-gray-200 rounded-full overflow-hidden"
                role="progressbar"
                aria-valuenow="<%= stats[:rate] %>"

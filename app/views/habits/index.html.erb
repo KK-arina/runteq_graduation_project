@@ -246,7 +246,11 @@
           <%# 週次目標と除外日の表示（変更なし） %>
           <div class="px-4 pb-2">
             <% if habit.check_type? %>
-              <span class="text-xs text-gray-400">週次目標: <%= habit.effective_weekly_target %>回</span>
+              <%#
+                【変更】チェック型の週次目標の単位を「回」→「日」に変更する。
+                チェック型は「やった日数」を記録するため単位は「日」が正しい。
+              %>
+              <span class="text-xs text-gray-400">週次目標: <%= habit.effective_weekly_target %>日</span>
             <% else %>
               <span class="text-xs text-gray-400">週次目標: <%= habit.weekly_target %><%= habit.unit.presence || "回" %>/週</span>
             <% end %>
