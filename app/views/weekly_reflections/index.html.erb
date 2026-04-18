@@ -89,35 +89,13 @@
               <%# 習慣名 %>
               <span class="text-gray-700 font-medium"><%= habit.name %></span>
 
-              <%# ── 【修正箇所】単位を habit の種類に応じて切り替える ──────────────
-                修正前: = stats[:completed_count]  / = habit.weekly_target  回
-                        → チェック型・数値型どちらも「回」と固定されていた
-                        → 筋トレ（チェック型）は「日」が正しいが「回」になっていた
-                        → 読書（数値型/冊）も「回」になっていた
-
-                修正後: habit.check_type? で分岐
-                  チェック型: completed_count（実施した日数）と「日」を表示
-                              例: 「5 / 7 日（71%）」
-                  数値型:     numeric_sum（今週の累計）と habit.unit（登録した単位）を表示
-                              例: 「6 / 7 冊（85%）」
-
-                format("%g", ...) とは？
-                  小数点以下の不要なゼロを削除するフォーマット指定子。
-                  例: format("%g", 6.0) → "6"  /  format("%g", 6.5) → "6.5"
-
-                habit.unit.presence || "回":
-                  unit が nil や空文字の場合は「回」をデフォルト単位として使う。
+              <%#
+                【変更】habit_progress_text ヘルパーで表記を統一する。
+                チェック型の分母を weekly_target → effective_weekly_target に変更し
+                ダッシュボード・習慣管理と同じ表記にする。
               %>
               <span class="text-gray-500">
-                <% if habit.check_type? %>
-                  <%# チェック型: 実施した日数を「日」で表示 %>
-                  <%= stats[:completed_count] %> / <%= habit.weekly_target %> 日
-                  (<%= stats[:rate] %>%)
-                <% else %>
-                  <%# 数値型: 今週の累計を登録単位で表示 %>
-                  <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %> / <%= habit.weekly_target %> <%= habit.unit.presence || "回" %>
-                  (<%= stats[:rate] %>%)
-                <% end %>
+                <%= habit_progress_text(habit, stats) %>
               </span>
               <%# ────────────────────────────────────────────────────────────────── %>
             </div>
@@ -128,11 +106,16 @@
               [stats[:rate].to_i, 100].min: 100% を超えてバーがはみ出さないようにする
             %>
             <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-              <div class="h-2 rounded-full transition-all duration-500
-                <%= stats[:rate].to_i >= 100 ? 'bg-green-500' :
-                    stats[:rate].to_i >= 70  ? 'bg-blue-500' :
-                    stats[:rate].to_i >= 40  ? 'bg-yellow-400' : 'bg-red-400' %>"
-                   style="width: <%= [stats[:rate].to_i, 100].min %>%">
+              <%#
+                【変更】色分けロジックをダッシュボード・習慣管理と統一する。
+                変更前: 4段階（100%=緑/70%=青/40%=黄/未満=赤）
+                変更後: 3段階（80%=緑/50%=青/未満=赤）
+                Tailwind の動的クラスはビルド時に検出されないため
+                rate_hex_color でインラインスタイルに変更する。
+              %>
+              <div class="h-2 rounded-full transition-all duration-500"
+                   style="width: <%= [stats[:rate].to_i, 100].min %>%;
+                          background-color: <%= rate_hex_color(stats[:rate].to_i) %>">
               </div>
             </div>
           </div>

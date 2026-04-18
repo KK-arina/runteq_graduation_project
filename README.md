@@ -68,7 +68,8 @@ flowchart LR
 [![C-3 タスク削除確認モーダル](https://img.shields.io/badge/C--3_タスク削除確認モーダル-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-3-task-delete-modal)
 [![C-4 週次振り返りタスクスナップショット](https://img.shields.io/badge/C--4_週次振り返りタスクスナップショット-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-4-weekly-reflection-task-summary)
 [![C-5 タスクアラーム通知](https://img.shields.io/badge/C--5_タスクアラーム通知-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-5-task-alarm-job)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-20%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![C-6 ダッシュボードタスク達成率](https://img.shields.io/badge/C--6_ダッシュボードタスク達成率-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-6-dashboard-task-priority-stats)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-21%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -154,6 +155,7 @@ flowchart LR
 | #C-3 | タスク削除確認モーダル（M-2）・手動タスク削除（ai_generated=false のみ削除可・デスクトップ中央モーダル/スマホボトムシート・Turbo Stream削除・トースト通知） | 2026-04-08 | feature/C-3-task-delete-modal |
 | #C-4 | 週次振り返りのタスクスナップショット保存（weekly_reflection_task_summaries・was_completedフラグ・優先度別表示・toggle後モーダル再注入バグ修正） | 2026-04-08 | feature/C-4-weekly-reflection-task-summary |
 | #C-5 | タスクアラーム通知（GoodJob + メール）・NotificationLogモデル・TaskAlarmJob・TaskMailer・alarm_enabled/scheduled_at/alarm_minutes_beforeフィールド追加・update時の再スケジュール・AlarmToggleController | 2026-04-12 | feature/C-5-task-alarm-job |
+| #C-6 | ダッシュボードの Must/Should/Could 別タスク達成率表示・達成率カラーの全画面統一・習慣フォーム改善 | 2026-04-18 | feature/C-6-dashboard-task-priority-stats |
 
 <br>
 
@@ -2374,6 +2376,134 @@ C-5テスト: 9件（JobTest 8件・MailerTest 1件）
 
 <br>
 
+### #C-6: ダッシュボードの Must/Should/Could 別タスク達成率表示
+
+<br>
+
+**ブランチ:** `feature/C-6-dashboard-task-priority-stats`<br>
+**完了日:** 2026-04-18<br>
+**概要:** ダッシュボードに今週のタスク優先度（Must/Should/Could）別の週次達成率プログレスバーを追加。<br>
+あわせて全画面の達成率表記・カラーを統一し、習慣フォームのチェック型週次目標値を非表示化した。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Controller | `DashboardsController` に `build_task_priority_stats` メソッドを追加（Must/Should/Could 別の集計） |
+| Controller | `group(:priority).count` で2クエリのみ（N+1なし）。Rails enum の `group()` はキーが文字列で返るため `priority_map` 変換不要 |
+| Controller | `in_time_zone.beginning_of_day` で Date 型と datetime 型の BETWEEN 比較のタイムゾーンズレを修正 |
+| Controller | archived タスクも done としてカウント（「完了後に整理したもの」として達成実績に含める） |
+| View | ダッシュボードに「今週のタスク達成率」セクションを追加（Must=赤/Should=青/Could=緑） |
+| View | `data-testid` を各要素に付与してテストから正確に参照できるように |
+| View | total が 0 の優先度は行ごと非表示。全優先度が 0 件の場合はカード全体を非表示 |
+| Helper | `ApplicationHelper` に `rate_hex_color` / `habit_progress_text` を追加 |
+| Helper | Tailwind 動的クラス（`bg-<%= rate_color %>-500`）はビルド時検出されないため `rate_hex_color` によるインラインスタイルに統一 |
+| Helper | `habit_progress_text` でダッシュボード・週次振り返り・習慣管理の達成率表記を統一 |
+| View | チェック型の分母を `weekly_target` → `effective_weekly_target`（除外日考慮後）に変更 |
+| View | 週次振り返り一覧の色分けを4段階（黄色あり）から3段階（緑/青/赤）に統一 |
+| View | 習慣管理のチェック型週次目標の単位を「回」→「日」に変更 |
+| JS | `habit_form_controller.js` に `weeklyTargetField` / `weeklyTargetHiddenWrapper` ターゲットを追加 |
+| JS | `toggleUnit()` でチェック型選択時に週次目標値フィールドを非表示に切り替え |
+| View | `habits/new.html.erb` / `habits/edit.html.erb` でチェック型の週次目標値を非表示（hidden で 7 を送信） |
+| Test | `data-testid` ベースの `assert_select` でテストの誤検知を防止（8件追加） |
+| Test | setup に fixtures タスクの論理削除・ログイン成功保証を追加 |
+
+<br>
+
+#### N+1 を起こさない設計（2クエリのみ）
+
+<br>
+
+```ruby
+# 今週タスクの優先度別総件数（1クエリ）
+total_counts = base_scope.unscope(:order).group(:priority).count
+
+# 完了（done + archived）件数（1クエリ）
+done_counts = base_scope.unscope(:order)
+                        .where(status: [Task.statuses[:done], Task.statuses[:archived]])
+                        .group(:priority).count
+```
+
+<br>
+
+ループ内でDBを叩かないため、タスクが何件あっても常に2クエリで済む。
+
+<br>
+
+#### タイムゾーン修正のポイント
+
+<br>
+
+`HabitRecord.today_for_record` は `Date` 型を返す。<br>
+`created_at`（datetime 型）との BETWEEN 比較では<br>
+`week_start.in_time_zone.beginning_of_day` / `today.in_time_zone.end_of_day` を使う。<br>
+`Date#beginning_of_day` のままだと UTC 変換がズレてテスト環境でタスクが集計されないバグが発生する。
+
+<br>
+
+#### Rails enum の group() のキー型に注意
+
+<br>
+
+```ruby
+# group(:priority).count の返り値
+{ "must" => 3, "should" => 5, "could" => 2 }  # キーは整数ではなく文字列
+```
+
+<br>
+
+Rails の enum カラムを `group().count` すると、キーは整数（0/1/2）ではなく<br>
+enum 名の文字列（`"must"/"should"/"could"`）で返る。<br>
+`priority_map` による整数→文字列変換は不要で `total_counts["must"]` で直接アクセスできる。
+
+<br>
+
+#### Tailwind 動的クラスの問題と解決
+
+<br>
+
+| 問題 | 解決 |
+|:---|:---|
+| `bg-<%= rate_color %>-500` はビルド時に検出されず CSS が生成されない | `rate_hex_color` によるインラインスタイル（`background-color: #22c55e`）に変更 |
+| `text-<%= rate_color %>-600` も同様 | `style="color: <%= rate_hex_color(rate) %>"` に変更 |
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `app/controllers/dashboards_controller.rb` | `build_task_priority_stats` メソッドを追加（タイムゾーン修正・2クエリ設計） |
+| `app/helpers/application_helper.rb` | `rate_hex_color` / `habit_progress_text` を追加 |
+| `app/views/dashboards/index.html.erb` | 今週のタスク達成率セクション追加・習慣達成率カラーをインラインスタイルに変更・表記統一 |
+| `app/views/weekly_reflections/index.html.erb` | プログレスバー色を4段階→3段階に統一・`habit_progress_text` で表記統一 |
+| `app/views/weekly_reflections/new.html.erb` | プログレスバー色・表記を統一・`effective_weekly_target` に変更 |
+| `app/views/habits/index.html.erb` | チェック型週次目標の単位を「回」→「日」に変更 |
+| `app/views/habits/new.html.erb` | チェック型の週次目標値フィールドを非表示・hidden input（value=7）を追加 |
+| `app/views/habits/edit.html.erb` | チェック型は `hidden_field :weekly_target, value: 7` のみに変更 |
+| `app/javascript/controllers/habit_form_controller.js` | `weeklyTargetField` / `weeklyTargetHiddenWrapper` ターゲット追加・`toggleUnit()` に表示切替ロジック追加 |
+| `test/controllers/dashboards_controller_test.rb` | 8件追加（`data-testid` ベース・fixtures干渉対策・ログイン成功保証） |
+| `test/integration/dashboard_test.rb` | h2テキスト正規表現を更新（`今週の習慣達成率` に変更） |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+C-6テスト: 8 runs, 38 assertions, 0 failures, 0 errors, 0 skips
+全テスト:  464 runs, 1180 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -3913,6 +4043,8 @@ habitflow/
 │   │   ├── task_menu_controller.js        # #C-3 新規: タスク削除確認モーダル（⋯メニュー・デスクトップ中央モーダル/スマホボトムシート・turbo:submit-end でクローズ・_injectTabToForms タブ維持）
 │   │   ├── voice_input_controller.js      # #B-7 新規: 音声入力（Web Speech API・graceful degradation対応・未対応ブラウザで🎤非表示）
 │   │   └── alarm_toggle_controller.js                  # #C-5 新規: アラームOFF時に分数入力欄をdisabledにする
+│   ├── helpers/
+│   │   └── application_helper.rb                       # #C-6 追加: rate_hex_color / habit_progress_text（達成率カラー・表記の全画面統一）
 │   ├── jobs/
 │   │   ├── application_job.rb                          # 変更: retry_on / discard_on 追加（#A-3）
 │   │   ├── streak_calculation_job.rb                   # #A-3 #B-3: ストリーク計算（本実装完了）
@@ -3925,8 +4057,8 @@ habitflow/
 │   │   ├── test_mailer.rb                              # #A-4: 動作確認用メイラー
 │   │   └── task_mailer.rb                              # #C-5 新規: タスクアラーム通知メイラー（HTML+テキスト・タイムゾーン変換）
 │   └── views/
-│       ├── dashboards/                    # ダッシュボード画面（変更: 今日のタスクセクション追加 #C-1）
-│       ├── habits/                        # 習慣一覧・新規作成・編集・アーカイブ一覧画面（変更: ⋯メニュー置き換え・_habit_card_actions.html.erb追加 #B-5）
+│       ├── dashboards/                    # ダッシュボード画面（変更: 今週のタスクセクション追加 #C-1・タスク達成率セクション追加 #C-6）
+│       ├── habits/                        # 習慣一覧・新規作成・編集・アーカイブ一覧画面（変更: チェック型週次目標非表示 #C-6）
 │       ├── habit_records/                 # 習慣記録パーシャル（変更: 状態バッジ5パターン #B-3）
 │       ├── weekly_reflections/            # 変更: show.html.erb にタスク実績セクション追加（#C-4）
 │       ├── shared/                        # 変更: _flash_message.html.erb を新規作成（Turbo Stream用トースト通知パーシャル・#C-3）
@@ -4011,7 +4143,8 @@ habitflow/
         ├── habits_menu_controller_test.rb   # #B-5: ⋯メニュー・モーダル・アーカイブ・削除・ロック状態テスト（14件）
         ├── habits_sort_controller_test.rb # #B-6: 並び替え保存・未ログイン・不正ID混入テスト（3件）
         ├── habit_record_memo_test.rb      # #B-7: memoバリデーション・has_memo?メソッドテスト（8件）
-        └── tasks_controller_test.rb      # 変更: destroy（手動削除・AI生成403・他ユーザー404・ロック中302・未ログイン302）5件追加（#C-3・計18件）
+        ├── tasks_controller_test.rb      # 変更: destroy（手動削除・AI生成403・他ユーザー404・ロック中302・未ログイン302）5件追加（#C-3・計18件）
+        └── dashboards_controller_test.rb  # #C-6 新規: タスク達成率8件（data-testid・fixtures干渉対策・ログイン成功保証）
 ```
 
 <br>
@@ -4041,7 +4174,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-459 runs, 1150 assertions, 0 failures, 0 errors, 0 skips
+464 runs, 1180 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -5595,6 +5728,99 @@ assert_nothing_raised do
   TaskAlarmJob.perform_now(999_999)
 end
 assert_equal 0, ActionMailer::Base.deliveries.size
+```
+
+<br>
+
+### group(:priority).count のキーは文字列で返る（#C-6）
+
+<br>
+
+Rails の enum カラムを `group().count` すると、キーは整数（0/1/2）ではなく<br>
+enum 名の文字列（`"must"/"should"/"could"`）で返る。<br>
+`priority_map = Task.priorities.invert` による整数→文字列変換は不要で<br>
+`total_counts["must"]` のように直接文字列キーでアクセスできる。<br>
+```ruby
+# group(:priority).count の実際の返り値
+{ "must" => 3, "should" => 5 }  # Integer ではなく String
+```
+
+<br>
+
+### Date 型と datetime 型の BETWEEN 比較は in_time_zone を挟む（#C-6）
+
+<br>
+
+`HabitRecord.today_for_record` は `Date` 型を返す。<br>
+`created_at`（datetime 型）との BETWEEN 比較で<br>
+`week_start.beginning_of_day` のまま使うと UTC 変換がズレてタスクが集計されないバグが発生する。<br>
+`week_start.in_time_zone.beginning_of_day` と `today.in_time_zone.end_of_day` を使うことで<br>
+JST 基準の明示的な Time オブジェクトに変換してから PostgreSQL に渡せる。<br>
+```ruby
+# ❌ Date#beginning_of_day → UTC 変換がズレる
+week_start.beginning_of_day
+
+# ✅ in_time_zone 経由で JST 基準の Time に変換する
+week_start.in_time_zone.beginning_of_day  # 2026-04-13 00:00:00 +09:00
+```
+
+<br>
+
+### Tailwind の動的クラスはインラインスタイルで代替する（#C-6）
+
+<br>
+
+`bg-<%= rate_color(rate) %>-500` のような ERB 変数を使った動的クラスは<br>
+Tailwind のビルド時静的解析で検出されず、CSS が生成されないため本番で色が当たらない。<br>
+`rate_hex_color` ヘルパーで16進数カラーコードを返し、<br>
+`style="background-color: <%= rate_hex_color(rate) %>"` のようにインラインスタイルで指定すること。<br>
+```erb
+<%# ❌ 動的クラス → ビルド対象外 %>
+
+
+<%# ✅ インラインスタイル → 動的カラーコードを安全に適用 %>
+
+```
+
+<br>
+
+### テストの assert_select は data-testid で絞り込む（#C-6）
+
+<br>
+
+`assert_select "span", text: "Must"` のように広いセレクタを使うと、<br>
+ページ上の他の `span` 要素（ユーザー名・ナビリンク等）にもマッチして誤検知が発生する。<br>
+`data-testid` 属性を HTML に付与し、`assert_select "[data-testid='priority-badge-must']"` のように<br>
+具体的なセレクタで絞り込むことで誤検知のない堅牢なテストになる。<br>
+将来的にデザインやクラスが変更されても `data-testid` が残る限りテストは壊れない。<br>
+```ruby
+# ❌ 広いセレクタ → ユーザー名等の無関係な span にもマッチ
+assert_select "span", text: "Must"
+
+# ✅ data-testid で絞り込む → 意図した要素のみ
+assert_select "[data-testid='priority-badge-must']", text: "Must"
+```
+
+<br>
+
+### fixtures のタスクはテスト setup で論理削除する（#C-6）
+
+<br>
+
+`tasks.yml` に fixture タスク（`ai_generated_task`）があると、<br>
+`created_at` が今週の BETWEEN 条件にヒットして集計に混入し、<br>
+テストが意図しない件数を返す問題が発生する。<br>
+`setup` で `@user.tasks.update_all(deleted_at: Time.current)` を実行して<br>
+fixtures タスクを論理削除してからテスト用データを作成することで<br>
+fixtures の影響を受けないクリーンな集計結果を制御できる。<br>
+```ruby
+def setup
+  travel_to Time.zone.local(2026, 4, 15, 10, 0, 0)
+  @user = users(:one)
+  post login_path, ...
+  # fixtures タスクを無効化してテストをクリーンな状態にする
+  @user.tasks.update_all(deleted_at: Time.current)
+end
 ```
 
 <br>
