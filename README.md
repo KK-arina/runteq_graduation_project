@@ -69,7 +69,8 @@ flowchart LR
 [![C-4 週次振り返りタスクスナップショット](https://img.shields.io/badge/C--4_週次振り返りタスクスナップショット-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-4-weekly-reflection-task-summary)
 [![C-5 タスクアラーム通知](https://img.shields.io/badge/C--5_タスクアラーム通知-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-5-task-alarm-job)
 [![C-6 ダッシュボードタスク達成率](https://img.shields.io/badge/C--6_ダッシュボードタスク達成率-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-6-dashboard-task-priority-stats)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-21%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![C-7 タスクAI編集ページ](https://img.shields.io/badge/C--7_タスクAI編集ページ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/C-7-task-ai-edit)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-22%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -119,7 +120,7 @@ flowchart LR
 |:---|:---|:---:|:---:|:---:|
 | Week A | DB・インフラ基盤 | #A-1〜#A-7 | 24 | ✅ 完了 |
 | Week B | 習慣機能拡張 | #B-1〜#B-7 | 28 | ✅ 完了 |
-| Week C | タスク管理機能 | #C-1〜#C-7 | 28 | 🟡 進行中 |
+| Week C | タスク管理機能 | #C-1〜#C-7 | 28 | ✅ 完了 |
 | Week D | AI分析・PMVV機能 | #D-1〜#D-11 | 42 | ⬜ 未着手 |
 | Week E | 週次振り返り拡張 | #E-1〜#E-5 | 22 | ⬜ 未着手 |
 | Week F | 認証拡張 | #F-1〜#F-6 | 19 | ⬜ 未着手 |
@@ -156,6 +157,7 @@ flowchart LR
 | #C-4 | 週次振り返りのタスクスナップショット保存（weekly_reflection_task_summaries・was_completedフラグ・優先度別表示・toggle後モーダル再注入バグ修正） | 2026-04-08 | feature/C-4-weekly-reflection-task-summary |
 | #C-5 | タスクアラーム通知（GoodJob + メール）・NotificationLogモデル・TaskAlarmJob・TaskMailer・alarm_enabled/scheduled_at/alarm_minutes_beforeフィールド追加・update時の再スケジュール・AlarmToggleController | 2026-04-12 | feature/C-5-task-alarm-job |
 | #C-6 | ダッシュボードの Must/Should/Could 別タスク達成率表示・達成率カラーの全画面統一・習慣フォーム改善 | 2026-04-18 | feature/C-6-dashboard-task-priority-stats |
+| #C-7 | タスクのAI編集ページ（11番・AI提案モーダル経由）session[:ai_context_task_id]によるアクセス制御・優先度変更不可の二重防御・ai_update_params・form_with + data: { turbo: false } | 2026-04-19 | feature/C-7-task-ai-edit |
 
 <br>
 
@@ -2504,6 +2506,70 @@ C-6テスト: 8 runs, 38 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
+### #C-7: タスクのAI編集ページ（11番・AI提案モーダル経由）
+
+<br>
+
+**ブランチ:** `feature/C-7-task-ai-edit`<br>
+**完了日:** 2026-04-19<br>
+**概要:** AI提案プレビューモーダルからのみアクセス可能なタスク編集ページを実装。<br>
+通常の `TasksController#edit` とは別ルートとして `ai_edit` / `ai_update` を追加。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Route | `get :ai_edit` / `patch :ai_update` を member ブロックに追加 |
+| Controller | `ai_edit` アクション: session に `ai_context_task_id` フラグを設定 |
+| Controller | `ai_update` アクション: フラグ検証 → 限定 params で保存 → アラーム再スケジュール |
+| Controller | `set_ai_context` / `verify_ai_context` / `clear_ai_context` を private に追加 |
+| Controller | `ai_update_params`: title・due_date・estimated_hours のみ許可（priority 除外） |
+| View | `app/views/tasks/ai_edit.html.erb` 新規作成（AI経由限定バナー付き） |
+| View | `form_with model: @task, data: { turbo: false }` で Turbo を無効化し通常フォーム送信 |
+| Test | `test/controllers/tasks_ai_edit_controller_test.rb` 新規作成（9件） |<br><br>
+
+<br>
+
+#### アクセス制御の設計
+
+<br>
+
+ai_edit（GET）
+↓ session[:ai_context_task_id] = @task.id を設定
+ai_edit.html.erb を表示（AI経由限定バナー・優先度は読み取り専用）
+ai_update（PATCH）
+↓ session[:ai_context_task_id] == @task.id か検証
+一致しない → tasks_path へリダイレクト（「AI提案モーダル経由でのみ実行できます」）
+一致する   → ai_update_params で保存 → session クリア → tasks_path へ
+
+<br>
+
+#### 優先度を変更不可にする二重防御
+
+<br>
+
+| 防御層 | 実装 |
+|:---|:---|
+| UI 層 | `ai_edit.html.erb` で priority フィールドを静的テキスト表示のみにする |
+| サーバー層 | `ai_update_params` に `:priority` を含めない |<br><br>
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+C-7テスト:  9 runs, 37 assertions, 0 failures, 0 errors, 0 skips
+全テスト:  473 runs, 1217 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -3532,6 +3598,35 @@ docker compose exec web bin/rails db:test:prepare
 
 <br>
 
+### 36. session によるアクセス制御と URL パラメータ改ざん対策（#C-7）
+
+<br>
+
+「AI提案モーダルを経由したかどうか」をサーバー側で証明する手段が必要だった。<br>
+URL パラメータ（`?from=ai_modal` 等）はユーザーが直接書き換えられるため不適切。<br>
+Rails の session は暗号化された Cookie として保存されるため改ざんできない。<br>
+`ai_edit`（GET）で `session[:ai_context_task_id] = @task.id` を設定し、<br>
+`ai_update`（PATCH）で `session[:ai_context_task_id] == @task.id` を照合する設計にした。<br>
+task_id まで照合する理由: 「タスクAの ai_edit → タスクBの ai_update」という<br>
+不正なクロスアクセスも確実に弾くため。
+
+<br>
+
+### 37. form_with の Turbo 干渉は data: { turbo: false } で解消する（#C-7）
+
+<br>
+
+Rails 7 の `form_with` はデフォルトで Turbo Drive が処理する。<br>
+`ai_update` アクションが通常の HTML リダイレクト（302）を返しても<br>
+Turbo が `TURBO_STREAM` 形式でリクエストを送るため、<br>
+コントローラーが `ActionController::ParameterMissing` を発生させてフォームが動かなかった。<br>
+`data: { turbo: false }` を指定することで Turbo を無効にし、<br>
+従来の HTML フォーム送信（`<form method="post">`）として動作させることで解決した。<br>
+また `form_with` に `model: @task` を渡すことで `f.text_field :title` が<br>
+`name="task[title]"` を自動生成し、`params[:task][:title]` としてサーバーで受け取れる。
+
+<br>
+
 ---
 
 <br>
@@ -4066,7 +4161,15 @@ habitflow/
 │       ├── task_mailer/                                # #C-5 新規: アラーム通知メールビュー
 │       │   ├── alarm_notification.html.erb             # HTMLメール本文
 │       │   └── alarm_notification.text.erb             # テキストメール本文
-│       ├── tasks/                                      # 変更: edit.html.erb 新規作成・new.html.erb にアラームUI追加・_task_modal.html.erb に編集リンク追加（#C-5）
+│       ├── tasks/
+│       │   ├── index.html.erb             # 9番: タスク一覧
+│       │   ├── new.html.erb               # 10番: タスク新規作成
+│       │   ├── edit.html.erb              # タスク編集（通常）
+│       │   ├── ai_edit.html.erb           # #C-7 新規: 11番 AI経由限定タスク編集（バナー付き・優先度読み取り専用・form_with + data: { turbo: false }）
+│       │   ├── _task_row.html.erb         # 未完了タスク行パーシャル
+│       │   ├── _done_task_row.html.erb    # 完了タスク行パーシャル
+│       │   ├── _tab_counts.html.erb       # タブ件数バッジパーシャル
+│       │   └── _task_modal.html.erb       # 削除確認モーダルパーシャル
 │       └── layouts/
 │           └── application.html.erb  # 変更: yield :modals を</body>直前に追加（#B-5）・重複 id="flash-area" を1箇所に統一（#C-4バグ修正）
 ├── db/
@@ -4143,7 +4246,7 @@ habitflow/
         ├── habits_menu_controller_test.rb   # #B-5: ⋯メニュー・モーダル・アーカイブ・削除・ロック状態テスト（14件）
         ├── habits_sort_controller_test.rb # #B-6: 並び替え保存・未ログイン・不正ID混入テスト（3件）
         ├── habit_record_memo_test.rb      # #B-7: memoバリデーション・has_memo?メソッドテスト（8件）
-        ├── tasks_controller_test.rb      # 変更: destroy（手動削除・AI生成403・他ユーザー404・ロック中302・未ログイン302）5件追加（#C-3・計18件）
+        ├── tasks_ai_edit_controller_test.rb  # #C-7 新規: ai_edit/ai_update（9件: 正常フロー・直接アクセス403・優先度変更不可・バリデーションエラー・他ユーザー404）
         └── dashboards_controller_test.rb  # #C-6 新規: タスク達成率8件（data-testid・fixtures干渉対策・ログイン成功保証）
 ```
 
@@ -4174,7 +4277,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-464 runs, 1180 assertions, 0 failures, 0 errors, 0 skips
+473 runs, 1217 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -4224,6 +4327,7 @@ docker compose exec web bin/rails test
 | `test/models/weekly_reflection_task_summary_test.rb` | モデル | バリデーション・UNIQUE制約（task_id IS NOT NULL部分インデックス対応）・アソシエーション（on_delete: :nullify でタスク削除後もスナップショット保持）・`create_all_for_reflection!`（冪等性・対象タスク選定）・`by_priority` スコープ・`priority_label` / `priority_color_class`（#C-4・21件） |
 | `test/jobs/task_alarm_job_test.rb` | ジョブ | メール送信確認・notification_logs記録・スキップ条件（alarm_disabled/完了済み/上限超過/通知無効）・discard_on 動作確認（8件）（#C-5） |
 | `test/mailers/task_mailer_test.rb` | メイラー | alarm_notification の件名・宛先・送信元確認（自動生成から修正）（#C-5） |
+| `test/controllers/tasks_ai_edit_controller_test.rb` | コントローラー | `ai_edit`（正常アクセス・session設定・他ユーザー404・未ログイン302）`ai_update`（sessionフラグあり保存・直接アクセスリダイレクト・優先度変更不可・バリデーションエラー422・他ユーザー404）（#C-7・9件） |
 
 <br>
 
@@ -5822,6 +5926,34 @@ def setup
   @user.tasks.update_all(deleted_at: Time.current)
 end
 ```
+
+<br>
+
+### form_with の Turbo 干渉に注意する（#C-7）
+
+<br>
+
+Rails 7 の `form_with` はデフォルトで Turbo Drive が処理するため、<br>
+サーバーが通常の HTML リダイレクトを返しても画面が遷移しないことがある。<br>
+AI編集ページのように「シンプルなフォーム送信 → リダイレクト」で十分な場合は<br>
+`data: { turbo: false }` を指定して Turbo を無効化する。<br>
+また `form_with` のフォームフィールドは必ず `f.text_field` / `f.date_field` 等の<br>
+`f.` メソッドを使うこと。`text_field_tag` 等を使うと `name="task[title]"` にならず<br>
+`params[:task]` が nil になって `ActionController::ParameterMissing` が発生する。
+
+<br>
+
+### session によるアクセス制御は task_id まで照合する（#C-7）
+
+<br>
+
+「特定のフロー経由かどうか」を session で制御する場合、<br>
+`session[:ai_context] = true` のようなフラグだけでは不十分。<br>
+「タスクAのai_edit → タスクBのai_update」という不正なクロスアクセスを防ぐために<br>
+`session[:ai_context_task_id] = @task.id` として task_id まで保存し、<br>
+`ai_update` で `session[:ai_context_task_id] == @task.id` と照合すること。<br>
+照合成功後は必ず `session.delete(:ai_context_task_id)` でフラグをクリアし、<br>
+次回は必ず ai_edit から入り直す状態に戻す。
 
 <br>
 
