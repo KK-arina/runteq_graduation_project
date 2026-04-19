@@ -12,6 +12,10 @@
 #   has_many :tasks を追加。
 #   TasksController で current_user.tasks を使うために必要。
 #
+# 【D-1 での変更内容】
+#   has_many :user_purposes を追加。
+#   UserPurposesController で current_user.user_purposes を使うために必要。
+#
 # ==============================================================================
 class User < ApplicationRecord
   # ============================================================
@@ -22,9 +26,9 @@ class User < ApplicationRecord
   # ============================================================
   # アソシエーション
   # ============================================================
-  has_many :habits,              dependent: :destroy
-  has_many :habit_records,       dependent: :destroy
-  has_many :weekly_reflections,  dependent: :destroy
+  has_many :habits,             dependent: :destroy
+  has_many :habit_records,      dependent: :destroy
+  has_many :weekly_reflections, dependent: :destroy
 
   # has_many :tasks（C-1 追加）
   # 【理由】
@@ -48,6 +52,19 @@ class User < ApplicationRecord
   #   User モデルから user_setting にアクセスできる必要がある。
   #   1人のユーザーに1つの設定レコード（UNIQUE制約あり）のため has_one を使う。
   has_one :user_setting
+
+  # has_many :user_purposes（D-1 追加）
+  # 【理由】
+  #   1人のユーザーは複数の PMVV 目標を持てる（バージョン管理のため）。
+  #   ユーザーが目標を更新するたびに新しいレコードを作成し、
+  #   過去のバージョンを履歴として保持するため has_many が必要。
+  #   UserPurposesController の new / create / edit / update で
+  #   current_user.user_purposes を使用する。
+  #
+  # dependent: :destroy:
+  #   ユーザーが削除されたとき、PMVV 記録も全て削除する。
+  #   schema.rb の add_foreign_key "user_purposes", "users", on_delete: :cascade と対応。
+  has_many :user_purposes, dependent: :destroy
 
   # ============================================================
   # バリデーション

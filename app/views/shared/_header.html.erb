@@ -151,6 +151,20 @@
               aria: { current: controller_name == 'tasks' ? 'page' : false } %>
           <%# ──────────────────────────────────────────────────────────────── %>
 
+          <%# ── D-1 追加: 目標管理リンク（PC用）────────────────────────────────────── %>
+          <%#
+            controller_name == 'user_purposes':
+              UserPurposesController にいるとき aria-current="page" を設定する。
+              16番（show）・17番（new/edit）どちらも user_purposes コントローラーなので
+              同じ判定で対応できる。
+          %>
+          <%= link_to "目標管理", user_purpose_path,
+              class: "text-gray-600 hover:text-gray-900 px-3 py-2
+                      text-sm font-medium transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
+              aria: { current: controller_name == 'user_purposes' ? 'page' : false } %>
+          <%# ──────────────────────────────────────────────────────────────────────── %>
+
           <%#
             ユーザー名表示
             aria-hidden="true"（Issue #33 追加）:
@@ -328,6 +342,15 @@
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
               aria: { current: controller_name == 'tasks' ? 'page' : false } %>
           <%# ──────────────────────────────────────────────────────────────── %>
+
+          <%# ── D-1 追加: 目標管理リンク（モバイル用）──────────────────────────────── %>
+          <%= link_to "目標管理", user_purpose_path,
+              class: "block px-3 py-2 rounded-md text-sm font-medium
+                      text-gray-600 hover:text-gray-900 hover:bg-gray-100
+                      transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
+              aria: { current: controller_name == 'user_purposes' ? 'page' : false } %>
+          <%# ──────────────────────────────────────────────────────────────────────── %>
 
           <div class="border-t border-gray-200 mt-1 pt-1">
             <%# aria-hidden="true": ユーザー名はログアウトボタンのaria-labelで伝えるため非表示 %>
