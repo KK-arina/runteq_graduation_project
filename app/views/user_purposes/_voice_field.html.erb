@@ -1,0 +1,108 @@
+<%# app/views/user_purposes/_voice_field.html.erb %>
+<%#
+  ==============================================================================
+  音声入力付きテキストエリア パーシャル
+  ==============================================================================
+
+  【このファイルの役割】
+    PMVV 入力フォームの各フィールド（Purpose/Mission/Vision/Value/Current）を
+    共通テンプレートとして定義する。
+    new.html.erb と edit.html.erb の両方から呼び出される。
+
+  【引数（locals）】
+    f          : フォームオブジェクト（form_with の do |f| で生成されるもの）
+    field      : カラム名（シンボル）例: :purpose, :mission
+    label_text : フィールドのラベル表示名 例: "Purpose"
+    hint_text  : ラベル横に表示するサブテキスト 例: "人生で一番大切にしていることは？"
+    placeholder: テキストエリアのプレースホルダー
+    example    : 入力例（グレーで小さく表示）
+    rows       : テキストエリアの行数（省略時は 3）
+    maxlength  : 最大文字数（省略時は 1000）
+
+  【voice-input Stimulus コントローラーとの連携】
+    data-controller="voice-input" を div に付けることで
+    この div 内の target が voice-input コントローラーのスコープになる。
+    data-voice-input-target="field" → 音声認識テキストの書き込み先
+    data-voice-input-target="button" → 🎤 ボタン本体
+
+  【呼び出し方】
+    <%= render "user_purposes/voice_field",
+          f: f,
+          field: :purpose,
+          label_text: "Purpose",
+          hint_text: "人生で一番大切にしていることは？",
+          placeholder: "人生で一番大切にしていることを自由に書いてください",
+          example: "例: 家族と過ごす時間を大切にしながら、仕事でも成果を出したい",
+          rows: 3,
+          maxlength: 1000 %>
+
+<%#
+  locals: でデフォルト値を定義する。
+  rows と maxlength は省略可能にしておく。
+  rows のデフォルト値は 3（一般的なテキストエリアの高さ）。
+  maxlength のデフォルト値は 1000（UserPurpose モデルの上限に合わせる）。
+%>
+<% rows ||= 3 %>
+<% maxlength ||= 1000 %>
+
+<%#
+  data-controller="voice-input":
+    このブロック全体を voice-input Stimulus コントローラーのスコープにする。
+    この div 内の data-voice-input-target="field/button" が
+    このコントローラーに属する target として認識される。
+%>
+<div data-controller="voice-input">
+
+  <%# ラベルと音声入力ボタンを横並びにする %>
+  <div class="flex items-center justify-between mb-1">
+
+    <%#
+      f.label: フォームオブジェクト経由でラベルを生成する。
+      block 形式にすることでラベルテキストと hint_text を同一 label タグ内に収められる。
+      for 属性が自動設定されるのでアクセシビリティが向上する。
+    %>
+    <%= f.label field, class: "block text-sm font-semibold text-gray-700" do %>
+      <%= label_text %>
+      <span class="font-normal text-violet-600 ml-1 text-xs"><%= hint_text %></span>
+    <% end %>
+
+    <%#
+      音声入力ボタン
+      data-action="click->voice-input#toggle":
+        クリック時に voice_input_controller.js の toggle() を呼び出す。
+      data-voice-input-target="button":
+        voice_input_controller.js がこのボタンの見た目を制御する。
+        録音中は赤くなりアニメーションする。
+        未対応ブラウザでは自動的に非表示になる。
+    %>
+    <button type="button"
+            data-action="click->voice-input#toggle"
+            data-voice-input-target="button"
+            class="flex items-center gap-1 px-2 py-1 text-xs text-gray-500
+                   border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors
+                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+            aria-label="音声入力を開始する">
+      🎤
+      <span class="hidden sm:inline">音声入力</span>
+    </button>
+  </div>
+
+  <%# 入力例（任意）%>
+  <% if defined?(example) && example.present? %>
+    <p class="text-xs text-gray-400 mb-2"><%= example %></p>
+  <% end %>
+
+  <%#
+    f.text_area: フォームオブジェクト経由でテキストエリアを生成する。
+    name="user_purpose[:field]" が自動設定される。
+    data-voice-input-target="field": 音声認識テキストの書き込み先として指定する。
+  %>
+  <%= f.text_area field,
+        rows: rows,
+        maxlength: maxlength,
+        placeholder: placeholder,
+        data: { "voice-input-target": "field" },
+        class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+                focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500
+                resize-none transition-colors" %>
+</div>

@@ -1,24 +1,13 @@
 # config/routes.rb
-#
+# （既存内容から変更箇所のみ抜粋）
 # ==============================================================================
-# ルーティング設定（C-7 変更: ai_edit / ai_update を追加）
-# ==============================================================================
-#
-# 【C-7 での変更点】
-#   resources :tasks の member ブロックに以下を追加した。
-#
-#   get  :ai_edit   → GET  /tasks/:id/ai_edit
-#     AI提案モーダルから「編集」リンクをクリックしたときに表示する画面。
-#     通常の edit（PATCH /tasks/:id）とは別ルートにする理由:
-#       ① 通常の edit はロック中でも使えてしまう（将来実装時に混乱を防ぐ）
-#       ② ai_context フラグ（session）で「AI提案モーダル経由かどうか」を判定するため
-#          専用のアクションを持つほうが意図が明確になる
-#       ③ E-3（AI提案モーダル）実装後に、ここに遷移させるリンクを追加しやすくなる
-#
-#   patch :ai_update → PATCH /tasks/:id/ai_update
-#     ai_edit フォームの送信先。
-#     通常の update（PATCH /tasks/:id）は将来 E-3 のAI確定処理専用にする可能性があるため
-#     ai_edit → ai_update という独立したペアにする。
+# 変更点: D-1 追加
+#   resource :user_purpose を追加する。
+#   resource（単数形）を使う理由:
+#     1ユーザーが持つ「現在の目標」は常に1件なので
+#     /user_purposes/1 のような id を URL に含めない設計にする。
+#     /user_purpose/new, /user_purpose/edit など id なしでアクセスできる。
+#   only: で必要なアクションだけを定義してルーティングをシンプルに保つ。
 # ==============================================================================
 
 Rails.application.routes.draw do
@@ -43,49 +32,38 @@ Rails.application.routes.draw do
   get "dashboard", to: "dashboards#index", as: :dashboard
 
   # ---------------------------------------------------------------
-  # resources :tasks
+  # D-1 追加: resource :user_purpose（単数形リソース）
   # ---------------------------------------------------------------
-  # 【C-7 変更点】
-  #   member ブロックに ai_edit と ai_update を追加した。
+  # 【resource（単数形）vs resources（複数形）の違い】
+  #   resources :user_purposes → /user_purposes/:id のように id が URL に入る
+  #   resource  :user_purpose  → /user_purpose のように id なしでアクセスできる
   #
-  #   member とは:
-  #     特定の1件のリソースに対して操作するルートを定義するブロック。
-  #     /tasks/:id/ai_edit のように :id を含むURLが生成される。
+  # 【なぜ単数形を使うのか】
+  #   ユーザーが「自分の目標」を見る・編集するとき、
+  #   自分の目標は常に1つ（is_active=true が1件）なので
+  #   /user_purpose で「自分の目標」と自明になる。
+  #   /user_purposes/3 のように id を指定させる必要がない。
   #
-  #   collection（既存）との違い:
-  #     member → /tasks/:id/xxx（特定1件に対する操作）
-  #     collection → /tasks/xxx（複数件や全体に対する操作）
+  # 【生成されるルートと named path helper】
+  #   GET  /user_purpose/new  → user_purposes#new  → new_user_purpose_path
+  #   POST /user_purpose      → user_purposes#create
+  #   GET  /user_purpose      → user_purposes#show  → user_purpose_path
+  #   GET  /user_purpose/edit → user_purposes#edit  → edit_user_purpose_path
+  #   PATCH/PUT /user_purpose → user_purposes#update
   #
-  #   生成されるルートと named path helper:
-  #     GET   /tasks/:id/ai_edit   → tasks#ai_edit
-  #       named helper: ai_edit_task_path(task)
-  #     PATCH /tasks/:id/ai_update → tasks#ai_update
-  #       named helper: ai_update_task_path(task)
+  # 【注意: resource は singular resource なのでコントローラー名は複数形】
+  #   Rails の慣例でコントローラーは UserPurposesController（複数形）のまま。
+  resource :user_purpose, only: [ :show, :new, :create, :edit, :update ]
+
   resources :tasks, only: [ :index, :new, :create, :destroy ] do
     member do
-      # PATCH /tasks/:id/toggle_complete → タスクの完了↔未完了を切り替える
       patch :toggle_complete
-
-      # PATCH /tasks/:id/archive → 完了タスクを個別にアーカイブする
       patch :archive
-
-      # --------------------------------------------------------
-      # C-7 追加: AI提案モーダル経由のタスク編集ルート
-      # --------------------------------------------------------
-      # GET  /tasks/:id/ai_edit   → AI専用タスク編集フォームを表示する
-      # PATCH /tasks/:id/ai_update → AI専用タスク編集フォームの保存処理
-      #
-      # 【なぜ通常の edit / update と分けるのか】
-      #   通常の edit / update は C-5 で実装した「ユーザーが直接編集する」用途。
-      #   ai_edit / ai_update は「AI提案モーダル経由でのみ編集できる」用途。
-      #   session に ai_context フラグを設定することで、
-      #   モーダル経由以外からのアクセスを 403 で弾く。
       get   :ai_edit
       patch :ai_update
     end
 
     collection do
-      # PATCH /tasks/archive_all_done → 完了タスクを一括アーカイブする
       patch :archive_all_done
     end
   end
