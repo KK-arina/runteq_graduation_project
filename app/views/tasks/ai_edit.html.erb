@@ -1,83 +1,27 @@
 <%# app/views/tasks/ai_edit.html.erb %>
-<%#
-  ==============================================================================
+<%# ==============================================================================
   タスク編集ページ（C-7: AI提案モーダル経由限定・11番画面）
-  ==============================================================================
-
-  【このファイルの役割】
-    AI提案モーダルの「✏️ 編集する」リンクをクリックしたときに表示する
-    タスク編集フォームです。
-    通常の edit.html.erb（C-5 で実装）とは以下の点が異なります。
-
-    ① アクセス制限
-       session に ai_context_task_id フラグがない場合はコントローラー側で
-       403 Forbidden を返すため、このページは表示されません。
-
-    ② 編集できる項目が限定される
-       タスク名・期限日・見積時間の3項目のみ変更可能です。
-       優先度（priority）は AI が決定した値を維持するため変更できません。
-       フォームの送信先は PATCH /tasks/:id/ai_update（ai_update アクション）で、
-       ai_update_params で :priority を除外しているため
-       直接リクエストを送っても優先度は変わりません。
-
-    ③ 送信先が ai_update_path
-       通常の update（PATCH /tasks/:id）ではなく
-       ai_update（PATCH /tasks/:id/ai_update）に送信します。
-
-    ④ フッターのキャンセルリンク
-       E-3（AI提案モーダル）実装後は ai_proposals_path に変更します。
-       現時点では tasks_path（タスク一覧）に戻ります。
-
-  【使用するインスタンス変数（TasksController#ai_edit で設定済み）】
-    @task: current_user.tasks.find(params[:id]) で取得した既存タスク
-
-  ==============================================================================
-%>
+  ============================================================================== %>
 <% content_for :title, "タスクを編集（AI編集）| HabitFlow" %>
 
 <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-  <%#
-    ── AI経由限定バナー ─────────────────────────────────────────────────────
-    このページが AI提案モーダル経由でのみアクセス可能であることを
-    ユーザーに明示するバナーです。
-    通常の編集ページと区別できるよう紫（AI カラー）で統一しています。
-  %>
+  <%# AI経由限定バナー %>
   <div class="mb-6 bg-purple-50 border border-purple-200 border-l-4 border-l-purple-500 rounded-lg p-4">
     <div class="flex items-start gap-3">
-      <%# AI アイコン（絵文字）%>
       <span class="text-xl flex-shrink-0" aria-hidden="true">🤖</span>
       <div>
         <p class="text-sm font-bold text-purple-800">AI提案モーダルから編集しています</p>
-        <%#
-          【なぜ「変更を保存したらモーダルへ戻ります」と書くのか】
-          現時点では tasks_path（タスク一覧）へリダイレクトしますが、
-          E-3（AI提案モーダル）が実装されたら ai_proposals_path に変更します。
-          将来の変更を想定したコメントをバナーに入れておくことで
-          ユーザーが「変更後どこに戻るか」を把握できます。
-        %>
-        <p class="text-xs text-purple-700 mt-1">
-          タスク名・期限日・見積時間を変更できます。優先度はAIが決定した値のまま固定です。
-        </p>
+        <p class="text-xs text-purple-700 mt-1">タスク名・期限日・見積時間を変更できます。優先度はAIが決定した値のまま固定です。</p>
       </div>
     </div>
   </div>
 
-  <%# ── ページヘッダー ─────────────────────────────────────────────────── %>
+  <%# ページヘッダー %>
   <div class="flex items-center gap-3 mb-6">
-    <%#
-      戻るリンク
-      現時点では tasks_path（タスク一覧）へ戻ります。
-      E-3（AI提案モーダル）実装後は ai_proposals_path に変更します。
-
-      【なぜ link_to にするのか】
-        戻るボタンはページ遷移（GET リクエスト）なので link_to が適切です。
-        フォーム送信（POST/PATCH）ではないため button_to は不要です。
-    %>
     <%= link_to tasks_path,
           class: "text-gray-400 hover:text-gray-600 transition-colors",
           aria: { label: "タスク一覧に戻る" } do %>
-      <%# 左矢印アイコン（SVG） %>
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
       </svg>
@@ -85,17 +29,10 @@
     <h1 class="text-2xl font-bold text-gray-900">タスクを編集（AI編集）</h1>
   </div>
 
-  <%#
-    ── バリデーションエラーメッセージ ─────────────────────────────────────
-    @task.errors.any?: バリデーションエラーが1件以上あるか判定します。
-    ai_update アクションで保存に失敗した場合に表示されます（render :ai_edit）。
-
-    role="alert": スクリーンリーダーにエラーメッセージを通知するための ARIA 属性です。
-  %>
+  <%# バリデーションエラーメッセージ %>
   <% if @task.errors.any? %>
     <div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4" role="alert">
       <div class="flex items-center gap-2 mb-2">
-        <%# 警告アイコン（SVG） %>
         <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
@@ -110,48 +47,21 @@
   <% end %>
 
   <%#
-    ── フォーム本体 ─────────────────────────────────────────────────────────
-
-    【form_with url: ai_update_task_path(@task), method: :patch を使う理由】
-      通常の form_with model: @task は action="/tasks/:id" method="PATCH" を生成しますが、
-      ここでは ai_update アクション（/tasks/:id/ai_update）に送りたいため
-      url: を明示的に指定します。
-
-      ai_update_task_path(@task):
-        routes.rb で定義した `patch :ai_update` から生成される named path helper です。
-        "/tasks/1/ai_update" のような URL を返します。
-
-      method: :patch:
-        HTTP メソッドを PATCH に指定します。
-        Rails は <form method="post"> に hidden input _method="patch" を自動で付けます
-        （ブラウザは GET と POST しか直接送れないため）。
-
-      local: true:
-        Turbo Drive のデフォルト非同期送信を無効にして
-        通常の HTML フォーム送信を行います。
-        今回はシンプルなフォームなので Turbo Stream は使いません。
+    フォーム本体
+    【重要】form_with に model: @task を渡すと action="/tasks/:id" になってしまう。
+    url: と method: を明示的に指定することで ai_update アクションに送信する。
+    data: { turbo: false } で Turbo を無効にして通常の HTML フォーム送信にする。
+    これにより params は { task: { title: "...", ... } } の形式で送られる。
   %>
-  <%= form_with url: ai_update_task_path(@task),
+  <%= form_with model: @task,
+        url: ai_update_task_path(@task),
         method: :patch,
-        local: true,
+        data: { turbo: false },
         class: "bg-white border border-gray-200 rounded-xl shadow-sm p-6" do |f| %>
 
-    <%#
-      ── ① 優先度（読み取り専用・変更不可）──────────────────────────────
-      【なぜ readonly フィールドとして表示するのか】
-        AI が決定した優先度をユーザーが変えられないようにします。
-        フォームには含めず「表示のみ」にすることで、
-        フォームを送信しても :priority が params に含まれません。
-        さらに ai_update_params でも :priority を除外しているため
-        「表示でも送信でも変えられない」二重防御になっています。
-    %>
+    <%# ① 優先度（読み取り専用・変更不可） %>
     <div class="mb-5">
       <p class="block text-sm font-bold text-gray-700 mb-2">優先度</p>
-      <%#
-        現在の優先度を日本語ラベルで表示する。
-        task.must? / task.should? / task.could? は Task モデルの enum から
-        Rails が自動生成するメソッドです。
-      %>
       <div class="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
         <span class="text-lg" aria-hidden="true">
           <%= @task.must? ? "🔴" : @task.should? ? "🔵" : "🟢" %>
@@ -162,41 +72,19 @@
           </span>
           <span class="text-xs text-gray-400 ml-2">（AI が決定した値のため変更不可）</span>
         </div>
-        <%#
-          【重要】hidden フィールドを使わない理由
-            priority を hidden で送ってしまうと
-            「サーバー側でも変更可能」になってしまいます。
-            ai_update_params に :priority を含めていないため、
-            仮に hidden で送っても無視されますが、
-            混乱を防ぐため hidden フィールドは置きません。
-        %>
       </div>
-      <p class="mt-1 text-xs text-gray-400">
-        ※ 優先度はAI提案モーダルで確認・変更してください
-      </p>
+      <p class="mt-1 text-xs text-gray-400">※ 優先度はAI提案モーダルで確認・変更してください</p>
     </div>
 
-    <%# ── ② タスク名 ──────────────────────────────────────────────────── %>
+    <%# ② タスク名 %>
     <div class="mb-5">
       <%#
-        f.label :title, "タスク名":
-          <label for="task_title">タスク名</label> を生成します。
-          for 属性が input の id（task_title）と一致することで
-          ラベルをクリックすると input にフォーカスが当たります（アクセシビリティ）。
+        f.label / f.text_field を使うことで
+        name="task[title]" が自動生成される。
+        これにより params[:task][:title] としてサーバーで受け取れる。
       %>
-      <%= f.label :title, "タスク名",
-            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <%= f.label :title, "タスク名", class: "block text-sm font-bold text-gray-700 mb-1" %>
       <span class="text-red-500 text-xs ml-1" aria-hidden="true">必須</span>
-
-      <%#
-        f.text_field :title:
-          <input type="text" name="task[title]" id="task_title" value="@task.title"> を生成します。
-          value には @task.title の現在値が自動で入るため、
-          バリデーションエラー後も入力値が復元されます。
-
-        @task.errors[:title].any?:
-          title フィールドにエラーがある場合は赤い枠で強調表示します。
-      %>
       <%= f.text_field :title,
             placeholder: "例: 企画書作成、メール返信",
             class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
@@ -206,33 +94,19 @@
             aria: { required: true } %>
     </div>
 
-    <%# ── ③ 期限日 ──────────────────────────────────────────────────────── %>
+    <%# ③ 期限日 %>
     <div class="mb-5">
-      <%= f.label :due_date, "期限日",
-            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <%= f.label :due_date, "期限日", class: "block text-sm font-bold text-gray-700 mb-1" %>
       <span class="text-xs text-gray-400 ml-1">任意</span>
-      <%#
-        f.date_field :due_date:
-          <input type="date" name="task[due_date]" value="@task.due_date"> を生成します。
-          ブラウザのネイティブな日付ピッカーが表示されます。
-          @task.due_date の現在値が初期値として入ります。
-      %>
       <%= f.date_field :due_date,
             class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" %>
     </div>
 
-    <%# ── ④ 見積時間 ────────────────────────────────────────────────────── %>
+    <%# ④ 見積時間 %>
     <div class="mb-6">
-      <%= f.label :estimated_hours, "見積時間（時間）",
-            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <%= f.label :estimated_hours, "見積時間（時間）", class: "block text-sm font-bold text-gray-700 mb-1" %>
       <span class="text-xs text-gray-400 ml-1">任意</span>
-      <%#
-        f.number_field :estimated_hours:
-          <input type="number" name="task[estimated_hours]" step="0.5" min="0.5"> を生成します。
-          step: "0.5" → 0.5 刻みで入力できます（0.5, 1.0, 1.5, 2.0...）。
-          min: "0.5"  → 0 以下の入力を HTML バリデーションで防ぎます。
-      %>
       <%= f.number_field :estimated_hours,
             placeholder: "例: 1.5",
             class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
@@ -241,26 +115,11 @@
             min: "0.5" %>
     </div>
 
-    <%# ── 送信ボタンエリア ────────────────────────────────────────────── %>
+    <%# 送信ボタンエリア %>
     <div class="flex gap-3">
-      <%#
-        キャンセルリンク
-        【E-3実装後の変更予定】
-          E-3（AI提案モーダル）が実装されたら
-          tasks_path を ai_proposals_path に変更します。
-          現時点では AI提案モーダルのルートが存在しないため
-          tasks_path（タスク一覧）へ戻ります。
-      %>
       <%= link_to "キャンセル", tasks_path,
             class: "flex-1 text-center px-4 py-2.5 border border-gray-300 rounded-lg
                     text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors" %>
-
-      <%#
-        保存ボタン
-        f.submit "編集内容を保存する":
-          <input type="submit" value="編集内容を保存する"> を生成します。
-          クリックするとフォームが ai_update_task_path(@task) へ PATCH で送信されます。
-      %>
       <%= f.submit "編集内容を保存する",
             class: "flex-2 flex-grow px-6 py-2.5 bg-purple-600 text-white rounded-lg
                     text-sm font-bold hover:bg-purple-700 transition-colors cursor-pointer" %>
