@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_04_08_103105) do
+ActiveRecord::Schema[7.2].define(version: 2026_04_20_132232) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -27,7 +27,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_04_08_103105) do
     t.jsonb "actions_json"
     t.boolean "crisis_detected", default: false, null: false
     t.string "prompt_version"
-    t.string "model_name"
+    t.string "ai_model_name"
     t.jsonb "metadata"
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false

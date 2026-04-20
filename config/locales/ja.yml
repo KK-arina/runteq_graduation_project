@@ -123,3 +123,38 @@ ja:
       not_a_number: "は数値で入力してください"
       inclusion: "は一覧にありません"
       confirmation: "と%{attribute}の入力が一致しません"
+
+# ============================================================
+# D-2: AI 分析関連メッセージ
+# ============================================================
+  ai_analysis:
+    status:
+      pending: "AI分析待機中..."
+      analyzing: "AIが分析しています"
+      completed: "AI分析が完了しました"
+      failed: "分析に失敗しました"
+
+  activerecord:
+    models:
+      ai_analysis: "AI分析結果"
+      user_purpose: "PMVV目標"
+    attributes:
+      ai_analysis:
+        analysis_type: "分析種別"
+        analysis_comment: "分析コメント"
+        root_cause: "根本原因"
+        coaching_message: "コーチングメッセージ"
+        improvement_suggestions: "改善提案"
+        actions_json: "推奨アクション"
+        crisis_detected: "危機検出"
+        is_latest: "最新フラグ"
+      user_purpose:
+        purpose: "Purpose（人生で大切にしていること）"
+        mission: "Mission（今最も必要なこと）"
+        vision: "Vision（1年後の理想の自分）"
+        value: "Value（絶対に譲れないこと）"
+        current_situation: "Current（今の自分の現状）"
+        analysis_state: "分析状態"
+        version: "バージョン"
+        is_active: "有効フラグ"
+        last_error_message: "エラーメッセージ"

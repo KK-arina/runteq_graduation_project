@@ -1,38 +1,39 @@
 <%# app/views/user_purposes/show.html.erb %>
 <%#
   ==============================================================================
-  16番: PMVV 目標管理ページ
+  16番: PMVV 目標管理ページ（Turbo Stream リアルタイム更新対応版）
   ==============================================================================
 
-  【このページの役割】
-    ユーザーの現在の PMVV 目標と AI 分析状態を表示する。
-    analysis_state に応じて4つの状態を切り替えて表示する。
+  【変更点】
+    ① turbo_stream_from タグを追加して Turbo Stream を購読する
+    ② 分析状態バナーをパーシャルに切り出して Turbo Stream で更新できるようにする
 
-  【表示状態の切り替え】
-    @current_purpose が nil  → 「目標が未入力」の Empty State を表示する
-    pending(0)   → 「AI分析待機中...」を表示する
-    analyzing(1) → 「AIが分析しています」のローディングを表示する
-    completed(2) → 「AI分析が完了しました」と結果への誘導を表示する
-    failed(3)    → 「分析に失敗しました」とエラー内容を表示する
-
-  【@current_purpose】
-    UserPurposesController#show で設定される。
-    UserPurpose.current_for(current_user) で is_active=true のレコードを取得。
-    存在しない場合は nil。
-
-  【スマホ・デスクトップ両対応】
-    Tailwind CSS の max-w-2xl と responsive クラスで
-    両画面サイズに対応したレイアウトにする。
+  【turbo_stream_from の仕組み】
+    1. このタグがページに存在すると、ブラウザは指定したチャンネルを購読する
+    2. PurposeAnalysisJob が broadcast_replace_to を呼び出すと、
+       チャンネルを購読しているブラウザに HTML が送信される
+    3. ブラウザが受け取った HTML で指定の DOM 要素を自動的に更新する
   ==============================================================================
 %>
 <% content_for :title, "目標管理 | HabitFlow" %>
+
+<%#
+  turbo_stream_from: このページで Turbo Stream を受信するためのタグ
+  【引数の意味】
+    "user_purpose_#{@current_purpose.id}":
+      PurposeAnalysisJob の broadcast_replace_to で指定した stream 名と一致させる。
+      ユーザーごとに一意の stream 名にすることで、
+      他のユーザーへの更新が混入しない。
+  @current_purpose が存在する場合のみ購読する（nil の場合は購読不要）
+%>
+<% if @current_purpose %>
+  <%= turbo_stream_from "user_purpose_#{@current_purpose.id}" %>
+<% end %>
 
 <div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
   <%# ─────────────────────────────────────────────────────────────────
       ページヘッダー
-      【役割】ページタイトルと「目標を更新する」ボタンを表示する。
-      justify-between で左にタイトル・右にボタンを配置する。
   ───────────────────────────────────────────────────────────────── %>
   <div class="flex items-center justify-between mb-8">
     <div>
@@ -41,12 +42,6 @@
         あなたの Purpose / Mission / Vision / Value / Current を管理します
       </p>
     </div>
-
-    <%# 「目標を更新する」ボタン（現在の目標が存在する場合のみ表示） %>
-    <%#
-      @current_purpose が存在する場合:「目標を更新する」→ edit ページへ
-      @current_purpose が nil の場合:「目標を入力する」→ new ページへ（下の Empty State で表示）
-    %>
     <% if @current_purpose %>
       <%= link_to "目標を更新する",
                   edit_user_purpose_path,
@@ -59,7 +54,6 @@
 
   <%# ─────────────────────────────────────────────────────────────────
       PMVV が未入力の場合: Empty State
-      【役割】目標を登録していないユーザーに登録を促す。
   ───────────────────────────────────────────────────────────────── %>
   <% unless @current_purpose %>
     <div class="text-center py-16 px-6 bg-white border border-dashed border-gray-300 rounded-2xl">
@@ -77,108 +71,35 @@
     </div>
 
   <%# ─────────────────────────────────────────────────────────────────
-      PMVV が存在する場合: 分析状態に応じた表示
+      PMVV が存在する場合
   ───────────────────────────────────────────────────────────────── %>
   <% else %>
 
-    <%# ── 分析状態バナー ──────────────────────────────────────────── %>
     <%#
-      【変更理由】
-        when "pending"（文字列比較）から pending? メソッドに変更する。
-        理由:
-          enum を定義すると Rails が pending?/analyzing?/completed?/failed? を自動生成する。
-          文字列比較はタイポのリスクがある。
-          メソッドを使う方が Rails らしく安全。
+      分析状態バナーをパーシャルで render する
+      【重要】
+        このパーシャルは PurposeAnalysisJob から Turbo Stream で更新される。
+        id="analysis_status_banner" が Turbo Stream の target と一致している。
+        render パーシャルの内側に id 要素があることで、
+        Turbo Stream の replace アクションが正しく動作する。
     %>
-
-    <%# pending: AI分析ジョブのエンキュー待ち %>
-    <% if @current_purpose.pending? %>
-      <div class="mb-6 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl"
-          role="status">
-        <span class="text-xl">⏳</span>
-        <div>
-          <p class="text-sm font-semibold text-blue-800">AI分析待機中...</p>
-          <p class="text-xs text-blue-600 mt-0.5">まもなく分析が始まります</p>
-        </div>
-      </div>
-
-    <%# analyzing: GoodJob がジョブを実行中 %>
-    <% elsif @current_purpose.analyzing? %>
-      <div class="mb-6 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl"
-          role="status">
-        <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0"
-            aria-hidden="true"></div>
-        <div>
-          <p class="text-sm font-semibold text-blue-800">🤖 AIが分析しています（通常30秒以内）</p>
-          <p class="text-xs text-blue-600 mt-0.5">しばらくお待ちください</p>
-        </div>
-      </div>
-
-    <%# completed: AI分析が完了した %>
-    <% elsif @current_purpose.completed? %>
-      <div class="mb-6 flex items-center justify-between gap-3 px-4 py-3
-                  bg-green-50 border border-green-300 rounded-xl">
-        <div class="flex items-center gap-3">
-          <span class="text-xl">✅</span>
-          <div>
-            <p class="text-sm font-semibold text-green-800">AI分析が完了しました</p>
-            <p class="text-xs text-green-600 mt-0.5">
-              <%= l @current_purpose.updated_at, format: :long %> 完了
-            </p>
-          </div>
-        </div>
-        <span class="text-xs text-gray-400">（D-3で結果ページを実装予定）</span>
-      </div>
-
-    <%# failed: AI分析が失敗した %>
-    <% elsif @current_purpose.failed? %>
-      <div class="mb-6 px-4 py-3 bg-red-50 border border-red-200 rounded-xl">
-        <div class="flex items-center gap-3 mb-2">
-          <span class="text-xl">⚠️</span>
-          <p class="text-sm font-semibold text-red-800">分析に失敗しました</p>
-        </div>
-        <% if @current_purpose.last_error_message.present? %>
-          <p class="text-xs text-red-600 mb-3">
-            エラー: <%= @current_purpose.last_error_message %>
-          </p>
-        <% end %>
-        <div class="flex gap-2">
-          <%= link_to "再試行する",
-                      edit_user_purpose_path,
-                      class: "px-3 py-1.5 text-xs font-semibold text-white
-                              bg-red-600 rounded-lg hover:bg-red-700 transition-colors
-                              focus:outline-none focus:ring-2 focus:ring-red-500" %>
-          <%= link_to "目標を更新する",
-                      edit_user_purpose_path,
-                      class: "px-3 py-1.5 text-xs font-semibold text-gray-600
-                              border border-gray-300 bg-white rounded-lg hover:bg-gray-50
-                              transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400" %>
-        </div>
-      </div>
-    <% end %>
+    <%= render "user_purposes/analysis_status_banner",
+               user_purpose: @current_purpose %>
 
     <%# ── 現在のPMVV 内容表示 ─────────────────────────────────────── %>
     <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm mb-6">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-base font-bold text-gray-800">
           現在の目標
-          <%# バージョン番号を表示する %>
           <span class="ml-2 text-xs font-normal text-gray-400">
             Version <%= @current_purpose.version %>
           </span>
         </h2>
-        <%# 有効中バッジ %>
         <span class="text-xs font-bold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
           有効中
         </span>
       </div>
 
-      <%# PMVV 5フィールドの表示 %>
-      <%#
-        各フィールドを定義配列としてまとめることで
-        ビューのコードをDRYにする。
-        label: 表示ラベル / color: バッジの文字色 / value: DBのカラム値
-      %>
       <% pmvv_fields = [
            { label: "PURPOSE", desc: "人生で大切にしていること", value: @current_purpose.purpose,           color: "text-violet-600" },
            { label: "MISSION", desc: "今最も必要なこと",         value: @current_purpose.mission,           color: "text-violet-600" },
@@ -191,7 +112,6 @@
         <% pmvv_fields.each do |field| %>
           <div class="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
             <div class="flex items-center gap-2 mb-1">
-              <%# バッジ: "PURPOSE" などのラベルを表示する %>
               <span class="text-xs font-bold <%= field[:color] %>">
                 <%= field[:label] %>
               </span>
@@ -199,7 +119,6 @@
                 <%= field[:desc] %>
               </span>
             </div>
-            <%# フィールド値が存在する場合はテキストを、空の場合は「未入力」を表示する %>
             <% if field[:value].present? %>
               <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
                 <%= field[:value] %>
@@ -227,16 +146,10 @@
                   <%= l past.created_at, format: :long %> 作成
                 </p>
               </div>
-              <%# 分析状態バッジ %>
-              <%#
-                【変更理由】
-                  文字列比較から enum メソッド（completed?/failed?/analyzing?）に変更する。
-              %>
               <span class="text-xs px-2 py-0.5 rounded-full font-semibold
                           <%= past.completed? ? 'bg-green-100 text-green-700' :
                               past.failed?    ? 'bg-red-100 text-red-700'    :
                                                 'bg-gray-100 text-gray-500' %>">
-                <%# 【表示テキスト】enum メソッドで分岐する %>
                 <% if past.completed? %>
                   分析完了
                 <% elsif past.failed? %>
