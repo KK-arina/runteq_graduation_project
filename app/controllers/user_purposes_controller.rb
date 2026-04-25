@@ -198,4 +198,48 @@ class UserPurposesController < ApplicationController
       :current_situation
     )
   end
+
+  # ============================================================
+  # retry_analysis アクション
+  # ============================================================
+  #
+  # 【役割】
+  #   失敗した AI 分析を再実行する。
+  #   analysis_state を pending に戻してジョブをエンキューする。
+  #
+  # 【なぜ link_to ではなく button_to + POST が必要か】
+  #   link_to はデフォルトで GET リクエストを送る。
+  #   GET はサーバーの状態を変更しない「読み取り専用」の原則があり、
+  #   「ジョブを再実行する」という状態変更は POST で行うべき。
+  #   button_to を使うと form が生成されて POST リクエストが送られる。
+  #
+  # 【セキュリティ】
+  #   require_login により未ログインユーザーはアクセスできない。
+  #   current_user.user_purposes 経由で取得するため
+  #   他ユーザーの UserPurpose を操作できない。
+  def retry_analysis
+    # current_user の UserPurpose のみを対象にする（他ユーザーの操作を防ぐ）
+    # 単数形リソースのため id は current_user から取得する
+    @user_purpose = UserPurpose.current_for(current_user)
+
+    unless @user_purpose
+      redirect_to new_user_purpose_path, alert: "目標が登録されていません。"
+      return
+    end
+
+    # 分析状態を pending に戻す
+    # 【なぜ update! を使うか】
+    #   バリデーションを通過させることで、
+    #   モデルレベルの制約（将来追加されるかもしれない）に対応できる。
+    @user_purpose.update!(
+      analysis_state:     :pending,
+      last_error_message: nil
+    )
+
+    # GoodJob に分析ジョブをエンキューする
+    PurposeAnalysisJob.perform_later(@user_purpose.id)
+
+    redirect_to user_purpose_path,
+                notice: "再分析を開始しました。しばらくお待ちください。"
+  end
 end

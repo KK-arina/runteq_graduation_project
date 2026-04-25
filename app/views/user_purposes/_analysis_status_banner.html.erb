@@ -1,0 +1,121 @@
+<%# app/views/user_purposes/_analysis_status_banner.html.erb %>
+<%#
+  ==============================================================================
+  分析状態バナー パーシャル（本番品質版）
+  ==============================================================================
+
+  【このファイルの役割】
+    16番ページ（PMVV目標管理）の分析状態バナーを表示する。
+    PurposeAnalysisJob から Turbo Stream でこのパーシャルが送信され、
+    ブラウザの DOM がリアルタイムで更新される。
+
+  【再試行ボタンの改善】
+    以前: link_to → GET リクエスト → ジョブが再実行されない
+    今回: button_to → POST リクエスト → retry_analysis アクションが実行される
+          → analysis_state が pending に戻り → PurposeAnalysisJob が再エンキュー
+
+  【ローカル変数】
+    user_purpose: UserPurpose インスタンス
+
+  【Turbo Stream の仕組み】
+    id="analysis_status_banner" が broadcast_replace_to の target と一致している。
+    ジョブが状態を更新するたびにこのパーシャルが再レンダリングされて
+    DOM が置き換えられる。
+  ==============================================================================
+%>
+
+<%# id="analysis_status_banner": Turbo Stream の target と一致させる（必須） %>
+<div id="analysis_status_banner">
+
+  <%# pending: AI分析ジョブのエンキュー待ち %>
+  <% if user_purpose.pending? %>
+    <div class="mb-6 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl"
+         role="status" aria-live="polite">
+      <span class="text-xl" aria-hidden="true">⏳</span>
+      <div>
+        <p class="text-sm font-semibold text-blue-800">AI分析待機中...</p>
+        <p class="text-xs text-blue-600 mt-0.5">まもなく分析が始まります</p>
+      </div>
+    </div>
+
+  <%# analyzing: GoodJob がジョブを実行中 %>
+  <% elsif user_purpose.analyzing? %>
+    <div class="mb-6 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl"
+         role="status" aria-live="polite">
+      <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0"
+           aria-hidden="true"></div>
+      <div>
+        <p class="text-sm font-semibold text-blue-800">🤖 AIが分析しています（通常30秒以内）</p>
+        <p class="text-xs text-blue-600 mt-0.5">しばらくお待ちください</p>
+      </div>
+    </div>
+
+  <%# completed: AI分析が正常完了 %>
+  <% elsif user_purpose.completed? %>
+    <div class="mb-6 flex items-center justify-between gap-3 px-4 py-3
+                bg-green-50 border border-green-300 rounded-xl"
+         role="status">
+      <div class="flex items-center gap-3">
+        <span class="text-xl" aria-hidden="true">✅</span>
+        <div>
+          <p class="text-sm font-semibold text-green-800">AI分析が完了しました</p>
+          <p class="text-xs text-green-600 mt-0.5">
+            <%# l: Rails の翻訳ヘルパー。:long フォーマットで日時を表示する %>
+            <%= l user_purpose.updated_at, format: :long %> 完了
+          </p>
+        </div>
+      </div>
+      <span class="text-xs text-gray-400 whitespace-nowrap">
+        （D-3で結果ページを実装予定）
+      </span>
+    </div>
+
+  <%# failed: AI分析が失敗 %>
+  <% elsif user_purpose.failed? %>
+    <div class="mb-6 px-4 py-3 bg-red-50 border border-red-200 rounded-xl"
+         role="alert">
+      <div class="flex items-center gap-3 mb-2">
+        <span class="text-xl" aria-hidden="true">⚠️</span>
+        <p class="text-sm font-semibold text-red-800">分析に失敗しました</p>
+      </div>
+
+      <%# エラーメッセージが存在する場合は表示する %>
+      <% if user_purpose.last_error_message.present? %>
+        <p class="text-xs text-red-600 mb-3">
+          エラー: <%= user_purpose.last_error_message %>
+        </p>
+      <% end %>
+
+      <div class="flex gap-2">
+        <%#
+          【改善】link_to → button_to に変更
+          理由:
+            link_to はデフォルトで GET リクエストを送るため、
+            retry_analysis（POST エンドポイント）にリクエストが届かない。
+            button_to は <form method="post"> を生成するため、
+            正しく POST リクエストが送られる。
+
+          data: { turbo_confirm: "再分析を実行しますか？" }:
+            確認ダイアログを表示して誤操作を防ぐ。
+            turbo_confirm は Turbo が提供する確認ダイアログ（window.confirm の代替）。
+        %>
+        <%= button_to "再試行する",
+                      retry_analysis_user_purpose_path,
+                      method: :post,
+                      data:  { turbo_confirm: "AI分析を再実行しますか？" },
+                      class: "px-3 py-1.5 text-xs font-semibold text-white
+                              bg-red-600 rounded-lg hover:bg-red-700 transition-colors
+                              focus:outline-none focus:ring-2 focus:ring-red-500
+                              cursor-pointer border-none" %>
+
+        <%# 目標を更新して分析し直したい場合のリンク %>
+        <%= link_to "目標を更新する",
+                    edit_user_purpose_path,
+                    class: "px-3 py-1.5 text-xs font-semibold text-gray-600
+                            border border-gray-300 bg-white rounded-lg hover:bg-gray-50
+                            transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400" %>
+      </div>
+    </div>
+  <% end %>
+
+</div>

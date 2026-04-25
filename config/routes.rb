@@ -53,7 +53,13 @@ Rails.application.routes.draw do
   #
   # 【注意: resource は singular resource なのでコントローラー名は複数形】
   #   Rails の慣例でコントローラーは UserPurposesController（複数形）のまま。
-  resource :user_purpose, only: [ :show, :new, :create, :edit, :update ]
+  resource :user_purpose, only: [:show, :new, :create, :edit, :update] do
+    # retry_analysis: 失敗した AI 分析を再実行するエンドポイント
+    # POST /user_purpose/retry_analysis
+    # on: :member → /user_purpose/:id/retry_analysis ではなく
+    #               単数形リソース（/user_purpose/retry_analysis）になる
+    post :retry_analysis, on: :member
+  end
 
   resources :tasks, only: [ :index, :new, :create, :destroy ] do
     member do

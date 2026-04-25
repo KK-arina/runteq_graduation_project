@@ -92,23 +92,12 @@ class TaskTest < ActiveSupport::TestCase
   end
 
   test "タイトルが空なら無効" do
-    @valid_task.title = ""
-    assert_not @valid_task.valid?
-    # 【修正】
-    # ja.yml で task.attributes.title = "タスク名" と定義したため、
-    # Rails は「属性名 + メッセージ」を連結して
-    # "タスク名を入力してください" ではなく
-    # full_messages では "タスク名を入力してください" になる。
-    #
-    # errors[:title] には属性名なしのメッセージ部分だけが入る。
-    # full_messages には "タスク名を入力してください" が入る。
-    #
-    # errors[:title] → ["を入力してください"]
-    # errors.full_messages → ["タスク名を入力してください"]
-    #
-    # テストでは errors[:title] を検証しているので
-    # 属性名なしの "を入力してください" が正しい期待値になる。
-    assert_includes @valid_task.errors[:title], "を入力してください"
+    task = Task.new(title: "")
+    assert_not task.valid?
+    # 【修正】"を入力してください" → "タスク名を入力してください"
+    # ja.yml で title の日本語名が "タスク名" に設定されているため
+    # エラーメッセージは "タスク名を入力してください" になる
+    assert_includes task.errors[:title], "タスク名を入力してください"
   end
 
   test "タイトルが101文字以上なら無効" do
