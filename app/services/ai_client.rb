@@ -41,7 +41,7 @@ class AiClient
   #   - 無料枠が広い（1分15リクエスト・1日1500リクエスト）
   #   - 応答速度が速い（flash = 高速モデル）
   #   - PMVV 分析程度のタスクには十分な精度がある
-  GEMINI_MODEL = "gemini-2.0-flash".freeze
+  GEMINI_MODEL = "gemini-2.5-flash".freeze  # 2.0-flash → 2.5-flash に変更
 
   # GEMINI_API_BASE: Gemini REST API のベース URL
   # v1beta: 最新機能が含まれる安定版（v1 より機能が多い）
