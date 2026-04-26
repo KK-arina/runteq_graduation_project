@@ -24,10 +24,9 @@ class TaskMailerTest < ActionMailer::TestCase
       password: "password123"
     )
 
-    UserSetting.create!(
-      user:      @user,
-      time_zone: "Asia/Tokyo"
-    )
+    # after_create :create_user_setting により自動作成されるため不要。
+    # time_zone が必要な場合は update! で上書きする。
+    # @user.user_setting.update!(time_zone: "Asia/Tokyo") # デフォルト値と同じなので不要
 
     @task = Task.create!(
       user:                 @user,

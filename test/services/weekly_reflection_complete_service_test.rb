@@ -31,6 +31,12 @@
 require "test_helper"
 
 class WeeklyReflectionCompleteServiceTest < ActiveSupport::TestCase
+  # ActiveJob::TestHelper を include することで
+  # assert_enqueued_with / assert_no_enqueued_jobs が使えるようになる。
+  # 【理由】
+  #   これらのメソッドは ActionDispatch::IntegrationTest には自動で含まれるが、
+  #   ActiveSupport::TestCase では明示的に include が必要。
+  include ActiveJob::TestHelper
   setup do
     @user = users(:one)
 
@@ -305,4 +311,40 @@ class WeeklyReflectionCompleteServiceTest < ActiveSupport::TestCase
     ).call
     assert result[:success], "corrections なしでも正常完了するべき"
   end
+
+  # ── D-4 追加テスト ────────────────────────────────────────────────────────
+
+  test "振り返り完了後にWeeklyReflectionAnalysisJobがエンキューされる" do
+    # assert_enqueued_with: 指定したジョブがキューに積まれたことを確認するアサーション
+    # ActiveJob::TestHelper が提供するメソッド（test_helper.rb で include 済み）
+    assert_enqueued_with(job: WeeklyReflectionAnalysisJob) do
+      result = WeeklyReflectionCompleteService.new(
+        reflection: @reflection,
+        user:       @user,
+        was_locked: false
+      ).call
+
+      assert result[:success], "サービスが成功を返すことを確認"
+    end
+  end
+
+  test "月次上限到達時はWeeklyReflectionAnalysisJobがエンキューされない" do
+    # ai_analysis_count を上限まで設定する（10/10）
+    @user.user_setting.update!(
+      ai_analysis_count:         10,
+      ai_analysis_monthly_limit: 10
+    )
+
+    # assert_no_enqueued_jobs: ブロック内でジョブがエンキューされないことを確認
+    assert_no_enqueued_jobs(only: WeeklyReflectionAnalysisJob) do
+      WeeklyReflectionCompleteService.new(
+        reflection: @reflection,
+        user:       @user,
+        was_locked: false
+      ).call
+    end
+  end
+
+  # ────────────────────────────────────────────────────────────────────────────
+
 end
