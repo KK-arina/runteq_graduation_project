@@ -1,0 +1,348 @@
+<%# app/views/user_purposes/ai_result.html.erb %>
+<%#
+  ==============================================================================
+  18番: AI分析結果ページ（D-3 新規作成）
+  ==============================================================================
+
+  【このページの役割】
+    PMVV の AI 分析結果を詳細表示する。
+    ① input_snapshot から PMVV 5要素を表示する（分析時点のデータ）
+    ② AI分析コメント・真の原因（Why×3）・コーチングメッセージを表示する
+    ③ 推奨アクション（習慣・タスク）をチェックボックスで選択して登録できる
+    ④ AI免責バナーを最下部に表示する
+
+  【@変数の定義（UserPurposesController#ai_result で設定）】
+    @current_purpose          : UserPurpose インスタンス
+    @ai_analysis              : AiAnalysis インスタンス
+    @snapshot_purpose         : 分析時点の Purpose テキスト（input_snapshot より）
+    @snapshot_mission         : 分析時点の Mission テキスト
+    @snapshot_vision          : 分析時点の Vision テキスト
+    @snapshot_value           : 分析時点の Value テキスト
+    @snapshot_current_situation: 分析時点の Current テキスト
+    @snapshot_version         : 分析時点のバージョン番号
+    @habit_proposals          : 習慣提案の配列（Hash の配列）
+    @task_proposals           : タスク提案の配列（Hash の配列）
+
+  【フォームの設計】
+    apply_proposals アクションに POST する。
+    チェックされた提案のインデックスを habit_indices[] / task_indices[] で送る。
+    例: habit_indices[]=0&habit_indices[]=2&task_indices[]=1
+    インデックスで送ることで、サーバー側で AI 分析結果から提案を特定し
+    安全に登録できる（任意文字列の直接送信を防ぐセキュリティ設計）。
+  ==============================================================================
+%>
+<% content_for :title, "AI分析結果 | HabitFlow" %>
+
+<div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <%# ─────────────────────────────────────────────────────────────────
+      ページヘッダー
+  ───────────────────────────────────────────────────────────────── %>
+  <div class="mb-2">
+    <%= link_to "← 目標管理に戻る",
+                user_purpose_path,
+                class: "text-sm text-blue-600 hover:text-blue-800 hover:underline transition-colors" %>
+  </div>
+
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">🤖 AI分析結果</h1>
+    <p class="mt-1 text-sm text-gray-500">
+      Version <%= @snapshot_version %> の目標に基づく分析
+      <%#
+        l: Rails の i18n 翻訳ヘルパー。
+        format: :long → config/locales/ja.yml の time.formats.long を参照する。
+        "2026年4月25日 09時23分" のような形式で表示される。
+      %>
+      （<%= l @ai_analysis.updated_at, format: :long %> 完了）
+    </p>
+  </div>
+
+  <%# ─────────────────────────────────────────────────────────────────
+      セクション①: 分析時点の PMVV（input_snapshot）
+      【なぜ @current_purpose ではなく @snapshot_* を使うのか】
+        ユーザーが PMVV を更新した後でも、この分析が実行された時点の
+        PMVV データを正確に表示するため。
+        input_snapshot は分析実行時のスナップショットなので
+        後から PMVV が更新されても影響を受けない。
+  ───────────────────────────────────────────────────────────────── %>
+  <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm mb-6">
+    <h2 class="text-base font-bold text-gray-800 mb-4">
+      分析対象のPMVV
+      <span class="ml-2 text-xs font-normal text-gray-400">
+        Version <%= @snapshot_version %> 時点のデータ
+      </span>
+    </h2>
+
+    <%#
+      pmvv_snapshot_fields: スナップショットの5フィールドを配列で定義する。
+      each で繰り返すことで同じ構造の HTML を5回書かずに済む（DRY 原則）。
+    %>
+    <% pmvv_snapshot_fields = [
+         { label: "PURPOSE", desc: "人生で大切にしていること", value: @snapshot_purpose },
+         { label: "MISSION", desc: "今最も必要なこと",         value: @snapshot_mission },
+         { label: "VISION",  desc: "1年後の自分",              value: @snapshot_vision },
+         { label: "VALUE",   desc: "絶対に譲れないこと",        value: @snapshot_value },
+         { label: "CURRENT", desc: "今の自分の現状",            value: @snapshot_current_situation }
+       ] %>
+
+    <div class="space-y-4">
+      <% pmvv_snapshot_fields.each do |field| %>
+        <div class="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-xs font-bold text-violet-600">
+              <%= field[:label] %>
+            </span>
+            <span class="text-xs text-gray-400">
+              <%= field[:desc] %>
+            </span>
+          </div>
+          <% if field[:value].present? %>
+            <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+              <%= field[:value] %>
+            </p>
+          <% else %>
+            <p class="text-sm text-gray-400 italic">未入力</p>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+  </div>
+
+  <%# ─────────────────────────────────────────────────────────────────
+      セクション②: AI分析コメント
+      【@ai_analysis.analysis_comment】
+        PMVV の総合分析コメント（200〜400文字）。
+        present? でチェックしてデータがある場合のみ表示する。
+  ───────────────────────────────────────────────────────────────── %>
+  <% if @ai_analysis.analysis_comment.present? %>
+    <div class="bg-violet-50 border border-violet-200 rounded-2xl p-6 shadow-sm mb-6">
+      <h2 class="text-base font-bold text-violet-800 mb-3">
+        🎯 AI分析コメント
+      </h2>
+      <%#
+        whitespace-pre-wrap: AI が改行を含むテキストを返した場合に
+        そのまま表示する。
+      %>
+      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+        <%= @ai_analysis.analysis_comment %>
+      </p>
+    </div>
+  <% end %>
+
+  <%# ─────────────────────────────────────────────────────────────────
+      セクション③: 真の原因（Why×3）
+      【@ai_analysis.root_cause】
+        現状と Vision のギャップの根本原因。
+        Chain-of-Thought プロンプトの Step 1（「なぜ？」を3回）の結果。
+  ───────────────────────────────────────────────────────────────── %>
+  <% if @ai_analysis.root_cause.present? %>
+    <div class="bg-orange-50 border border-orange-200 rounded-2xl p-6 shadow-sm mb-6">
+      <h2 class="text-base font-bold text-orange-800 mb-3">
+        🔍 真の原因（Why×3）
+      </h2>
+      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+        <%= @ai_analysis.root_cause %>
+      </p>
+    </div>
+  <% end %>
+
+  <%# ─────────────────────────────────────────────────────────────────
+      セクション④: コーチングメッセージ
+      【@ai_analysis.coaching_message】
+        励ましと具体的なアドバイス（150〜300文字）。
+        Chain-of-Thought プロンプトの Step 2 の結果。
+  ───────────────────────────────────────────────────────────────── %>
+  <% if @ai_analysis.coaching_message.present? %>
+    <div class="bg-green-50 border border-green-200 rounded-2xl p-6 shadow-sm mb-6">
+      <h2 class="text-base font-bold text-green-800 mb-3">
+        💪 コーチングメッセージ
+      </h2>
+      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+        <%= @ai_analysis.coaching_message %>
+      </p>
+    </div>
+  <% end %>
+
+  <%# ─────────────────────────────────────────────────────────────────
+      セクション⑤: 推奨アクション（チェックボックスで選択して登録）
+      【フォームの設計】
+        apply_proposals アクションに POST する。
+        habit_indices[] と task_indices[] でチェックされたインデックスを送る。
+      【なぜインデックスで送るのか（セキュリティ設計）】
+        提案のタイトルをパラメータとして送ると、
+        攻撃者が任意のタイトルを送信できるリスクがある。
+        インデックス（整数）を送ることで、サーバー側で
+        AI分析結果の提案のみを参照する設計になっている。
+  ───────────────────────────────────────────────────────────────── %>
+  <% if @habit_proposals.any? || @task_proposals.any? %>
+    <%#
+      form_with url: apply_proposals_user_purpose_path, method: :post:
+        apply_proposals アクションに POST リクエストを送る。
+        model: は使わない（DB レコードではなくインデックスを送るため）。
+    %>
+    <%= form_with url: apply_proposals_user_purpose_path,
+                  method: :post,
+                  class: "space-y-6" do |f| %>
+
+      <%# ── 習慣の提案 ────────────────────────────────────────────── %>
+      <% if @habit_proposals.any? %>
+        <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+          <h2 class="text-base font-bold text-gray-800 mb-1">
+            📋 習慣の提案
+          </h2>
+          <p class="text-xs text-gray-500 mb-4">
+            ダッシュボードに追加したい習慣にチェックを入れてください
+          </p>
+
+          <div class="space-y-3">
+            <% @habit_proposals.each_with_index do |proposal, idx| %>
+              <%#
+                label タグで囲むことで、ラベルのどこをクリックしても
+                チェックボックスが反応するようになる（UX向上）。
+              %>
+              <label class="flex items-start gap-3 p-3 border border-gray-100 rounded-xl
+                            hover:bg-gray-50 cursor-pointer transition-colors">
+                <%#
+                  check_box_tag: Rails ヘルパーで input タグを生成する。
+                  name="habit_indices[]": [] で終わることで複数チェック時に配列として送られる。
+                  value: idx → このチェックボックスの値（配列のインデックス番号）
+                  false: デフォルトは未チェック状態
+                  id: "habit_#{idx}": label の for 属性と対応する一意な ID
+                %>
+                <%= check_box_tag "habit_indices[]",
+                                  idx,
+                                  false,
+                                  id:    "habit_#{idx}",
+                                  class: "mt-0.5 h-4 w-4 rounded border-gray-300
+                                          text-violet-600 focus:ring-violet-500 flex-shrink-0" %>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <%#
+                      優先度バッジ: proposal[:priority] → "must"/"should"/"could" の文字列。
+                      case 式で色を切り替える。
+                      to_s.downcase: AI が "MUST" のような大文字を返しても対応できる。
+                    %>
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full
+                                <%= case proposal[:priority].to_s.downcase
+                                    when 'must'   then 'bg-red-100 text-red-700'
+                                    when 'should' then 'bg-blue-100 text-blue-700'
+                                    else               'bg-green-100 text-green-700'
+                                    end %>">
+                      <%= proposal[:priority].to_s.upcase %>
+                    </span>
+                    <span class="text-sm font-semibold text-gray-800">
+                      <%= proposal[:title] %>
+                    </span>
+                  </div>
+                  <% if proposal[:description].present? %>
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                      <%= proposal[:description] %>
+                    </p>
+                  <% end %>
+                  <% if proposal[:frequency].present? %>
+                    <p class="text-xs text-gray-400 mt-1">
+                      頻度: <%= proposal[:frequency] %>
+                    </p>
+                  <% end %>
+                </div>
+              </label>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <%# ── タスクの提案 ────────────────────────────────────────────── %>
+      <% if @task_proposals.any? %>
+        <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+          <h2 class="text-base font-bold text-gray-800 mb-1">
+            ✅ タスクの提案
+          </h2>
+          <p class="text-xs text-gray-500 mb-4">
+            ダッシュボードに追加したいタスクにチェックを入れてください
+          </p>
+
+          <div class="space-y-3">
+            <% @task_proposals.each_with_index do |proposal, idx| %>
+              <label class="flex items-start gap-3 p-3 border border-gray-100 rounded-xl
+                            hover:bg-gray-50 cursor-pointer transition-colors">
+                <%#
+                  task_indices[]: タスク用のチェックボックス。
+                  習慣と同じくインデックス番号を value にする。
+                  id: "task_#{idx}": 習慣の "habit_#{idx}" と区別するために異なるプレフィックスを使う。
+                %>
+                <%= check_box_tag "task_indices[]",
+                                  idx,
+                                  false,
+                                  id:    "task_#{idx}",
+                                  class: "mt-0.5 h-4 w-4 rounded border-gray-300
+                                          text-blue-600 focus:ring-blue-500 flex-shrink-0" %>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 mb-1">
+                    <span class="text-xs font-bold px-2 py-0.5 rounded-full
+                                <%= case proposal[:priority].to_s.downcase
+                                    when 'must'   then 'bg-red-100 text-red-700'
+                                    when 'should' then 'bg-blue-100 text-blue-700'
+                                    else               'bg-green-100 text-green-700'
+                                    end %>">
+                      <%= proposal[:priority].to_s.upcase %>
+                    </span>
+                    <span class="text-sm font-semibold text-gray-800">
+                      <%= proposal[:title] %>
+                    </span>
+                  </div>
+                  <% if proposal[:description].present? %>
+                    <p class="text-xs text-gray-500 leading-relaxed">
+                      <%= proposal[:description] %>
+                    </p>
+                  <% end %>
+                </div>
+              </label>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <%# ── 登録ボタン ─────────────────────────────────────────────── %>
+      <div class="flex justify-end">
+        <%#
+          f.submit: フォームの送信ボタン。
+          クリックすると apply_proposals アクションに POST リクエストが送られる。
+
+          【data: { disable_with: "..." } の役割】
+            ボタンを1回クリックすると disabled 状態になり、
+            テキストが「反映中...」に変わる。
+            これにより連打による二重送信（同じ習慣・タスクが2件登録される）を防ぐ。
+            Turbo がデフォルトで提供する機能で、追加 gem は不要。
+        %>
+        <%= f.submit "✨ チェックした提案をダッシュボードに反映する",
+                    class: "px-6 py-3 bg-violet-600 text-white text-sm font-bold
+                            rounded-xl hover:bg-violet-700 transition-colors cursor-pointer
+                            focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2
+                            disabled:opacity-50 disabled:cursor-not-allowed",
+                    data: {
+                      disable_with: "反映中..."
+                    } %>
+      </div>
+    <% end %>
+
+  <% else %>
+    <%# 提案が0件の場合（AI の応答が空だった等の稀なケース） %>
+    <div class="bg-gray-50 border border-gray-200 rounded-2xl p-6 text-center">
+      <p class="text-sm text-gray-500 mb-3">
+        提案がありません。目標を更新して再分析してください。
+      </p>
+      <%= link_to "目標を更新する",
+                  edit_user_purpose_path,
+                  class: "inline-block px-4 py-2 text-sm font-semibold text-white
+                          bg-violet-600 rounded-xl hover:bg-violet-700 transition-colors" %>
+    </div>
+  <% end %>
+
+  <%# ─────────────────────────────────────────────────────────────────
+      AI免責バナー（全 AI 出力ページに必ず表示する）
+      render "shared/ai_disclaimer": _ai_disclaimer.html.erb パーシャルを呼び出す。
+      app/views/shared/_ai_disclaimer.html.erb として作成済み。
+  ───────────────────────────────────────────────────────────────── %>
+  <%= render "shared/ai_disclaimer" %>
+
+</div>
