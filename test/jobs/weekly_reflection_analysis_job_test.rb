@@ -24,8 +24,6 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
   # テスト前の共通セットアップ
   # ==============================================================
   def setup
-    # テスト用ユーザーを作成する
-    # SecureRandom.hex(4) でメールアドレスを一意にしてテスト間の衝突を防ぐ
     @user = User.create!(
       name:                  "テストユーザー",
       email:                 "test_job_#{SecureRandom.hex(4)}@example.com",
@@ -33,16 +31,11 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
       password_confirmation: "password"
     )
 
-    # user_setting を作成する（AI 利用回数管理に必要）
-    @user_setting = UserSetting.create!(
-      user:                      @user,
-      ai_analysis_count:         0,
-      ai_analysis_monthly_limit: 10
-    )
+    # after_create :create_user_setting により User 作成時に自動作成される。
+    # UserSetting.create! は呼ばない。reload で最新状態を取得する。
+    @user_setting = @user.user_setting
 
-    # WeeklyReflection を作成する
-    # Date.new で固定日付を使うことで曜日に依存しない安定したテストになる
-    week_start = Date.new(2026, 4, 20) # 月曜日
+    week_start = Date.new(2026, 4, 20)
     @reflection = WeeklyReflection.create!(
       user:                 @user,
       week_start_date:      week_start,
@@ -52,7 +45,6 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
       next_action:          "朝型に切り替える",
       reflection_comment:   "来週は改善したい"
     )
-    # 振り返りを完了状態にする（complete! で completed_at をセット）
     @reflection.complete!
   end
 

@@ -17,17 +17,16 @@ class TaskAlarmJobTest < ActiveJob::TestCase
   # セットアップ
   # ============================================================
   def setup
-    # テスト用のユーザーとタスクを作成する
-    # fixtures を使わずに create! で作ることで各テストが独立した状態になる
     @user = User.create!(
       name:     "テストユーザー",
       email:    "alarm_test@example.com",
       password: "password123"
     )
 
-    # ユーザー設定を作成する（通知有効・メール通知 ON）
-    @user_setting = UserSetting.create!(
-      user:                       @user,
+    # after_create :create_user_setting により User 作成時に自動作成される。
+    # update! で必要な設定値だけ上書きする。
+    @user_setting = @user.user_setting
+    @user_setting.update!(
       notification_enabled:       true,
       line_notification_enabled:  false,
       email_notification_enabled: true,
@@ -35,7 +34,6 @@ class TaskAlarmJobTest < ActiveJob::TestCase
       daily_notification_count:   0
     )
 
-    # テスト用のタスクを作成する（アラーム有効・1時間後に予定）
     @task = Task.create!(
       user:                 @user,
       title:                "テストタスク",
@@ -45,7 +43,6 @@ class TaskAlarmJobTest < ActiveJob::TestCase
       alarm_minutes_before: 30
     )
 
-    # テスト前にメール配信リストをクリアする
     ActionMailer::Base.deliveries.clear
   end
 

@@ -73,7 +73,8 @@ flowchart LR
 [![D-1 UserPurposeモデル・PMVV入力ページ](https://img.shields.io/badge/D--1_UserPurpose・PMVV入力-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-1-user-purpose-model)
 [![D-2 PMVV AI分析ジョブ](https://img.shields.io/badge/D--2_PMVV_AI分析ジョブ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-2-purpose-analysis-job)
 [![D-3 PMVV目標管理・AI分析結果ページ](https://img.shields.io/badge/D--3_PMVV目標管理・AI分析結果-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-3-pmvv-show-and-ai-result)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-25%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![D-4 週次振り返りAI分析ジョブ](https://img.shields.io/badge/D--4_週次振り返りAI分析ジョブ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-4-weekly-reflection-analysis-job)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-26%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -164,6 +165,7 @@ flowchart LR
 | #D-1 | UserPurpose モデル・PMVV入力ページ（17番）・PMVV目標管理ページ（16番） | 2026-04-19 | feature/D-1-user-purpose-model |
 | #D-2 | PMVV AI分析ジョブ（GoodJob + Gemini API / Groq フォールバック） | 2026-04-25 | feature/D-2-purpose-analysis-job |
 | #D-3 | PMVV目標管理ページ（16番）・AI分析結果ページ（18番） | 2026-04-26 | feature/D-3-pmvv-show-and-ai-result |
+| #D-4 | 週次振り返りAI分析ジョブ（GoodJob + Gemini API / Groq フォールバック） | 2026-04-26 | feature/D-4-weekly-reflection-analysis-job |
 
 <br>
 
@@ -2932,6 +2934,127 @@ AI 分析後にユーザーが PMVV を更新した場合でも、<br>
 
 <br>
 
+### #D-4: 週次振り返り AI分析ジョブ（GoodJob）
+
+<br>
+
+**ブランチ:** `feature/D-4-weekly-reflection-analysis-job`<br>
+**完了日:** 2026-04-26<br>
+**概要:** 振り返り完了後に GoodJob で非同期実行される AI 分析ジョブを実装。<br>
+Gemini REST API（gemini-2.5-flash）をデフォルトとし、Groq API（llama-3.3-70b-versatile）へのフォールバックを備える（#D-2 の AiClient を共通利用）。<br>
+振り返りデータと、PMVV が設定されている場合はその整合性分析も含む Chain-of-Thought プロンプトを設計。<br>
+分析結果を `ai_analyses` テーブルに保存し、`ai_analysis_count` を原子的にインクリメントする。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Job | `WeeklyReflectionAnalysisJob` を新規作成（`app/jobs/weekly_reflection_analysis_job.rb`）<br>Chain-of-Thought 3ステップ プロンプト・PMVV 有無による動的プロンプト分岐・JSON パース強化 |
+| Service | `WeeklyReflectionCompleteService` にジョブエンキュー処理を追加<br>トランザクション外での `perform_later`（A-7 設計原則に従う）・月次上限の事前チェック |
+| Model | `User` に `after_create :create_user_setting` コールバックを追加<br>ユーザー登録時に `UserSetting` を自動作成（欠落によるジョブスキップを防ぐ） |
+| i18n | `config/locales/ja.yml` に `UserSetting` のバリデーションエラーメッセージを追加 |
+| Test | `WeeklyReflectionAnalysisJob` テスト 8件・`WeeklyReflectionCompleteService` テスト 2件追加<br>`include ActiveJob::TestHelper` で `assert_enqueued_with` / `assert_no_enqueued_jobs` を使用 |
+
+<br>
+
+#### プロンプト設計
+
+<br>
+
+| ステップ | 内容 |
+|:---|:---|
+| ステップ1（分析） | 振り返りデータから「できなかった本質的な原因」を Why×3 で深掘り・PMVV がある場合は Vision/Value とのギャップを特定 |
+| ステップ2（コーチング） | 強みの特定・PMVV に沿った改善策・励ましと行動指針 |
+| ステップ3（提案） | 習慣3件・タスク3件（各提案に有効な根拠を添付） |
+
+<br>
+
+#### ai_analyses に保存されるデータ
+
+<br>
+
+| カラム | 内容 |
+|:---|:---|
+| `analysis_type` | `:weekly_reflection`（enum 値 0） |
+| `analysis_comment` | 今週の振り返りの総合分析コメント（200〜400文字） |
+| `root_cause` | できなかった本質的な原因（Why×3・150〜300文字） |
+| `coaching_message` | 励ましと来週に向けた具体的なアドバイス（150〜300文字） |
+| `improvement_suggestions` | 全体的な改善提案のサマリー（100〜200文字） |
+| `actions_json` | 習慣3件・タスク3件の提案配列（JSONB）<br>`ai_proposed_habit` / `ai_proposed_task` モデルは存在しないため全てここに格納 |
+| `input_snapshot` | 分析実行時の振り返りデータ + PMVV のスナップショット（JSONB） |
+| `ai_model_name` | 実際に使用した AI モデル名（`gemini-2.5-flash` または `llama-3.3-70b-versatile`） |
+| `prompt_version` | プロンプトのバージョン（`v1.0`） |
+| `crisis_detected` | 危機ワード検出フラグ |
+
+<br>
+
+#### ai_analysis_count のインクリメント設計
+
+<br>
+
+```ruby
+# ❌ Ruby 側で計算 → 同時実行で競合が発生する
+user_setting.increment!(:ai_analysis_count)
+
+# ✅ DB 側で計算 → 原子的操作で競合しない
+UserSetting.where(id: user_setting.id)
+           .update_all("ai_analysis_count = ai_analysis_count + 1")
+```
+
+<br>
+
+#### 月次上限チェックの二重防御
+
+<br>
+
+| チェック箇所 | タイミング | 効果 |
+|:---|:---|:---|
+| `WeeklyReflectionCompleteService#enqueue_analysis_job_if_eligible` | エンキュー前 | 不要なジョブを DB に積まない最適化 |
+| `WeeklyReflectionAnalysisJob#perform` | ジョブ実行時 | タイムラグや二重エンキューによる超過を防ぐ |
+
+<br>
+
+#### トランザクション外でエンキューする理由
+
+<br>
+
+A-7 の設計原則「トランザクション内は DB アクセスのみ。外部 API・GoodJob エンキューは外に出す」に従う。<br>
+トランザクション内でエンキューすると、ジョブが実行されたときに DB のコミットが完了していない可能性がある。
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `app/jobs/weekly_reflection_analysis_job.rb` | 新規作成（Chain-of-Thought・PMVV 有無による動的プロンプト・JSON パース強化・月次上限チェック） |
+| `app/services/weekly_reflection_complete_service.rb` | `enqueue_analysis_job_if_eligible` メソッドを追加（トランザクション外でエンキュー） |
+| `app/models/user.rb` | `after_create :create_user_setting` を追加・`create_user_setting` private メソッドを追加 |
+| `config/locales/ja.yml` | `user_setting.ai_analysis_monthly_limit.greater_than_or_equal_to` を追加 |
+| `test/jobs/weekly_reflection_analysis_job_test.rb` | 新規作成（8件：正常系・nil返却・PMVV有無・上限チェック・discard_on） |
+| `test/services/weekly_reflection_complete_service_test.rb` | エンキュー確認テスト 2件追加（`include ActiveJob::TestHelper` 追加） |
+| `test/jobs/task_alarm_job_test.rb` | setup の `UserSetting.create!` を `user.user_setting.update!` に変更（after_create 対応） |
+| `test/mailers/task_mailer_test.rb` | setup の `UserSetting.create!` を削除（after_create で自動作成済み） |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+D-4テスト: 10件（ジョブ8件・サービス2件）
+全テスト: 494 runs, 1272 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -4373,6 +4496,117 @@ end
 
 <br>
 
+### 55. UserSetting は after_create で自動作成する（#D-4）
+
+<br>
+
+`UserSetting` がないユーザーに対してジョブを実行すると、<br>
+`enqueue_analysis_job_if_eligible` の nil ガードで早期リターンし、ジョブがエンキューされない。<br>
+`User` モデルの `after_create` コールバックで `UserSetting.create!(user: self)` を呼ぶことで<br>
+ユーザー登録時に必ず `UserSetting` が作成される設計にする。<br>
+`rescue ActiveRecord::RecordInvalid` でログを残しつつユーザー登録自体は成功させる。
+
+<br>
+
+**テストへの影響:**<br>
+`after_create` 追加後は `User.create!` で `UserSetting` が自動作成されるため、<br>
+テストの `setup` で `UserSetting.create!` を呼ぶと UNIQUE 制約違反になる。<br>
+既存テストは `UserSetting.create!` を削除し、`user.user_setting` で参照する形に変更する。<br>
+設定値が異なる場合は `user.user_setting.update!` で上書きする。<br>
+
+```ruby
+# ❌ after_create 追加後は重複エラー
+@user_setting = UserSetting.create!(user: @user, ai_analysis_count: 0, ...)
+
+# ✅ after_create で作成済みのものを参照・必要なら update! で上書き
+@user_setting = @user.user_setting
+@user_setting.update!(notification_enabled: true, ...)
+```
+
+<br>
+
+### 56. update_all でカウントを原子的にインクリメントする（#D-4）
+
+<br>
+
+`increment!` は Ruby 側で現在値を読んで +1 する3ステップ操作のため、<br>
+複数のジョブが同時実行されたとき「両方が同じ値を読んで +1 する」競合が発生する。<br>
+`update_all("count = count + 1")` は DB 側で計算するため原子的操作（atomic）になる。<br>
+AI 分析は非同期ジョブで実行されるため、特に並行実行時の競合対策が重要になる。<br>
+
+```ruby
+# ❌ increment! → Ruby 側で計算（競合が発生する）
+user_setting.increment!(:ai_analysis_count)
+
+# ✅ update_all → DB 側で計算（原子的操作・競合しない）
+UserSetting.where(id: user_setting.id)
+           .update_all("ai_analysis_count = ai_analysis_count + 1")
+```
+
+<br>
+
+### 57. result.nil? 時は raise ではなく return する（#D-4）
+
+<br>
+
+`AiClient#analyze` が nil を返すのは「Gemini + Groq の両方でリトライも含め全て失敗した」最終結果。<br>
+この段階で `raise` すると `retry_on` の対象外の例外として即 discard され<br>
+GoodJob のリトライ機能が活用できなくなる。<br>
+`return` してジョブを正常終了させ、次回の振り返り完了時に再挑戦できる設計にする。<br>
+
+```ruby
+# ❌ raise → retry_on 対象外の例外で即 discard される
+raise "AI API Response is nil" if result.nil?
+
+# ✅ return → ログだけ残して正常終了
+if result.nil?
+  Rails.logger.error "[WeeklyReflectionAnalysisJob] 全 AI プロバイダが失敗しました"
+  return
+end
+```
+
+<br>
+
+### 58. include ActiveJob::TestHelper を明示しないと assert_enqueued_with が使えない（#D-4）
+
+<br>
+
+`assert_enqueued_with` / `assert_no_enqueued_jobs` は `ActionDispatch::IntegrationTest` には<br>
+自動で include されるが、`ActiveSupport::TestCase` では明示的な include が必要。<br>
+`NoMethodError: undefined method 'assert_enqueued_with'` が出た場合はこれが原因。<br>
+
+```ruby
+class WeeklyReflectionCompleteServiceTest < ActiveSupport::TestCase
+  # ✅ 明示的に include する
+  include ActiveJob::TestHelper
+  ...
+end
+```
+
+<br>
+
+### 59. discard_on は GoodJob 4.x では perform_now でも機能する（#D-4）
+
+<br>
+
+GoodJob 4.x では `discard_on ActiveRecord::RecordNotFound` が `perform_now` でも機能し、<br>
+例外は外に伝播せずジョブが静かに破棄される。<br>
+テストでは「例外が発生しないこと」を `assert_nothing_raised` で確認する。<br>
+
+```ruby
+# ❌ perform_now で例外が来ると期待するが GoodJob 4.x では来ない
+assert_raises ActiveRecord::RecordNotFound do
+  WeeklyReflectionAnalysisJob.perform_now(999_999_999)
+end
+
+# ✅ 例外が外に出ないことを確認する
+assert_nothing_raised do
+  WeeklyReflectionAnalysisJob.perform_now(999_999_999)
+end
+```
+
+<br>
+
 ---
 
 <br>
@@ -4860,7 +5094,7 @@ habitflow/
 │   │   ├── pages_controller.rb            # ランディングページ
 │   │   └── user_purposes_controller.rb    # #D-1 新規: PMVV目標管理（show/new/create/edit/update・バージョン管理）
 │   ├── models/
-│   │   ├── user.rb                        # ユーザー認証・has_many 設定（変更: has_many :tasks追加 #C-1）
+│   │   ├── user.rb                        # ユーザー認証・has_many 設定（変更: has_many :tasks追加 #C-1）（変更: after_create :create_user_setting 追加 #D-4）
 │   │   ├── habit.rb                       # 習慣・論理削除・週次進捗計算
 │   │   ├── habit_record.rb                # 日次記録・AM4:00 基準・UNIQUE 制約
 │   │   ├── weekly_reflection.rb           # 週次振り返り・complete! メソッド（変更: has_many :task_summaries 追加 #C-4）
@@ -4873,7 +5107,7 @@ habitflow/
 │   │   ├── user_purpose.rb                # #D-1 新規: PMVVモデル（enum:analysis_state / before_validation:set_version / before_save:deactivate_previous_versions / current_for）
 │   │   └── ai_analysis.rb                 # #D-2 新規: AI分析結果モデル（is_latest 管理・before_create コールバック・analysis_type enum）
 │   ├── services/
-│   │   ├── weekly_reflection_complete_service.rb  # 変更: WeeklyReflectionTaskSummary.create_all_for_reflection! 追加（#C-4）
+│   ├── weekly_reflection_complete_service.rb  # 変更: WeeklyReflectionTaskSummary追加（#C-4）・enqueue_analysis_job_if_eligible 追加（#D-4）
 │   │   ├── habit_record_save_service.rb            # #A-7 #B-1: 習慣記録保存フロー（数値型対応・errors:[]配列形式統一）
 │   │   ├── user_destroy_service.rb                 # #A-7: 退会処理フロー（個人情報匿名化）
 │   │   ├── ai_proposal_confirm_service.rb          # #A-7: AI提案確定フロー骨格（#D-3〜#D-4で本実装）
@@ -4900,7 +5134,8 @@ habitflow/
 │   │   ├── monthly_ai_count_reset_job.rb               # #A-3: 月次AI使用回数リセット
 │   │   ├── hello_good_job.rb                           # #A-3: 動作確認用（確認後削除可）
 │   │   ├── task_alarm_job.rb                           # #C-5 新規: アラーム通知ジョブ（スキップ条件5種・メール送信・ログ記録・atomic更新）
-│   │   └── purpose_analysis_job.rb        # #D-1 #D-2: PMVV AI分析ジョブ（D-2で完全実装・Chain-of-Thought・JSON パース強化・Turbo Stream 通知）
+│   │   ├── purpose_analysis_job.rb        # #D-1 #D-2: PMVV AI分析ジョブ（D-2で完全実装・Chain-of-Thought・JSON パース強化・Turbo Stream 通知）
+│   │   └── weekly_reflection_analysis_job.rb # #D-4 新規: 週次振り返りAI分析ジョブ（Chain-of-Thought・PMVV有無による動的プロンプト・月次上限チェック・update_allで原子的インクリメント）
 │   ├── mailers/
 │   │   ├── application_mailer.rb                       # #A-4: 全メール共通設定（fromアドレス）
 │   │   ├── test_mailer.rb                              # #A-4: 動作確認用メイラー
@@ -4980,7 +5215,7 @@ habitflow/
 │   │   └── rack_mini_profiler.rb          # #A-6: クエリ数・実行時間可視化（development環境のみ）
 │   ├── locales/
 │   │   ├── en.yml                         # 英語ロケール
-│   │   └── ja.yml                         # 日本語ロケール（変更: Task属性名・エラーメッセージ追加 #C-1）
+│   │   └── ja.yml                         # 変更: Task属性名・エラーメッセージ追加（#C-1）・UserSetting ai_analysis_monthly_limit エラーメッセージ追加（#D-4）
 │   └── environments/
 │       ├── development.rb                 # 変更: letter_opener設定追加（#A-4）
 │       └── production.rb                  # 変更: Action Mailer設定・GoodJob :async化（#A-4）
@@ -4999,7 +5234,8 @@ habitflow/
     ├── fixtures/
     │   └── weekly_reflection_task_summaries.yml  # #C-4 新規
     ├── jobs/
-    │   └── purpose_analysis_job_test.rb   # #D-2 新規（6件：正常系・nil返却・不正JSON・actions配列チェック・前後文章パース）
+    │   ├── purpose_analysis_job_test.rb   # #D-2 新規（6件：正常系・nil返却・不正JSON・actions配列チェック・前後文章パース）
+│   │   └── weekly_reflection_analysis_job_test.rb  # #D-4 新規（8件：正常系・nil返却・PMVV有無・月次上限・discard_on）
     ├── models/
     │   ├── habit_record_test.rb              # 変更: numeric_value バリデーション・Service経由保存テスト追加（#B-1）
     │   ├── habit_excluded_day_test.rb     # #B-2: 除外日モデルテスト（15件）
@@ -5048,7 +5284,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-484 runs, 1242 assertions, 0 failures, 0 errors, 0 skips
+494 runs, 1272 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -5103,6 +5339,8 @@ docker compose exec web bin/rails test
 | `test/models/ai_analysis_test.rb` | モデル | （D-2 で追加済み・D-3 では変更なし） |
 | `test/jobs/purpose_analysis_job_test.rb` | ジョブ | （D-2 で追加済み・D-3 では変更なし） |
 | （D-3 は既存テストの 484件 0 failures で完了を確認） | — | `config/locales/ja.yml` の重複解消・`task.title.blank` 修正で既存テストを修正 |
+| `test/jobs/weekly_reflection_analysis_job_test.rb` | ジョブ | 正常系（AiAnalysis作成・ai_analysis_count+1・PMVV有無）・nil返却・上限スキップ・discard_on（8件）（#D-4） |
+| `test/services/weekly_reflection_complete_service_test.rb` | サービス | エンキュー確認・上限時スキップ確認（2件追加、`include ActiveJob::TestHelper` 追加）（#D-4） |
 
 <br>
 
@@ -6854,6 +7092,41 @@ GoodJob のバックグラウンドスレッドとブラウザの WebSocket は<
 `async` アダプターでは `broadcast` がブラウザに届かないことがある。<br>
 DB アダプター（`solid_cable`）を使うことでプロセス・スレッドをまたいで確実に通知できる。<br>
 本番で Redis を使う場合は開発環境だけ `solid_cable` にするのが費用対効果が高い。
+
+<br>
+
+### User 登録時の関連レコード自動作成は after_create で保証する（#D-4）
+
+<br>
+
+`UserSetting` のように「User が存在すれば必ず1件存在すべき」関連レコードは、<br>
+`after_create` コールバックで自動作成することで「存在しない状態」を設計上ありえなくする。<br>
+コントローラー・ジョブ・サービスで nil ガードを書き続けるより根本的な解決になる。<br>
+`rescue ActiveRecord::RecordInvalid` でバリデーション失敗時のログを残しつつ<br>
+ユーザー登録自体は成功させる設計にすることで、障害が波及しない安全な実装になる。
+
+<br>
+
+### after_create 追加後は既存テストの UserSetting.create! を必ず更新する（#D-4）
+
+<br>
+
+`User` モデルに `after_create :create_user_setting` を追加すると、<br>
+既存テストの `setup` で `UserSetting.create!(user: @user, ...)` を呼んでいる箇所が<br>
+UNIQUE 制約違反（`PG::UniqueViolation`）で全てエラーになる。<br>
+`grep -r "UserSetting.create" test/` でヒットした全ファイルを確認し、<br>
+`user.user_setting` で参照する形に変更するか、設定値の違いは `user.user_setting.update!` で対応する。
+
+<br>
+
+### GoodJob のジョブは ID で渡して perform 内で find する設計にする（#D-4）
+
+<br>
+
+GoodJob はジョブ引数を JSON で `good_jobs.serialized_params` に保存するため、<br>
+ActiveRecord インスタンスを渡すと JSON シリアライズできずエラーになる。<br>
+ID（整数）を渡して `perform` 内で `find` し、`discard_on ActiveRecord::RecordNotFound` と<br>
+組み合わせることで「レコード削除後の残存ジョブ」を自動破棄できる安全な設計になる。
 
 <br>
 

@@ -153,9 +153,15 @@ ja:
         user_purpose:
           attributes:
             version:
-              blank:       "を入力してください"
+              blank:        "を入力してください"
               not_a_number: "は数値で入力してください"
               greater_than: "は%{count}より大きい値にしてください"
+
+        # ── D-4 追加: UserSetting モデルのエラーメッセージ ──────
+        user_setting:
+          attributes:
+            ai_analysis_monthly_limit:
+              greater_than_or_equal_to: "は%{count}以上の値にしてください"
 
   # ──────────────────────────────────────────────────────────────
   # 汎用エラーメッセージ

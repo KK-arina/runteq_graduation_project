@@ -82,6 +82,19 @@ class User < ApplicationRecord
   # ============================================================
   before_save :downcase_email
 
+  # after_create :create_user_setting（D-4 追加）
+  # 【理由】
+  #   ユーザー登録時に UserSetting レコードを自動作成する。
+  #   UserSetting がない場合、WeeklyReflectionAnalysisJob 等の
+  #   AI分析ジョブが月次上限チェックで early return してしまい、
+  #   ジョブがエンキューされない問題が発生する。
+  #
+  # 【なぜ after_create か】
+  #   before_create の時点では user.id がまだ存在しない。
+  #   after_create 時点で id が確定するため、UserSetting の
+  #   user_id 外部キーに正しく設定できる。
+  after_create :create_user_setting
+
   # ============================================================
   # インスタンスメソッド
   # ============================================================
@@ -100,6 +113,20 @@ class User < ApplicationRecord
   # プライベートメソッド
   # ============================================================
   private
+
+  # create_user_setting
+  # 【役割】
+  #   ユーザー新規作成時に UserSetting レコードをデフォルト値で自動作成する。
+  #   schema.rb のデフォルト値が適用されるため引数は user のみで十分。
+  #
+  # 【rescue している理由】
+  #   UserSetting 作成失敗でユーザー登録自体をロールバックさせないため。
+  #   ログを残すことでデバッグ可能にする。
+  def create_user_setting
+    UserSetting.create!(user: self)
+  rescue ActiveRecord::RecordInvalid => e
+    Rails.logger.error "[User#create_user_setting] UserSetting 作成失敗: #{e.message}"
+  end
 
   def downcase_email
     self.email = email.to_s.downcase
