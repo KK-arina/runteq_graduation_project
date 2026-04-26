@@ -303,6 +303,14 @@ group :test do
   gem "selenium-webdriver"
 end
 
+# ── D-3 追加: 開発環境で Turbo Stream を動かすための Action Cable アダプター ──
+# solid_cable: PostgreSQL をブローカーとして使う Action Cable アダプター。
+# Redis 不要で、既存の DB（PostgreSQL）を通じてプロセス間通信ができる。
+# これにより GoodJob のバックグラウンドスレッドからブラウザへの
+# Turbo Stream 通知が開発環境でも正しく届くようになる。
+# 【参考】https://github.com/rails/solid_cable
+gem "solid_cable"
+
 # ==================== コメントアウト（未使用）のgem ====================
 
 # Redis: インメモリデータベース

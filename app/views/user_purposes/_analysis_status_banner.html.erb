@@ -1,34 +1,42 @@
 <%# app/views/user_purposes/_analysis_status_banner.html.erb %>
 <%#
   ==============================================================================
-  分析状態バナー パーシャル（本番品質版）
+  分析状態バナー パーシャル（D-3 更新版）
   ==============================================================================
 
-  【このファイルの役割】
-    16番ページ（PMVV目標管理）の分析状態バナーを表示する。
-    PurposeAnalysisJob から Turbo Stream でこのパーシャルが送信され、
-    ブラウザの DOM がリアルタイムで更新される。
-
-  【再試行ボタンの改善】
-    以前: link_to → GET リクエスト → ジョブが再実行されない
-    今回: button_to → POST リクエスト → retry_analysis アクションが実行される
-          → analysis_state が pending に戻り → PurposeAnalysisJob が再エンキュー
+  【D-3 での変更点】
+    completed 状態のバナーに「結果を見る →」リンクを追加する。
+    以前は "(D-3で結果ページを実装予定)" というプレースホルダーだった。
+    ai_analysis ローカル変数を追加して、結果ページへのリンクを制御する。
 
   【ローカル変数】
-    user_purpose: UserPurpose インスタンス
+    user_purpose : UserPurpose インスタンス（必須）
+    ai_analysis  : AiAnalysis インスタンスまたは nil
+                   completed 状態のとき「結果を見る →」リンクに使用する。
 
   【Turbo Stream の仕組み】
-    id="analysis_status_banner" が broadcast_replace_to の target と一致している。
-    ジョブが状態を更新するたびにこのパーシャルが再レンダリングされて
-    DOM が置き換えられる。
+    id="analysis_status_banner" が PurposeAnalysisJob の
+    broadcast_replace_to の target と一致している。
+    ジョブが analysis_state を更新するたびにこのパーシャルが
+    再レンダリングされて DOM が自動で置き換えられる。
+
+  【呼び出し方（show.html.erb より）】
+    render "user_purposes/analysis_status_banner",
+               user_purpose: @current_purpose,
+               ai_analysis:  @ai_analysis
   ==============================================================================
 %>
 
 <%# id="analysis_status_banner": Turbo Stream の target と一致させる（必須） %>
 <div id="analysis_status_banner">
 
-  <%# pending: AI分析ジョブのエンキュー待ち %>
+  <%# ── pending: AI分析ジョブのエンキュー待ち ────────────────────── %>
   <% if user_purpose.pending? %>
+    <%#
+      role="status" aria-live="polite":
+        スクリーンリーダーに「この領域は動的に更新される」と伝える。
+        polite = 現在の読み上げが終わってから通知する（穏やか・緊急でない通知向け）。
+    %>
     <div class="mb-6 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl"
          role="status" aria-live="polite">
       <span class="text-xl" aria-hidden="true">⏳</span>
@@ -38,10 +46,16 @@
       </div>
     </div>
 
-  <%# analyzing: GoodJob がジョブを実行中 %>
+  <%# ── analyzing: GoodJob がジョブを実行中 ──────────────────────── %>
   <% elsif user_purpose.analyzing? %>
     <div class="mb-6 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl"
          role="status" aria-live="polite">
+      <%#
+        スピナーアニメーション:
+          border-t-transparent で上部だけ透明にすることで回転しているように見せる。
+          animate-spin: Tailwind CSS のアニメーションユーティリティ（360度回転）。
+          flex-shrink-0: スピナーがテキストに押しつぶされないようにする。
+      %>
       <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0"
            aria-hidden="true"></div>
       <div>
@@ -50,7 +64,7 @@
       </div>
     </div>
 
-  <%# completed: AI分析が正常完了 %>
+  <%# ── completed: AI分析が正常完了 ──────────────────────────────── %>
   <% elsif user_purpose.completed? %>
     <div class="mb-6 flex items-center justify-between gap-3 px-4 py-3
                 bg-green-50 border border-green-300 rounded-xl"
@@ -60,18 +74,44 @@
         <div>
           <p class="text-sm font-semibold text-green-800">AI分析が完了しました</p>
           <p class="text-xs text-green-600 mt-0.5">
-            <%# l: Rails の翻訳ヘルパー。:long フォーマットで日時を表示する %>
+            <%#
+              l: Rails の i18n 翻訳ヘルパー。
+              format: :long → config/locales/ja.yml の time.formats.long を参照する。
+              "2026年4月25日 09時23分" のような日本語形式で表示される。
+            %>
             <%= l user_purpose.updated_at, format: :long %> 完了
           </p>
         </div>
       </div>
-      <span class="text-xs text-gray-400 whitespace-nowrap">
-        （D-3で結果ページを実装予定）
-      </span>
+      <%#
+        「結果を見る →」ボタン（D-3 で実装）
+        ai_analysis が存在する場合のみ表示する。
+        【なぜ ai_analysis の存在確認が必要か】
+          completed 状態でも何らかの理由で AiAnalysis レコードが
+          作成されていない場合（バグ等）にリンクが壊れないようにする。
+        ai_result_user_purpose_path: routes.rb で定義した 18番ページへのパス。
+        【ルートの確認】
+          GET /user_purpose/ai_result → user_purposes#ai_result
+          named path helper: ai_result_user_purpose_path
+      %>
+      <% if ai_analysis.present? %>
+        <%= link_to "結果を見る →",
+                    ai_result_user_purpose_path,
+                    class: "px-3 py-1.5 text-xs font-bold text-white bg-green-600
+                            rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap
+                            focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2" %>
+      <% else %>
+        <%# AiAnalysis レコードが存在しない稀なケース %>
+        <span class="text-xs text-gray-400">結果を準備中...</span>
+      <% end %>
     </div>
 
-  <%# failed: AI分析が失敗 %>
+  <%# ── failed: AI分析が失敗 ──────────────────────────────────────── %>
   <% elsif user_purpose.failed? %>
+    <%#
+      role="alert": エラーメッセージであることをスクリーンリーダーに伝える。
+      pending/analyzing の "status" とは異なり、即座に読み上げる必要があるため "alert"。
+    %>
     <div class="mb-6 px-4 py-3 bg-red-50 border border-red-200 rounded-xl"
          role="alert">
       <div class="flex items-center gap-3 mb-2">
@@ -88,16 +128,14 @@
 
       <div class="flex gap-2">
         <%#
-          【改善】link_to → button_to に変更
-          理由:
+          button_to を使う理由:
             link_to はデフォルトで GET リクエストを送るため、
             retry_analysis（POST エンドポイント）にリクエストが届かない。
             button_to は <form method="post"> を生成するため、
             正しく POST リクエストが送られる。
-
-          data: { turbo_confirm: "再分析を実行しますか？" }:
-            確認ダイアログを表示して誤操作を防ぐ。
-            turbo_confirm は Turbo が提供する確認ダイアログ（window.confirm の代替）。
+          data: { turbo_confirm: "..." }:
+            Turbo が提供する確認ダイアログ。
+            window.confirm の代替で誤操作を防ぐ。
         %>
         <%= button_to "再試行する",
                       retry_analysis_user_purpose_path,
@@ -108,7 +146,6 @@
                               focus:outline-none focus:ring-2 focus:ring-red-500
                               cursor-pointer border-none" %>
 
-        <%# 目標を更新して分析し直したい場合のリンク %>
         <%= link_to "目標を更新する",
                     edit_user_purpose_path,
                     class: "px-3 py-1.5 text-xs font-semibold text-gray-600

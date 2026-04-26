@@ -1,30 +1,34 @@
 <%# app/views/user_purposes/show.html.erb %>
 <%#
   ==============================================================================
-  16番: PMVV 目標管理ページ（Turbo Stream リアルタイム更新対応版）
+  16番: PMVV 目標管理ページ（D-3 更新版）
   ==============================================================================
 
-  【変更点】
-    ① turbo_stream_from タグを追加して Turbo Stream を購読する
-    ② 分析状態バナーをパーシャルに切り出して Turbo Stream で更新できるようにする
+  【D-3 での変更点】
+    分析状態バナーパーシャルに @ai_analysis を渡すように変更する。
+    これにより completed 状態のバナーで「結果を見る →」リンクが
+    正しく表示されるようになる。
 
-  【turbo_stream_from の仕組み】
-    1. このタグがページに存在すると、ブラウザは指定したチャンネルを購読する
-    2. PurposeAnalysisJob が broadcast_replace_to を呼び出すと、
-       チャンネルを購読しているブラウザに HTML が送信される
-    3. ブラウザが受け取った HTML で指定の DOM 要素を自動的に更新する
+  【Turbo Stream の仕組み（変更なし）】
+    turbo_stream_from タグにより、PurposeAnalysisJob が
+    分析状態を更新するたびにバナーがリアルタイムで切り替わる。
+    @current_purpose が nil の場合は購読しない。
+
+  【@変数の定義（UserPurposesController#show で設定）】
+    @current_purpose : UserPurpose インスタンス（is_active=true）または nil
+    @ai_analysis     : AiAnalysis インスタンスまたは nil
+    @past_purposes   : is_active=false の UserPurpose 配列（バージョン降順）
   ==============================================================================
 %>
 <% content_for :title, "目標管理 | HabitFlow" %>
 
 <%#
   turbo_stream_from: このページで Turbo Stream を受信するためのタグ
-  【引数の意味】
+  【引数】
     "user_purpose_#{@current_purpose.id}":
       PurposeAnalysisJob の broadcast_replace_to で指定した stream 名と一致させる。
-      ユーザーごとに一意の stream 名にすることで、
-      他のユーザーへの更新が混入しない。
-  @current_purpose が存在する場合のみ購読する（nil の場合は購読不要）
+      ユーザーごとに一意の stream 名にすることで他ユーザーへの更新が混入しない。
+  @current_purpose が存在する場合のみ購読する（nil の場合は購読不要）。
 %>
 <% if @current_purpose %>
   <%= turbo_stream_from "user_purpose_#{@current_purpose.id}" %>
@@ -54,6 +58,7 @@
 
   <%# ─────────────────────────────────────────────────────────────────
       PMVV が未入力の場合: Empty State
+      【条件】 @current_purpose が nil のとき
   ───────────────────────────────────────────────────────────────── %>
   <% unless @current_purpose %>
     <div class="text-center py-16 px-6 bg-white border border-dashed border-gray-300 rounded-2xl">
@@ -72,19 +77,25 @@
 
   <%# ─────────────────────────────────────────────────────────────────
       PMVV が存在する場合
+      【条件】 @current_purpose が存在するとき
   ───────────────────────────────────────────────────────────────── %>
   <% else %>
 
     <%#
       分析状態バナーをパーシャルで render する
-      【重要】
-        このパーシャルは PurposeAnalysisJob から Turbo Stream で更新される。
-        id="analysis_status_banner" が Turbo Stream の target と一致している。
-        render パーシャルの内側に id 要素があることで、
-        Turbo Stream の replace アクションが正しく動作する。
+      【D-3 変更点】
+        @ai_analysis を追加で渡す。
+        completed 状態のバナーで「結果を見る →」リンクを表示するために必要。
+
+      【Turbo Stream の仕組み】
+        このパーシャルの内側に id="analysis_status_banner" がある。
+        PurposeAnalysisJob が broadcast_replace_to を呼ぶと
+        この id の要素が自動的に新しい HTML に置き換えられる。
+        ユーザーはページをリロードせずに分析状態の変化を確認できる。
     %>
     <%= render "user_purposes/analysis_status_banner",
-               user_purpose: @current_purpose %>
+               user_purpose: @current_purpose,
+               ai_analysis:  @ai_analysis %>
 
     <%# ── 現在のPMVV 内容表示 ─────────────────────────────────────── %>
     <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm mb-6">
@@ -100,19 +111,24 @@
         </span>
       </div>
 
+      <%#
+        pmvv_fields: PMVV の5フィールドを配列で定義する。
+        each で繰り返すことで同じ構造の HTML を5回書かずに済む（DRY 原則）。
+        last:border-0 last:pb-0: 最後の要素のボーダーとパディングを除去する。
+      %>
       <% pmvv_fields = [
-           { label: "PURPOSE", desc: "人生で大切にしていること", value: @current_purpose.purpose,           color: "text-violet-600" },
-           { label: "MISSION", desc: "今最も必要なこと",         value: @current_purpose.mission,           color: "text-violet-600" },
-           { label: "VISION",  desc: "1年後の自分",              value: @current_purpose.vision,            color: "text-violet-600" },
-           { label: "VALUE",   desc: "絶対に譲れないこと",        value: @current_purpose.value,             color: "text-violet-600" },
-           { label: "CURRENT", desc: "今の自分の現状",            value: @current_purpose.current_situation, color: "text-violet-600" }
+           { label: "PURPOSE", desc: "人生で大切にしていること", value: @current_purpose.purpose },
+           { label: "MISSION", desc: "今最も必要なこと",         value: @current_purpose.mission },
+           { label: "VISION",  desc: "1年後の自分",              value: @current_purpose.vision },
+           { label: "VALUE",   desc: "絶対に譲れないこと",        value: @current_purpose.value },
+           { label: "CURRENT", desc: "今の自分の現状",            value: @current_purpose.current_situation }
          ] %>
 
       <div class="space-y-4">
         <% pmvv_fields.each do |field| %>
           <div class="border-b border-gray-100 pb-4 last:border-0 last:pb-0">
             <div class="flex items-center gap-2 mb-1">
-              <span class="text-xs font-bold <%= field[:color] %>">
+              <span class="text-xs font-bold text-violet-600">
                 <%= field[:label] %>
               </span>
               <span class="text-xs text-gray-400">
@@ -120,6 +136,10 @@
               </span>
             </div>
             <% if field[:value].present? %>
+              <%#
+                whitespace-pre-wrap: テキスト内の改行を HTML で保持する。
+                ユーザーが複数行で入力したテキストがそのまま表示される。
+              %>
               <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
                 <%= field[:value] %>
               </p>
@@ -146,6 +166,10 @@
                   <%= l past.created_at, format: :long %> 作成
                 </p>
               </div>
+              <%#
+                バッジ: analysis_state に応じて色を変える三項演算子チェーン。
+                completed → 緑 / failed → 赤 / それ以外 → グレー
+              %>
               <span class="text-xs px-2 py-0.5 rounded-full font-semibold
                           <%= past.completed? ? 'bg-green-100 text-green-700' :
                               past.failed?    ? 'bg-red-100 text-red-700'    :

@@ -1,13 +1,19 @@
 # config/routes.rb
-# （既存内容から変更箇所のみ抜粋）
+#
 # ==============================================================================
-# 変更点: D-1 追加
-#   resource :user_purpose を追加する。
-#   resource（単数形）を使う理由:
-#     1ユーザーが持つ「現在の目標」は常に1件なので
-#     /user_purposes/1 のような id を URL に含めない設計にする。
-#     /user_purpose/new, /user_purpose/edit など id なしでアクセスできる。
-#   only: で必要なアクションだけを定義してルーティングをシンプルに保つ。
+# ルーティング定義
+# ==============================================================================
+#
+# 【D-3 変更点】
+#   resource :user_purpose のブロック内に以下を追加:
+#     get  :ai_result        → 18番（AI分析結果ページ）への遷移
+#     post :apply_proposals  → チェックした提案を習慣・タスクとして登録する
+#
+# 【なぜ on: :member を使うのか】
+#   resource（単数形）の member は /user_purpose/:action の形になる。
+#   例: GET  /user_purpose/ai_result        → user_purposes#ai_result
+#       POST /user_purpose/apply_proposals  → user_purposes#apply_proposals
+#   ※ 単数形リソースなので :id は含まれない。
 # ==============================================================================
 
 Rails.application.routes.draw do
@@ -32,9 +38,9 @@ Rails.application.routes.draw do
   get "dashboard", to: "dashboards#index", as: :dashboard
 
   # ---------------------------------------------------------------
-  # D-1 追加: resource :user_purpose（単数形リソース）
+  # resource :user_purpose（単数形リソース）
   # ---------------------------------------------------------------
-  # 【resource（単数形）vs resources（複数形）の違い】
+  # 【resource（単数形）と resources（複数形）の違い】
   #   resources :user_purposes → /user_purposes/:id のように id が URL に入る
   #   resource  :user_purpose  → /user_purpose のように id なしでアクセスできる
   #
@@ -44,21 +50,26 @@ Rails.application.routes.draw do
   #   /user_purpose で「自分の目標」と自明になる。
   #   /user_purposes/3 のように id を指定させる必要がない。
   #
-  # 【生成されるルートと named path helper】
-  #   GET  /user_purpose/new  → user_purposes#new  → new_user_purpose_path
-  #   POST /user_purpose      → user_purposes#create
-  #   GET  /user_purpose      → user_purposes#show  → user_purpose_path
-  #   GET  /user_purpose/edit → user_purposes#edit  → edit_user_purpose_path
-  #   PATCH/PUT /user_purpose → user_purposes#update
-  #
-  # 【注意: resource は singular resource なのでコントローラー名は複数形】
-  #   Rails の慣例でコントローラーは UserPurposesController（複数形）のまま。
+  # 【D-3 追加アクション】
+  #   ai_result       : 18番 AI分析結果ページを表示する（GET）
+  #   apply_proposals : チェックした提案を習慣・タスクとして登録する（POST）
   resource :user_purpose, only: [:show, :new, :create, :edit, :update] do
-    # retry_analysis: 失敗した AI 分析を再実行するエンドポイント
-    # POST /user_purpose/retry_analysis
-    # on: :member → /user_purpose/:id/retry_analysis ではなく
-    #               単数形リソース（/user_purpose/retry_analysis）になる
-    post :retry_analysis, on: :member
+    member do
+      # retry_analysis: 失敗した AI 分析を再実行する（D-2 実装済み）
+      post :retry_analysis
+
+      # ── D-3 追加 ──────────────────────────────────────────────
+      # ai_result: 18番 AI分析結果ページ
+      #   GET リクエストで閲覧専用ページを表示する。
+      #   ルートヘルパー: ai_result_user_purpose_path
+      get :ai_result
+
+      # apply_proposals: チェックした提案を習慣・タスクとして登録する
+      #   POST リクエストでデータ変更を伴う操作を行う。
+      #   ルートヘルパー: apply_proposals_user_purpose_path
+      post :apply_proposals
+      # ──────────────────────────────────────────────────────────
+    end
   end
 
   resources :tasks, only: [ :index, :new, :create, :destroy ] do

@@ -324,12 +324,30 @@ class PurposeAnalysisJob < ApplicationJob
   # broadcast_state_update(user_purpose)
   # ----------------------------------------------------------
   # Turbo Streams でブラウザの 16番ページをリアルタイム更新する
+  #
+  # 【locals に ai_analysis を渡す理由】
+  #   _analysis_status_banner.html.erb パーシャルは
+  #   completed 状態のときに ai_analysis ローカル変数を参照する。
+  #   渡さないと "undefined local variable or method 'ai_analysis'" エラーになる。
+  #
+  # 【AiAnalysis.find_by の条件】
+  #   user_purpose_id と is_latest: true で最新の分析結果を取得する。
+  #   分析完了前（pending/analyzing）は nil になる。
+  #   nil のときはバナーに「結果を準備中...」と表示される（設計通り）。
   def broadcast_state_update(user_purpose)
+    # completed 状態のとき「結果を見る →」リンクを表示するために
+    # AiAnalysis を取得して locals に渡す
+    ai_analysis = AiAnalysis.where(
+      user_purpose_id: user_purpose.id,
+      is_latest:       true,
+      analysis_type:   AiAnalysis.analysis_types[:purpose_breakdown]
+    ).first
+
     Turbo::StreamsChannel.broadcast_replace_to(
       "user_purpose_#{user_purpose.id}",
       target:  "analysis_status_banner",
       partial: "user_purposes/analysis_status_banner",
-      locals:  { user_purpose: user_purpose }
+      locals:  { user_purpose: user_purpose, ai_analysis: ai_analysis }
     )
   rescue => e
     # Turbo Stream 更新が失敗しても分析結果は保存済みなのでログだけ残す

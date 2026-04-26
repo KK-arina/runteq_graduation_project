@@ -1,10 +1,33 @@
 # config/locales/ja.yml
-# （既存内容はそのまま維持し、追記箇所のみ以下に示す）
+#
 # ==============================================================================
-# D-1 追加: UserPurpose モデルの属性名・エラーメッセージを追加する
+# 日本語ロケールファイル
+# ==============================================================================
+#
+# 【D-3 での修正点】
+#   ja.yml に activerecord: が2箇所定義されていた（重複エラーの危険）。
+#   1つにまとめて整理する。
+#   time.formats.long が定義済みのため追記不要（確認済み）。
+#
+# 【YAML の重要なルール】
+#   同じキーを2回書くと後の定義が前の定義を上書きする。
+#   activerecord: が2箇所あると models: や attributes: の定義が
+#   部分的に消える危険があるため、必ず1か所にまとめること。
+#
+# 【インデント（スペース）の重要性】
+#   YAML はインデントで階層構造を表現する。
+#   スペース数が1つでもずれると構文エラーになる。
+#   タブ文字は使用禁止（スペースのみ）。
 # ==============================================================================
 
 ja:
+  # ──────────────────────────────────────────────────────────────
+  # 日付・時刻フォーマット
+  # ──────────────────────────────────────────────────────────────
+  # 【D-1 追加】
+  # l ヘルパーで使用するフォーマット定義。
+  # 例: l @user_purpose.updated_at, format: :long
+  #   → "2026年4月25日 09時23分" のように表示される。
   date:
     formats:
       long: "%Y年%-m月%-d日"
@@ -12,66 +35,90 @@ ja:
     formats:
       long: "%Y年%-m月%-d日 %H時%M分"
 
+  # ──────────────────────────────────────────────────────────────
+  # ActiveRecord 関連の日本語化（1か所にまとめる）
+  # ──────────────────────────────────────────────────────────────
   activerecord:
+    # モデル名の日本語化
+    # 例: Model.model_name.human → "AI分析結果"
+    models:
+      ai_analysis:  "AI分析結果"
+      user_purpose: "PMVV目標"
+
+    # 属性名の日本語化
+    # 例: エラーメッセージで "パスワードを入力してください" のように使われる
     attributes:
       user:
-        name: "ユーザー名"
-        email: "メールアドレス"
-        password: "パスワード"
+        name:                  "ユーザー名"
+        email:                 "メールアドレス"
+        password:              "パスワード"
         password_confirmation: "パスワード（確認）"
 
       habit:
-        name: "習慣名"
-        weekly_target: "週次目標"
+        name:             "習慣名"
+        weekly_target:    "週次目標"
         measurement_type: "記録タイプ"
-        unit: "単位"
-        color: "カラー"
-        icon: "アイコン"
+        unit:             "単位"
+        color:            "カラー"
+        icon:             "アイコン"
 
       task:
-        title: "タスク名"
-        priority: "優先度"
-        task_type: "タスク種別"
-        status: "ステータス"
-        due_date: "期限日"
-        estimated_hours: "見積時間"
-        scheduled_at: "実施予定日時"
-        alarm_enabled: "アラーム"
+        title:               "タスク名"
+        priority:            "優先度"
+        task_type:           "タスク種別"
+        status:              "ステータス"
+        due_date:            "期限日"
+        estimated_hours:     "見積時間"
+        scheduled_at:        "実施予定日時"
+        alarm_enabled:       "アラーム"
         alarm_minutes_before: "アラーム通知時間"
-        habit_id: "関連習慣"
+        habit_id:            "関連習慣"
 
-      # ── D-1 追加: UserPurpose モデルの属性名日本語化 ────────────
-      # 「Purpose を入力してください」→「Purpose（人生で大切にしていること）を入力してください」
-      # のように日本語でわかりやすい属性名に変換する。
+      # ── D-1 追加: UserPurpose モデルの属性名日本語化 ──────────
+      # エラーメッセージで属性名が日本語で表示されるようになる。
+      # 例: "Purpose（人生で大切にしていること）を入力してください"
       user_purpose:
         purpose:           "Purpose（人生で大切にしていること）"
         mission:           "Mission（今最も必要なこと）"
-        vision:            "Vision（1年後の自分）"
+        vision:            "Vision（1年後の理想の自分）"
         value:             "Value（絶対に譲れないこと）"
         current_situation: "Current（今の自分の現状）"
         version:           "バージョン"
         analysis_state:    "分析状態"
-      # ──────────────────────────────────────────────────────────
+        is_active:         "有効フラグ"
+        last_error_message: "エラーメッセージ"
 
+      # ── D-2 追加: AiAnalysis モデルの属性名日本語化 ──────────
+      ai_analysis:
+        analysis_type:           "分析種別"
+        analysis_comment:        "分析コメント"
+        root_cause:              "根本原因"
+        coaching_message:        "コーチングメッセージ"
+        improvement_suggestions: "改善提案"
+        actions_json:            "推奨アクション"
+        crisis_detected:         "危機検出"
+        is_latest:               "最新フラグ"
+
+    # エラーメッセージの日本語化
     errors:
       messages:
         record_invalid: "バリデーションに失敗しました: %{errors}"
         restrict_dependent_destroy:
-          has_one: "%{record}が存在するので削除できません"
+          has_one:  "%{record}が存在するので削除できません"
           has_many: "%{record}が存在するので削除できません"
       models:
         user:
           attributes:
             name:
-              blank: "を入力してください"
+              blank:    "を入力してください"
               too_long: "は%{count}文字以内で入力してください"
             email:
-              blank: "を入力してください"
-              invalid: "の形式が正しくありません"
-              taken: "は現在使用できません。別のメールアドレスをお試しください"
+              blank:    "を入力してください"
+              invalid:  "の形式が正しくありません"
+              taken:    "は現在使用できません。別のメールアドレスをお試しください"
               too_long: "は%{count}文字以内で入力してください"
             password:
-              blank: "を入力してください"
+              blank:     "を入力してください"
               too_short: "は%{count}文字以上で入力してください"
             password_confirmation:
               confirmation: "とパスワードの入力が一致しません"
@@ -85,76 +132,41 @@ ja:
         weekly_reflection_habit_summary:
           attributes:
             habit_name:
-              blank: "を入力してください"
+              blank:    "を入力してください"
               too_long: "は%{count}文字以内で入力してください"
             weekly_target:
-              blank: "を入力してください"
+              blank:       "を入力してください"
               not_a_number: "は数値で入力してください"
         task:
           attributes:
             title:
-              blank: "を入力してください"
+              blank:    "タスク名を入力してください"  # ← 修正: モデルの直書きと一致させる
               too_long: "は100文字以内で入力してください"
             priority:
-              blank: "を入力してください"
+              blank:     "を入力してください"
               inclusion: "はMust / Should / Couldから選択してください"
             task_type:
-              blank: "を入力してください"
+              blank:     "を入力してください"
               inclusion: "が不正です"
 
-        # ── D-1 追加: UserPurpose モデルのエラーメッセージ ─────────
+        # ── D-1 追加: UserPurpose モデルのエラーメッセージ ──────
         user_purpose:
           attributes:
             version:
-              blank: "を入力してください"
+              blank:       "を入力してください"
               not_a_number: "は数値で入力してください"
               greater_than: "は%{count}より大きい値にしてください"
-          base:
-            at_least_one: "Purpose / Mission / Vision / Value / Current のうち少なくとも1つを入力してください"
-        # ──────────────────────────────────────────────────────────
 
+  # ──────────────────────────────────────────────────────────────
+  # 汎用エラーメッセージ
+  # ──────────────────────────────────────────────────────────────
   errors:
     messages:
-      taken: "は現在使用できません。別のメールアドレスをお試しください"
-      blank: "を入力してください"
-      invalid: "の形式が正しくありません"
-      too_long: "は%{count}文字以内で入力してください"
-      too_short: "は%{count}文字以上で入力してください"
+      taken:        "は現在使用できません。別のメールアドレスをお試しください"
+      blank:        "を入力してください"
+      invalid:      "の形式が正しくありません"
+      too_long:     "は%{count}文字以内で入力してください"
+      too_short:    "は%{count}文字以上で入力してください"
       not_a_number: "は数値で入力してください"
-      inclusion: "は一覧にありません"
+      inclusion:    "は一覧にありません"
       confirmation: "と%{attribute}の入力が一致しません"
-
-# ============================================================
-# D-2: AI 分析関連メッセージ
-# ============================================================
-  ai_analysis:
-    status:
-      pending: "AI分析待機中..."
-      analyzing: "AIが分析しています"
-      completed: "AI分析が完了しました"
-      failed: "分析に失敗しました"
-
-  activerecord:
-    models:
-      ai_analysis: "AI分析結果"
-      user_purpose: "PMVV目標"
-    attributes:
-      ai_analysis:
-        analysis_type: "分析種別"
-        analysis_comment: "分析コメント"
-        root_cause: "根本原因"
-        coaching_message: "コーチングメッセージ"
-        improvement_suggestions: "改善提案"
-        actions_json: "推奨アクション"
-        crisis_detected: "危機検出"
-        is_latest: "最新フラグ"
-      user_purpose:
-        purpose: "Purpose（人生で大切にしていること）"
-        mission: "Mission（今最も必要なこと）"
-        vision: "Vision（1年後の理想の自分）"
-        value: "Value（絶対に譲れないこと）"
-        current_situation: "Current（今の自分の現状）"
-        analysis_state: "分析状態"
-        version: "バージョン"
-        is_active: "有効フラグ"
-        last_error_message: "エラーメッセージ"
