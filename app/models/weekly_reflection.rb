@@ -1,28 +1,33 @@
 # app/models/weekly_reflection.rb
 #
 # ==============================================================================
-# WeeklyReflection モデル（リフレクション手法対応）
+# WeeklyReflection モデル（D-5: 危機介入機能を追加）
 # ==============================================================================
-# 【変更内容】
-#   ① next_action カラムのバリデーション追加（1000文字以内、任意）
-#      「からの？（次への展開）」に対応するカラム
+# 【D-5 での変更内容】
+#   ① CrisisDetector モジュールをインクルード
+#   ② crisis_text_fields メソッドを定義（検出対象フィールドを指定）
 #
 # 【カラムと UI の対応表】
 #   DB カラム名          | UIラベル            | リフレクション項目
 #   ────────────────────|─────────────────────|──────────────────
 #   direct_reason        | なぜ？（直接の原因） | Why（なぜ）
-#   background_situation | どう？（改善策）      | How（どう）※ラベルを変更
-#   next_action          | からの？（次への展開）| Next（からの）※新規追加
+#   background_situation | どう？（改善策）      | How（どう）
+#   next_action          | からの？（次への展開）| Next（からの）
 #   reflection_comment   | 自由コメント（任意） | 自由記述
-#
-# 【background_situation について】
-#   カラム名は「背景・状況」を意味するが、UI の変更に伴い
-#   「どうすれば来週は変えられそうですか？（改善策）」として使う。
-#   カラム名のリネームは既存マイグレーション不変ルールのため行わず、
-#   View のラベルのみ変更することで対応する。
 # ==============================================================================
 
 class WeeklyReflection < ApplicationRecord
+  # ── D-5 追加: CrisisDetector モジュールをインクルードする ────────────────
+  #
+  # 【インクルードの理由】
+  #   振り返り入力の各テキストフィールドに「死にたい」「消えたい」などの
+  #   危機ワードが含まれていないかを before_validation で自動検出する。
+  #   検出された場合は crisis_word_detected フラグが true になる。
+  #   このフラグをコントローラーが確認して AI 分析ジョブをスキップし、
+  #   代わりに crisis_detected=true で AiAnalysis を記録する。
+  include CrisisDetector
+  # ────────────────────────────────────────────────────────────────────────────
+
   # ============================================================
   # アソシエーション
   # ============================================================
@@ -32,55 +37,25 @@ class WeeklyReflection < ApplicationRecord
            class_name: "WeeklyReflectionHabitSummary",
            dependent: :destroy
 
-  # ── C-4 追加 ───────────────────────────────────────────────────────────────
-  # has_many :task_summaries
-  #   このアソシエーションを追加する理由:
-  #     WeeklyReflectionTaskSummary.create_all_for_reflection! の中で
-  #     weekly_reflection.task_summaries.exists? や
-  #     weekly_reflection.task_summaries.build を使うため。
-  #     dependent: :destroy を指定することで、
-  #     振り返りが削除されたときにタスクスナップショットも自動削除される
-  #     （DB側の on_delete: :cascade と二重に保護する）。
   has_many :task_summaries,
            class_name: "WeeklyReflectionTaskSummary",
            dependent: :destroy
-  # ────────────────────────────────────────────────────────────────────────────
 
   # ============================================================
   # コールバック
   # ============================================================
-
-  # before_validation :set_year_and_week_number
-  # バリデーション実行「前」に year と week_number を自動セットする。
-  # week_start_date から ISO 週番号を計算して設定する。
   before_validation :set_year_and_week_number
 
   # ============================================================
   # バリデーション
   # ============================================================
-
   validates :week_start_date, presence: true
   validates :week_end_date,   presence: true
-
-  # reflection_comment: 自由コメント（任意・1000文字以内）
   validates :reflection_comment, length: { maximum: 1000 }
-
-  # direct_reason: なぜ？（直接の原因）任意・1000文字以内
-  validates :direct_reason, length: { maximum: 1000 }
-
-  # background_situation: どう？（改善策）任意・1000文字以内
-  # ※ UI ラベルは「背景・状況」→「どうすれば変えられそうか？」に変更済み
+  validates :direct_reason,      length: { maximum: 1000 }
   validates :background_situation, length: { maximum: 1000 }
-
-  # ── 追加: next_action バリデーション ──────────────────────────────────────
-  #
-  # next_action: からの？（次への展開）任意・1000文字以内
-  # 「この振り返りから他の習慣・行動に活かせることは何か？」を記入する欄。
-  # UI 設計では任意入力のため presence バリデーションは付けない。
-  validates :next_action, length: { maximum: 1000 }
-  # ────────────────────────────────────────────────────────────────────────────
-
-  validate :week_end_date_must_be_six_days_after_start
+  validates :next_action,        length: { maximum: 1000 }
+  validate  :week_end_date_must_be_six_days_after_start
 
   # ============================================================
   # スコープ
@@ -93,19 +68,12 @@ class WeeklyReflection < ApplicationRecord
   # ============================================================
   # クラスメソッド
   # ============================================================
-
-  # current_week_start_date
-  # AM4:00 基準で「今週の月曜日」を返す。
-  # ダッシュボードの日付計算と同じ基準を使うことで一貫性を保つ。
   def self.current_week_start_date
     (Time.current - 4.hours).beginning_of_week(:monday).to_date
   end
 
-  # find_or_build_for_current_week
-  # 今週の振り返りレコードを探して返す。なければ初期値でビルドする。
   def self.find_or_build_for_current_week(user)
     start_date = current_week_start_date
-
     user.weekly_reflections.find_or_initialize_by(
       week_start_date: start_date
     ) do |reflection|
@@ -116,24 +84,18 @@ class WeeklyReflection < ApplicationRecord
   # ============================================================
   # インスタンスメソッド
   # ============================================================
-
-  # completed?: completed_at に時刻が入っているかどうかを返す
   def completed?
     completed_at.present?
   end
 
-  # week_label: 「2026/03/09 - 03/15」形式の文字列を返す（ビューで使用）
   def week_label
     "#{week_start_date.strftime('%Y/%m/%d')} - #{week_end_date.strftime('%m/%d')}"
   end
 
-  # pending?: completed? の逆（未完了かどうか）
   def pending?
     !completed?
   end
 
-  # complete!: 振り返りを完了状態にする（冪等性あり）
-  # completed? が true の場合は何もしない。
   def complete!
     return if completed?
     update!(completed_at: Time.current, is_locked: true)
@@ -144,12 +106,30 @@ class WeeklyReflection < ApplicationRecord
   # ============================================================
   private
 
-  # set_year_and_week_number
-  # week_start_date から ISO 週番号の year・week_number を自動計算する。
-  # UNIQUE 制約 (user_id, year, week_number) のために必要。
+  # ── D-5 追加: crisis_text_fields ──────────────────────────────────────────
   #
-  # cwyear: ISO 週番号ベースの年（12月末〜1月初の境界で正確）
-  # cweek:  ISO 週番号（1〜53）
+  # 【役割】
+  #   CrisisDetector モジュールの check_crisis_keywords メソッドが
+  #   危機ワードを検索する対象フィールドの値を配列で返す。
+  #
+  # 【なぜ private か】
+  #   このメソッドは CrisisDetector から内部的に呼ばれるため、
+  #   外部から直接呼ばれる必要はない。private にすることで
+  #   誤った呼び出しを防ぐ。
+  #
+  # 【対象フィールドの選定理由】
+  #   振り返り入力で自由記述できる全テキストフィールドを対象にする。
+  #   ユーザーがどのフィールドに書くか予測できないため、全フィールドを検索する。
+  def crisis_text_fields
+    [
+      direct_reason,        # なぜ？（直接の原因）
+      background_situation, # どう？（改善策）
+      next_action,          # からの？（次への展開）
+      reflection_comment    # 自由コメント
+    ]
+  end
+  # ────────────────────────────────────────────────────────────────────────────
+
   def set_year_and_week_number
     return unless week_start_date.present?
     self.year        = week_start_date.cwyear

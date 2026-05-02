@@ -1,0 +1,66 @@
+<%# app/views/shared/_crisis_intervention_modal.html.erb %>
+<%#
+  ==============================================================================
+  危機介入モーダル（13-M / 17-M 共通パーシャル）
+  ==============================================================================
+  【D-5 修正履歴】
+    stopPropagation アクションを削除。
+    overlayClicked() が何もしない実装のため、
+    イベント伝播を止める処理は不要。
+  ==============================================================================
+%>
+
+<div
+  data-controller="crisis-intervention"
+  data-crisis-intervention-show-value="<%= flash[:crisis].present? ? 'true' : 'false' %>"
+>
+
+  <div
+    data-crisis-intervention-target="overlay"
+    data-action="click->crisis-intervention#overlayClicked"
+    style="display: none; position: fixed; inset: 0; z-index: 50;
+           background: rgba(0, 0, 0, 0.55); backdrop-filter: blur(2px);
+           align-items: center; justify-content: center; padding: 16px;"
+  >
+
+    <%#
+      ──────────────────────────────────────────────────────────────────────────
+      デスクトップ用: 中央モーダルカード（768px 以上で表示）
+      ──────────────────────────────────────────────────────────────────────────
+      【stopPropagation を削除した理由】
+        overlayClicked() が何もしない（意図的な空実装）ため、
+        モーダルカード内クリックがオーバーレイに伝播してもモーダルは閉じない。
+        未定義メソッドを data-action に指定するとコンソールエラーになるため削除。
+    %>
+    <div
+      data-crisis-intervention-target="modal"
+      style="display: none; flex-direction: column; background: white;
+             border-radius: 16px; width: 100%; max-width: 460px;
+             max-height: 90vh; overflow-y: auto;
+             border-top: 6px solid #10b981; box-shadow: 0 20px 60px rgba(0,0,0,0.3);"
+    >
+      <%= render "shared/crisis_modal_content" %>
+    </div>
+
+    <%#
+      ──────────────────────────────────────────────────────────────────────────
+      スマホ用: ボトムシート（768px 未満で表示）
+      ──────────────────────────────────────────────────────────────────────────
+    %>
+    <div
+      data-crisis-intervention-target="sheet"
+      style="display: none; flex-direction: column; background: white;
+             border-radius: 20px 20px 0 0; width: 100%;
+             position: fixed; bottom: 0; left: 0; right: 0;
+             max-height: 85vh; overflow-y: auto;
+             border-top: 6px solid #10b981; box-shadow: 0 -4px 24px rgba(0,0,0,0.2);
+             transform: translateY(100%); transition: transform 0.3s ease;"
+    >
+      <div style="display: flex; justify-content: center; padding: 12px 0 4px;">
+        <div style="width: 40px; height: 4px; background: #e2e8f0; border-radius: 2px;"></div>
+      </div>
+      <%= render "shared/crisis_modal_content" %>
+    </div>
+
+  </div>
+</div>

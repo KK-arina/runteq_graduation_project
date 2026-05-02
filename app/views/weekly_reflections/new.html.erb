@@ -1,27 +1,11 @@
 <%# app/views/weekly_reflections/new.html.erb %>
 <%#
   ==============================================================================
-  週次振り返り入力ページ（リフレクション手法対応版）
+  週次振り返り入力ページ（D-5: 危機介入モーダルを追加）
   ==============================================================================
-  【変更内容】
-    リフレクション手法「なぜ？→ どう？→ からの？」の3要素を
-    振り返りフォームのフィールドに対応させる。
-
-  【フィールドとDBカラムの対応】
-    フィールド         | DB カラム            | リフレクション項目
-    ──────────────────|──────────────────────|────────────────
-    なぜ？             | direct_reason        | Why（なぜ）
-    どう？             | background_situation | How（どう）※ラベルを変更
-    からの？           | next_action          | Next（からの）※新規追加
-    自由コメント       | reflection_comment   | 自由記述
-
-  【なぜ background_situation のカラム名を変えないのか】
-    既存マイグレーション不変ルールに従い、カラムのリネームは行わない。
-    View のラベルだけ「どう？（改善策）」に変更することで対応する。
-
-  【B-1 数値型対応（既存）】
-    習慣実績セクションで数値型習慣の補正フィールドを表示する。
-    @habit_stats には { rate:, completed_count:, numeric_sum: } が入る。
+  【D-5 での変更内容】
+    ① ページ末尾に _crisis_intervention_modal パーシャルを追加する
+    ② flash[:crisis] が true の場合、Stimulus がモーダルを自動表示する
   ==============================================================================
 %>
 
@@ -52,7 +36,6 @@
 
   <% else %>
 
-    <%# -------- 達成できた習慣 -------- %>
     <% unless @achieved_habits.empty? %>
       <section class="mb-6">
         <h2 class="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-emerald-700 mb-3">
@@ -65,10 +48,6 @@
             <div class="bg-white border border-emerald-200 rounded-xl p-4 shadow-sm flex items-center justify-between gap-4">
               <div class="flex-1 min-w-0">
                 <p class="font-semibold text-gray-800 truncate"><%= habit.name %></p>
-                <%#
-                  【変更】habit_progress_text ヘルパーで表記を統一する。
-                  チェック型の分母が effective_weekly_target になり習慣管理と一致する。
-                %>
                 <p class="text-xs text-gray-500 mt-0.5">
                   <%= habit_progress_text(habit, stats) %>達成
                 </p>
@@ -82,7 +61,6 @@
       </section>
     <% end %>
 
-    <%# -------- 達成できなかった習慣 -------- %>
     <% unless @not_achieved_habits.empty? %>
       <section class="mb-6">
         <h2 class="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-red-600 mb-3">
@@ -92,17 +70,9 @@
         <div class="space-y-3">
           <% @not_achieved_habits.each do |habit| %>
             <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
-
             <div class="bg-white border border-red-200 rounded-xl p-4 shadow-sm">
               <div class="flex items-center justify-between gap-4 mb-2">
                 <p class="font-semibold text-gray-800 truncate"><%= habit.name %></p>
-
-                <%#
-                  【変更1】動的クラスをインラインスタイルに変更。
-                  bg-= rate_color -500 は Tailwind ビルド時に検出されず CSS が生成されない。
-                  rate_hex_color でインラインスタイルに変更する。
-                  【変更2】habit_progress_text ヘルパーで表記を統一する。
-                %>
                 <span class="flex-shrink-0 text-xs font-bold"
                       style="color: <%= rate_hex_color(stats[:rate]) %>">
                   <%= habit_progress_text(habit, stats) %>
@@ -113,8 +83,6 @@
                      style="width: <%= stats[:rate] %>%; background-color: <%= rate_hex_color(stats[:rate]) %>;">
                 </div>
               </div>
-
-              <%# 数値型: 実績補正フィールド %>
               <% if habit.numeric_type? %>
                 <div class="flex items-center gap-2 mt-2 pt-2 border-t border-gray-100">
                   <label for="correction_<%= habit.id %>"
@@ -145,7 +113,7 @@
   <% end %>
 
   <%# ==========================================
-      振り返りフォーム（リフレクション3項目対応）
+      振り返りフォーム
   ========================================== %>
   <%= form_with model: @weekly_reflection,
                 url: weekly_reflections_path,
@@ -159,32 +127,15 @@
 
     <%= render "shared/form_errors", model: @weekly_reflection %>
 
-    <%# ────────────────────────────────────────────────────────
-        リフレクション3項目（なぜ？→ どう？→ からの？）
-        ──────────────────────────────────────────────────────── %>
     <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
       <h3 class="text-sm font-bold text-gray-700">📝 振り返りのポイント</h3>
 
-      <%# ①「なぜ？」direct_reason ────────────────────────────────────────── %>
-      <%#
-        【フィールドの意図】
-          「できなかった直接の理由」を1つ書いてもらう。
-          リフレクション手法の「Why（なぜ）」に対応する。
-          プレースホルダーで「理由を1つ」と誘導することで、
-          漠然とした「忙しかった」ではなく具体的な原因を引き出す。
-
-        【DB カラム】direct_reason（テキスト型、任意）
-      %>
       <div>
         <%= f.label :direct_reason,
               class: "block text-sm font-semibold text-gray-700 mb-1" do %>
           なぜ？<span class="font-normal text-gray-500 ml-1">（直接の原因）</span>
         <% end %>
         <p class="text-xs text-gray-500 mb-2">できなかった理由を1つ書いてみましょう</p>
-        <%#
-          data-action で音声入力ボタン（将来実装）との連携を想定。
-          現時点では通常のテキストエリアとして動作する。
-        %>
         <%= f.text_area :direct_reason,
             rows: 3,
             placeholder: "なぜできなかったのか？理由を1つ書いてみましょう（例: 残業が続き、帰宅後に動ける体力が残っていなかった）",
@@ -194,18 +145,6 @@
                     resize-none transition-colors" %>
       </div>
 
-      <%# ②「どう？」background_situation ─────────────────────────────────── %>
-      <%#
-        【フィールドの意図】
-          「来週どう改善するか」を具体的に書いてもらう。
-          リフレクション手法の「How（どう）」に対応する。
-          DB カラム名は background_situation（旧: 背景・状況）だが、
-          ラベルを「どうすれば来週は変えられそうですか？」に変更することで
-          改善策として機能させる。
-
-        【DB カラム】background_situation（テキスト型、任意）
-                    ※カラム名変更不可のため旧名のまま使用
-      %>
       <div>
         <%= f.label :background_situation,
               class: "block text-sm font-semibold text-gray-700 mb-1" do %>
@@ -221,16 +160,6 @@
                     resize-none transition-colors" %>
       </div>
 
-      <%# ③「からの？」next_action ─────────────────────────────────────────── %>
-      <%#
-        【フィールドの意図】
-          「この振り返りから他の習慣や行動に活かせること」を書いてもらう。
-          リフレクション手法の「Next（からの）」に対応する。
-          例: 「朝型習慣を筋トレだけでなく読書にも広げる」
-
-        【DB カラム】next_action（テキスト型、任意）
-                    このマイグレーションで新規追加したカラム。
-      %>
       <div>
         <%= f.label :next_action,
               class: "block text-sm font-semibold text-gray-700 mb-1" do %>
@@ -246,16 +175,7 @@
                     resize-none transition-colors" %>
       </div>
     </div>
-    <%# ────────────────────────────────────────────────────────────────────── %>
 
-    <%# 自由コメント（任意）reflection_comment ──────────────────────────────── %>
-    <%#
-      【フィールドの意図】
-        上記3項目に収まらない感想・気づきを自由に書いてもらう。
-        任意入力であることをラベルで明示する。
-
-      【DB カラム】reflection_comment（テキスト型、任意・1000文字以内）
-    %>
     <div>
       <%= f.label :reflection_comment, class: "block text-sm font-semibold text-gray-700 mb-1" do %>
         自由コメント<span class="font-normal text-gray-400 ml-1">（任意）</span>
@@ -272,7 +192,6 @@
                   resize-none transition-colors" %>
     </div>
 
-    <%# ボタンエリア %>
     <div class="flex justify-end items-center gap-4 pt-2">
       <%= link_to "キャンセル", weekly_reflections_path,
           class: "px-5 py-3 bg-white border border-gray-300 text-gray-700 text-sm font-semibold
@@ -291,3 +210,20 @@
   <% end %>
 
 </div>
+
+<%#
+  ─────────────────────────────────────────────────────────────────────────────
+  D-5: 危機介入モーダル（13-M）
+  ─────────────────────────────────────────────────────────────────────────────
+  【なぜ </div> の外（ページの末尾）に置くのか】
+    position: fixed のモーダルは DOM の最上位に近い位置に置くと
+    CSS のスタッキングコンテキストの問題を回避できる。
+    親要素の transform/transition が fixed の基準を変えてしまう問題を防ぐ。
+
+  【flash[:crisis] の引き継ぎについて】
+    この new アクションへのリダイレクト時に flash[:crisis] = true が
+    セットされている場合、このパーシャルの Stimulus コントローラーが
+    connect() で data-crisis-intervention-show-value="true" を確認し、
+    モーダルを自動表示する。
+%>
+<%= render "shared/crisis_intervention_modal" %>

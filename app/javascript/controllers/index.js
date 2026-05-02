@@ -82,3 +82,15 @@ application.register("task-toggle", TaskToggleController)
 //   ケバブケース task-menu に変換されてHTMLの属性名になる。
 import TaskMenuController from "./task_menu_controller"
 application.register("task-menu", TaskMenuController)
+
+// ── D-5 追加: crisis-intervention コントローラーを登録する ──────────────────
+//
+// 【このコントローラーの役割】
+//   振り返り入力・PMVV 入力で危機ワードが検出されたとき、
+//   相談窓口情報を表示するモーダルを制御する。
+//   法規・安全対応として最優先で実装する機能。
+//
+// 【登録名 "crisis-intervention" について】
+//   HTML 側の data-controller="crisis-intervention" と対応する。
+import CrisisInterventionController from "./crisis_intervention_controller"
+application.register("crisis-intervention", CrisisInterventionController)
