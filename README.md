@@ -74,7 +74,8 @@ flowchart LR
 [![D-2 PMVV AI分析ジョブ](https://img.shields.io/badge/D--2_PMVV_AI分析ジョブ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-2-purpose-analysis-job)
 [![D-3 PMVV目標管理・AI分析結果ページ](https://img.shields.io/badge/D--3_PMVV目標管理・AI分析結果-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-3-pmvv-show-and-ai-result)
 [![D-4 週次振り返りAI分析ジョブ](https://img.shields.io/badge/D--4_週次振り返りAI分析ジョブ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-4-weekly-reflection-analysis-job)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-26%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![D-5 危機介入機能](https://img.shields.io/badge/D--5_危機介入機能-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-5-crisis-intervention)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-27%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -166,6 +167,7 @@ flowchart LR
 | #D-2 | PMVV AI分析ジョブ（GoodJob + Gemini API / Groq フォールバック） | 2026-04-25 | feature/D-2-purpose-analysis-job |
 | #D-3 | PMVV目標管理ページ（16番）・AI分析結果ページ（18番） | 2026-04-26 | feature/D-3-pmvv-show-and-ai-result |
 | #D-4 | 週次振り返りAI分析ジョブ（GoodJob + Gemini API / Groq フォールバック） | 2026-04-26 | feature/D-4-weekly-reflection-analysis-job |
+| #D-5 | 危機介入機能（Railsキーワード検出 + プロンプトルール） | 2026-05-03 | feature/D-5-crisis-intervention |
 
 <br>
 
@@ -3055,6 +3057,119 @@ D-4テスト: 10件（ジョブ8件・サービス2件）
 
 <br>
 
+### #D-5: 危機介入機能（Railsキーワード検出 + プロンプトルール）
+
+<br>
+
+**ブランチ:** `feature/D-5-crisis-intervention`<br>
+**完了日:** 2026-05-03<br>
+**概要:** 振り返り入力・PMVV入力で危機ワード（「死にたい」「消えたい」等）を検出した場合、<br>
+AI分析をスキップして危機介入モーダルを表示。`crisis_detected=true` を `ai_analyses` テーブルに記録する。<br>
+⚠️ 法規・安全対応として最優先で実装した機能。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Module | `CrisisDetector` モジュールを新規作成（`app/models/concerns/`）<br>`CRISIS_KEYWORDS` 定数（30件のバリエーション）・`CRISIS_PATTERN` 正規表現・`before_validation :check_crisis_keywords`・`crisis_word_detected?` 述語メソッド |
+| Model | `WeeklyReflection` に `CrisisDetector` をインクルード。`crisis_text_fields` で全4フィールドを対象に指定 |
+| Model | `UserPurpose` に `CrisisDetector` をインクルード。`crisis_text_fields` で全5フィールドを対象に指定 |
+| Service | `WeeklyReflectionCompleteService` を更新<br>crisis 検出時は `WeeklyReflectionAnalysisJob` をスキップ<br>`crisis_detected=true` の `AiAnalysis` を記録<br>戻り値に `crisis_detected: Boolean` キーを追加 |
+| Controller | `WeeklyReflectionsController#create` を更新<br>crisis 検出時に `flash[:crisis] = true` をセット<br>`weekly_reflections_path`（一覧）または `dashboard_path`（ロック解除時）にリダイレクト |
+| Controller | `UserPurposesController#create` / `#update` を更新<br>crisis 検出時に `PurposeAnalysisJob` をスキップ<br>`analysis_state` を `failed` に更新（「AI分析待機中...」バナーが永久に残るのを防ぐ）<br>`flash[:crisis] = true` をセットして `user_purpose_path` にリダイレクト |
+| JS | `crisis_intervention_controller.js` を新規作成（Stimulusコントローラー）<br>デスクトップ（768px以上）: 画面中央オーバーレイモーダル<br>スマホ（768px未満）: ボトムシート（`translateY` アニメーション）<br>「入力を続ける」ボタンのみで閉じる設計（Escape・オーバーレイクリックでは閉じない） |
+| View | `shared/_crisis_intervention_modal.html.erb` を新規作成（Stimulusコントローラーのルート要素）<br>`data-crisis-intervention-show-value` で `flash[:crisis]` を受け取り自動表示を制御 |
+| View | `shared/_crisis_modal_content.html.erb` を新規作成（デスクトップ・スマホ共通コンテンツ）<br>🌸アイコン・よりそいホットライン（0120-279-338・24時間）・いのちの電話（0120-783-556）を表示<br>`clamp()` でレスポンシブなフォントサイズ自動調整を実装 |
+| View | `weekly_reflections/index.html.erb` にモーダルを追加（振り返り一覧・crisis のリダイレクト先） |
+| View | `weekly_reflections/new.html.erb` にモーダルを追加（13-M） |
+| View | `user_purposes/new.html.erb` / `edit.html.erb` / `show.html.erb` にモーダルを追加（17-M） |
+| View | `dashboards/index.html.erb` にモーダルを追加（ロック解除 + crisis 時のリダイレクト先） |
+| Layout | `application.html.erb` の `flash.each` に `next if message_type.to_s == "crisis"` を追加<br>`flash[:crisis]` の `true` が「true」としてトースト表示されるバグを修正 |
+| Prompt | `WeeklyReflectionAnalysisJob` / `PurposeAnalysisJob` の `build_prompt` に危機検出ルールを明記<br>通常の落ち込み表現（「つらい」「疲れた」等）と危機ワードの区別基準をAIに指示 |
+| Test | `test/models/concerns/crisis_detector_test.rb` を新規作成（11件）<br>`test/services/weekly_reflection_complete_service_crisis_test.rb` を新規作成（5件）<br>`test/models/habit_record_memo_test.rb` の `record_date` 日付衝突バグを修正（2026-05 → 2025-01） |
+
+<br>
+
+#### 相談窓口情報（モーダル表示内容）
+
+<br>
+
+| 窓口 | 電話番号 | 対応時間 | 費用 |
+|:---|:---|:---|:---|
+| よりそいホットライン | 0120-279-338 | 24時間・365日 | 無料 |
+| いのちの電話 | 0120-783-556 | 毎日16〜21時（毎月10日24時間） | 無料 |
+
+<br>
+
+出典: [よりそいホットライン](https://www.yorisoi-hotline.jp/) / [いのちの電話](https://www.inochi.or.jp/)
+
+<br>
+
+#### crisis 検出フローの設計
+
+<br>
+
+```
+ユーザーが振り返り/PMVV を送信
+  ↓
+WeeklyReflection / UserPurpose の before_validation が実行
+  ↓
+CrisisDetector#check_crisis_keywords が全フィールドを CRISIS_PATTERN でスキャン
+  ↓
+        危機ワードあり？
+        ↙             ↘
+      Yes               No
+       ↓                 ↓
+crisis_word_detected    通常処理
+= true                  AI ジョブをエンキュー
+       ↓
+AI ジョブをスキップ
+crisis_detected=true の
+AiAnalysis を記録
+       ↓
+flash[:crisis] = true
+適切なページにリダイレクト
+       ↓
+Stimulus connect() が
+show-value="true" を検出
+       ↓
+🌸 危機介入モーダルを表示
+       ↓
+「入力を続ける」でモーダルを閉じる
+```
+
+<br>
+
+#### 設計上の重要判断
+
+<br>
+
+| 判断 | 理由 |
+|:---|:---|
+| 振り返り・PMVV の保存自体は続行する | ユーザーを詰まらせない。「記録はされた」という安心感を提供する |
+| ロック解除も通常通り実行する | crisis 検出は保存の「失敗」ではなく「特別な状態」のため |
+| AI 分析ジョブのみスキップする | AI が危機的な感情を「改善ポイント」として分析することへの配慮 |
+| `crisis_detected=true` を DB に記録する | 運営者がサポートが必要なユーザーを把握できる設計。将来のフォローアップ通知にも活用可能 |
+| オーバーレイクリック・Escape では閉じない | ユーザーに必ず一度情報を目にしてもらうための設計 |
+| `analysis_state` を `failed` に更新する | pending のままだと「AI分析待機中...」バナーが永久に表示され続けるため |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+D-5テスト: 16件（CrisisDetectorテスト11件・WeeklyReflectionCompleteService危機介入テスト5件）
+全テスト:  510 runs, 1294 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -4607,6 +4722,75 @@ end
 
 <br>
 
+### 60. 危機介入モーダルのリダイレクト先は「振り返り完了後の遷移先」に合わせる（#D-5）
+
+<br>
+
+振り返り完了後は `completed_at` がセットされるため、<br>
+`/weekly_reflections/new` にリダイレクトすると `new` アクションの冒頭ガード<br>
+（`completed? == true` → `/weekly_reflections` に強制リダイレクト）に引っかかる。<br>
+結果として flash が2回のリダイレクトをまたいで届かず、モーダルが表示されない。<br>
+crisis 時のリダイレクト先は「振り返り完了後に自然に遷移するページ」に合わせること。
+
+<br>
+
+```
+通常完了時: /weekly_reflections（一覧）または /dashboard（ロック解除時）
+crisis 時:  同じリダイレクト先 + flash[:crisis] = true でモーダルをトリガー
+```
+
+<br>
+
+### 61. `flash.each` でカスタムフラグが「true」として表示されるバグ（#D-5）
+
+<br>
+
+`flash[:crisis] = true` を設定すると、`application.html.erb` の `flash.each` が<br>
+`"crisis" => true` を拾い、「true」という文字列がトースト通知として表示されるバグが発生する。<br>
+`flash.each` に `next if message_type.to_s == "crisis"` を追加することで<br>
+内部フラグとして使う flash キーを通知表示の対象から除外できる。<br>
+`ActionDispatch::Flash::FlashHash` には `except` メソッドが存在しないため、<br>
+`flash.except("crisis").each` とは書けない点に注意すること。
+
+<br>
+
+```ruby
+# ❌ FlashHash には except メソッドがない → NoMethodError
+flash.except("crisis").each do |message_type, message|
+
+# ✅ each の中で next でスキップする
+flash.each do |message_type, message|
+  next if message_type.to_s == "crisis"  # ← 内部フラグをスキップ
+  ...
+end
+```
+
+<br>
+
+### 62. CSS の `clamp()` でモーダルのフォントサイズをレスポンシブ対応する（#D-5）
+
+<br>
+
+スマホ（375px）でモーダル内の電話番号が折り返されないようにするには<br>
+`font-size: clamp(最小値, 推奨値, 最大値)` を使うことで画面幅に応じた自動調整ができる。<br>
+`white-space: nowrap` + `flex-shrink: 0` を電話番号に適用することで折り返しを完全に防ぎ、<br>
+左側の窓口名（`flex: 1 1 auto; min-width: 0`）が縮んで電話番号を守るレイアウトにする。
+
+<br>
+
+```css
+/* 電話番号: 折り返し禁止・縮小禁止 */
+font-size: clamp(14px, 3.8vw, 18px);
+white-space: nowrap;
+flex-shrink: 0;
+
+/* 窓口名: 画面幅に合わせて縮小可 */
+flex: 1 1 auto;
+min-width: 0;
+```
+
+<br>
+
 ---
 
 <br>
@@ -5105,7 +5289,9 @@ habitflow/
 │   │   ├── user_setting.rb                    # ユーザー設定（rest_mode_active?・#B-3で参照）
 │   │   ├── task.rb                        # 変更: toggle_complete!/archive! メソッド追加・done?ガード（#C-2）
 │   │   ├── user_purpose.rb                # #D-1 新規: PMVVモデル（enum:analysis_state / before_validation:set_version / before_save:deactivate_previous_versions / current_for）
-│   │   └── ai_analysis.rb                 # #D-2 新規: AI分析結果モデル（is_latest 管理・before_create コールバック・analysis_type enum）
+│   │   ├── ai_analysis.rb                 # #D-2 新規: AI分析結果モデル（is_latest 管理・before_create コールバック・analysis_type enum）
+│   │   └── concerns/
+│   │       └── crisis_detector.rb         # #D-5 新規: 危機ワード検出モジュール（CRISIS_KEYWORDS 30件・CRISIS_PATTERN・before_validation・crisis_word_detected?）
 │   ├── services/
 │   ├── weekly_reflection_complete_service.rb  # 変更: WeeklyReflectionTaskSummary追加（#C-4）・enqueue_analysis_job_if_eligible 追加（#D-4）
 │   │   ├── habit_record_save_service.rb            # #A-7 #B-1: 習慣記録保存フロー（数値型対応・errors:[]配列形式統一）
@@ -5124,6 +5310,7 @@ habitflow/
 │   │   ├── task_menu_controller.js        # #C-3 新規: タスク削除確認モーダル（⋯メニュー・デスクトップ中央モーダル/スマホボトムシート・turbo:submit-end でクローズ・_injectTabToForms タブ維持）
 │   │   ├── voice_input_controller.js      # #B-7 新規: 音声入力（Web Speech API・graceful degradation対応・未対応ブラウザで🎤非表示）
 │   │   ├── alarm_toggle_controller.js                  # #C-5 新規: アラームOFF時に分数入力欄をdisabledにする
+│   │   ├── crisis_intervention_controller.js  # #D-5 新規: 危機介入モーダル制御（デスクトップ中央モーダル/スマホボトムシート・Escape/オーバーレイクリックで閉じない設計）
 │   │   └── voice_input_controller.js      # #B-7 新規→#D-1 で voice_field パーシャルと連携強化: 音声入力（Web Speech API）
 │   ├── helpers/
 │   │   └── application_helper.rb                       # #C-6 追加: rate_hex_color / habit_progress_text（達成率カラー・表記の全画面統一）
@@ -5146,7 +5333,9 @@ habitflow/
 │       ├── habit_records/                 # 習慣記録パーシャル（変更: 状態バッジ5パターン #B-3）
 │       ├── weekly_reflections/            # 変更: show.html.erb にタスク実績セクション追加（#C-4）
 │       ├── shared/                        # 変更: _flash_message.html.erb を新規作成（#C-3）・_header.html.erb に「目標管理」リンク追加（#D-1）
-│           └── _ai_disclaimer.html.erb           # #D-3 新規: AI免責バナーパーシャル（全AI出力ページ共通・aria-label対応）
+│           ├── _ai_disclaimer.html.erb           # #D-3 新規: AI免責バナーパーシャル（全AI出力ページ共通・aria-label対応）
+│           ├── _crisis_intervention_modal.html.erb  # #D-5 新規: 危機介入モーダルラッパー（Stimulusコントローラー・show-value で自動表示制御）
+│           └── _crisis_modal_content.html.erb       # #D-5 新規: 危機介入モーダルコンテンツ（よりそいホットライン・いのちの電話・clamp()レスポンシブ対応）
 │       ├── errors/                        # 404・422・500 エラーページ
 │       ├── task_mailer/                                # #C-5 新規: アラーム通知メールビュー
 │       │   ├── alarm_notification.html.erb             # HTMLメール本文
@@ -5230,12 +5419,13 @@ habitflow/
     ├── services/
     │   ├── application_record_with_transaction_test.rb  # #A-7: with_transaction の動作確認（5テスト）
     │   ├── weekly_reflection_complete_service_test.rb   # 変更: 補正ロジック・再補正・セキュリティテスト追加（#B-1）
-    │   └── habit_record_save_service_test.rb            # #A-7: 習慣記録フローのテスト（3テスト）
+    │   ├── habit_record_save_service_test.rb            # #A-7: 習慣記録フローのテスト（3テスト）
+    │   └── weekly_reflection_complete_service_crisis_test.rb  # #D-5 新規（5件：ジョブスキップ・crisis_detected:true返却・AiAnalysis記録・振り返り保存続行・通常ワードはジョブ実行）
     ├── fixtures/
     │   └── weekly_reflection_task_summaries.yml  # #C-4 新規
     ├── jobs/
     │   ├── purpose_analysis_job_test.rb   # #D-2 新規（6件：正常系・nil返却・不正JSON・actions配列チェック・前後文章パース）
-│   │   └── weekly_reflection_analysis_job_test.rb  # #D-4 新規（8件：正常系・nil返却・PMVV有無・月次上限・discard_on）
+    │   └── weekly_reflection_analysis_job_test.rb  # #D-4 新規（8件：正常系・nil返却・PMVV有無・月次上限・discard_on）
     ├── models/
     │   ├── habit_record_test.rb              # 変更: numeric_value バリデーション・Service経由保存テスト追加（#B-1）
     │   ├── habit_excluded_day_test.rb     # #B-2: 除外日モデルテスト（15件）
@@ -5244,7 +5434,9 @@ habitflow/
     │   ├── habit_sort_test.rb             # #B-6: カラー・アイコンバリデーション・acts_as_list 動作確認（8件）
     │   ├── task_test.rb                   # 変更: soft_delete・ai_generated? テスト4件追加（#C-3・計28件）
     │   ├── weekly_reflection_task_summary_test.rb  # #C-4 新規（21件：バリデーション・UNIQUE制約・アソシエーション・クラスメソッド・スコープ・インスタンスメソッド）
-    │   └── ai_analysis_test.rb            # #D-2 新規（5件：バリデーション・is_latest コールバック・scope :latest）
+    │   ├── ai_analysis_test.rb            # #D-2 新規（5件：バリデーション・is_latest コールバック・scope :latest）
+    │   └── concerns/
+    │       └── crisis_detector_test.rb        # #D-5 新規（11件：各フィールドでの検出・通常ワード非検出・WeeklyReflection/UserPurpose両対応）
     ├── integration/
     │   ├── numeric_habit_flow_test.rb   # #B-1 追加: 数値型習慣の統合テスト（E2E・6ケース）
     │   └── memo_flow_test.rb              # #B-7: メモ保存・部分更新・バリデーションエラー・スペース変換テスト（6件）
@@ -5284,7 +5476,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-494 runs, 1272 assertions, 0 failures, 0 errors, 0 skips
+510 runs, 1294 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
