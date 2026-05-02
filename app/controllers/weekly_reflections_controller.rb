@@ -1,16 +1,23 @@
 # app/controllers/weekly_reflections_controller.rb
 #
 # ==============================================================================
-# WeeklyReflectionsController（B-2: 除外日対応）
+# WeeklyReflectionsController（D-5: 危機介入機能を追加）
 # ==============================================================================
-# 【B-2 での変更内容】
-#   ① @habits 取得時に includes(:habit_excluded_days) を追加（N+1防止）
-#   ② build_habit_stats のチェック型の分母を effective_weekly_target に変更
+# 【D-5 での変更内容】
+#   create アクションで WeeklyReflectionCompleteService の戻り値に
+#   crisis_detected: true が含まれている場合、
+#   flash[:crisis] にフラグを立てて振り返り入力ページにリダイレクトする。
+#   このフラグをビューが受け取って危機介入モーダルを表示する。
+#
+# 【なぜ flash を使うのか】
+#   リダイレクト後のページ（new.html.erb）でモーダルを表示するために、
+#   リダイレクト前のリクエストのデータをリダイレクト後に渡す手段として
+#   flash が最適。flash は1リクエストだけ生きるセッション情報。
 # ==============================================================================
 
 class WeeklyReflectionsController < ApplicationController
   before_action :require_login
-  before_action :set_weekly_reflection, only: [ :show ]
+  before_action :set_weekly_reflection, only: [:show]
 
   def index
     @weekly_reflections = current_user.weekly_reflections
@@ -19,8 +26,6 @@ class WeeklyReflectionsController < ApplicationController
                                       .includes(:habit_summaries)
 
     @current_week_reflection = WeeklyReflection.find_or_build_for_current_week(current_user)
-
-    # includes(:habit_excluded_days)（B-2 追加）
     @habits = current_user.habits.active.includes(:habit_excluded_days)
     @habit_stats = build_habit_stats(@habits, current_user)
   end
@@ -34,10 +39,8 @@ class WeeklyReflectionsController < ApplicationController
       return
     end
 
-    # includes(:habit_excluded_days)（B-2 追加）
     @habits = current_user.habits.active.includes(:habit_excluded_days)
     @habit_stats = build_habit_stats(@habits, current_user)
-
     @achieved_habits     = @habits.select { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
     @not_achieved_habits = @habits.reject { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
   end
@@ -64,6 +67,35 @@ class WeeklyReflectionsController < ApplicationController
     if result[:success]
       current_user.reload
 
+      # ── D-5 追加: 危機ワード検出時の分岐 ────────────────────────────────
+      #
+      # 【なぜ crisis_detected: true でも success: true を返すのか】
+      #   振り返りの保存自体は成功しているため、success: true になる。
+      #   crisis 検出は「保存の失敗」ではなく「特別な状態」なので、
+      #   success の中に crisis_detected フラグを含めて判断する。
+      #
+      # 【flash[:crisis] の使い方】
+      #   リダイレクト先のビューで `flash[:crisis]` が true なら
+      #   危機介入モーダルを自動表示する（JavaScript で制御）。
+      #   flash は1リクエスト分のみ有効なので、ページ遷移後は自動でクリアされる。
+      if result[:crisis_detected]
+        Rails.logger.warn "[WeeklyReflectionsController] 危機ワード検出: user_id=#{current_user.id}"
+
+        # flash[:crisis]: JavaScript がモーダルを表示するためのトリガー
+        flash[:crisis] = true
+
+        # ロック解除済みなら unlock バナーも表示する
+        if was_locked
+          flash[:unlock] = "振り返りが完了しました。PDCAロックが解除されました。🔓"
+        end
+
+        # 振り返り入力ページに戻す（保存は完了しているのでダッシュボードでもよいが、
+        # モーダルを見てもらうために振り返りページに留める）
+        redirect_to new_weekly_reflection_path
+        return
+      end
+      # ────────────────────────────────────────────────────────────────────────
+
       if was_locked
         flash[:unlock] = "振り返りが完了しました！PDCAロックが解除されました。今週も頑張りましょう！🔓"
         redirect_to dashboard_path
@@ -74,7 +106,6 @@ class WeeklyReflectionsController < ApplicationController
     else
       Rails.logger.error "WeeklyReflectionCompleteService failed: #{result[:error]}"
 
-      # includes(:habit_excluded_days)（B-2 追加）
       @habits = current_user.habits.active.includes(:habit_excluded_days)
       @habit_stats = build_habit_stats(@habits, current_user)
       @achieved_habits     = @habits.select { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
@@ -86,28 +117,12 @@ class WeeklyReflectionsController < ApplicationController
   end
 
   def show
-    # habit_name はスナップショット列のため habit の eager loading は不要
-    # .to_a で配列化し .count / .size がメモリ上で完結するようにする
     @habit_summaries = @weekly_reflection.habit_summaries
                                          .order(achievement_rate: :desc)
                                          .to_a
-
-    # ── C-4 追加 ──────────────────────────────────────────────────────────────
-    # @task_summaries: タスクスナップショットを優先度昇順（must→should→could）で取得
-    #
-    # .by_priority スコープを使う理由:
-    #   must(0) < should(1) < could(2) の数値順で ORDER BY priority ASC になるため、
-    #   重要度の高いタスクが先頭に並ぶ。
-    #
-    # .to_a で配列化する理由:
-    #   ビューで .select / .count / .size を複数回呼ぶ場合、
-    #   .to_a でメモリに読み込んでおくことで毎回 SQL が発行されるのを防ぐ。
-    #   N+1 クエリを防ぎパフォーマンスを向上させる。
-    @task_summaries = @weekly_reflection.task_summaries
+    @task_summaries  = @weekly_reflection.task_summaries
                                          .by_priority
                                          .to_a
-    # ──────────────────────────────────────────────────────────────────────────
-
     @overall_achievement_rate = calculate_overall_achievement_rate
   end
 
@@ -141,7 +156,6 @@ class WeeklyReflectionsController < ApplicationController
                 .find_by(week_start_date: last_week)
   end
 
-  # build_habit_stats（B-2: 除外日対応に更新）
   def build_habit_stats(habits, user)
     today      = HabitRecord.today_for_record
     week_start = today.beginning_of_week(:monday)
@@ -170,7 +184,6 @@ class WeeklyReflectionsController < ApplicationController
 
     habits.each_with_object({}) do |habit, hash|
       if habit.check_type?
-        # 【B-2 変更】分母を effective_weekly_target に変更
         target          = habit.effective_weekly_target
         completed_count = check_counts[habit.id] || 0
         rate = target.zero? ? 0 :

@@ -192,3 +192,10 @@
 
   <% end %>
 </div>
+
+<%#
+  D-5: 危機介入モーダル（17-M）
+  UserPurposesController#create が flash[:crisis] = true をセットした場合、
+  Stimulus が自動でモーダルを表示する。
+%>
+<%= render "shared/crisis_intervention_modal" %>

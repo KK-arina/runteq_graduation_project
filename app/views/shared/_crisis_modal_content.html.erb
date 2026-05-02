@@ -1,0 +1,140 @@
+<%# app/views/shared/_crisis_modal_content.html.erb %>
+<%#
+  ==============================================================================
+  危機介入モーダルのコンテンツ（デスクトップ・スマホ共通）
+  ==============================================================================
+
+  【このパーシャルの役割】
+    デスクトップ用モーダルとスマホ用ボトムシートの両方から
+    render される共通コンテンツ。
+    相談窓口情報と「入力を続ける」ボタンを提供する。
+
+  【文言の設計方針】
+    - 「あなたに問題があります」「危険です」などの批判的な表現は使わない
+    - 「少し立ち止まりませんか」という寄り添う表現を使う
+    - 相談することへのハードルを下げる言葉遣いにする
+    - 「入力を続ける」ボタンを大きく表示して、ユーザーを詰まらせない
+
+  【相談窓口情報】
+    よりそいホットライン: 0120-279-338（24時間・365日・無料）
+      出典: https://www.yorisoi-hotline.jp/
+      ※ 2024年現在も継続して運営されていることを確認済み
+
+    いのちの電話: 0120-783-556（毎日16時〜21時、毎月10日24時間）
+      出典: https://www.inochi.or.jp/
+      ※ 2024年現在も継続して運営されていることを確認済み
+==============================================================================
+%>
+
+<div style="padding: 24px 24px 32px;">
+
+  <%# ─── ヘッダー ─────────────────────────────────────────── %>
+  <div style="text-align: center; margin-bottom: 20px;">
+    <%# 🌸 アイコン: 脅威ではなく「寄り添い」「希望」のイメージ %>
+    <div style="font-size: 48px; margin-bottom: 12px;">🌸</div>
+    <h2 style="font-size: 20px; font-weight: 700; color: #065f46; margin: 0 0 8px;">
+      少し立ち止まりませんか
+    </h2>
+    <p style="font-size: 14px; color: #374151; line-height: 1.7; margin: 0;">
+      今、つらい気持ちを抱えているかもしれません。<br>
+      一人で抱え込まずに、<strong>話を聞いてくれる人や窓口</strong>があります。
+    </p>
+  </div>
+
+  <%# ─── 緑の情報バナー ────────────────────────────────────── %>
+  <div style="padding: 14px 16px; background: #f0fdf4; border: 1px solid #bbf7d0;
+              border-radius: 12px; margin-bottom: 20px;">
+    <p style="font-size: 13px; color: #065f46; line-height: 1.7; margin: 0;">
+      入力内容はすでに保存されています。<br>
+      準備ができたときに「入力を続ける」を押してください。
+    </p>
+  </div>
+
+  <%# ─── 相談窓口カード ───────────────────────────────────── %>
+  <div style="margin-bottom: 20px;">
+    <p style="font-size: 12px; font-weight: 700; color: #6b7280; text-transform: uppercase;
+              letter-spacing: 0.5px; margin-bottom: 12px;">
+      📞 相談窓口（無料・匿名でご利用いただけます）
+    </p>
+
+    <%#
+      よりそいホットライン
+      出典: https://www.yorisoi-hotline.jp/
+      24時間・365日対応の全国共通ダイヤル（無料）
+      一般社団法人 社会的包摂サポートセンターが運営
+    %>
+    <div style="display: flex; justify-content: space-between; align-items: center;
+                padding: 14px 16px; background: white; border: 1px solid #d1fae5;
+                border-radius: 10px; margin-bottom: 10px;">
+      <div>
+        <p style="font-size: 14px; font-weight: 700; color: #1f2937; margin: 0 0 2px;">
+          よりそいホットライン
+        </p>
+        <p style="font-size: 12px; color: #6b7280; margin: 0;">
+          24時間・365日・無料
+        </p>
+      </div>
+      <%# 電話番号を大きく表示して視認性を高める %>
+      <a href="tel:0120-279-338"
+         style="font-size: 18px; font-weight: 800; color: #065f46;
+                text-decoration: none; letter-spacing: 0.5px;">
+        0120-279-338
+      </a>
+    </div>
+
+    <%#
+      いのちの電話
+      出典: https://www.inochi.or.jp/
+      毎日16時〜21時（毎月10日のみ24時間）
+      公益社団法人 日本いのちの電話連盟が運営
+    %>
+    <div style="display: flex; justify-content: space-between; align-items: center;
+                padding: 14px 16px; background: white; border: 1px solid #d1fae5;
+                border-radius: 10px;">
+      <div>
+        <p style="font-size: 14px; font-weight: 700; color: #1f2937; margin: 0 0 2px;">
+          いのちの電話
+        </p>
+        <p style="font-size: 12px; color: #6b7280; margin: 0;">
+          毎日16〜21時（毎月10日24時間）・無料
+        </p>
+      </div>
+      <a href="tel:0120-783-556"
+         style="font-size: 18px; font-weight: 800; color: #065f46;
+                text-decoration: none; letter-spacing: 0.5px;">
+        0120-783-556
+      </a>
+    </div>
+  </div>
+
+  <%# ─── 注意書き ─────────────────────────────────────────── %>
+  <p style="font-size: 11px; color: #9ca3af; text-align: center;
+             line-height: 1.6; margin-bottom: 20px;">
+    ※ 相談内容の秘密は守られます（相談機関の規定に従います）。<br>
+    ※ AI による分析は今回スキップしました。入力内容は保存済みです。
+  </p>
+
+  <%#
+    ─── 「入力を続ける」ボタン ──────────────────────────────
+    【data-action の説明】
+      "crisis-intervention#closeModal" で Stimulus コントローラーの
+      closeModal() メソッドを呼び出す。
+      モーダルを閉じるだけで、ページ遷移は行わない。
+
+    【なぜ button タグを使うのか】
+      link_to は GET リクエストのために使う。
+      ここではページ遷移せずモーダルを閉じるだけなので button が適切。
+  %>
+  <button
+    type="button"
+    data-action="crisis-intervention#closeModal"
+    style="width: 100%; padding: 14px; background: #10b981; color: white;
+           font-size: 15px; font-weight: 700; border: none; border-radius: 12px;
+           cursor: pointer; transition: background 0.2s;"
+    onmouseover="this.style.background='#059669'"
+    onmouseout="this.style.background='#10b981'"
+  >
+    入力を続ける
+  </button>
+
+</div>
