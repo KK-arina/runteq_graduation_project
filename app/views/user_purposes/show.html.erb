@@ -192,3 +192,10 @@
 
   <% end %>
 </div>
+<%#
+  D-5: 危機介入モーダル（PMVV管理ページ）
+  UserPurposesController#create/update が crisis 検出時に
+  flash[:crisis] = true をセットして user_purpose_path にリダイレクトする。
+  show ページでモーダルを表示するために配置する。
+%>
+<%= render "shared/crisis_intervention_modal" %>

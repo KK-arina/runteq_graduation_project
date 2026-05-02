@@ -43,7 +43,7 @@ class HabitRecordMemoTest < ActiveSupport::TestCase
     record = HabitRecord.new(
       user:        @user,
       habit:       @habit,
-      record_date: Date.new(2026, 5, 1),
+      record_date: Date.new(2025, 1, 1),
       completed:   false,
       memo:        nil
     )
@@ -56,7 +56,7 @@ class HabitRecordMemoTest < ActiveSupport::TestCase
     record = HabitRecord.new(
       user:        @user,
       habit:       @habit,
-      record_date: Date.new(2026, 5, 2),
+      record_date: Date.new(2025, 1, 2),
       completed:   false,
       memo:        ""
     )
@@ -67,7 +67,7 @@ class HabitRecordMemoTest < ActiveSupport::TestCase
     record = HabitRecord.new(
       user:        @user,
       habit:       @habit,
-      record_date: Date.new(2026, 5, 3),
+      record_date: Date.new(2025, 1, 3),
       completed:   false,
       # "a" * 200 で200文字の文字列を作る
       memo:        "a" * 200
@@ -79,7 +79,7 @@ class HabitRecordMemoTest < ActiveSupport::TestCase
     record = HabitRecord.new(
       user:        @user,
       habit:       @habit,
-      record_date: Date.new(2026, 5, 4),
+      record_date: Date.new(2025, 1, 4),
       completed:   false,
       memo:        "a" * 201
     )
@@ -97,7 +97,7 @@ class HabitRecordMemoTest < ActiveSupport::TestCase
     record = HabitRecord.new(
       user:        @user,
       habit:       @habit,
-      record_date: Date.new(2026, 5, 5),
+      record_date: Date.new(2025, 1, 5),
       completed:   false,
       memo:        nil
     )
@@ -109,7 +109,7 @@ class HabitRecordMemoTest < ActiveSupport::TestCase
     record = HabitRecord.new(
       user:        @user,
       habit:       @habit,
-      record_date: Date.new(2026, 5, 6),
+      record_date: Date.new(2025, 1, 6),
       completed:   false,
       memo:        ""
     )
@@ -120,7 +120,7 @@ class HabitRecordMemoTest < ActiveSupport::TestCase
     record = HabitRecord.new(
       user:        @user,
       habit:       @habit,
-      record_date: Date.new(2026, 5, 7),
+      record_date: Date.new(2025, 1, 7),
       completed:   false,
       memo:        "今日は調子がよかった"
     )
@@ -133,7 +133,7 @@ class HabitRecordMemoTest < ActiveSupport::TestCase
     record = HabitRecord.new(
       user:        @user,
       habit:       @habit,
-      record_date: Date.new(2026, 5, 8),
+      record_date: Date.new(2025, 1, 8),
       completed:   false,
       memo:        "   "
     )

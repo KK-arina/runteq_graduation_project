@@ -162,6 +162,7 @@
         例: :notice.to_s → "notice"（文字列に変換される）
     %>
     <% flash.each do |message_type, message| %>
+      <% next if message_type.to_s == "crisis" %>
       <% type = message_type.to_s %>
 
       <div class="max-w-7xl mx-auto px-4 mt-4"

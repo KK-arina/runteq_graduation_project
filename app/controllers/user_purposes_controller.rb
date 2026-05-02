@@ -43,10 +43,15 @@ class UserPurposesController < ApplicationController
       if @user_purpose.crisis_word_detected?
         Rails.logger.warn "[UserPurposesController#create] 危機ワード検出: user_id=#{current_user.id}"
 
-        # crisis_detected=true の AiAnalysis を記録する
-        record_crisis_analysis_for_purpose(@user_purpose)
+        # ── D-5 修正: analysis_state を failed に更新する ──────────────────
+        # 【理由】
+        #   crisis 検出時は AI 分析ジョブをスキップするため、
+        #   pending のままだと「AI分析待機中...」バナーが永久に表示される。
+        #   update_columns でバリデーション・コールバックをスキップして
+        #   状態だけ更新する（deactivate_previous_versions の再実行を防ぐ）。
+        @user_purpose.update_columns(analysis_state: UserPurpose.analysis_states[:failed])
 
-        # flash[:crisis]: JavaScript がモーダルを表示するためのトリガー
+        record_crisis_analysis_for_purpose(@user_purpose)
         flash[:crisis] = true
         redirect_to user_purpose_path,
                     notice: "目標を保存しました。"
@@ -78,6 +83,10 @@ class UserPurposesController < ApplicationController
       # ── D-5 追加: 危機ワード検出時の分岐 ────────────────────────────────
       if @user_purpose.crisis_word_detected?
         Rails.logger.warn "[UserPurposesController#update] 危機ワード検出: user_id=#{current_user.id}"
+
+        # ── D-5 修正: analysis_state を failed に更新する ──────────────────
+        @user_purpose.update_columns(analysis_state: UserPurpose.analysis_states[:failed])
+
         record_crisis_analysis_for_purpose(@user_purpose)
         flash[:crisis] = true
         redirect_to user_purpose_path,

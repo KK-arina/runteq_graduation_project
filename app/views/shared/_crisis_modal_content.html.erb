@@ -3,134 +3,127 @@
   ==============================================================================
   危機介入モーダルのコンテンツ（デスクトップ・スマホ共通）
   ==============================================================================
-
-  【このパーシャルの役割】
-    デスクトップ用モーダルとスマホ用ボトムシートの両方から
-    render される共通コンテンツ。
-    相談窓口情報と「入力を続ける」ボタンを提供する。
-
-  【文言の設計方針】
-    - 「あなたに問題があります」「危険です」などの批判的な表現は使わない
-    - 「少し立ち止まりませんか」という寄り添う表現を使う
-    - 相談することへのハードルを下げる言葉遣いにする
-    - 「入力を続ける」ボタンを大きく表示して、ユーザーを詰まらせない
-
-  【相談窓口情報】
-    よりそいホットライン: 0120-279-338（24時間・365日・無料）
-      出典: https://www.yorisoi-hotline.jp/
-      ※ 2024年現在も継続して運営されていることを確認済み
-
-    いのちの電話: 0120-783-556（毎日16時〜21時、毎月10日24時間）
-      出典: https://www.inochi.or.jp/
-      ※ 2024年現在も継続して運営されていることを確認済み
-==============================================================================
+  【D-5 修正】
+    スマホ表示で電話番号が折り返される問題を修正。
+    - 電話番号に white-space: nowrap を追加（折り返し禁止）
+    - font-size に clamp() を使って画面幅に応じて自動調整
+    - 相談窓口カードを flex-wrap: wrap に変更してレイアウト崩れを防止
+  ==============================================================================
 %>
 
-<div style="padding: 24px 24px 32px;">
+<div style="padding: 20px 20px 28px;">
 
   <%# ─── ヘッダー ─────────────────────────────────────────── %>
-  <div style="text-align: center; margin-bottom: 20px;">
-    <%# 🌸 アイコン: 脅威ではなく「寄り添い」「希望」のイメージ %>
-    <div style="font-size: 48px; margin-bottom: 12px;">🌸</div>
-    <h2 style="font-size: 20px; font-weight: 700; color: #065f46; margin: 0 0 8px;">
+  <div style="text-align: center; margin-bottom: 16px;">
+    <div style="font-size: 44px; margin-bottom: 10px;">🌸</div>
+    <h2 style="font-size: clamp(16px, 4vw, 20px); font-weight: 700; color: #065f46; margin: 0 0 8px;">
       少し立ち止まりませんか
     </h2>
-    <p style="font-size: 14px; color: #374151; line-height: 1.7; margin: 0;">
+    <%#
+      clamp(最小値, 推奨値, 最大値) を使う理由:
+        画面幅に応じてフォントサイズが自動調整される。
+        スマホ（小画面）では小さく、デスクトップでは大きくなる。
+        最小・最大を固定することで極端なサイズ変化を防ぐ。
+    %>
+    <p style="font-size: clamp(12px, 2.8vw, 14px); color: #374151; line-height: 1.7; margin: 0;">
       今、つらい気持ちを抱えているかもしれません。<br>
       一人で抱え込まずに、<strong>話を聞いてくれる人や窓口</strong>があります。
     </p>
   </div>
 
   <%# ─── 緑の情報バナー ────────────────────────────────────── %>
-  <div style="padding: 14px 16px; background: #f0fdf4; border: 1px solid #bbf7d0;
-              border-radius: 12px; margin-bottom: 20px;">
-    <p style="font-size: 13px; color: #065f46; line-height: 1.7; margin: 0;">
+  <div style="padding: 12px 14px; background: #f0fdf4; border: 1px solid #bbf7d0;
+              border-radius: 12px; margin-bottom: 16px;">
+    <p style="font-size: clamp(11px, 3vw, 13px); color: #065f46; line-height: 1.7; margin: 0;">
       入力内容はすでに保存されています。<br>
       準備ができたときに「入力を続ける」を押してください。
     </p>
   </div>
 
   <%# ─── 相談窓口カード ───────────────────────────────────── %>
-  <div style="margin-bottom: 20px;">
-    <p style="font-size: 12px; font-weight: 700; color: #6b7280; text-transform: uppercase;
-              letter-spacing: 0.5px; margin-bottom: 12px;">
+  <div style="margin-bottom: 16px;">
+    <p style="font-size: clamp(10px, 2.8vw, 12px); font-weight: 700; color: #6b7280;
+              text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">
       📞 相談窓口（無料・匿名でご利用いただけます）
     </p>
 
     <%#
       よりそいホットライン
       出典: https://www.yorisoi-hotline.jp/
-      24時間・365日対応の全国共通ダイヤル（無料）
-      一般社団法人 社会的包摂サポートセンターが運営
+      24時間・365日対応（無料）
     %>
-    <div style="display: flex; justify-content: space-between; align-items: center;
-                padding: 14px 16px; background: white; border: 1px solid #d1fae5;
-                border-radius: 10px; margin-bottom: 10px;">
-      <div>
-        <p style="font-size: 14px; font-weight: 700; color: #1f2937; margin: 0 0 2px;">
+    <a href="tel:0120-279-338"
+       style="display: flex; justify-content: space-between; align-items: center;
+              flex-wrap: nowrap; gap: 8px;
+              padding: 12px 14px; background: white; border: 1px solid #d1fae5;
+              border-radius: 10px; margin-bottom: 10px; text-decoration: none;">
+      <%#
+        左側のテキストブロック: flex-shrink: 1 で縮小可能にする
+        右側の電話番号: flex-shrink: 0 と white-space: nowrap で折り返し禁止
+      %>
+      <div style="flex: 1 1 auto; min-width: 0;">
+        <p style="font-size: clamp(12px, 3.2vw, 14px); font-weight: 700;
+                  color: #1f2937; margin: 0 0 2px; white-space: nowrap;">
           よりそいホットライン
         </p>
-        <p style="font-size: 12px; color: #6b7280; margin: 0;">
+        <p style="font-size: clamp(10px, 2.5vw, 12px); color: #6b7280; margin: 0;">
           24時間・365日・無料
         </p>
       </div>
-      <%# 電話番号を大きく表示して視認性を高める %>
-      <a href="tel:0120-279-338"
-         style="font-size: 18px; font-weight: 800; color: #065f46;
-                text-decoration: none; letter-spacing: 0.5px;">
+      <%#
+        white-space: nowrap: 電話番号を1行に固定する（折り返し禁止）
+        flex-shrink: 0: 電話番号ブロックを縮小させない
+        font-size: clamp() で画面幅に応じて自動調整
+      %>
+      <span style="font-size: clamp(14px, 3.8vw, 18px); font-weight: 800;
+                   color: #065f46; white-space: nowrap; flex-shrink: 0;">
         0120-279-338
-      </a>
-    </div>
+      </span>
+    </a>
 
     <%#
       いのちの電話
       出典: https://www.inochi.or.jp/
       毎日16時〜21時（毎月10日のみ24時間）
-      公益社団法人 日本いのちの電話連盟が運営
     %>
-    <div style="display: flex; justify-content: space-between; align-items: center;
-                padding: 14px 16px; background: white; border: 1px solid #d1fae5;
-                border-radius: 10px;">
-      <div>
-        <p style="font-size: 14px; font-weight: 700; color: #1f2937; margin: 0 0 2px;">
+    <a href="tel:0120-783-556"
+       style="display: flex; justify-content: space-between; align-items: center;
+              flex-wrap: nowrap; gap: 8px;
+              padding: 12px 14px; background: white; border: 1px solid #d1fae5;
+              border-radius: 10px; text-decoration: none;">
+      <div style="flex: 1 1 auto; min-width: 0;">
+        <p style="font-size: clamp(12px, 3.2vw, 14px); font-weight: 700;
+                  color: #1f2937; margin: 0 0 2px; white-space: nowrap;">
           いのちの電話
         </p>
-        <p style="font-size: 12px; color: #6b7280; margin: 0;">
+        <p style="font-size: clamp(10px, 2.5vw, 12px); color: #6b7280; margin: 0;">
           毎日16〜21時（毎月10日24時間）・無料
         </p>
       </div>
-      <a href="tel:0120-783-556"
-         style="font-size: 18px; font-weight: 800; color: #065f46;
-                text-decoration: none; letter-spacing: 0.5px;">
+      <span style="font-size: clamp(14px, 3.8vw, 18px); font-weight: 800;
+                   color: #065f46; white-space: nowrap; flex-shrink: 0;">
         0120-783-556
-      </a>
-    </div>
+      </span>
+    </a>
   </div>
 
   <%# ─── 注意書き ─────────────────────────────────────────── %>
-  <p style="font-size: 11px; color: #9ca3af; text-align: center;
-             line-height: 1.6; margin-bottom: 20px;">
+  <p style="font-size: clamp(9px, 2.5vw, 11px); color: #9ca3af; text-align: center;
+             line-height: 1.6; margin-bottom: 16px;">
     ※ 相談内容の秘密は守られます（相談機関の規定に従います）。<br>
     ※ AI による分析は今回スキップしました。入力内容は保存済みです。
   </p>
 
   <%#
     ─── 「入力を続ける」ボタン ──────────────────────────────
-    【data-action の説明】
-      "crisis-intervention#closeModal" で Stimulus コントローラーの
-      closeModal() メソッドを呼び出す。
-      モーダルを閉じるだけで、ページ遷移は行わない。
-
-    【なぜ button タグを使うのか】
-      link_to は GET リクエストのために使う。
-      ここではページ遷移せずモーダルを閉じるだけなので button が適切。
+    clamp() でボタンのフォントサイズも画面幅に応じて調整する。
   %>
   <button
     type="button"
     data-action="crisis-intervention#closeModal"
-    style="width: 100%; padding: 14px; background: #10b981; color: white;
-           font-size: 15px; font-weight: 700; border: none; border-radius: 12px;
-           cursor: pointer; transition: background 0.2s;"
+    style="width: 100%; padding: 13px; background: #10b981; color: white;
+           font-size: clamp(13px, 3.5vw, 15px); font-weight: 700;
+           border: none; border-radius: 12px; cursor: pointer; transition: background 0.2s;"
     onmouseover="this.style.background='#059669'"
     onmouseout="this.style.background='#10b981'"
   >

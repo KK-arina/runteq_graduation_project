@@ -81,17 +81,25 @@ class WeeklyReflectionsController < ApplicationController
       if result[:crisis_detected]
         Rails.logger.warn "[WeeklyReflectionsController] 危機ワード検出: user_id=#{current_user.id}"
 
-        # flash[:crisis]: JavaScript がモーダルを表示するためのトリガー
         flash[:crisis] = true
 
-        # ロック解除済みなら unlock バナーも表示する
+        # ── D-5 修正: crisis時のリダイレクト先 ──────────────────────────────
+        #
+        # 【修正理由】
+        #   振り返りは保存完了（completed_at がセット済み）のため、
+        #   /weekly_reflections/new にリダイレクトすると
+        #   new アクション冒頭の completed? ガードに引っかかり、
+        #   /weekly_reflections に強制リダイレクトされてしまう。
+        #   そのため最初から適切なリダイレクト先を指定する。
+        #
+        # ロック状態だった場合 → ダッシュボード（ロック解除バナーも表示）
+        # 通常の場合         → 振り返り一覧（モーダルを表示）
         if was_locked
           flash[:unlock] = "振り返りが完了しました。PDCAロックが解除されました。🔓"
+          redirect_to dashboard_path
+        else
+          redirect_to weekly_reflections_path
         end
-
-        # 振り返り入力ページに戻す（保存は完了しているのでダッシュボードでもよいが、
-        # モーダルを見てもらうために振り返りページに留める）
-        redirect_to new_weekly_reflection_path
         return
       end
       # ────────────────────────────────────────────────────────────────────────
