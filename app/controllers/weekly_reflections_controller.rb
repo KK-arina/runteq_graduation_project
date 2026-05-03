@@ -150,7 +150,7 @@ class WeeklyReflectionsController < ApplicationController
       return
     end
 
-    @weekly_reflection.assign_attributes(weekly_reflection_params)
+    @weekly_reflection.assign_attributes(complete_without_ai_params)
     was_locked = current_user.locked?
 
     result = WeeklyReflectionCompleteService.new(
@@ -200,6 +200,24 @@ class WeeklyReflectionsController < ApplicationController
   end
 
   private
+
+  # complete_without_ai 専用のパラメータ取得メソッド
+  # モーダルのフォームは weekly_reflection[] なしで送信されるため
+  # weekly_reflection_params とは別に定義する
+  def complete_without_ai_params
+    # params に weekly_reflection キーがある場合（通常フォームからの送信）
+    if params[:weekly_reflection].present?
+      weekly_reflection_params
+    else
+      # モーダルの hidden フィールドからの送信（フラットなパラメータ）
+      params.permit(
+        :reflection_comment,
+        :direct_reason,
+        :background_situation,
+        :next_action
+      )
+    end
+  end
 
   # setup_new_form_variables（D-6 新規追加）
   # new ビューのレンダリングに必要な変数を一括セットする。
