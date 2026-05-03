@@ -94,3 +94,12 @@ application.register("task-menu", TaskMenuController)
 //   HTML 側の data-controller="crisis-intervention" と対応する。
 import CrisisInterventionController from "./crisis_intervention_controller"
 application.register("crisis-intervention", CrisisInterventionController)
+
+// ============================================================
+// D-6 追加: AI コスト上限モーダルコントローラー
+// ============================================================
+// "ai-limit-modal" という名前で登録する。
+// HTML の data-controller="ai-limit-modal" と自動的に紐づく。
+// ケバブケース（ハイフン区切り）はStimulusの命名規則。
+import AiLimitModalController from "./ai_limit_modal_controller"
+application.register("ai-limit-modal", AiLimitModalController)

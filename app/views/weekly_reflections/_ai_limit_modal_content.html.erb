@@ -1,0 +1,135 @@
+<%# app/views/weekly_reflections/_ai_limit_modal_content.html.erb %>
+<%#
+  ==============================================================================
+  14-B モーダルのコンテンツ部分（デスクトップ・スマホ共通）
+  ==============================================================================
+  【このパーシャルの役割】
+    _ai_limit_modal.html.erb のデスクトップ版・スマホ版の両方から
+    render されるコンテンツ部分。デザインの一元管理のために分離した。
+
+  【「AIなしで完了」ボタンの仕組み】
+    独立したフォームを送信するのではなく、
+    Stimulus の submitWithoutAi() を経由してメインフォームの action を
+    /weekly_reflections/complete_without_ai に書き換えてから送信する。
+    これにより入力済みのテキストがそのまま送信される。
+  ==============================================================================
+%>
+
+<div class="p-6">
+
+  <%# ── ヘッダー（タイトル + 閉じるボタン） ── %>
+  <div class="flex items-start justify-between mb-4">
+    <div class="flex items-center gap-3">
+      <%# aria-hidden="true": 絵文字アイコンはスクリーンリーダーに読み上げさせない %>
+      <span class="text-2xl" aria-hidden="true">⚠️</span>
+      <h2 class="text-lg font-bold text-gray-900" id="ai-limit-modal-title">
+        今月のAI分析回数の上限に達しました
+      </h2>
+    </div>
+
+    <%#
+      閉じるボタン（×）
+      data-action="ai-limit-modal#close":
+        クリックすると AiLimitModalController の close() が呼ばれる
+      aria-label: スクリーンリーダーに「何をするボタンか」を伝える
+    %>
+    <button type="button"
+            data-action="ai-limit-modal#close"
+            class="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded
+                   focus:outline-none focus:ring-2 focus:ring-gray-400"
+            aria-label="モーダルを閉じる">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <%# ── 説明文 ── %>
+  <p class="text-sm text-gray-600 mb-5 leading-relaxed">
+    振り返りの保存と PDCAロック解除は通常通り実行できます。<br>
+    AI提案なしで今週の振り返りを完了するか、来月になるまでお待ちください。
+  </p>
+
+  <%#
+    ── 使用状況カード ──
+    &. （Safe Navigation Operator）: user_setting が nil でもエラーにならない
+    || 0 / || 10: nil の場合のデフォルト値
+  %>
+  <% user_setting = current_user.user_setting %>
+  <% ai_count = user_setting&.ai_analysis_count || 0 %>
+  <% ai_limit = user_setting&.ai_analysis_monthly_limit || 10 %>
+
+  <div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-5">
+    <p class="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">AI使用状況（当月）</p>
+
+    <div class="flex justify-between items-center mb-2">
+      <span class="text-sm text-gray-700">使用回数</span>
+      <span class="text-sm font-bold text-red-600"><%= ai_count %> / <%= ai_limit %> 回</span>
+    </div>
+
+    <%#
+      プログレスバー
+      ai_limit.zero? : ゼロ除算を防ぐ（万が一 limit が 0 の場合は 100% 表示）
+      .floor         : 小数点以下を切り捨てて整数にする
+      [..].min       : 100% を超えないよう上限を設ける
+    %>
+    <div class="w-full bg-red-100 rounded-full h-2.5 overflow-hidden">
+      <div class="bg-red-500 h-2.5 rounded-full"
+           style="width: <%= ai_limit.zero? ? 100 : [(ai_count.to_f / ai_limit * 100).floor, 100].min %>%">
+      </div>
+    </div>
+
+    <p class="text-xs text-gray-500 mt-2">毎月1日に使用回数はリセットされます。</p>
+  </div>
+
+  <%# ── 補足説明 ── %>
+  <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-5">
+    <p class="text-xs text-blue-700 leading-relaxed">
+      ✅ <strong>振り返りの保存は通常通り実行されます。</strong><br>
+      AIなしで完了した場合、習慣・タスクのAI提案は提供されませんが、
+      ロック解除や振り返りコメントの保存は問題なく行えます。
+    </p>
+  </div>
+
+  <%# ── ボタンエリア ── %>
+  <div class="space-y-3">
+
+    <%#
+      「AIなしで振り返りを完了する」ボタン
+      data-action="click->ai-limit-modal#submitWithoutAi":
+        クリックすると JS の submitWithoutAi() が呼ばれる。
+        submitWithoutAi() はメインフォームの action を
+        /weekly_reflections/complete_without_ai に書き換えてから送信する。
+        これにより、ユーザーが入力した振り返り内容がそのまま送信される。
+      type="button":
+        type="submit" にするとフォームが意図せず送信されるため button を指定する
+    %>
+    <button type="button"
+            data-action="click->ai-limit-modal#submitWithoutAi"
+            class="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600
+                   text-white font-semibold rounded-xl transition-colors
+                   cursor-pointer text-sm
+                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-400">
+      AIなしで振り返りを完了する
+    </button>
+
+    <%#
+      「入力を続ける（キャンセル）」ボタン
+      data-action="ai-limit-modal#close": モーダルを閉じるだけ。何も送信しない。
+    %>
+    <button type="button"
+            data-action="ai-limit-modal#close"
+            class="w-full py-3 px-4 bg-white border border-gray-300
+                   text-gray-700 font-semibold rounded-xl
+                   hover:bg-gray-50 transition-colors text-sm
+                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">
+      入力を続ける（キャンセル）
+    </button>
+
+    <%# 将来実装予定の設定ページへの導線 %>
+    <p class="text-center text-xs text-gray-400 pt-1">
+      AI使用状況の詳細は<span class="text-blue-500 font-medium">設定ページ</span>で確認できます。（近日公開予定）
+    </p>
+  </div>
+
+</div>

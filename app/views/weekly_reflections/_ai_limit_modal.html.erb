@@ -1,0 +1,92 @@
+<%# app/views/weekly_reflections/_ai_limit_modal.html.erb %>
+<%#
+  ==============================================================================
+  14-B: AI コスト上限エラーモーダル（D-6 新規追加）
+  ==============================================================================
+  【このパーシャルの役割】
+    当月の AI 分析回数が上限（デフォルト: 10回）に達したとき、
+    ユーザーに以下の2択を提示するモーダルダイアログ。
+      1. 「AIなしで振り返りを完了する」→ 入力内容をそのまま送信してロック解除
+      2. 「入力を続ける」→ モーダルを閉じてフォームに戻る
+
+  【表示される条件】
+    create アクション内で ai_limit_exceeded? が true になった場合、
+    flash.now[:ai_limit] = true がセットされ、render :new が実行される。
+    このパーシャルが含まれた new.html.erb が描画されるとき、
+    Stimulus の connect() が data-ai-limit-modal-show-value="true" を読んで
+    自動的にモーダルを開く。
+
+  【flash.now[:ai_limit] と data 属性のつなぎ方】
+    サーバー（Ruby）→ flash.now[:ai_limit] = true をセット
+    HTML（ERB）    → data-ai-limit-modal-show-value="true" に反映
+    JavaScript     → connect() で this.showValue を確認してモーダルを表示
+  ==============================================================================
+%>
+
+<%#
+  data-controller="ai-limit-modal":
+    この div が AiLimitModalController のスコープになる。
+    この div の中にある data-ai-limit-modal-target="..." が認識される。
+
+  data-ai-limit-modal-show-value:
+    flash.now[:ai_limit] が true なら "true" を渡す。
+    JavaScript 側で Boolean に変換されて this.showValue として使われる。
+%>
+<div data-controller="ai-limit-modal"
+     data-ai-limit-modal-show-value="<%= flash[:ai_limit].present? ? 'true' : 'false' %>">
+
+  <%#
+    ============================================================
+    デスクトップ版: 画面中央オーバーレイモーダル
+    ============================================================
+    fixed inset-0  : 画面全体を覆う固定配置（スクロールしても動かない）
+    bg-black/50    : 半透明の黒背景（オーバーレイ効果）
+    z-50           : 他の要素より前面に表示（z-index: 50）
+    style="display: none": JavaScript が open() で "flex" に変更するまで非表示
+    ※ Tailwind の hidden クラス（display:none !important）は
+      JavaScript から上書きできないため style 属性で直接制御する
+  %>
+  <div data-ai-limit-modal-target="desktopModal"
+       class="fixed inset-0 bg-black/50 items-center justify-center z-50 p-4"
+       style="display: none;"
+       data-action="click->ai-limit-modal#closeOnOverlay">
+
+    <%#
+      モーダルカード本体
+      max-w-lg      : 最大幅 512px（読みやすい幅）
+      border-t-4    : 上部に赤いボーダーを付けてエラー系であることを示す
+      overflow-hidden: 子要素がはみ出さないようにする
+    %>
+    <div class="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border-t-4 border-red-500">
+      <%= render "weekly_reflections/ai_limit_modal_content" %>
+    </div>
+  </div>
+
+  <%#
+    ============================================================
+    スマホ版: 画面下部ボトムシート
+    ============================================================
+    items-end      : コンテンツを画面の下端に配置（ボトムシートらしい見た目）
+    style="display: none": デスクトップ版と同様に初期非表示
+  %>
+  <div data-ai-limit-modal-target="mobileSheet"
+       class="fixed inset-0 bg-black/50 items-end z-50"
+       style="display: none;"
+       data-action="click->ai-limit-modal#closeOnOverlay">
+
+    <%#
+      ボトムシートのカード本体
+      rounded-t-2xl : 上部だけ角を丸くしてシートらしい見た目にする
+      max-h-[85vh]  : 画面の85%を超えないよう高さを制限する（小さい画面でも収まる）
+      overflow-y-auto: コンテンツが多い場合はスクロール可能にする
+    %>
+    <div class="bg-white w-full rounded-t-2xl max-h-[85vh] overflow-y-auto border-t-4 border-red-500">
+      <%# スワイプハンドル: スマホでボトムシートであることを視覚的に示すバー %>
+      <div class="flex justify-center pt-3 pb-1">
+        <div class="w-10 h-1.5 bg-gray-300 rounded-full"></div>
+      </div>
+      <%= render "weekly_reflections/ai_limit_modal_content" %>
+    </div>
+  </div>
+
+</div>

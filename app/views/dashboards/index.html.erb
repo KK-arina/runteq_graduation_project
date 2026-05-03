@@ -292,3 +292,11 @@
     ダッシュボードでもモーダルを表示できるようにする。
 %>
 <%= render "shared/crisis_intervention_modal" %>
+
+<%#
+  D-6: AI コスト上限モーダル（14-B）
+  was_locked = true の場合（ロック状態から完了した場合）、
+  complete_without_ai は dashboard_path にリダイレクトする。
+  そのためダッシュボードにも配置する。
+%>
+<%= render "weekly_reflections/ai_limit_modal" %>

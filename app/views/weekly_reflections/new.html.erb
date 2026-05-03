@@ -227,3 +227,11 @@
     モーダルを自動表示する。
 %>
 <%= render "shared/crisis_intervention_modal" %>
+
+<%#
+  D-6: AI コスト上限モーダル（14-B）
+  create アクションで render :new が実行されたとき、
+  flash.now[:ai_limit] = true を受け取ってモーダルを自動表示する。
+  「入力を続ける」を選んだ場合、このページのフォームにテキストが残っている。
+%>
+<%= render "weekly_reflections/ai_limit_modal" %>

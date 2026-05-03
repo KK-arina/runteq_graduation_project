@@ -182,9 +182,6 @@ class ApplicationController < ActionController::Base
   def locked?
     return false unless logged_in?
 
-    # ── Step 1: 現在が「月曜日のAM4:00以降」かどうかを確認する ────────
-    # change(hour: 4, min: 0, sec: 0): 今週月曜日の AM4:00 を計算する
-    # now < this_monday_4am: まだ AM4:00 前ならロック条件を満たさないので即 false
     now = Time.current
     this_monday_4am = Date.current
                           .beginning_of_week(:monday)
@@ -192,33 +189,14 @@ class ApplicationController < ActionController::Base
                           .change(hour: 4, min: 0, sec: 0)
     return false if now < this_monday_4am
 
-    # ── Step 2: 前週の月曜日を計算する ─────────────────────────────
-    # HabitRecord.today_for_record: AM4:00基準の「今日」を返すモデルメソッド
-    # .beginning_of_week(:monday) - 1.week: 前週の月曜日
     last_week_start = HabitRecord.today_for_record
                                  .beginning_of_week(:monday) - 1.week
 
-    # ── Step 3: 前週のレコード自体が存在するか確認する ─────────────
-    # 【なぜ存在確認が必要か】
-    # 初週ユーザーは前週の振り返りレコードが存在しない。
-    # この場合「振り返りを完了していない」ではなく「まだ振り返りの対象期間がない」
-    # ため、ロックすべきではない（ユーザー体験として不合理）。
-    #
-    # .for_week(last_week_start): week_start_date = 前週月曜日 で絞り込むスコープ
-    # .exists?: レコードが1件でも存在すれば true（SELECT 1 ... LIMIT 1）
     last_week_exists = current_user.weekly_reflections
                                    .for_week(last_week_start)
                                    .exists?
-
-    # 前週レコードが存在しない = 初週ユーザー → ロックしない
     return false unless last_week_exists
 
-    # ── Step 4: 前週の振り返りが「完了済み」かどうかを確認する ──────
-    # .completed: completed_at が NOT NULL のもの（WeeklyReflection に定義済みスコープ）
-    # .exists?: 完了済みレコードが存在すれば true（メモリロードなし）
-    #
-    # last_week_completed が true  → 前週は完了済み → ロックなし（false）
-    # last_week_completed が false → 前週は未完了   → ロックあり（true）
     last_week_completed = current_user.weekly_reflections
                                       .for_week(last_week_start)
                                       .completed
@@ -253,6 +231,40 @@ class ApplicationController < ActionController::Base
       end
     end
   end
+
+  # ============================================================
+  # ai_limit_exceeded?（D-6 新規追加）
+  # ============================================================
+  #
+  # 【役割】
+  #   現在ログイン中のユーザーが AI 分析の月次上限に達しているかを返す。
+  #
+  # 【なぜ ApplicationController に置くのか】
+  #   WeeklyReflectionsController だけでなく、将来的に他のコントローラー
+  #   （例: AI チャット機能など）でも AI 上限チェックが必要になる可能性がある。
+  #   共通の親クラスに置くことで全コントローラーで再利用できる。
+  #
+  # 【helper_method とは】
+  #   通常、private メソッドはコントローラー内でしか使えない。
+  #   helper_method に登録すると ERB（ビューファイル）からも呼び出せるようになる。
+  #   例: ビューで `<% if ai_limit_exceeded? %>` という条件分岐が書ける。
+  #
+  # 【戻り値】
+  #   true  : 上限に達している（今月はこれ以上 AI 分析できない）
+  #   false : まだ余裕がある or user_setting が存在しない（安全側に倒す）
+  def ai_limit_exceeded?
+    # current_user&.user_setting:
+    #   &. は Safe Navigation Operator（ぼっち演算子）。
+    #   current_user が nil（未ログイン）の場合、user_setting を呼ばずに nil を返す。
+    #   これにより NoMethodError を防げる。
+    return false unless current_user&.user_setting
+
+    # ai_analysis_count         : 今月の使用回数
+    # ai_analysis_monthly_limit : 月間上限（デフォルト: 10）
+    # >= を使うことで「上限に達した瞬間」から制限をかける
+    current_user.user_setting.ai_analysis_count >= current_user.user_setting.ai_analysis_monthly_limit
+  end
+  helper_method :ai_limit_exceeded?
 
   # ============================================================
   # Issue #27: カスタムエラーページ表示メソッド
