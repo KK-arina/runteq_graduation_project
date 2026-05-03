@@ -75,7 +75,8 @@ flowchart LR
 [![D-3 PMVV目標管理・AI分析結果ページ](https://img.shields.io/badge/D--3_PMVV目標管理・AI分析結果-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-3-pmvv-show-and-ai-result)
 [![D-4 週次振り返りAI分析ジョブ](https://img.shields.io/badge/D--4_週次振り返りAI分析ジョブ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-4-weekly-reflection-analysis-job)
 [![D-5 危機介入機能](https://img.shields.io/badge/D--5_危機介入機能-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-5-crisis-intervention)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-27%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![D-6 AIコスト上限管理](https://img.shields.io/badge/D--6_AIコスト上限管理-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-6-ai-cost-limit)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-28%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -168,6 +169,7 @@ flowchart LR
 | #D-3 | PMVV目標管理ページ（16番）・AI分析結果ページ（18番） | 2026-04-26 | feature/D-3-pmvv-show-and-ai-result |
 | #D-4 | 週次振り返りAI分析ジョブ（GoodJob + Gemini API / Groq フォールバック） | 2026-04-26 | feature/D-4-weekly-reflection-analysis-job |
 | #D-5 | 危機介入機能（Railsキーワード検出 + プロンプトルール） | 2026-05-03 | feature/D-5-crisis-intervention |
+| #D-6 | AIコスト上限管理（ai_analysis_monthly_limit・14-Bモーダル） | 2026-05-03 | feature/D-6-ai-cost-limit |
 
 <br>
 
@@ -3170,6 +3172,119 @@ D-5テスト: 16件（CrisisDetectorテスト11件・WeeklyReflectionCompleteSer
 
 <br>
 
+### #D-6: AIコスト上限管理（ai_analysis_monthly_limit）
+
+<br>
+
+**ブランチ:** `feature/D-6-ai-cost-limit`<br>
+**完了日:** 2026-05-03<br>
+**概要:** `user_settings.ai_analysis_count` が `ai_analysis_monthly_limit`（デフォルト: 10回）に達したとき、<br>
+AI分析をスキップして14-B（AIコスト上限エラーモーダル）を表示。<br>
+「AIなしで振り返りを完了する」でロック解除のみ実行できる。<br>
+毎月1日に `MonthlyAiCountResetJob` が使用回数をリセットする（GoodJob cron は #A-3 で実装済み）。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Controller | `ApplicationController` に `ai_limit_exceeded?` を追加（`helper_method` 登録でビューでも使用可） |
+| Controller | `WeeklyReflectionsController#create` に上限チェックを追加<br>超過時は `flash.now[:ai_limit] = true` + `render :new` で**入力内容を保持したまま**モーダルを表示 |
+| Controller | `WeeklyReflectionsController#complete_without_ai` を新規追加<br>`POST /weekly_reflections/complete_without_ai` で振り返り保存・ロック解除・AI分析スキップを実行 |
+| Controller | `complete_without_ai_params` を追加<br>モーダル専用フォームのフラットなパラメータ形式と通常の `weekly_reflection[]` 形式の両方に対応 |
+| Controller | `setup_new_form_variables` を抽出（`create` / `complete_without_ai` 両方で使う DRY 化） |
+| Route | `resources :weekly_reflections` に `collection do post :complete_without_ai end` を追加 |
+| JS | `ai_limit_modal_controller.js` を新規作成（Stimulus コントローラー）<br>デスクトップ（768px以上）: 画面中央オーバーレイモーダル<br>スマホ（768px未満）: 画面下部ボトムシート<br>`submitWithoutAi()` でメインフォームの入力値を専用フォームの hidden フィールドにコピーして送信 |
+| View | `_ai_limit_modal.html.erb` を新規作成（14-B モーダルラッパー）<br>`data-ai-limit-modal-show-value` で `flash.now[:ai_limit]` を受け取り自動表示 |
+| View | `_ai_limit_modal_content.html.erb` を新規作成（デスクトップ・スマホ共通コンテンツ）<br>使用状況カード（N/10回 + 赤プログレスバー）・「AIなしで完了」専用フォーム・「入力を続ける」ボタン |
+| View | `new.html.erb` / `index.html.erb` / `dashboards/index.html.erb` にモーダルパーシャルを追加 |
+| i18n | `config/locales/ja.yml` に D-6 関連メッセージを追加 |
+| Test | `test/controllers/weekly_reflections_ai_limit_test.rb` を新規作成（9テスト） |
+
+<br>
+
+#### 設計上の最重要ポイント: `render :new` vs `redirect_to`
+
+<br>
+
+| 方式 | 動作 | 採用理由 |
+|:---|:---|:---:|
+| `redirect_to new_weekly_reflection_path` | ユーザーが入力した「なぜ？」「どう？」等のテキストが全て消える | ❌ 不採用 |
+| `render :new, status: :unprocessable_entity` | `@weekly_reflection` のインスタンス変数が保持されてフォームの入力内容が残る | ✅ 採用 |
+
+<br>
+
+`render :new` + `flash.now[:ai_limit] = true` の組み合わせにより、<br>
+「入力内容はそのまま残った状態でモーダルだけが浮かび上がる」UXを実現した。
+
+<br>
+
+#### モーダルの「AIなしで完了」送信方式
+
+<br>
+
+`render :new` で再描画されたフォームは action 属性がページの URL（相対パス）になるため、<br>
+JavaScript でフォームの action を書き換える方式は不安定になることが判明した。<br>
+モーダル内に `complete_without_ai` 専用の独立したフォームを配置し、<br>
+Stimulus の `submitWithoutAi()` でメインフォームの入力値を hidden フィールドにコピーして送信する設計を採用した。
+
+<br>
+
+ユーザーが振り返りを入力して「振り返りを完了する」を押す
+↓
+create アクションで ai_limit_exceeded? が true
+↓
+assign_attributes は実行済みのため入力値が @weekly_reflection に保持されている
+↓
+flash.now[:ai_limit] = true + render :new（フォームの入力内容が残る）
+↓
+Stimulus connect() が show-value="true" を検出 → 14-B モーダルを自動表示
+↓
+「AIなしで振り返りを完了する」を押す
+↓
+submitWithoutAi() がメインフォームの各フィールドの値を専用フォームの hidden フィールドにコピー
+↓
+POST /weekly_reflections/complete_without_ai に送信
+↓
+complete_without_ai アクション: 振り返り保存 + ロック解除 + AI分析スキップ
+
+<br>
+
+#### complete_without_ai_params の設計
+
+<br>
+
+| 状況 | パラメータ形式 | 対応 |
+|:---|:---|:---|
+| 通常フォームから送信（将来拡張用） | `weekly_reflection[field]` 形式 | `weekly_reflection_params` を使用 |
+| モーダルの hidden フォームから送信 | フラット形式（`field` のみ） | `params.permit(:reflection_comment, ...)` を使用 |
+
+<br>
+
+#### テスト設計の知見
+
+<br>
+
+`travel_to` は `ActionDispatch::IntegrationTest` のHTTPリクエスト内スレッドに引き継がれないため、<br>
+`locked?` の時刻依存テストはリクエスト結果（リダイレクト先）ではなく<br>
+DB状態（振り返りの保存確認・flash の有無）で検証する設計に変更した。
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+D-6テスト: 9 runs, 32 assertions, 0 failures, 0 errors, 0 skips
+全テスト:  519 runs, 1326 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -4791,6 +4906,73 @@ min-width: 0;
 
 <br>
 
+### 63. `render :new` + `flash.now` で入力内容を保持したままモーダルを表示する（#D-6）
+
+<br>
+
+上限チェックで `redirect_to` を使うとユーザーが書いた振り返り内容が全て消える。<br>
+`render :new` を使うことで `@weekly_reflection` のインスタンス変数が保持され、<br>
+フォームの入力済み内容がそのまま画面に残った状態でモーダルだけが浮かび上がる UX を実現できる。<br>
+`flash.now` を使う理由は `flash`（`flash.now` なし）だと次のリクエストでもフラグが残り<br>
+モーダルが二重起動してしまうためである。
+
+<br>
+
+```ruby
+# create アクション内
+@weekly_reflection.assign_attributes(weekly_reflection_params)  # 先に値をセット
+
+if ai_limit_exceeded?
+  flash.now[:ai_limit] = true          # このリクエスト内だけ有効
+  setup_new_form_variables             # new ビューに必要な変数を準備
+  render :new, status: :unprocessable_entity  # 入力内容が保持される
+  return
+end
+```
+
+<br>
+
+### 64. モーダル専用フォームで hidden フィールドに値をコピーして送信する（#D-6）
+
+<br>
+
+`render :new` で描画されたフォームは action 属性がページ URL（相対パス）になるため、<br>
+JavaScript でフォームの action を書き換える方式では 404/422 エラーが発生した。<br>
+モーダル内に `complete_without_ai` 専用の独立したフォームを配置し、<br>
+Stimulus の `submitWithoutAi()` でメインフォームの各フィールドの値を<br>
+専用フォームの hidden フィールドにコピーしてから送信する方式が安定している。
+
+<br>
+
+```javascript
+submitWithoutAi(event) {
+  event.preventDefault()
+  const fields = ["reflection_comment", "direct_reason", "background_situation", "next_action"]
+  fields.forEach(fieldName => {
+    const source = document.querySelector(`textarea[name="weekly_reflection[${fieldName}]"]`)
+    const target = this.submitFormTarget.querySelector(`input[data-field="${fieldName}"]`)
+    if (source && target) target.value = source.value
+  })
+  this.submitFormTarget.submit()  // 入力値コピー後に専用フォームを送信
+}
+```
+
+<br>
+
+### 65. `travel_to` はリクエスト内スレッドに引き継がれないため locked? のテストは DB 状態で検証する（#D-6）
+
+<br>
+
+`ActionDispatch::IntegrationTest` の `travel_to` による時刻固定は<br>
+HTTPリクエストを処理する別スレッドに引き継がれないため、<br>
+`locked?` のようなリクエスト内で呼ばれる時刻依存メソッドはテスト環境でリアル時間で動作する。<br>
+「ロック状態でのリダイレクト先が `dashboard_path` になる」のような時刻依存の挙動は<br>
+テストから正確に検証できない。<br>
+代わりに「振り返りが保存されたか」「flash にメッセージがあるか」などの DB 状態で検証することで<br>
+時刻に依存しない安定したテストになる。
+
+<br>
+
 ---
 
 <br>
@@ -5270,7 +5452,7 @@ habitflow/
 │   │   ├── dashboards_controller.rb       # ダッシュボード（変更: @today_tasks追加 #C-1）
 │   │   ├── habits_controller.rb           # 習慣の CRUD（変更: archive/unarchive/archived追加・set_habit修正 #B-4）
 │   │   ├── habit_records_controller.rb    # 習慣の日次記録（変更: Float() 安全変換・numeric_value 対応 #B-1）
-│   │   ├── weekly_reflections_controller.rb # 変更: show に @task_summaries 追加（#C-4）
+│   │   ├── weekly_reflections_controller.rb # 変更: create に ai_limit_exceeded? 追加・complete_without_ai 新規追加・setup_new_form_variables 抽出（#D-6）
 │   │   ├── tasks_controller.rb            # 変更: toggle_complete にモーダル再注入追加・destroy追加（#C-3/#C-4バグ修正）
 │   │   ├── sessions_controller.rb         # ログイン・ログアウト
 │   │   ├── users_controller.rb            # ユーザー登録
@@ -5293,25 +5475,27 @@ habitflow/
 │   │   └── concerns/
 │   │       └── crisis_detector.rb         # #D-5 新規: 危機ワード検出モジュール（CRISIS_KEYWORDS 30件・CRISIS_PATTERN・before_validation・crisis_word_detected?）
 │   ├── services/
-│   ├── weekly_reflection_complete_service.rb  # 変更: WeeklyReflectionTaskSummary追加（#C-4）・enqueue_analysis_job_if_eligible 追加（#D-4）
+│   │   ├── weekly_reflection_complete_service.rb  # 変更: WeeklyReflectionTaskSummary追加（#C-4）・enqueue_analysis_job_if_eligible 追加（#D-4）
 │   │   ├── habit_record_save_service.rb            # #A-7 #B-1: 習慣記録保存フロー（数値型対応・errors:[]配列形式統一）
 │   │   ├── user_destroy_service.rb                 # #A-7: 退会処理フロー（個人情報匿名化）
 │   │   ├── ai_proposal_confirm_service.rb          # #A-7: AI提案確定フロー骨格（#D-3〜#D-4で本実装）
 │   │   └── ai_client.rb                   # #D-2 新規: AI API 抽象化クライアント（Gemini REST API / Groq フォールバック・429 指数バックオフ）
 │   ├── javascript/controllers/
-│   │   ├── habit_record_controller.js     # チェックボックス即時保存（変更: saveNumeric event.target方式に変更 #B-1）（変更: メモ関連メソッド追加・NOT_PROVIDED部分更新対応 #B-7）
-│   │   ├── habit_form_controller.js       # #B-1 追加: 習慣作成フォームの動的切り替え（#B-6追記: selectColor/selectIcon/syncInitialState追加）
-│   │   ├── mobile_menu_controller.js      # ハンバーガーメニュー開閉
-│   │   ├── form_submit_controller.js      # フォーム送信ローディング・二重送信防止
-│   │   ├── habit_menu_controller.js       # #B-5 新規: 習慣削除確認モーダル（⋯メニュー・デスクトップ/スマホ切替・オーバーレイクリック・Escape対応）
-│   │   ├── habit_sort_controller.js       # #B-6 新規: 習慣一覧の Drag&Drop 並び替え（SortableJS + fetch・forceFallback対応）
-│   │   ├── priority_card_controller.js    # #C-1 新規: 優先度カード排他選択（Stimulus・全カードリセット→選択カードアクティブ化）
-│   │   ├── task_toggle_controller.js      # #C-2 新規: タスク完了チェックボックス（fetch + Turbo.renderStreamMessage・tabパラメータ送信・エラーロールバック）
-│   │   ├── task_menu_controller.js        # #C-3 新規: タスク削除確認モーダル（⋯メニュー・デスクトップ中央モーダル/スマホボトムシート・turbo:submit-end でクローズ・_injectTabToForms タブ維持）
-│   │   ├── voice_input_controller.js      # #B-7 新規: 音声入力（Web Speech API・graceful degradation対応・未対応ブラウザで🎤非表示）
-│   │   ├── alarm_toggle_controller.js                  # #C-5 新規: アラームOFF時に分数入力欄をdisabledにする
-│   │   ├── crisis_intervention_controller.js  # #D-5 新規: 危機介入モーダル制御（デスクトップ中央モーダル/スマホボトムシート・Escape/オーバーレイクリックで閉じない設計）
-│   │   └── voice_input_controller.js      # #B-7 新規→#D-1 で voice_field パーシャルと連携強化: 音声入力（Web Speech API）
+│   │   └── controllers/
+│   │       ├── habit_record_controller.js     # チェックボックス即時保存（変更: saveNumeric event.target方式に変更 #B-1）（変更: メモ関連メソッド追加・NOT_PROVIDED部分更新対応 #B-7）
+│   │       ├── habit_form_controller.js       # #B-1 追加: 習慣作成フォームの動的切り替え（#B-6追記: selectColor/selectIcon/syncInitialState追加）
+│   │       ├── mobile_menu_controller.js      # ハンバーガーメニュー開閉
+│   │       ├── form_submit_controller.js      # フォーム送信ローディング・二重送信防止
+│   │       ├── habit_menu_controller.js       # #B-5 新規: 習慣削除確認モーダル（⋯メニュー・デスクトップ/スマホ切替・オーバーレイクリック・Escape対応）
+│   │       ├── habit_sort_controller.js       # #B-6 新規: 習慣一覧の Drag&Drop 並び替え（SortableJS + fetch・forceFallback対応）
+│   │       ├── priority_card_controller.js    # #C-1 新規: 優先度カード排他選択（Stimulus・全カードリセット→選択カードアクティブ化）
+│   │       ├── task_toggle_controller.js      # #C-2 新規: タスク完了チェックボックス（fetch + Turbo.renderStreamMessage・tabパラメータ送信・エラーロールバック）
+│   │       ├── task_menu_controller.js        # #C-3 新規: タスク削除確認モーダル（⋯メニュー・デスクトップ中央モーダル/スマホボトムシート・turbo:submit-end でクローズ・_injectTabToForms タブ維持）
+│   │       ├── voice_input_controller.js      # #B-7 新規: 音声入力（Web Speech API・graceful degradation対応・未対応ブラウザで🎤非表示）
+│   │       ├── alarm_toggle_controller.js                  # #C-5 新規: アラームOFF時に分数入力欄をdisabledにする
+│   │       ├── crisis_intervention_controller.js  # #D-5 新規: 危機介入モーダル制御（デスクトップ中央モーダル/スマホボトムシート・Escape/オーバーレイクリックで閉じない設計）
+│   │       ├── ai_limit_modal_controller.js       # #D-6 新規: AIコスト上限モーダル制御（デスクトップ中央モーダル/スマホボトムシート・submitWithoutAi でメインフォームの値をコピー送信）
+│   │       └── voice_input_controller.js      # #B-7 新規→#D-1 で voice_field パーシャルと連携強化: 音声入力（Web Speech API）
 │   ├── helpers/
 │   │   └── application_helper.rb                       # #C-6 追加: rate_hex_color / habit_progress_text（達成率カラー・表記の全画面統一）
 │   ├── jobs/
@@ -5332,10 +5516,12 @@ habitflow/
 │       ├── habits/                        # 習慣一覧・新規作成・編集・アーカイブ一覧画面（変更: チェック型週次目標非表示 #C-6）
 │       ├── habit_records/                 # 習慣記録パーシャル（変更: 状態バッジ5パターン #B-3）
 │       ├── weekly_reflections/            # 変更: show.html.erb にタスク実績セクション追加（#C-4）
+│       │   ├── _ai_limit_modal.html.erb           # #D-6 新規: 14-B AIコスト上限モーダルラッパー（show-value で自動表示制御）
+│       │   └── _ai_limit_modal_content.html.erb   # #D-6 新規: 14-B モーダルコンテンツ（使用状況カード・専用フォーム・入力値コピー送信）
 │       ├── shared/                        # 変更: _flash_message.html.erb を新規作成（#C-3）・_header.html.erb に「目標管理」リンク追加（#D-1）
-│           ├── _ai_disclaimer.html.erb           # #D-3 新規: AI免責バナーパーシャル（全AI出力ページ共通・aria-label対応）
-│           ├── _crisis_intervention_modal.html.erb  # #D-5 新規: 危機介入モーダルラッパー（Stimulusコントローラー・show-value で自動表示制御）
-│           └── _crisis_modal_content.html.erb       # #D-5 新規: 危機介入モーダルコンテンツ（よりそいホットライン・いのちの電話・clamp()レスポンシブ対応）
+│       │   ├── _ai_disclaimer.html.erb           # #D-3 新規: AI免責バナーパーシャル（全AI出力ページ共通・aria-label対応）
+│       │   ├── _crisis_intervention_modal.html.erb  # #D-5 新規: 危機介入モーダルラッパー（Stimulusコントローラー・show-value で自動表示制御）
+│       │   └── _crisis_modal_content.html.erb       # #D-5 新規: 危機介入モーダルコンテンツ（よりそいホットライン・いのちの電話・clamp()レスポンシブ対応）
 │       ├── errors/                        # 404・422・500 エラーページ
 │       ├── task_mailer/                                # #C-5 新規: アラーム通知メールビュー
 │       │   ├── alarm_notification.html.erb             # HTMLメール本文
@@ -5446,7 +5632,8 @@ habitflow/
         ├── habits_sort_controller_test.rb # #B-6: 並び替え保存・未ログイン・不正ID混入テスト（3件）
         ├── habit_record_memo_test.rb      # #B-7: memoバリデーション・has_memo?メソッドテスト（8件）
         ├── tasks_ai_edit_controller_test.rb  # #C-7 新規: ai_edit/ai_update（9件: 正常フロー・直接アクセス403・優先度変更不可・バリデーションエラー・他ユーザー404）
-        └── dashboards_controller_test.rb  # #C-6 新規: タスク達成率8件（data-testid・fixtures干渉対策・ログイン成功保証）
+        ├── dashboards_controller_test.rb  # #C-6 新規: タスク達成率8件（data-testid・fixtures干渉対策・ログイン成功保証）
+        └── weekly_reflections_ai_limit_test.rb    # #D-6 新規（9件：上限未達時通常動作・上限超過時flash[:ai_limit]・振り返り未保存確認・complete_without_ai保存・AIジョブ未エンキュー・MonthlyAiCountResetJob月初リセット・月初以外スキップ・保存とリダイレクト確認・未ログインアクセス拒否）
 ```
 
 <br>
@@ -5476,7 +5663,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-510 runs, 1294 assertions, 0 failures, 0 errors, 0 skips
+519 runs, 1326 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 

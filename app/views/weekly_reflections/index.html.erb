@@ -200,3 +200,11 @@
     flash[:crisis] = true を受け取るページにパーシャルが必要なため追加する。
 %>
 <%= render "shared/crisis_intervention_modal" %>
+
+<%#
+  D-6: AI コスト上限モーダル（14-B）
+  complete_without_ai アクション後に weekly_reflections_path に
+  リダイレクトされた場合に備えて配置する。
+  通常このページでモーダルが開くことはないが、念のため配置しておく。
+%>
+<%= render "weekly_reflections/ai_limit_modal" %>

@@ -1,0 +1,126 @@
+<%# app/views/weekly_reflections/_ai_limit_modal_content.html.erb %>
+<%#
+  ==============================================================================
+  14-B モーダルのコンテンツ部分（D-6）
+  ==============================================================================
+  【「AIなしで完了」の送信方式について】
+    JavaScriptでメインフォームのactionを書き換える方式は
+    render :new 時にフォームのURLが相対パスになる問題があった。
+    そのため、モーダル内に complete_without_ai 専用フォームを持ち、
+    メインフォームの入力値を JavaScript でコピーして送信する方式に変更。
+  ==============================================================================
+%>
+
+<div class="p-5">
+
+  <%# ── ヘッダー ── %>
+  <div class="flex items-start justify-between mb-4 gap-2">
+    <div class="flex items-start gap-2 flex-1 min-w-0">
+      <span class="text-xl flex-shrink-0 mt-0.5" aria-hidden="true">⚠️</span>
+      <h2 class="text-base font-bold text-gray-900 leading-snug" id="ai-limit-modal-title">
+        今月のAI分析回数の上限に達しました
+      </h2>
+    </div>
+    <button type="button"
+            data-action="ai-limit-modal#close"
+            class="flex-shrink-0 text-gray-400 hover:text-gray-600 transition-colors
+                   p-1 rounded focus:outline-none focus:ring-2 focus:ring-gray-400"
+            aria-label="モーダルを閉じる">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <%# ── 説明文 ── %>
+  <p class="text-sm text-gray-600 mb-4 leading-relaxed">
+    振り返りの保存と PDCAロック解除は通常通り実行できます。<br>
+    AI提案なしで今週の振り返りを完了するか、来月になるまでお待ちください。
+  </p>
+
+  <%# ── 使用状況カード ── %>
+  <% user_setting = current_user.user_setting %>
+  <% ai_count = user_setting&.ai_analysis_count || 0 %>
+  <% ai_limit = user_setting&.ai_analysis_monthly_limit || 10 %>
+
+  <div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+    <p class="text-xs font-bold text-red-700 uppercase tracking-wide mb-2">AI使用状況（当月）</p>
+    <div class="flex justify-between items-center mb-2">
+      <span class="text-sm text-gray-700">使用回数</span>
+      <span class="text-sm font-bold text-red-600 flex-shrink-0 ml-2">
+        <%= ai_count %> / <%= ai_limit %> 回
+      </span>
+    </div>
+    <div class="w-full bg-red-100 rounded-full h-2.5 overflow-hidden">
+      <div class="bg-red-500 h-2.5 rounded-full"
+           style="width: <%= ai_limit.zero? ? 100 : [(ai_count.to_f / ai_limit * 100).floor, 100].min %>%">
+      </div>
+    </div>
+    <p class="text-xs text-gray-500 mt-2">毎月1日に使用回数はリセットされます。</p>
+  </div>
+
+  <%# ── 補足説明 ── %>
+  <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+    <p class="text-xs text-blue-700 leading-relaxed">
+      ✅ <strong>振り返りの保存は通常通り実行されます。</strong><br>
+      AIなしで完了した場合、習慣・タスクのAI提案は提供されませんが、
+      ロック解除や振り返りコメントの保存は問題なく行えます。
+    </p>
+  </div>
+
+  <%# ── ボタンエリア ── %>
+  <div class="space-y-3">
+
+    <%#
+      「AIなしで振り返りを完了する」専用フォーム
+      complete_without_ai に直接 POST する独立したフォーム。
+      メインフォームの入力値は Stimulus の copyAndSubmit() で
+      hidden フィールドにコピーしてから送信する。
+      data-ai-limit-modal-target="submitForm" で JS から参照する。
+    %>
+    <%= form_with url: complete_without_ai_weekly_reflections_path,
+                  method: :post,
+                  local: true,
+                  data: { "ai-limit-modal-target": "submitForm" } do |f| %>
+
+      <%#
+        hidden フィールド: メインフォームの入力値を JS でコピーする先。
+        初期値は空文字。submitWithoutAi() が呼ばれたときに
+        メインフォームの各フィールドの値をここにセットする。
+      %>
+      <%= f.hidden_field :reflection_comment,   value: "", data: { field: "reflection_comment" } %>
+      <%= f.hidden_field :direct_reason,        value: "", data: { field: "direct_reason" } %>
+      <%= f.hidden_field :background_situation, value: "", data: { field: "background_situation" } %>
+      <%= f.hidden_field :next_action,          value: "", data: { field: "next_action" } %>
+
+      <%#
+        送信ボタン
+        data-action="click->ai-limit-modal#submitWithoutAi":
+          クリックすると submitWithoutAi() が呼ばれ、
+          メインフォームの値をコピーしてからこのフォームを送信する。
+      %>
+      <button type="button"
+              data-action="click->ai-limit-modal#submitWithoutAi"
+              class="w-full py-3 px-4 bg-orange-500 hover:bg-orange-600
+                     text-white font-semibold rounded-xl transition-colors
+                     cursor-pointer text-sm
+                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-400">
+        AIなしで振り返りを完了する
+      </button>
+    <% end %>
+
+    <button type="button"
+            data-action="ai-limit-modal#close"
+            class="w-full py-3 px-4 bg-white border border-gray-300
+                   text-gray-700 font-semibold rounded-xl
+                   hover:bg-gray-50 transition-colors text-sm
+                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400">
+      入力を続ける（キャンセル）
+    </button>
+
+    <p class="text-center text-xs text-gray-400 pt-1">
+      AI使用状況の詳細は<span class="text-blue-500 font-medium">設定ページ</span>で確認できます。（近日公開予定）
+    </p>
+  </div>
+
+</div>

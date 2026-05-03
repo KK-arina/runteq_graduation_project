@@ -1,18 +1,31 @@
 # app/controllers/weekly_reflections_controller.rb
 #
 # ==============================================================================
-# WeeklyReflectionsController（D-5: 危機介入機能を追加）
+# WeeklyReflectionsController
 # ==============================================================================
-# 【D-5 での変更内容】
-#   create アクションで WeeklyReflectionCompleteService の戻り値に
-#   crisis_detected: true が含まれている場合、
-#   flash[:crisis] にフラグを立てて振り返り入力ページにリダイレクトする。
-#   このフラグをビューが受け取って危機介入モーダルを表示する。
+# 【変更履歴】
+#   D-5: create アクションに危機介入（crisis_detected）分岐を追加
+#   D-6: create アクションに AI コスト上限チェックを追加
+#        ・上限に達している場合は flash.now[:ai_limit] = true をセットして
+#          render :new を実行する（redirect_to ではなく render を使う理由は後述）
+#        ・complete_without_ai アクションを新規追加
+#          → 振り返りを保存してロック解除するが AI 分析ジョブはエンキューしない
 #
-# 【なぜ flash を使うのか】
-#   リダイレクト後のページ（new.html.erb）でモーダルを表示するために、
-#   リダイレクト前のリクエストのデータをリダイレクト後に渡す手段として
-#   flash が最適。flash は1リクエストだけ生きるセッション情報。
+# 【D-6 の最重要設計ポイント: render vs redirect_to】
+#   NG: redirect_to new_weekly_reflection_path
+#     → ユーザーが書いた「振り返りコメント」「なぜ？」等のテキストがすべて消える
+#     → 書き直しを強いられるため UX が最悪になる
+#
+#   OK: render :new, status: :unprocessable_entity
+#     → @weekly_reflection のインスタンス変数が保持されるため、
+#       フォームに入力済みの内容がそのまま残る
+#     → モーダルだけが浮かび上がり、ユーザーは選択するだけでよい
+#
+# 【flash.now vs flash の使い分け】
+#   flash      : 次のリクエスト（リダイレクト先）まで保持される
+#   flash.now  : 現在のリクエスト内（render したビュー）だけで有効
+#   render :new のときは flash.now を使う。flash を使うと
+#   次のページ遷移でも表示されてしまい、モーダルが二重に起動する。
 # ==============================================================================
 
 class WeeklyReflectionsController < ApplicationController
@@ -45,6 +58,9 @@ class WeeklyReflectionsController < ApplicationController
     @not_achieved_habits = @habits.reject { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
   end
 
+  # ============================================================
+  # create アクション（D-6: AI コスト上限チェックを追加）
+  # ============================================================
   def create
     @weekly_reflection = find_pending_last_week_reflection ||
                         WeeklyReflection.find_or_build_for_current_week(current_user)
@@ -54,7 +70,25 @@ class WeeklyReflectionsController < ApplicationController
       return
     end
 
+    # フォームの入力値を @weekly_reflection にセットする。
+    # assign_attributes を先に実行することで、AI上限チェックで
+    # render :new になった場合もフォームの入力内容が残る。
     @weekly_reflection.assign_attributes(weekly_reflection_params)
+
+    # ── D-6 追加: AI コスト上限チェック ──────────────────────────────────────
+    #
+    # 【flash.now を使う理由】
+    #   render :new（リダイレクトなし）でビューを描画するため、
+    #   flash.now で「このリクエスト内だけ有効」なフラグを立てる。
+    #   flash を使うと次のリクエストでもフラグが残りモーダルが二重起動する。
+    if ai_limit_exceeded?
+      flash.now[:ai_limit] = true
+      setup_new_form_variables
+      render :new, status: :unprocessable_entity
+      return
+    end
+    # ────────────────────────────────────────────────────────────────────────────
+
     was_locked = current_user.locked?
 
     result = WeeklyReflectionCompleteService.new(
@@ -67,33 +101,11 @@ class WeeklyReflectionsController < ApplicationController
     if result[:success]
       current_user.reload
 
-      # ── D-5 追加: 危機ワード検出時の分岐 ────────────────────────────────
-      #
-      # 【なぜ crisis_detected: true でも success: true を返すのか】
-      #   振り返りの保存自体は成功しているため、success: true になる。
-      #   crisis 検出は「保存の失敗」ではなく「特別な状態」なので、
-      #   success の中に crisis_detected フラグを含めて判断する。
-      #
-      # 【flash[:crisis] の使い方】
-      #   リダイレクト先のビューで `flash[:crisis]` が true なら
-      #   危機介入モーダルを自動表示する（JavaScript で制御）。
-      #   flash は1リクエスト分のみ有効なので、ページ遷移後は自動でクリアされる。
+      # ── D-5: 危機ワード検出時の分岐（変更なし）──────────────────────────
       if result[:crisis_detected]
         Rails.logger.warn "[WeeklyReflectionsController] 危機ワード検出: user_id=#{current_user.id}"
-
         flash[:crisis] = true
 
-        # ── D-5 修正: crisis時のリダイレクト先 ──────────────────────────────
-        #
-        # 【修正理由】
-        #   振り返りは保存完了（completed_at がセット済み）のため、
-        #   /weekly_reflections/new にリダイレクトすると
-        #   new アクション冒頭の completed? ガードに引っかかり、
-        #   /weekly_reflections に強制リダイレクトされてしまう。
-        #   そのため最初から適切なリダイレクト先を指定する。
-        #
-        # ロック状態だった場合 → ダッシュボード（ロック解除バナーも表示）
-        # 通常の場合         → 振り返り一覧（モーダルを表示）
         if was_locked
           flash[:unlock] = "振り返りが完了しました。PDCAロックが解除されました。🔓"
           redirect_to dashboard_path
@@ -113,12 +125,65 @@ class WeeklyReflectionsController < ApplicationController
       end
     else
       Rails.logger.error "WeeklyReflectionCompleteService failed: #{result[:error]}"
+      setup_new_form_variables
+      flash.now[:alert] = "保存に失敗しました。入力内容を確認してください。"
+      render :new, status: :unprocessable_entity
+    end
+  end
 
-      @habits = current_user.habits.active.includes(:habit_excluded_days)
-      @habit_stats = build_habit_stats(@habits, current_user)
-      @achieved_habits     = @habits.select { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
-      @not_achieved_habits = @habits.reject { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
+  # ============================================================
+  # complete_without_ai アクション（D-6 新規追加）
+  # ============================================================
+  #
+  # 【役割】
+  #   Stimulus の submitWithoutAi() から呼ばれる。
+  #   メインフォームの action を /weekly_reflections/complete_without_ai に
+  #   書き換えて送信するため、ユーザーが入力した振り返り内容がそのまま届く。
+  #   振り返りの保存とロック解除は通常通り行うが、
+  #   AI 分析ジョブはエンキューしない（上限チェックで自動スキップされる）。
+  def complete_without_ai
+    @weekly_reflection = find_pending_last_week_reflection ||
+                        WeeklyReflection.find_or_build_for_current_week(current_user)
 
+    if @weekly_reflection.persisted? && @weekly_reflection.completed?
+      redirect_to weekly_reflections_path, notice: "振り返りは既に完了しています。"
+      return
+    end
+
+    @weekly_reflection.assign_attributes(complete_without_ai_params)
+    was_locked = current_user.locked?
+
+    result = WeeklyReflectionCompleteService.new(
+      reflection:  @weekly_reflection,
+      user:        current_user,
+      was_locked:  was_locked,
+      corrections: params[:reflection_numeric_corrections]
+    ).call
+
+    if result[:success]
+      current_user.reload
+
+      if result[:crisis_detected]
+        flash[:crisis] = true
+        if was_locked
+          flash[:unlock] = "振り返りが完了しました。PDCAロックが解除されました。🔓"
+          redirect_to dashboard_path
+        else
+          redirect_to weekly_reflections_path
+        end
+        return
+      end
+
+      if was_locked
+        flash[:unlock] = "振り返りが完了しました！PDCAロックが解除されました。（今月のAI分析回数の上限に達したため、AI分析はスキップされました）🔓"
+        redirect_to dashboard_path
+      else
+        redirect_to weekly_reflections_path,
+                    notice: "今週の振り返りを保存しました！（AI分析はスキップされました）お疲れ様でした🎉"
+      end
+    else
+      Rails.logger.error "WeeklyReflectionCompleteService (without AI) failed: #{result[:error]}"
+      setup_new_form_variables
       flash.now[:alert] = "保存に失敗しました。入力内容を確認してください。"
       render :new, status: :unprocessable_entity
     end
@@ -135,6 +200,34 @@ class WeeklyReflectionsController < ApplicationController
   end
 
   private
+
+  # complete_without_ai 専用のパラメータ取得メソッド
+  # モーダルのフォームは weekly_reflection[] なしで送信されるため
+  # weekly_reflection_params とは別に定義する
+  def complete_without_ai_params
+    # params に weekly_reflection キーがある場合（通常フォームからの送信）
+    if params[:weekly_reflection].present?
+      weekly_reflection_params
+    else
+      # モーダルの hidden フィールドからの送信（フラットなパラメータ）
+      params.permit(
+        :reflection_comment,
+        :direct_reason,
+        :background_situation,
+        :next_action
+      )
+    end
+  end
+
+  # setup_new_form_variables（D-6 新規追加）
+  # new ビューのレンダリングに必要な変数を一括セットする。
+  # create と complete_without_ai の両方で render :new する際に使う（DRY化）。
+  def setup_new_form_variables
+    @habits = current_user.habits.active.includes(:habit_excluded_days)
+    @habit_stats = build_habit_stats(@habits, current_user)
+    @achieved_habits     = @habits.select { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
+    @not_achieved_habits = @habits.reject { |h| (@habit_stats[h.id]&.dig(:rate) || 0) >= 100 }
+  end
 
   def calculate_overall_achievement_rate
     return 0 if @habit_summaries.empty?

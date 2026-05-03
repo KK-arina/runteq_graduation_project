@@ -99,7 +99,23 @@ Rails.application.routes.draw do
     resources :habit_records, only: [ :create, :update ]
   end
 
-  resources :weekly_reflections, only: [ :index, :new, :create, :show ]
+  # 【collection と member の違い】
+  #   collection → /weekly_reflections/complete_without_ai
+  #               特定のレコードを指定しない操作（:id が URL に含まれない）
+  #   member     → /weekly_reflections/:id/complete_without_ai
+  #               特定のレコードに対する操作（:id が URL に含まれる）
+  #
+  # complete_without_ai は「現在の週の振り返り」を対象とするが
+  # ID を URL で指定するのではなく、コントローラー内で動的に取得するため
+  # collection を使う。
+
+  resources :weekly_reflections, only: [:index, :new, :create, :show] do
+    collection do
+      # POST /weekly_reflections/complete_without_ai
+      # AI上限超過時に「AIなしで完了」ボタンを押したときに呼ばれる
+      post :complete_without_ai
+    end
+  end
 
   if Rails.env.development?
     mount GoodJob::Engine => "/good_job"
