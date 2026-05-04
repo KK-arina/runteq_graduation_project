@@ -4,19 +4,68 @@
   ダッシュボード画面。
   今週の習慣達成率・今日の習慣チェック・タスク優先度別達成率・今日のタスクを表示する。
 
-  【C-6 変更点】
-    「今週のタスク達成率」セクションを追加。
-    @task_priority_stats を使い Must / Should / Could の達成率プログレスバーを表示する。
-    total が 0 の優先度は行ごと非表示。全て 0 件の場合はカード全体を非表示にする。
-    data-testid 属性を各要素に付与してテストから正確に参照できるようにする。
-
-  【C-6 追加修正】
-    習慣ごとのプログレスバー色・全体達成率の数字色を
-    rate_hex_color / rate_color ヘルパーで統一する。
+  【D-7 変更点】
+    PMVV AI分析バナーを追加。
+    @current_purpose が存在する場合、turbo_stream_from でチャンネルを購読し、
+    PurposeAnalysisJob が完了したとき Turbo Stream でバナーをリアルタイム更新する。
 %>
 <% content_for :title, "ダッシュボード | HabitFlow" %>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <%#
+    ──────────────────────────────────────────────────────────────────────────
+    D-7: PMVV AI分析完了バナー（Turbo Stream リアルタイム更新対応）
+    ──────────────────────────────────────────────────────────────────────────
+    【なぜここに置くのか】
+      オンボーディング完了後、PurposeAnalysisJob が非同期で分析を実行する。
+      分析完了時に Turbo Stream でバナーをリアルタイム更新して
+      「完了しました」をユーザーに通知するため。
+
+    【turbo_stream_from の仕組み】
+      turbo_stream_from "user_purpose_#{current_user.id}" と書くことで
+      このページは "user_purpose_#{ユーザーID}" チャンネルを購読（subscribe）する。
+      PurposeAnalysisJob の broadcast_state_update が
+      同じチャンネル名に向けて broadcast_replace_to を送信したとき、
+      id="analysis_status_banner" の DOM が自動で置き換えられる。
+
+    【@current_purpose が nil の場合】
+      PMVV 未入力またはスキップしたユーザーはバナーを表示しない。
+      if @current_purpose のガードで制御する。
+
+    【id="analysis_status_banner" が重要な理由】
+      PurposeAnalysisJob の broadcast_replace_to の target 名と
+      完全に一致させる必要がある。
+      一致しないと DOM が更新されない。
+    ──────────────────────────────────────────────────────────────────────────
+  %>
+  <% if @current_purpose %>
+    <%#
+      【重要】チャンネル名は PurposeAnalysisJob の broadcast_replace_to と
+      完全に一致させる必要がある。
+      ジョブ側: "user_purpose_#{user_purpose.id}" → UserPurpose レコードの ID
+      ビュー側も UserPurpose の ID を使う必要がある。
+      current_user.id（User の ID）ではなく、
+      @current_purpose.id（UserPurpose の ID）を使う。
+    %>
+    <%= turbo_stream_from "user_purpose_#{@current_purpose.id}" %>
+
+    <%#
+      id="analysis_status_banner":
+        PurposeAnalysisJob の broadcast_replace_to のターゲット名と一致させる（必須）。
+        ジョブが完了したとき、この div の中身が自動的に置き換えられる。
+
+      render partial:
+        _analysis_status_banner.html.erb（user_purposes ディレクトリにある既存パーシャル）を
+        ダッシュボードでも再利用する。
+        locals で @current_purpose と @ai_analysis を渡す。
+    %>
+    <div id="analysis_status_banner" class="mb-6">
+      <%= render "user_purposes/analysis_status_banner",
+            user_purpose: @current_purpose,
+            ai_analysis:  @ai_analysis %>
+    </div>
+  <% end %>
 
   <%# ── PDCA強制ロック警告バナー ──────────────────────────────────────── %>
   <% if @locked %>
@@ -50,11 +99,6 @@
       <div class="mb-4">
         <div class="flex justify-between items-center mb-1">
           <span class="text-sm text-gray-600">全体達成率</span>
-          <%#
-            【変更】動的クラスをインラインスタイルに変更。
-            text-= rate_color -600 は Tailwind ビルド時に検出されないため
-            rate_hex_color でインラインスタイルに変更する。
-          %>
           <span class="text-sm font-bold"
                 style="color: <%= rate_hex_color(@overall_rate) %>">
             <%= @overall_rate %>%
@@ -66,9 +110,6 @@
              aria-valuemin="0"
              aria-valuemax="100"
              aria-label="全体の習慣達成率">
-          <%#
-            【変更】動的クラスをインラインスタイルに変更。
-          %>
           <div class="h-3 rounded-full transition-all duration-300"
                style="width: <%= @overall_rate %>%; background-color: <%= rate_hex_color(@overall_rate) %>">
           </div>
@@ -90,19 +131,9 @@
               <% end %>
             </span>
             <span class="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
-              <%#
-                【変更】habit_progress_text ヘルパーで表記を統一する。
-                チェック型の分母が weekly_target から effective_weekly_target に変わり
-                習慣管理の「completed_count/effective_target日」と一致する。
-              %>
               <%= habit_progress_text(habit, stats) %>
             </span>
           </div>
-
-          <%#
-            rate_hex_color を使ってインラインスタイルで色を指定する。
-            habit.color は使わず達成率のみで色を決定する。
-          %>
           <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
                role="progressbar"
                aria-valuenow="<%= stats[:rate] %>"
@@ -119,9 +150,7 @@
     <% end %>
   </div>
 
-  <%# ================================================================== %>
   <%# ── C-6: 今週のタスク達成率（Must/Should/Could 別）──────────────── %>
-  <%# ================================================================== %>
   <% if @task_priority_stats.any? { |_, s| s[:total] > 0 } %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6"
          data-testid="task-priority-stats-section">
@@ -155,16 +184,12 @@
                   data-testid="priority-count-<%= display[:testid] %>">
               <%= stats[:done] %>/<%= stats[:total] %>件 完了
             </span>
-            <%#
-              【変更】動的クラスをインラインスタイルに変更。
-            %>
             <span class="text-sm font-bold flex-shrink-0"
                   style="color: <%= rate_hex_color(stats[:rate]) %>"
                   data-testid="priority-rate-<%= display[:testid] %>">
               <%= stats[:rate] %>%
             </span>
           </div>
-
           <div class="h-3 bg-gray-200 rounded-full overflow-hidden"
                role="progressbar"
                aria-valuenow="<%= stats[:rate] %>"
@@ -281,22 +306,8 @@
 
 </div>
 
-<%#
-  ─────────────────────────────────────────────────────────────────────────────
-  D-5: 危機介入モーダル（ダッシュボード）
-  ─────────────────────────────────────────────────────────────────────────────
-  【なぜ dashboards/index.html.erb にモーダルを置くのか】
-    ロック状態のユーザーが crisis ワードで振り返りを完了した場合、
-    flash[:unlock] と flash[:crisis] の両方をセットして
-    dashboard_path にリダイレクトするため、
-    ダッシュボードでもモーダルを表示できるようにする。
-%>
+<%# D-5: 危機介入モーダル %>
 <%= render "shared/crisis_intervention_modal" %>
 
-<%#
-  D-6: AI コスト上限モーダル（14-B）
-  was_locked = true の場合（ロック状態から完了した場合）、
-  complete_without_ai は dashboard_path にリダイレクトする。
-  そのためダッシュボードにも配置する。
-%>
+<%# D-6: AI コスト上限モーダル %>
 <%= render "weekly_reflections/ai_limit_modal" %>

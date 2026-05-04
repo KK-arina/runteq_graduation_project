@@ -20,7 +20,9 @@ class WeeklyReflectionsAiLimitTest < ActionDispatch::IntegrationTest
       name:                  "AIテストユーザー",
       email:                 "ai_limit_#{rand(9999)}@example.com",
       password:              "password123",
-      password_confirmation: "password123"
+      password_confirmation: "password123",
+      # D-7 追加: first_login_at が NULL だと /onboarding/step5 へリダイレクトされテストが失敗する
+      first_login_at:        1.month.ago
     )
     @user_setting = @user.user_setting
 

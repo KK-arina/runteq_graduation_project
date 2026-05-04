@@ -1,0 +1,220 @@
+<%# app/views/onboardings/step5.html.erb %>
+<%#
+  ==============================================================================
+  オンボーディング 5/5: PMVV目標入力ページ（D-7）
+  ==============================================================================
+  【このページの役割】
+    初回ログインユーザーのオンボーディング最終ステップ。
+    PMVV（Purpose/Mission/Vision/Value/Current）を入力するフォームを表示する。
+
+  【スキップ処理について】
+    button_to + method: :post で POST /onboarding/skip を呼び出す。
+
+    ⚠️ 重要: data: { turbo: false } は使わない。
+    turbo: false を指定すると Rails の CSRF トークンがフォームに
+    埋め込まれなくなり、422 エラーが発生する。
+    button_to はデフォルトで Turbo が処理するため、
+    turbo を有効のままにする（= data: { turbo: false } を削除）。
+
+  【フォームの送信先】
+    form_with url: onboarding_complete_path, method: :post
+    → POST /onboarding/complete → OnboardingsController#complete
+  ==============================================================================
+%>
+<% content_for :title, "目標を入力（5/5）| HabitFlow" %>
+
+<div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <%#
+    ──────────────────────────────────────────────────────────────────────────
+    ステップインジケーター（進捗バー）
+    ──────────────────────────────────────────────────────────────────────────
+    【役割】今が5ステップ中の何番目かをユーザーに視覚的に伝える。
+    ステップ1〜4: 完了済み（緑・チェックマーク）
+    ステップ5:    現在ステップ（青・アクティブ）
+  %>
+  <div class="flex justify-center items-center gap-2 mb-8"
+       aria-label="オンボーディング進捗: 5ステップ中の5ステップ目">
+    <% (1..4).each do |step| %>
+      <%# 完了済みステップのドット（緑） %>
+      <div class="w-8 h-8 rounded-full bg-green-500 text-white flex items-center
+                  justify-center text-xs font-bold flex-shrink-0"
+           aria-hidden="true">
+        ✓
+      </div>
+      <%# ステップ間の繋ぎライン（完了済み = 緑） %>
+      <div class="w-8 h-1 bg-green-400 flex-shrink-0" aria-hidden="true"></div>
+    <% end %>
+
+    <%# 5番目のステップドット（現在 = 青） %>
+    <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center
+                justify-center text-xs font-bold flex-shrink-0
+                ring-2 ring-blue-500 ring-offset-2"
+         aria-current="step"
+         aria-label="ステップ 5（現在）">
+      5
+    </div>
+  </div>
+
+  <%# ページヘッダー %>
+  <div class="mb-6 text-center">
+    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">
+      ステップ 5 / 5 — 最後のステップです
+    </p>
+    <h1 class="text-2xl font-bold text-gray-900">🎯 あなたの目標を教えてください</h1>
+    <p class="mt-2 text-sm text-gray-500 leading-relaxed">
+      PMVV（Purpose / Mission / Vision / Value）を入力すると、<br>
+      AIがあなたに合った習慣・タスクを提案します。
+    </p>
+  </div>
+
+  <%# 情報バナー %>
+  <div class="mb-6 flex items-start gap-3 px-4 py-3
+              bg-violet-50 border border-violet-200 rounded-xl">
+    <span class="text-xl flex-shrink-0" aria-hidden="true">✨</span>
+    <p class="text-sm text-violet-700 leading-relaxed">
+      すべて任意入力です。スキップして後から入力することもできます。<br>
+      保存後、バックグラウンドでAI分析を開始します。
+    </p>
+  </div>
+
+  <%# バリデーションエラー表示 %>
+  <%= render "shared/form_errors", model: @user_purpose %>
+
+  <%#
+    ──────────────────────────────────────────────────────────────────────────
+    PMVV 入力フォーム
+
+    【form_with の設定】
+      url: onboarding_complete_path → POST /onboarding/complete に送信する
+      method: :post               → HTTP POST を明示する
+      local: true                 → Turbo を使わず通常フォーム送信にする
+                                     （完了後は redirect_to でページ遷移するため）
+      data-controller="form-submit" → 二重送信防止 Stimulus コントローラー
+
+    【url: を明示する理由】
+      model: @user_purpose（単数形リソース）だと Rails が
+      user_purposes_path を探しに行くが存在しないためエラーになる。
+      オンボーディング専用 POST に送るため url: を明示する。
+    ──────────────────────────────────────────────────────────────────────────
+  %>
+  <%= form_with model: @user_purpose,
+                url: onboarding_complete_path,
+                method: :post,
+                local: true,
+                class: "space-y-6",
+                data: {
+                  controller: "form-submit",
+                  action: "submit->form-submit#submit"
+                } do |f| %>
+
+    <%# PURPOSE（人生で大切にしていること）%>
+    <%= render "user_purposes/voice_field",
+          f: f,
+          field: :purpose,
+          label_text: "Purpose",
+          hint_text: "人生で一番大切にしていることは？",
+          placeholder: "人生で一番大切にしていることを自由に書いてください",
+          example: "例: 家族と過ごす時間を大切にしながら、仕事でも成果を出したい",
+          rows: 3,
+          maxlength: 1000 %>
+
+    <%# VISION（1年後の理想の自分）%>
+    <%= render "user_purposes/voice_field",
+          f: f,
+          field: :vision,
+          label_text: "Vision",
+          hint_text: "1年後どんな自分になっていたいか？",
+          placeholder: "1年後になりたい自分の姿を具体的に書いてください",
+          example: "例: 毎朝6時に起きて読書できる習慣が身についた自分",
+          rows: 3,
+          maxlength: 1000 %>
+
+    <%# MISSION（今最も必要なこと）%>
+    <%= render "user_purposes/voice_field",
+          f: f,
+          field: :mission,
+          label_text: "Mission",
+          hint_text: "今の自分に最も必要なことは？",
+          placeholder: "今の自分に最も必要なことを書いてください",
+          example: "例: 睡眠の質を改善して、毎日の集中力を高める",
+          rows: 3,
+          maxlength: 1000 %>
+
+    <%# VALUE（絶対に譲れないこと）%>
+    <%= render "user_purposes/voice_field",
+          f: f,
+          field: :value,
+          label_text: "Value",
+          hint_text: "絶対に譲れないことは？",
+          placeholder: "あなたが大切にしている価値観を書いてください",
+          example: "例: 家族との夕食時間は削らない。週末の休息は確保する",
+          rows: 2,
+          maxlength: 500 %>
+
+    <%# CURRENT（今の自分の現状）%>
+    <%= render "user_purposes/voice_field",
+          f: f,
+          field: :current_situation,
+          label_text: "Current",
+          hint_text: "今の自分の現状を教えてください",
+          placeholder: "現在の状況や課題を具体的に書いてください（AIの分析精度が上がります）",
+          example: "例: 夜11時に寝ているが質が悪く、朝起きるのが辛い。筋トレは週2回できている",
+          rows: 3,
+          maxlength: 1000 %>
+
+    <%#
+      完了ボタン（フォーム内）
+      スキップボタンはフォームの外に配置するため完了ボタンのみここに残す。
+      スキップボタンをフォーム内に置くと button_to が生成する <form> が
+      メインフォームの内側に入り HTML 仕様違反になる。
+      その結果、スキップ時にメインフォームのバリデーションが走り
+      「少なくとも1つ入力してください」エラーが表示される。
+    %>
+    <div class="pt-2">
+      <%= f.submit t("onboarding.complete_button"),
+            class: "w-full py-3 px-6 bg-violet-600 text-white
+                    text-sm font-semibold rounded-xl
+                    hover:bg-violet-700 transition-colors cursor-pointer
+                    focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500",
+            data: {
+              "form-submit-target": "button",
+              "loading-text": "保存中..."
+            } %>
+    </div>
+
+  <% end %>
+  <%#
+    ↑ここで form_with を閉じる。
+    スキップボタンは必ずこの下（フォームの外）に配置する。
+  %>
+
+  <%#
+    スキップボタン（フォームの外）
+    【なぜフォームの外に置くのか】
+      button_to は独自の <form method="post"> を生成する。
+      HTML の仕様では form の中に form を入れることができない。
+      フォームの外に出すことでスキップは完全に独立した
+      POST リクエストになり正常に動作する。
+  %>
+  <div class="mt-3">
+    <%= button_to t("onboarding.skip_button"),
+          onboarding_skip_path,
+          method: :post,
+          form: { class: "w-full" },
+          class: "w-full px-5 py-3 bg-white border border-gray-300
+                  text-gray-500 text-sm font-medium rounded-xl
+                  hover:bg-gray-50 hover:text-gray-700 transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" %>
+  </div>
+
+  <%# 補足説明 %>
+  <p class="mt-4 text-center text-xs text-gray-400 leading-relaxed">
+    スキップしても、ダッシュボードの「目標管理」からいつでも入力できます。<br>
+    PMVV を入力することで AI 提案の精度が大幅に向上します。
+  </p>
+
+</div>
+
+<%# 危機介入モーダル（D-5 実装済み） %>
+<%= render "shared/crisis_intervention_modal" %>

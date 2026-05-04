@@ -23,8 +23,10 @@ class HabitExcludedDayTest < ActiveSupport::TestCase
     @user = User.create!(
       name:             "テストユーザー",
       email:            "test_b2_#{SecureRandom.hex(4)}@example.com",
-      password:         "password123",
-      password_confirmation: "password123"
+      password:              "password123",
+      password_confirmation: "password123",
+      # D-7 追加: first_login_at が NULL だと /onboarding/step5 へリダイレクトされテストが失敗する
+      first_login_at:        1.month.ago
     )
 
     @habit = @user.habits.create!(

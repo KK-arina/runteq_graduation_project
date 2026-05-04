@@ -132,20 +132,25 @@ class ApplicationController < ActionController::Base
   end
 
   # ----------------------------------------------------------
-  # require_login
+  # require_login（D-7 更新: オンボーディングリダイレクトを追加）
   # ----------------------------------------------------------
-  # before_action として使用します。
-  # ログインしていない場合はログインページにリダイレクトします。
+  # 【変更内容】
+  #   ログイン済みかつ first_login_at が NULL のユーザー（初回ログイン）を
+  #   オンボーディングページへリダイレクトする処理を追加した。
   #
-  # 【セキュリティ上の意味】
-  # 認証が必要なアクション（習慣管理、ダッシュボード等）の前に
-  # 必ずこのチェックを挟むことで、未ログインユーザーが
-  # 直接URLを叩いてもデータにアクセスできないようにしている。
+  # 【redirect_to_onboarding_if_needed の役割】
+  #   ログイン後に全ページで初回ユーザーをチェックする。
+  #   オンボーディング自体のページ（/onboarding/*）では
+  #   リダイレクトしない（無限ループ防止）。
   def require_login
     unless logged_in?
       flash[:alert] = "ログインしてください"
       redirect_to login_path
+      return
     end
+
+    # D-7 追加: 初回ログインユーザーをオンボーディングへリダイレクトする
+    redirect_to_onboarding_if_needed
   end
 
   # ============================================================
@@ -338,5 +343,33 @@ class ApplicationController < ActionController::Base
       # シンプルなエラーメッセージをJSONで返す
       format.json { render json: { error: status.to_s }, status: status }
     end
+  end
+
+  # ----------------------------------------------------------
+  # redirect_to_onboarding_if_needed（D-7 追加）
+  # ----------------------------------------------------------
+  # 【役割】
+  #   first_login_at が NULL のログイン済みユーザーを
+  #   オンボーディングページ（5/5 PMVV入力）へリダイレクトする。
+  #
+  # 【無限ループ防止の仕組み】
+  #   オンボーディングページ自体でも before_action :require_login が
+  #   呼ばれるため、このメソッドが呼ばれる。
+  #   オンボーディングコントローラーにいるときはリダイレクトしないよう
+  #   controller_name == 'onboardings' でガードする。
+  #
+  #   同様に sessions コントローラーと users コントローラーも除外する。
+  #   ログアウト処理中や登録中にリダイレクトが発生しないようにするため。
+  #
+  # 【current_user.first_login_at.nil? の意味】
+  #   first_login_at が NULL = オンボーディング未完了
+  #   NULL 以外（DateTime）= オンボーディング完了済み
+  def redirect_to_onboarding_if_needed
+    # オンボーディング・認証関連コントローラーでは実行しない
+    return if controller_name.in?(%w[onboardings sessions users errors pages])
+    return unless current_user&.first_login_at.nil?
+
+    # 初回ログインユーザーをオンボーディング 5/5 へリダイレクト
+    redirect_to onboarding_step5_path, notice: t("onboarding.welcome")
   end
 end

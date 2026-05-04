@@ -35,6 +35,25 @@ Rails.application.routes.draw do
   post   "/login",  to: "sessions#create"
   delete "/logout", to: "sessions#destroy", as: :logout
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # D-7 追加: オンボーディングルーティング
+  # ──────────────────────────────────────────────────────────────────────────
+  # 【各ルートの役割】
+  #   GET  /onboarding/step5    → step5 アクション（5/5 PMVV入力ページを表示）
+  #   POST /onboarding/complete → complete アクション（PMVV保存 + 完了）
+  #   POST /onboarding/skip     → skip アクション（スキップして完了）
+  #
+  # 【as: オプション】
+  #   as: :onboarding_step5    → ビューで onboarding_step5_path と書ける
+  #   as: :onboarding_complete → ビューで onboarding_complete_path と書ける
+  #   as: :onboarding_skip     → ビューで onboarding_skip_path と書ける
+  scope "/onboarding", controller: :onboardings do
+    get  "step5",    action: :step5,    as: :onboarding_step5
+    post "complete", action: :complete, as: :onboarding_complete
+    post "skip",     action: :skip,     as: :onboarding_skip
+  end
+  # ──────────────────────────────────────────────────────────────────────────
+
   get "dashboard", to: "dashboards#index", as: :dashboard
 
   # ---------------------------------------------------------------

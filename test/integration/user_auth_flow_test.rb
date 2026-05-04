@@ -66,18 +66,13 @@ class UserAuthFlowTest < ActionDispatch::IntegrationTest
     # assert_redirected_to: 指定パスへの 302 リダイレクトレスポンスかどうかを確認
     assert_redirected_to dashboard_path
 
-    # follow_redirect!: リダイレクト先の URL に実際に GET リクエストを送る
-    # これにより dashboard_path のレスポンスがセットされます
+    # follow_redirect!: dashboard_path へ GET リクエストを送る
     follow_redirect!
 
-    # ダッシュボードが表示されることを確認
-    # assert_response :success → HTTP ステータス 200 OK であることを確認
-    assert_response :success
-
-    # assert_select "h1", text: /ダッシュボード/
-    # → <h1> タグの中に「ダッシュボード」という文字列が含まれることを確認
-    # /ダッシュボード/ は正規表現（完全一致ではなく部分一致）
-    assert_select "h1", text: /ダッシュボード/
+    # D-7 対応: 新規ユーザーは first_login_at = NULL のため
+    # dashboard_path にアクセスすると /onboarding/step5 へリダイレクトされる
+    # ダッシュボードは表示されずオンボーディングへ誘導される設計
+    assert_redirected_to onboarding_step5_path
 
     # ── Step 2: ログアウト ────────────────────────────────────────
     # SessionsController#destroy を呼び出す
@@ -105,9 +100,10 @@ class UserAuthFlowTest < ActionDispatch::IntegrationTest
     # SessionsController#create はログイン成功後に dashboard_path にリダイレクトします
     assert_redirected_to dashboard_path
 
+    # D-7 対応: このユーザーは新規登録後 first_login_at が NULL のまま。
+    # dashboard_path にアクセスすると /onboarding/step5 へリダイレクトされる。
     follow_redirect!
-    assert_response :success
-    assert_select "h1", text: /ダッシュボード/
+    assert_redirected_to onboarding_step5_path
   end
 
   # ============================================================

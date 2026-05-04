@@ -62,7 +62,9 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
       name:                  "最終確認ユーザー",
       email:                 "final_check@example.com",
       password:              "password123",
-      password_confirmation: "password123"
+      password_confirmation: "password123",
+      # D-7 追加: first_login_at が NULL だと /onboarding/step5 へリダイレクトされテストが失敗する
+      first_login_at:        1.month.ago
     )
   end
 
@@ -621,7 +623,9 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
         name:                  "他ユーザー",
         email:                 "other_user@example.com",
         password:              "password123",
-        password_confirmation: "password123"
+        password_confirmation: "password123",
+        # D-7 追加: first_login_at が NULL だと /onboarding/step5 へリダイレクトされテストが失敗する
+        first_login_at:        1.month.ago
       )
       other_habit = other_user.habits.create!(name: "他ユーザーの習慣", weekly_target: 7)
 
