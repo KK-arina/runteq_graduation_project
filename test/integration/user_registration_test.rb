@@ -22,24 +22,20 @@ class UserRegistrationTest < ActionDispatch::IntegrationTest
     end
 
     # ------------------------------------------------------------------
-    # ✅ 修正ポイント
-    # 旧: follow_redirect! → assert_select "div", text: /ユーザー登録が完了しました/
-    #     → root_path経由でダッシュボードへ2段階リダイレクトしていた
-    #
-    # 新: UsersController#create が dashboard_path に直接リダイレクトするため
-    #     1回の follow_redirect! で完結する
-    #     コメントで指摘された「1回目の遷移を明示的に確認」も追加
+    # D-7 対応: 新規ユーザーは first_login_at = NULL のため
+    # UsersController#create は dashboard_path へリダイレクトするが、
+    # DashboardsController の require_login → redirect_to_onboarding_if_needed で
+    # /onboarding/step5 へ再リダイレクトされる。
+    # 1回目のリダイレクト先は dashboard_path のまま変わらない。
     # ------------------------------------------------------------------
 
-    # 1回目：登録後 dashboard_path へのリダイレクトを明示的に確認
+    # 1回目：登録後 dashboard_path へのリダイレクトを確認（変更なし）
     assert_redirected_to dashboard_path
 
-    # リダイレクト先のダッシュボードページを取得
+    # 2回目：dashboard_path にアクセスすると /onboarding/step5 へリダイレクト
+    # D-7 対応: 新規ユーザーはオンボーディングへ誘導される
     follow_redirect!
-    assert_response :success
-
-    # ダッシュボードが表示されていることを確認
-    assert_select "h1", text: /ダッシュボード/
+    assert_redirected_to onboarding_step5_path
   end
 
   # ---- 無効な情報での登録失敗テスト ----

@@ -34,7 +34,9 @@ class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
       name:                  "追加確認ユーザー",
       email:                 "additional_check@example.com",
       password:              "password123",
-      password_confirmation: "password123"
+      password_confirmation: "password123",
+      # D-7 追加: first_login_at が NULL だと /onboarding/step5 へリダイレクトされテストが失敗する
+      first_login_at:        1.month.ago
     )
   end
 
@@ -68,7 +70,9 @@ class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
         name:                  "他ユーザー振り返り",
         email:                 "other_reflection@example.com",
         password:              "password123",
-        password_confirmation: "password123"
+        password_confirmation: "password123",
+        # D-7 追加: first_login_at が NULL だと /onboarding/step5 へリダイレクトされテストが失敗する
+        first_login_at:        1.month.ago
       )
       # 完了済みの振り返りレコードを直接作成する
       # completed_at: nil でないもの = 完了済み

@@ -28,7 +28,9 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
       name:                  "テストユーザー",
       email:                 "test_job_#{SecureRandom.hex(4)}@example.com",
       password:              "password",
-      password_confirmation: "password"
+      password_confirmation: "password",
+      # D-7 追加: first_login_at が NULL だと /onboarding/step5 へリダイレクトされテストが失敗する
+      first_login_at:        1.month.ago
     )
 
     # after_create :create_user_setting により User 作成時に自動作成される。

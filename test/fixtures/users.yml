@@ -1,4 +1,4 @@
-# ファイルパス: test/fixtures/users.yml
+# test/fixtures/users.yml
 #
 # 【このファイルの役割】
 # テスト用のユーザーサンプルデータ。
@@ -8,25 +8,31 @@
 # has_secure_password を使っているため、password_digest に BCrypt ハッシュが必要。
 # テスト用の固定ハッシュ（"password" → BCryptハッシュ）を使う。
 # これは rails console で BCrypt::Password.create("password") で生成できる。
-
+#
+# 【D-7 追加: first_login_at について】
+#   first_login_at が NULL のユーザーは ApplicationController の
+#   redirect_to_onboarding_if_needed により /onboarding/step5 へリダイレクトされる。
+#   既存テストユーザーはオンボーディング完了済みとして扱うため
+#   全エントリに first_login_at を設定する。
 # ---- 既存のフィクスチャ（Week 1 で追加済み） ----
-
 one:
   name: "テストユーザー1"
   email: "test1@example.com"
   # "$2a$12$..." は "password" を BCrypt でハッシュ化した文字列
   password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
+  # D-7 追加: オンボーディング完了済みとして扱う（NULL だとリダイレクトされる）
+  first_login_at: "2026-01-01 00:00:00"
 
 two:
   name: "テストユーザー2"
   email: "test2@example.com"
   password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
-
+  # D-7 追加: オンボーディング完了済みとして扱う
+  first_login_at: "2026-01-01 00:00:00"
 
 # ============================================================
 # Issue #25 で追加するフィクスチャ
 # ============================================================
-
 # locked_user
 #   → PDCA強制ロックがかかっているユーザーのテスト用
 #   → このユーザーは weekly_reflections.yml の pending_reflection（未完了）に紐づいている
@@ -35,3 +41,5 @@ locked_user:
   name: "ロックテストユーザー"
   email: "locked@example.com"
   password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
+  # D-7 追加: オンボーディング完了済みとして扱う
+  first_login_at: "2026-01-01 00:00:00"
