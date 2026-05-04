@@ -1,0 +1,346 @@
+<%# app/views/habits/ai_edit.html.erb %>
+<%#
+  ==============================================================================
+  習慣編集ページ（D-8: AI提案モーダル経由限定・8番画面）
+  ==============================================================================
+
+  【このファイルの役割】
+    AI提案モーダルの「✏️ 習慣を編集」リンクからのみアクセスできる
+    習慣の編集ページ。
+
+  【通常の edit.html.erb との違い】
+    ① measurement_type（記録タイプ）は変更不可→ 読み取り専用で表示するのみ
+    ② color / icon は変更不可→ 外観変更は通常の編集から行う
+    ③ フォームの送信先が ai_update_habit_path(@habit) になる
+    ④ data: { turbo: false } で Turbo を無効にして通常の HTML フォーム送信にする
+
+  【なぜ measurement_type を変更不可にするのか】
+    チェック型(0) ⇄ 数値型(1) を変更すると habit_records.completed と
+    habit_records.numeric_value の過去データが無意味になり
+    ストリーク計算・達成率計算が壊れる。
+    AI提案でも過去データの整合性を壊す変更は許可しない。
+
+  【なぜ data: { turbo: false } にするのか】
+    Rails 7 の form_with はデフォルトで Turbo Drive が処理する。
+    ai_update が通常の HTML リダイレクト（302）を返しても
+    Turbo が TURBO_STREAM 形式でリクエストを送るため
+    コントローラーが期待通りに動かないことがある。
+    data: { turbo: false } で Turbo を無効にし、
+    従来の HTML フォーム送信として動作させる。
+
+  【C-7（tasks/ai_edit.html.erb）との対称性】
+    タスクの AI編集ページと全く同じ構造にすることで
+    コードの一貫性を保ち、将来の保守を容易にする。
+
+  【渡されるインスタンス変数】
+    @habit: Habit オブジェクト（before_action :set_habit で取得済み）
+  ==============================================================================
+%>
+<% content_for :title, "習慣を編集（AI編集）| HabitFlow" %>
+
+<div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <%#
+    ============================================================
+    AI経由限定バナー
+    ============================================================
+    このページが「AI提案モーダルからのみアクセス可能な特別な編集ページ」
+    であることをユーザーに明示する。
+    通常の習慣編集（/habits/:id/edit）とは異なることを伝える。
+  %>
+  <div class="mb-6 bg-purple-50 border border-purple-200 border-l-4 border-l-purple-500 rounded-lg p-4">
+    <div class="flex items-start gap-3">
+      <%# aria-hidden="true": 装飾的な絵文字はスクリーンリーダーに読み上げさせない %>
+      <span class="text-xl flex-shrink-0" aria-hidden="true">🤖</span>
+      <div>
+        <p class="text-sm font-bold text-purple-800">AI提案モーダルから編集しています</p>
+        <p class="text-xs text-purple-700 mt-1">
+          習慣名・週次目標・除外日を変更できます。記録タイプはAIが提案した値のまま固定です。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <%#
+    ============================================================
+    ページヘッダー
+    ============================================================
+  %>
+  <div class="flex items-center gap-3 mb-6">
+    <%#
+      キャンセルリンク: 習慣一覧に戻る
+      E-3（AI提案モーダル）実装後は、モーダルに戻るリンクに変更する予定。
+    %>
+    <%= link_to habits_path,
+          class: "text-gray-400 hover:text-gray-600 transition-colors",
+          aria: { label: "習慣一覧に戻る" } do %>
+      <%# 左矢印アイコン（SVG）: テキストより視覚的に分かりやすい %>
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+      </svg>
+    <% end %>
+    <h1 class="text-2xl font-bold text-gray-900">習慣を編集（AI編集）</h1>
+  </div>
+
+  <%#
+    ============================================================
+    バリデーションエラーメッセージ
+    ============================================================
+    ai_update で update! が失敗したとき（保存失敗→422で再描画）に
+    @habit.errors にエラーが入る。
+    any? で「エラーが1件以上ある」ときだけ表示する。
+  %>
+  <% if @habit.errors.any? %>
+    <div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4" role="alert">
+      <div class="flex items-center gap-2 mb-2">
+        <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <p class="text-sm font-bold text-red-800">入力内容に問題があります</p>
+      </div>
+      <ul class="list-disc list-inside space-y-1">
+        <% @habit.errors.full_messages.each do |message| %>
+          <li class="text-sm text-red-700"><%= message %></li>
+        <% end %>
+      </ul>
+    </div>
+  <% end %>
+
+  <%#
+    ============================================================
+    フォーム本体
+    ============================================================
+    【重要ポイント①: url: を明示する理由】
+      form_with model: @habit だけだと
+      @habit が既存レコード（persisted? = true）のため
+      Rails は自動で PATCH /habits/:id を生成する。
+      ai_update_habit_path(@habit) を明示することで
+      PATCH /habits/:id/ai_update に送信できる。
+
+    【重要ポイント②: data: { turbo: false } の理由】
+      Turbo を無効にして通常の HTML フォーム送信にする。
+      Turbo が有効だと ai_update の redirect_to が
+      期待通りに動かない場合があるため。
+
+    【重要ポイント③: f. メソッドを使う理由】
+      f.text_field :name → name="habit[name]" を自動生成
+      params[:habit][:name] としてサーバーで受け取れる。
+      text_field_tag :name → name="name" になり params[:habit] が nil になる。
+  %>
+  <%= form_with model: @habit,
+        url: ai_update_habit_path(@habit),
+        method: :patch,
+        data: { turbo: false },
+        class: "bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-6" do |f| %>
+
+    <%#
+      ============================================================
+      ① 記録タイプ（読み取り専用・変更不可）
+      ============================================================
+      【なぜ読み取り専用にするのか】
+        チェック型 ⇄ 数値型 の変更は過去の記録データと矛盾する。
+        例: 「読書」をチェック型→数値型に変えると
+            habit_records.completed（過去の記録）が無意味になる。
+        AI提案でも過去データを破壊する変更は許可しない。
+
+      【hidden_field を使わない理由】
+        ai_update_params に :measurement_type を含めていないため
+        フォームから送っても無視される（サーバー側の防御）。
+        表示目的のみなので hidden_field は不要。
+    %>
+    <div>
+      <p class="block text-sm font-bold text-gray-700 mb-2">記録タイプ</p>
+      <div class="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+        <%# aria-hidden="true": 装飾的な絵文字はスクリーンリーダーに読み上げさせない %>
+        <span class="text-lg" aria-hidden="true">
+          <%= @habit.check_type? ? "☑️" : "🔢" %>
+        </span>
+        <div>
+          <span class="text-sm font-bold text-gray-700">
+            <%= @habit.check_type? ? "チェック型（やった/やらない）" : "数値型（#{@habit.unit}で記録）" %>
+          </span>
+          <span class="text-xs text-gray-400 ml-2">（変更不可）</span>
+        </div>
+      </div>
+      <p class="mt-1 text-xs text-gray-400">
+        ※ 記録タイプは過去データとの整合性のため変更できません
+      </p>
+    </div>
+
+    <%#
+      ============================================================
+      ② 習慣名
+      ============================================================
+      f.text_field :name → name="habit[name]" を自動生成
+      @habit.name の現在値が value に自動で入る。
+      maxlength: 50 → Habit モデルのバリデーション（length: { maximum: 50 }）に対応。
+    %>
+    <div>
+      <%= f.label :name, "習慣名",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <span class="text-red-500 text-xs" aria-hidden="true">必須</span>
+      <%= f.text_field :name,
+            placeholder: "例: 読書、筋トレ、英語学習",
+            maxlength: 50,
+            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                    #{ @habit.errors[:name].any? ? 'border-red-400 bg-red-50' : '' }",
+            aria: { required: true } %>
+    </div>
+
+    <%#
+      ============================================================
+      ③ 週次目標値
+      ============================================================
+      チェック型と数値型で表示と説明文を分ける。
+
+      【チェック型の場合】
+        週次目標は「何日やるか」（1〜7日）。
+        除外日設定と組み合わせて effective_weekly_target が計算される。
+
+      【数値型の場合】
+        週次目標は「1週間の目標数値」（例: 毎週読む本の冊数）。
+        1以上の数値を入力する。
+    %>
+    <div>
+      <%= f.label :weekly_target, "週次目標値",
+            class: "block text-sm font-bold text-gray-700 mb-1" %>
+      <% if @habit.check_type? %>
+        <%# チェック型: 1〜7の範囲で週の目標日数を設定する %>
+        <p class="text-xs text-gray-500 mb-2">
+          1週間に何回実施するか設定してください（1〜7回）
+        </p>
+        <%= f.number_field :weekly_target,
+              min: 1, max: 7,
+              class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                      #{ @habit.errors[:weekly_target].any? ? 'border-red-400 bg-red-50' : '' }" %>
+      <% else %>
+        <%# 数値型: 1以上の目標数値を設定する %>
+        <p class="text-xs text-gray-500 mb-2">
+          1週間の目標を設定してください（単位: <%= @habit.unit.presence || "回" %>、1以上の数値）
+        </p>
+        <%= f.number_field :weekly_target,
+              min: 1,
+              class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                      #{ @habit.errors[:weekly_target].any? ? 'border-red-400 bg-red-50' : '' }" %>
+      <% end %>
+    </div>
+
+    <%#
+      ============================================================
+      ④ 除外する曜日
+      ============================================================
+      ai_update_params に :excluded_day_numbers は含まれていないが、
+      save_excluded_days! は params[:excluded_day_numbers] を直接参照するため
+      フォームに含める必要がある。
+
+      【selected_days の決定ロジック】
+        バリデーションエラーで再描画された場合（params.key?）:
+          → ユーザーが入力した値（params）を優先して表示する
+        通常の初回表示の場合:
+          → DB に保存されている現在の除外日を表示する
+
+        この分岐がないと、バリデーションエラー後に
+        除外日の選択状態がリセットされてしまう。
+
+      【check_box_tag を f.check_box ではなく使う理由】
+        excluded_day_numbers は habit テーブルのカラムではないため
+        f.check_box :excluded_day_numbers では正しく動かない。
+        check_box_tag で name="excluded_day_numbers[]" として送信し、
+        コントローラーで params[:excluded_day_numbers] として受け取る。
+    %>
+    <div>
+      <label class="block text-sm font-bold text-gray-700 mb-1">除外する曜日</label>
+      <p class="text-xs text-gray-500 mb-3">
+        実施しない曜日を選択してください（達成率の計算から除外されます）
+      </p>
+      <%#
+        params.key?(:excluded_day_numbers):
+          フォーム送信後（バリデーションエラーで再描画）の場合 true
+          通常の初回表示の場合 false
+        → true なら送信値を、false なら DB の値を使う
+      %>
+      <% selected_days = if params.key?(:excluded_day_numbers)
+                           Array(params[:excluded_day_numbers]).map(&:to_i)
+                         else
+                           @habit.excluded_day_numbers
+                         end %>
+      <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">
+        <% HabitExcludedDay::DAY_NAMES_FULL.each do |day_number, day_name| %>
+          <%#
+            has-[:checked]:border-blue-500:
+              Tailwind の親セレクタ修飾子。
+              label の中に :checked の input があるとき border-blue-500 を適用する。
+              JavaScript なしで選択状態を視覚的に表現できる。
+
+            focus-within:ring-2:
+              label の中の input にフォーカスが当たったとき
+              ラベル全体にフォーカスリングを表示する（アクセシビリティ対応）。
+          %>
+          <label class="flex flex-col items-center gap-1.5 p-2 border-2 rounded-lg cursor-pointer
+                        transition-colors hover:border-blue-300 hover:bg-blue-50
+                        has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50
+                        focus-within:ring-2 focus-within:ring-blue-500 focus-within:ring-offset-1">
+            <%#
+              check_box_tag "excluded_day_numbers[]", day_number:
+                name="excluded_day_numbers[]" で送信される。
+                Rails は [] を見て配列としてパースし、
+                params[:excluded_day_numbers] = ["0", "6"] のような形で受け取る。
+
+              selected_days.include?(day_number):
+                この曜日が現在の除外日に含まれていれば checked=true にする。
+
+              class: "sr-only":
+                画面には表示しないがスクリーンリーダーには読み上げる（アクセシビリティ）。
+                ラベル全体をクリック可能にするため input は非表示にする。
+            %>
+            <%= check_box_tag "excluded_day_numbers[]", day_number,
+                  selected_days.include?(day_number),
+                  id: "excluded_day_#{day_number}",
+                  class: "sr-only" %>
+            <span class="text-xs font-bold text-gray-600"><%= day_name %></span>
+          </label>
+        <% end %>
+      </div>
+      <p class="text-xs text-gray-400 mt-2">
+        ※ 例: 土日を除外すると週5日が最大達成日数になります
+      </p>
+    </div>
+
+    <%#
+      ============================================================
+      送信ボタンエリア
+      ============================================================
+      キャンセル: habits_path（習慣一覧）に戻る
+        E-3 実装後はモーダルに戻るリンクに変更する。
+
+      送信ボタン: ai_update_habit_path(@habit) に PATCH で送信
+        f.submit を使うことで @habit の状態（保存中等）に応じた
+        テキスト変更が自動で行われる。
+    %>
+    <div class="flex gap-3 pt-2">
+      <%#
+        link_to でキャンセルリンクをボタン風に表示する。
+        button タグではなく a タグなので data: { turbo: false } は不要。
+      %>
+      <%= link_to "キャンセル", habits_path,
+            class: "flex-1 text-center px-4 py-2.5 border border-gray-300 rounded-lg
+                    text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors" %>
+      <%#
+        f.submit:
+          form_with のフォームビルダーのメソッド。
+          type="submit" のボタンを生成する。
+          cursor-pointer: フォームの submit ボタンはデフォルトで pointer にならないため明示する。
+      %>
+      <%= f.submit "編集内容を保存する",
+            class: "flex-grow px-6 py-2.5 bg-purple-600 text-white rounded-lg
+                    text-sm font-bold hover:bg-purple-700 transition-colors cursor-pointer" %>
+    </div>
+
+  <% end %>
+  <%# /form_with %>
+
+</div>
+<%# /max-w-2xl %>
