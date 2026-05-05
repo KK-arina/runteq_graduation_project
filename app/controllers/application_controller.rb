@@ -428,6 +428,21 @@ class ApplicationController < ActionController::Base
       # JSON リクエストの場合（APIからのアクセスや将来の拡張を考慮）
       # シンプルなエラーメッセージをJSONで返す
       format.json { render json: { error: status.to_s }, status: status }
+
+      # ── D-10 修正: favicon.ico など未知フォーマットへの対応 ──────────────
+      #
+      # 【なぜ必要か】
+      #   ブラウザは自動的に /favicon.ico へ GET リクエストを送る。
+      #   このリクエストが catch-all ルートにマッチして ErrorsController#not_found
+      #   → render_error_page に到達する。
+      #   respond_to に ico フォーマットの処理がないと
+      #   ActionController::UnknownFormat が発生して 500 エラーになる。
+      #
+      # 【any で全フォーマットを受け入れる】
+      #   format.any はここまでの format.html / format.json 等に
+      #   マッチしなかった全フォーマット（ico, xml, png 等）を受け取る。
+      #   head status のみ返してボディなしで応答する（最小限の応答）。
+      format.any { head status }
     end
   end
 
