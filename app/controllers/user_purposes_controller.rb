@@ -11,6 +11,18 @@
 class UserPurposesController < ApplicationController
   before_action :require_login
 
+  # ── D-10 追加: AI API レート制限（連打防止）────────────────────────────
+  #
+  # 【only: [:create, :update, :retry_analysis] にする理由】
+  #   create / update: 新しい PMVV を保存して PurposeAnalysisJob を投入する
+  #   retry_analysis:  「再試行する」ボタンから PurposeAnalysisJob を再投入する
+  #   → この3アクションのみ AI 分析ジョブが発生するため throttle を適用する。
+  #
+  # 【show / edit / apply_proposals / ai_result には適用しない理由】
+  #   これらのアクションは AI 分析ジョブを投入しない閲覧・後処理アクション。
+  # ──────────────────────────────────────────────────────────────────────
+  before_action :throttle_ai_request, only: [:create, :update, :retry_analysis]
+
   def show
     @current_purpose = UserPurpose.current_for(current_user)
     if @current_purpose

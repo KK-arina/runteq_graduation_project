@@ -79,7 +79,8 @@ flowchart LR
 [![D-7 オンボーディングPMVV](https://img.shields.io/badge/D--7_オンボーディングPMVV-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-7-onboarding-pmvv-step)
 [![D-8 習慣AI編集ページ](https://img.shields.io/badge/D--8_習慣AI編集ページ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-8-habit-ai-edit)
 [![D-9 input_snapshotバリデーション](https://img.shields.io/badge/D--9_input__snapshot_バリデーション-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-9-ai-analysis-input-snapshot-validation)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-31%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![D-10 AI APIレート制限](https://img.shields.io/badge/D--10_AI_APIレート制限-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/d-10-ai-rate-limit)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-32%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -176,6 +177,7 @@ flowchart LR
 | #D-7 | オンボーディング 5/5 PMVV入力ステップ | 2026-05-04 | feature/D-7-onboarding-pmvv-step |
 | #D-8 | AI提案の習慣編集ページ（8番・AI経由限定）session[:ai_context_habit_id]によるアクセス制御・measurement_type変更不可の二重防御・ai_update_params・form_with + data: { turbo: false } | 2026-05-04 | feature/D-8-habit-ai-edit |
 | #D-9 | AiAnalysis input_snapshot JSONBスキーマバリデーション | 2026-05-05 | feature/D-9-ai-analysis-input-snapshot-validation |
+| #D-10 | AI API レート制限（連打防止）・favicon.ico UnknownFormat修正 | 2026-05-05 | feature/d-10-ai-rate-limit |
 
 <br>
 
@@ -3529,6 +3531,102 @@ D-9テスト: 16 runs, 45 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
+### #D-10: AI API レート制限（連打防止）
+
+<br>
+
+**ブランチ:** `feature/d-10-ai-rate-limit`<br>
+**完了日:** 2026-05-05<br>
+**概要:** 振り返り完了ボタンや「再試行する」を連打された場合に、同一ユーザーから短時間に<br>
+複数のAI分析ジョブが投入されるのを防ぐ。月次上限管理（#D-6）とは別の「同一分内の重複リクエスト」防止。<br>
+あわせて `render_error_page` の `format.any` 対応で `favicon.ico` の `UnknownFormat` エラーを解消。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Migration | `user_settings` に `last_ai_requested_at datetime` カラムを追加<br>null: true（初回リクエストなしを許容）・インデックス不要（user_id 経由で取得するため） |
+| Model | `UserSetting` に `ai_recently_requested?` を追加（1分以内かどうかを判定）<br>`UserSetting` に `touch_ai_requested_at!` を追加（`update_columns` で単一カラムのみ更新） |
+| Controller | `ApplicationController` に `throttle_ai_request` before_action を追加<br>判定①: `last_ai_requested_at` が1分以内 → `flash[:notice]` + `redirect_back`<br>判定②: `analysis_state: [:pending, :analyzing]` のジョブが存在する → `flash[:notice]` + `redirect_back`<br>全通過時: `touch_ai_requested_at!` で現在時刻を記録 |
+| Controller | `WeeklyReflectionsController` に `before_action :throttle_ai_request, only: [:create]` を追加<br>（`complete_without_ai` は AI を使わないため除外） |
+| Controller | `UserPurposesController` に `before_action :throttle_ai_request, only: [:create, :update, :retry_analysis]` を追加 |
+| Controller | `ApplicationController#render_error_page` に `format.any { head status }` を追加<br>（`favicon.ico` など未知フォーマットへのリクエストで `ActionController::UnknownFormat` が発生していた問題を解消） |
+| JS | `ai_throttle_controller.js` を新規作成（Stimulusコントローラー）<br>ボタン押下後 1 分間 `disabled` にして「受け付けました...」と表示<br>`connect()` でタイマーID を初期化・`disconnect()` でタイマーをクリア（メモリリーク防止） |
+| JS | `index.js` に `ai-throttle` コントローラーを登録 |
+| View | `weekly_reflections/new.html.erb` のフォームに `ai-throttle` コントローラーを追加<br>`data-controller: "form-submit ai-throttle"` / `action` に両コントローラーの submit イベントを並列登録<br>送信ボタンに `data-ai-throttle-target="button"` を追加 |
+| View | `user_purposes/_analysis_status_banner.html.erb` の「再試行する」ボタンに<br>`form: { data: { controller: "ai-throttle", action: "submit->ai-throttle#throttle" } }` を追加 |
+| i18n | `config/locales/ja.yml` に `ai_throttle.too_soon` / `ai_throttle.already_processing` を追加 |
+| Test | `test/controllers/weekly_reflections_controller_test.rb` のテスト5に<br>`user.user_setting.update_columns(last_ai_requested_at: 2.minutes.ago)` を追加（throttle バイパス対応） |
+
+<br>
+
+#### 2段階の重複判定設計
+
+<br>
+
+| 判定 | チェック内容 | 実装 |
+|:---|:---|:---|
+| 判定① | 1分以内のリクエスト | `user_setting.last_ai_requested_at > Time.current - 1.minute` |
+| 判定② | pending/analyzing ジョブの存在 | `user_purposes.where(analysis_state: [:pending, :analyzing]).exists?` |
+
+<br>
+
+#### サーバーサイドとフロントエンドの二重防御
+
+<br>
+
+| 防御層 | 実装 | 効果 |
+|:---|:---|:---|
+| サーバー層 | `ApplicationController#throttle_ai_request`（DB 管理・Redis 不使用） | HTTP 直接送信でも制限される |
+| フロント層 | `AiThrottleController`（Stimulus）でボタンを 1 分間 disabled | ユーザーの連打を物理的に防ぐ |
+
+<br>
+
+#### format.any 追加による favicon.ico エラー解消
+
+<br>
+
+`catch-all` ルートが `favicon.ico`（`ico` フォーマット）のリクエストを受けると<br>
+`respond_to` ブロックに `ico` の処理がないため `ActionController::UnknownFormat` が発生していた。<br>
+`format.any { head status }` を追加することで `html` / `json` / `turbo_stream` 以外の<br>
+全フォーマット（`ico` / `xml` / `png` 等）に対してボディなしのステータスコードのみを返すようになった。
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `db/migrate/YYYYMMDDHHMMSS_add_last_ai_requested_at_to_user_settings.rb` | 新規作成 |
+| `app/models/user_setting.rb` | `ai_recently_requested?` / `touch_ai_requested_at!` を追加 |
+| `app/controllers/application_controller.rb` | `throttle_ai_request` を追加・`render_error_page` に `format.any` を追加 |
+| `app/controllers/weekly_reflections_controller.rb` | `before_action :throttle_ai_request, only: [:create]` を追加 |
+| `app/controllers/user_purposes_controller.rb` | `before_action :throttle_ai_request, only: [:create, :update, :retry_analysis]` を追加 |
+| `app/javascript/controllers/ai_throttle_controller.js` | 新規作成 |
+| `app/javascript/controllers/index.js` | `ai-throttle` コントローラーを登録 |
+| `app/views/weekly_reflections/new.html.erb` | フォームと送信ボタンに `ai-throttle` を適用 |
+| `app/views/user_purposes/_analysis_status_banner.html.erb` | 「再試行する」ボタンに `ai-throttle` を適用 |
+| `config/locales/ja.yml` | `ai_throttle` 関連メッセージを追加 |
+| `test/controllers/weekly_reflections_controller_test.rb` | テスト5に throttle バイパス処理を追加 |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+D-10テスト: 既存 549 runs すべてパス（0 failures, 0 errors, 0 skips）
+```
+
+<br>
+
 ---
 
 <br>
@@ -5326,6 +5424,123 @@ end
 
 <br>
 
+### 70. DB カラムのみで AI レート制限を実現する（#D-10）
+
+<br>
+
+Redis を使わず `user_settings.last_ai_requested_at` カラムのみで 1 分以内の重複リクエストを防ぐ設計を採用した。<br>
+Render 無料プランでは Redis が利用できないため、既存の PostgreSQL のみで実現できる方式が必須要件だった。
+
+<br>
+
+| 方式 | 特徴 | 採用理由 |
+|:---|:---|:---|
+| Redis（rack-attack 等） | 高速・精密なレート制限が可能 | Render 無料プランでは利用不可 |
+| DB カラム（`last_ai_requested_at`） | user_setting 取得のついでに確認できる | 追加インフラ不要・コスト 0 |
+
+<br>
+
+`update_columns` で単一カラムのみ更新することでバリデーション・コールバックをスキップし、<br>
+タイムスタンプの記録を高速かつシンプルに実現した。<br>
+
+```ruby
+# UserSetting モデルに追加したメソッド
+def ai_recently_requested?
+  return false unless last_ai_requested_at.present?
+  last_ai_requested_at > Time.current - 1.minute
+end
+
+def touch_ai_requested_at!
+  update_columns(last_ai_requested_at: Time.current)
+end
+```
+
+<br>
+
+### 71. Stimulus コントローラーのタイマー管理はタイマーID を保持する（#D-10）
+
+<br>
+
+`setTimeout` の戻り値（タイマーID）を `this._cooldownTimer` に保持することで、<br>
+Turbo Drive でページ遷移した場合でも `disconnect()` でタイマーをクリアできる。<br>
+タイマーID を保持しないと「ページ遷移後にタイマーが残り続けるメモリリーク」が発生する。<br>
+
+```javascript
+// ✅ タイマーID を保持 → disconnect() でクリアできる
+connect() {
+  this._cooldownTimer = null
+}
+
+disconnect() {
+  if (this._cooldownTimer) {
+    clearTimeout(this._cooldownTimer)
+    this._cooldownTimer = null
+  }
+}
+
+throttle() {
+  this._cooldownTimer = setTimeout(() => {
+    // 1分後にボタンを有効に戻す
+  }, this.cooldownValue)
+}
+```
+
+<br>
+
+### 72. Stimulus の data-action には複数コントローラーのメソッドをスペース区切りで並べる（#D-10）
+
+<br>
+
+1つの DOM イベントに対して複数のコントローラーメソッドを実行したい場合、<br>
+`data-action` にスペース区切りで並べることで順番に実行できる。<br>
+`data-controller` も同様にスペース区切りで複数コントローラーを適用できる。<br>
+
+```erb
+<%# form-submit と ai-throttle の両方を同一フォームに適用する %>
+<%= form_with data: {
+  controller: "form-submit ai-throttle",
+  action: "submit->form-submit#submit submit->ai-throttle#throttle"
+} do |f| %>
+```
+
+<br>
+
+1 つのボタンに複数コントローラーのターゲットを同時に指定することも可能。<br>
+
+```erb
+<%= f.submit "送信",
+    data: {
+      "form-submit-target": "button",   # form-submit コントローラーのターゲット
+      "ai-throttle-target": "button"    # ai-throttle コントローラーのターゲット
+    } %>
+```
+
+<br>
+
+### 73. format.any で未知フォーマットの UnknownFormat エラーを解消する（#D-10）
+
+<br>
+
+`respond_to` ブロックに `format.html` / `format.json` / `format.turbo_stream` のみを定義していると、<br>
+`favicon.ico`（`ico` フォーマット）や `robots.txt`（`txt` フォーマット）のリクエストが<br>
+catch-all ルートにマッチした際に `ActionController::UnknownFormat` が発生する。<br>
+`format.any { head status }` を末尾に追加することで全ての未知フォーマットに対して<br>
+ボディなしのステータスコードのみを返すようになり、エラーが解消される。<br>
+
+```ruby
+def render_error_page(template, status)
+  respond_to do |format|
+    format.turbo_stream { head status }
+    format.html { render template: template, layout: "application", status: status }
+    format.json { render json: { error: status.to_s }, status: status }
+    # ✅ ico / xml / png 等の未知フォーマット → ボディなしでステータスのみ返す
+    format.any { head status }
+  end
+end
+```
+
+<br>
+
 ---
 
 <br>
@@ -5801,7 +6016,7 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 habitflow/
 ├── app/
 │   ├── controllers/
-│   │   ├── application_controller.rb      # 認証・ロック判定・エラーハンドリングの共通処理
+│   │   ├── application_controller.rb      # 変更（D-10）: throttle_ai_request 追加・render_error_page に format.any 追加（favicon.ico UnknownFormat 解消）
 │   │   ├── dashboards_controller.rb       # ダッシュボード（変更: @today_tasks追加 #C-1）
 │   ├── habits_controller.rb           # 変更（D-8）: ai_edit / ai_update アクション追加・set_habit に :ai_edit / :ai_update 追加・require_unlocked に :ai_update 追加・set_ai_context / verify_ai_context / clear_ai_context / ai_update_params を private に追加
 │   │   ├── habit_records_controller.rb    # 習慣の日次記録（変更: Float() 安全変換・numeric_value 対応 #B-1）
@@ -5822,7 +6037,7 @@ habitflow/
 │   │   ├── weekly_reflection_task_summary.rb  # #C-4 新規: タスクスナップショット（was_completedフラグ・priority_label/color_class・create_all_for_reflection!）
 │   │   ├── habit_template.rb                  # #A-5: オンボーディング用習慣テンプレートマスタ
 │   │   ├── habit_excluded_day.rb              # #B-2: 除外日モデル（DAY_NAMES定数・バリデーション）
-│   │   ├── user_setting.rb                    # ユーザー設定（rest_mode_active?・#B-3で参照）
+│   │   ├── user_setting.rb                    # 変更（D-10）: ai_recently_requested? / touch_ai_requested_at! を追加
 │   │   ├── task.rb                        # 変更: toggle_complete!/archive! メソッド追加・done?ガード（#C-2）
 │   │   ├── user_purpose.rb                # #D-1 新規: PMVVモデル（enum:analysis_state / before_validation:set_version / before_save:deactivate_previous_versions / current_for）
 │   │   ├── ai_analysis.rb                 # 変更（D-9）: validate :input_snapshot_schema_valid 追加・input_snapshot_schema_valid プライベートメソッド追加（purpose_breakdown のみ・key? のみチェック・with_indifferent_access 対応）
@@ -5834,7 +6049,7 @@ habitflow/
 │   │   ├── user_destroy_service.rb                 # #A-7: 退会処理フロー（個人情報匿名化）
 │   │   ├── ai_proposal_confirm_service.rb          # #A-7: AI提案確定フロー骨格（#D-3〜#D-4で本実装）
 │   │   └── ai_client.rb                   # #D-2 新規: AI API 抽象化クライアント（Gemini REST API / Groq フォールバック・429 指数バックオフ）
-│   ├── javascript/controllers/
+│   ├── javascript/
 │   │   └── controllers/
 │   │       ├── habit_record_controller.js     # チェックボックス即時保存（変更: saveNumeric event.target方式に変更 #B-1）（変更: メモ関連メソッド追加・NOT_PROVIDED部分更新対応 #B-7）
 │   │       ├── habit_form_controller.js       # #B-1 追加: 習慣作成フォームの動的切り替え（#B-6追記: selectColor/selectIcon/syncInitialState追加）
@@ -5849,6 +6064,7 @@ habitflow/
 │   │       ├── alarm_toggle_controller.js                  # #C-5 新規: アラームOFF時に分数入力欄をdisabledにする
 │   │       ├── crisis_intervention_controller.js  # #D-5 新規: 危機介入モーダル制御（デスクトップ中央モーダル/スマホボトムシート・Escape/オーバーレイクリックで閉じない設計）
 │   │       ├── ai_limit_modal_controller.js       # #D-6 新規: AIコスト上限モーダル制御（デスクトップ中央モーダル/スマホボトムシート・submitWithoutAi でメインフォームの値をコピー送信）
+│   │       ├── ai_throttle_controller.js     # #D-10 新規: AI API 連打防止（ボタン押下後1分間 disabled・タイマー管理・メモリリーク防止）
 │   │       └── voice_input_controller.js      # #B-7 新規→#D-1 で voice_field パーシャルと連携強化: 音声入力（Web Speech API）
 │   ├── helpers/
 │   │   └── application_helper.rb                       # #C-6 追加: rate_hex_color / habit_progress_text（達成率カラー・表記の全画面統一）
@@ -5929,7 +6145,8 @@ habitflow/
 │   │   ├── YYYYMMDDHHMMSS_add_next_action_to_weekly_reflections.rb  # #B-1: からの？カラム追加（text型・null許可）
 │   │   ├── YYYYMMDDHHMMSS_create_weekly_reflection_task_summaries.rb  # #C-4: タスクスナップショットテーブル（on_delete: :nullify・UNIQUE部分インデックス）
 │   │   ├── YYYYMMDDHHMMSS_rename_model_name_in_ai_analyses.rb  # #D-2: model_name → ai_model_name にリネーム（ActiveRecord 予約語回避）
-│   │   └── YYYYMMDDHHMMSS_add_channel_hash_to_solid_cable_messages.rb  # #D-3: solid_cable 3.0.12 が要求する channel_hash bigint カラムを追加
+│   │   ├── YYYYMMDDHHMMSS_add_channel_hash_to_solid_cable_messages.rb  # #D-3: solid_cable 3.0.12 が要求する channel_hash bigint カラムを追加
+│   │   └── YYYYMMDDHHMMSS_add_last_ai_requested_at_to_user_settings.rb  # #D-10: AI レート制限用 last_ai_requested_at カラム追加
 │   ├── explain_analyze_audit.sql          # #A-6: インデックス監査用SQLスクリプト（7クエリ）
 │   ├── schema.rb                          # 現在のDBスキーマ（自動生成）
 │   └── seeds.rb                           # デモ用サンプルデータ
@@ -6080,6 +6297,7 @@ docker compose exec web bin/rails test
 | `test/controllers/onboardings_controller_test.rb` | コントローラー | step5表示・完了・スキップ・再アクセス防止・初回リダイレクト・完了済みガード（#D-7・7件） |
 | `test/controllers/habits_ai_edit_controller_test.rb` | コントローラー | `ai_edit`（正常アクセス・session設定確認・未ログイン302・他ユーザー302）`ai_update`（sessionフラグあり保存・直接アクセスリダイレクト・measurement_type変更不可・バリデーションエラー422・他ユーザー302・session クリア確認）（#D-8・10件） |
 | `test/models/ai_analysis_test.rb` | モデル | 変更（D-9）: D-9 テスト 11 ケース追加（全5キー揃い・nil スキップ・シンボルキー・weekly_reflection スキップ・各キー個別欠落5件・全キー欠落・purpose 値が nil でも通過）<br>weekly_reflection は `create!` で作成（フィクスチャ依存を排除）<br>`private` ヘルパーをファイル末尾に配置（`test` ブロックの非公開化を防止） |
+| `test/controllers/weekly_reflections_controller_test.rb` | コントローラー | 変更（D-10）: テスト5「create prevents double submission」に `user.user_setting.update_columns(last_ai_requested_at: 2.minutes.ago)` を追加（throttle バイパス対応） |
 
 <br>
 
@@ -7997,6 +8215,41 @@ missing_keys = required_keys.reject { |key| snapshot.key?(key) }
 `present?` から `key?` に変更した場合、`PurposeAnalysisJobTest` の正常系テストが<br>
 失敗から通過に変わる可能性がある（逆も同様）。<br>
 モデルテストだけでなく必ず全テストを実行して影響範囲を確認すること。
+
+<br>
+
+### throttle チェックのテストは「throttle をバイパスしてから本来の挙動を検証する」（#D-10）
+
+<br>
+
+1回目の POST で `last_ai_requested_at` が更新されるため、<br>
+同一テスト内で2回目の POST を送ると throttle に引っかかって元の挙動を確認できなくなる。<br>
+テストの目的が「throttle」ではなく「2重送信防止の別ロジック」の場合は、<br>
+`update_columns(last_ai_requested_at: 2.minutes.ago)` で throttle をバイパスしてから検証すること。<br>
+
+```ruby
+# D-10 対応: 2回目送信前に throttle をバイパスする
+@user.user_setting.update_columns(
+  last_ai_requested_at: 2.minutes.ago  # 1分以上前に設定して throttle を回避
+)
+
+assert_no_difference "WeeklyReflection.count" do
+  post weekly_reflections_path, params: { ... }  # 本来の重複防止ロジックを検証
+end
+```
+
+<br>
+
+### format.any がないと favicon.ico のリクエストが UnknownFormat エラーになる（#D-10）
+
+<br>
+
+ブラウザは自動的に `/favicon.ico` へ GET リクエストを送る。<br>
+catch-all ルート（`match "*path", to: "errors#not_found", via: :all`）がこのリクエストを受け取り、<br>
+`render_error_page` の `respond_to` に `ico` フォーマットの処理がないと<br>
+`ActionController::UnknownFormat` が発生する。<br>
+「開発環境だから無視してよい」ではなく、エラーログが汚れ、本番でも同様に発生するため必ず修正すること。<br>
+`format.any { head status }` を全ての `respond_to` ブロックの末尾に追加することで解消できる。
 
 <br>
 

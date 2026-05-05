@@ -117,6 +117,18 @@ class WeeklyReflectionsControllerTest < ActionDispatch::IntegrationTest
         weekly_reflection: { reflection_comment: "1回目" }
       }
 
+      # ── D-10 対応: 1回目の POST で last_ai_requested_at が更新されるため、
+      # 2回目の POST が throttle_ai_request に引っかかってしまう。
+      # テストの目的は「同じ週の2重投稿防止」であり throttle の確認ではないため、
+      # 2回目の前に last_ai_requested_at を 2 分前に巻き戻して throttle をバイパスする。
+      #
+      # 【なぜ update_columns を使うのか】
+      #   バリデーションやコールバックをスキップして単一カラムのみ更新する。
+      #   テスト用の時刻操作のため副作用を最小限にしたい。
+      @user.user_setting.update_columns(
+        last_ai_requested_at: 2.minutes.ago
+      )
+
       # assert_no_difference → ブロック実行前後で件数が変わらないことを確認する
       assert_no_difference "WeeklyReflection.count" do
         post weekly_reflections_path, params: {

@@ -128,19 +128,31 @@
 
       <div class="flex gap-2">
         <%#
-          button_to を使う理由:
-            link_to はデフォルトで GET リクエストを送るため、
-            retry_analysis（POST エンドポイント）にリクエストが届かない。
-            button_to は <form method="post"> を生成するため、
-            正しく POST リクエストが送られる。
-          data: { turbo_confirm: "..." }:
-            Turbo が提供する確認ダイアログ。
-            window.confirm の代替で誤操作を防ぐ。
+          D-10 変更: 再試行ボタンに ai-throttle コントローラーを適用する。
+          button_to は <form> タグを生成するため、
+          data-controller と data-action を form 要素に付ける必要がある。
+          form: { data: { ... } } オプションで form タグに data 属性を追加できる。
+          
+          【動作の流れ】
+            1. ユーザーが「再試行する」をクリック
+            2. confirm ダイアログが表示される（turbo_confirm）
+            3. OK を押すと submit イベントが発火
+            4. ai-throttle#throttle でボタンが 1 分間 disabled になる
+            5. フォームが POST /user_purpose/retry_analysis に送信される
         %>
         <%= button_to "再試行する",
                       retry_analysis_user_purpose_path,
                       method: :post,
-                      data:  { turbo_confirm: "AI分析を再実行しますか？" },
+                      data: {
+                        turbo_confirm: "AI分析を再実行しますか？",
+                        "ai-throttle-target": "button"
+                      },
+                      form: {
+                        data: {
+                          controller: "ai-throttle",
+                          action: "submit->ai-throttle#throttle"
+                        }
+                      },
                       class: "px-3 py-1.5 text-xs font-semibold text-white
                               bg-red-600 rounded-lg hover:bg-red-700 transition-colors
                               focus:outline-none focus:ring-2 focus:ring-red-500

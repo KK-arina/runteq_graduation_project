@@ -32,6 +32,18 @@ class WeeklyReflectionsController < ApplicationController
   before_action :require_login
   before_action :set_weekly_reflection, only: [:show]
 
+  # ── D-10 追加: AI API レート制限（連打防止）────────────────────────────
+  #
+  # 【only: [:create] にする理由】
+  #   create アクションのみが AI 分析ジョブを投入する。
+  #   complete_without_ai は AI を使わないため throttle 不要。
+  #   show / index / new にも throttle は不要。
+  #
+  # 【throttle_ai_request は ApplicationController に定義】
+  #   全コントローラーで再利用可能にするため親クラスに配置している。
+  # ──────────────────────────────────────────────────────────────────────
+  before_action :throttle_ai_request, only: [:create]
+
   def index
     @weekly_reflections = current_user.weekly_reflections
                                       .completed

@@ -103,3 +103,17 @@ application.register("crisis-intervention", CrisisInterventionController)
 // ケバブケース（ハイフン区切り）はStimulusの命名規則。
 import AiLimitModalController from "./ai_limit_modal_controller"
 application.register("ai-limit-modal", AiLimitModalController)
+
+// ── D-10 追加: ai-throttle コントローラーを登録する ─────────────────────────
+//
+// 【このコントローラーの役割】
+//   振り返り完了ボタン・再試行ボタンを押下後 1 分間 disabled にして
+//   連打による重複 AI 分析ジョブの投入を防ぐ（フロント側防御）。
+//   サーバー側の ApplicationController#throttle_ai_request と組み合わせた
+//   二重防御の実装。
+//
+// 【登録名 "ai-throttle" について】
+//   HTML 側の data-controller="ai-throttle" と対応する。
+//   ファイル名 ai_throttle_controller.js がケバブケース ai-throttle に変換される。
+import AiThrottleController from "./ai_throttle_controller"
+application.register("ai-throttle", AiThrottleController)
