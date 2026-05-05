@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_04_26_051236) do
+ActiveRecord::Schema[7.2].define(version: 2026_05_05_094158) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -312,6 +312,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_04_26_051236) do
     t.integer "ai_analysis_monthly_limit", default: 10, null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.datetime "last_ai_requested_at", comment: "最後にAI分析リクエストを受け付けた日時。D-10レート制限で使用。"
     t.index ["user_id"], name: "index_user_settings_on_user_id"
     t.index ["user_id"], name: "index_user_settings_on_user_id_unique", unique: true
   end

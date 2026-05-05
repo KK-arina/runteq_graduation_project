@@ -115,14 +115,23 @@
   <%# ==========================================
       振り返りフォーム
   ========================================== %>
+  <%#
+    D-10 変更: data-controller に "ai-throttle" を追加する。
+    Stimulus は data-controller にスペース区切りで複数コントローラーを指定できる。
+    "form-submit": 送信中のローディング表示（既存）
+    "ai-throttle": 送信後 1 分間ボタンを disabled にする（D-10 追加）
+    data-action: submit イベントで両コントローラーのメソッドを順に呼ぶ。
+      form-submit#submit → ローディング表示 + disabled（既存）
+      ai-throttle#throttle → 1 分間 disabled タイマーをセット（D-10 追加）
+  %>
   <%= form_with model: @weekly_reflection,
                 url: weekly_reflections_path,
                 method: :post,
                 local: true,
                 class: "space-y-6",
                 data: {
-                  controller: "form-submit",
-                  action: "submit->form-submit#submit"
+                  controller: "form-submit ai-throttle",
+                  action: "submit->form-submit#submit submit->ai-throttle#throttle"
                 } do |f| %>
 
     <%= render "shared/form_errors", model: @weekly_reflection %>
@@ -197,12 +206,19 @@
           class: "px-5 py-3 bg-white border border-gray-300 text-gray-700 text-sm font-semibold
                   rounded-xl hover:bg-gray-50 transition-colors
                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" %>
+      <%#
+        D-10 変更: data-ai-throttle-target="button" を追加する。
+        "form-submit-target": "button"  → form-submit コントローラーのターゲット（既存）
+        "ai-throttle-target": "button"  → ai-throttle コントローラーのターゲット（D-10 追加）
+        1つのボタンに複数コントローラーのターゲットを同時に指定できる。
+      %>
       <%= f.submit "振り返りを完了する",
           class: "flex-1 py-3 px-4 bg-blue-600 text-white text-sm font-semibold
                   rounded-xl hover:bg-blue-700 transition-colors cursor-pointer
                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500",
           data: {
             "form-submit-target": "button",
+            "ai-throttle-target": "button",
             "loading-text": "送信中..."
           } %>
     </div>

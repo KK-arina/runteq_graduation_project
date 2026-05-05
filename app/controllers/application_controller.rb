@@ -272,6 +272,92 @@ class ApplicationController < ActionController::Base
   helper_method :ai_limit_exceeded?
 
   # ============================================================
+  # D-10 追加: AI API レート制限（連打防止）
+  # ============================================================
+  #
+  # throttle_ai_request
+  # ----------------------------------------------------------
+  # 【役割】
+  #   before_action として WeeklyReflectionsController と
+  #   UserPurposesController の AI 分析トリガーアクション（create / retry_analysis）
+  #   に適用する。
+  #   同一ユーザーから 1 分以内の重複リクエストを拒否する。
+  #
+  # 【2段階の重複判定】
+  #
+  #   判定①: user_settings.last_ai_requested_at による時刻チェック
+  #     → 「1分以内に既にリクエストを受け付けた」かどうか
+  #     → Redis 不使用・DB のみで管理（Render 無料プラン対応）
+  #
+  #   判定②: analysis_state が :pending / :analyzing のジョブが存在するか
+  #     → ジョブが既にキューに積まれている・実行中の場合もスキップ
+  #     → WeeklyReflection と UserPurpose の両方を確認する
+  #
+  # 【429 を使わず flash + redirect で返す理由】
+  #   Turbo / Stimulus との相性を考慮し、
+  #   シンプルな flash[:notice] + redirect_back で UX を統一する。
+  #   rack-attack（#F-5）と組み合わせる場合は 429 ステータスを追加する。
+  #
+  # 【スキップ対象アクション】
+  #   complete_without_ai: AI を使わない完了なので throttle 不要
+  # ----------------------------------------------------------
+  def throttle_ai_request
+    # current_user が nil（未ログイン）の場合は require_login が先に動くため
+    # ここでは nil チェックのみ行い、早期リターンする
+    return unless current_user
+
+    setting = current_user.user_setting
+
+    # user_setting が存在しない稀なケースはスルーする
+    # （user_setting がなければ last_ai_requested_at も参照できない）
+    return unless setting
+
+    # ── 判定①: 1分以内の重複リクエストチェック ──────────────────────────
+    #
+    # ai_recently_requested? は UserSetting モデルに定義したメソッド。
+    # last_ai_requested_at が「1分以内」なら true を返す。
+    if setting.ai_recently_requested?
+      # 429 レスポンス時のフラッシュメッセージを設定する
+      # notice を使う理由: alert だと赤いエラーバナーになり、
+      # 「受け付けました」という案内メッセージとトーンが合わない
+      flash[:notice] = I18n.t("ai_throttle.too_soon")
+
+      # redirect_back: 直前のページ（振り返りフォームや PMVV ページ）に戻る
+      # fallback_location: 直前ページが不明な場合のフォールバック先
+      redirect_back fallback_location: root_path
+      return
+    end
+
+    # ── 判定②: pending / analyzing ジョブの存在チェック ─────────────────
+    #
+    # analysis_state が pending または analyzing のレコードが
+    # 既に存在する場合は、ジョブが積まれている・実行中と判断してスキップする。
+    #
+    # 【なぜ WeeklyReflection と UserPurpose の両方を確認するのか】
+    #   リクエストが振り返りからなのか PMVV からなのかに関わらず、
+    #   「このユーザーの AI 分析が進行中かどうか」を総合的に判断する。
+    #   ただし、パフォーマンスを考慮して EXISTS? クエリ（SELECT 1 のみ）を使う。
+    #
+    # 【.pending と .analyzing について】
+    #   analysis_state の enum 値（0: pending, 1: analyzing）に対応するスコープ。
+    #   UserPurpose に定義済み（user_purpose.rb 参照）。
+    #   WeeklyReflection には analysis_state がないため確認不要。
+    if current_user.user_purposes.where(analysis_state: [:pending, :analyzing]).exists?
+      flash[:notice] = I18n.t("ai_throttle.already_processing")
+      redirect_back fallback_location: root_path
+      return
+    end
+
+    # ── 全チェック通過: last_ai_requested_at を現在時刻で更新する ─────────
+    #
+    # チェックを通過したリクエストのみ更新する（2重カウント防止）。
+    # touch_ai_requested_at! は update_columns で単一カラムのみ更新するため高速。
+    setting.touch_ai_requested_at!
+  end
+  # throttle_ai_request の helper_method 登録は不要
+  # （before_action として使うためビューからは呼ばない）
+
+  # ============================================================
   # Issue #27: カスタムエラーページ表示メソッド
   # ============================================================
 
