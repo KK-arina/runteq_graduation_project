@@ -11,6 +11,14 @@
 #   analysis_state を pending → analyzing → completed/failed に遷移させ、
 #   Turbo Stream でフロントエンドをリアルタイム更新する。
 #
+# 【D-9 での変更内容】
+#   ① Step 4 に input_snapshot の事前バリデーションチェックを追加
+#      - build_input_snapshot で生成したスナップショットを
+#        AiAnalysis.new で事前にバリデーションし、
+#        失敗した場合は handle_failure して早期リターンする
+#      - これにより「Gemini APIのレスポンスパース後・DB保存前に必ずバリデーションを通過」
+#        という要件を満たす
+#
 # ==============================================================================
 
 class PurposeAnalysisJob < ApplicationJob
@@ -71,7 +79,7 @@ class PurposeAnalysisJob < ApplicationJob
     model_name   = result[:model]
 
     # ----------------------------------------------------------
-    # Step 4: JSON パースと AiAnalysis の保存
+    # Step 4: JSON パースと input_snapshot の事前バリデーション
     # ----------------------------------------------------------
     parsed = parse_response(raw_response)
 
@@ -80,14 +88,62 @@ class PurposeAnalysisJob < ApplicationJob
       return
     end
 
-    # AiAnalysis の保存と UserPurpose の状態更新をトランザクションで行う
-    # 【トランザクションの理由】
-    #   2つの DB 更新を一体として扱い、片方だけ成功する中途半端な状態を防ぐ
+    # ── D-9 追加: input_snapshot のスキーマを DB保存前に事前検証する ──────────
+    #
+    # 【なぜここで事前バリデーションするか】
+    #   AiAnalysis.create! 時にもバリデーションが走るが、
+    #   create! でバリデーションエラーが発生すると ActiveRecord::RecordInvalid が
+    #   raise される。rescue => e でキャッチしてジョブ全体を raise し直すと
+    #   GoodJob が「予期しないエラー」として扱い、user_purpose の状態が
+    #   analyzing のまま stuck する可能性がある。
+    #   create! の前に明示的に valid? チェックすることで確実に handle_failure を呼び、
+    #   画面を正しく「失敗」状態に遷移させる。
+    #
+    # 【AiAnalysis.new で valid? を実行する理由】
+    #   実際の保存（create!）と同じバリデーションロジックを使うことで
+    #   「モデルのバリデーションと事前チェックの乖離」を防ぐ。
+    #   将来バリデーションを変更しても両方に自動で反映される。
+    input_snapshot = build_input_snapshot(user_purpose)
+
+    # AiAnalysis.new で仮インスタンスを作成してバリデーションのみ実行する
+    # 【仮インスタンスを使う理由】
+    #   save! や create! をせずにバリデーションだけを実行できる。
+    #   DB には何も書き込まれないため安全。
+    pre_check = AiAnalysis.new(
+      user_purpose:   user_purpose,
+      analysis_type:  :purpose_breakdown,
+      input_snapshot: input_snapshot,
+      is_latest:      true
+    )
+
+    # valid? メソッドでバリデーションを実行する
+    # 【true の場合】全バリデーション通過 → 処理を続行する
+    # 【false の場合】バリデーションエラーあり → handle_failure して早期リターン
+    unless pre_check.valid?
+      # errors.full_messages: ["PMVV分析データ に必須キーが不足しています: purpose"] のような配列
+      # join(', ') で1つの文字列に結合して last_error_message に保存する
+      error_detail = pre_check.errors.full_messages.join(", ")
+
+      Rails.logger.error "[PurposeAnalysisJob] input_snapshot バリデーション失敗: #{error_detail}, user_purpose_id=#{user_purpose_id}"
+
+      handle_failure(
+        user_purpose,
+        "分析データの形式が正しくありません（#{error_detail}）。再試行してください。"
+      )
+      return
+    end
+
+    Rails.logger.info "[PurposeAnalysisJob] input_snapshot バリデーション通過: user_purpose_id=#{user_purpose_id}"
+    # ──────────────────────────────────────────────────────────────────────────
+
+    # ----------------------------------------------------------
+    # Step 5: AiAnalysis の保存と UserPurpose の状態更新
+    # ----------------------------------------------------------
     ActiveRecord::Base.transaction do
       AiAnalysis.create!(
         user_purpose_id:         user_purpose.id,
         analysis_type:           :purpose_breakdown,
-        input_snapshot:          build_input_snapshot(user_purpose),
+        input_snapshot:          input_snapshot,  # D-9: 事前検証済みの変数を使う（再計算しない）
         analysis_comment:        parsed[:analysis_comment],
         improvement_suggestions: parsed[:improvement_suggestions],
         root_cause:              parsed[:root_cause],
@@ -95,11 +151,8 @@ class PurposeAnalysisJob < ApplicationJob
         actions_json:            parsed[:actions],
         crisis_detected:         parsed[:crisis_detected] || false,
         prompt_version:          PROMPT_VERSION,
-        # 【変更】model_name → ai_model_name
-        # model_name は ActiveRecord の予約済みメソッド名のため
-        # カラム名を ai_model_name にリネームした
-        ai_model_name: model_name,
-        is_latest:     true
+        ai_model_name:           model_name,
+        is_latest:               true
       )
 
       user_purpose.update!(
@@ -109,7 +162,7 @@ class PurposeAnalysisJob < ApplicationJob
     end
 
     # ----------------------------------------------------------
-    # Step 5: 完了状態を Turbo Stream で通知する
+    # Step 6: 完了状態を Turbo Stream で通知する
     # ----------------------------------------------------------
     # transaction 完了後に broadcast する
     # 【理由】DB コミット前に UI が更新されることを防ぐ
@@ -255,7 +308,6 @@ class PurposeAnalysisJob < ApplicationJob
 
     # ② { から } の範囲を正規表現で抽出する
     # /\{.*\}/m の m フラグ: . が改行にもマッチするようにする（複数行対応）
-    # これにより前置き・後置き文章があっても JSON 部分だけを取り出せる
     json_str = text[/\{.*\}/m]
 
     if json_str.blank?
@@ -272,12 +324,11 @@ class PurposeAnalysisJob < ApplicationJob
     missing_keys  = required_keys.reject { |k| parsed.key?(k) }
 
     if missing_keys.any?
-      Rails.logger.error "[PurposeAnalysisJob] JSON に必須キーが不足: #{missing_keys.join(", ")}"
+      Rails.logger.error "[PurposeAnalysisJob] JSON に必須キーが不足: #{missing_keys.join(', ')}"
       return nil
     end
 
     # ⑤ actions が配列かどうかをバリデーションする
-    # AI が "actions": "文字列" のように配列以外を返すことがある
     unless parsed[:actions].is_a?(Array)
       Rails.logger.error "[PurposeAnalysisJob] actions が配列ではありません: #{parsed[:actions].class}"
       return nil
@@ -298,6 +349,12 @@ class PurposeAnalysisJob < ApplicationJob
   # 【as_json を使わない理由】
   #   不要なカラムまで含まれる。明示的に指定することで
   #   「意味のあるデータのみ」を保存できる。
+  #
+  # 【D-9 との関連】
+  #   このメソッドが返す Hash のキーが input_snapshot_schema_valid で
+  #   チェックされる5つの必須キーを含む必要がある。
+  #   purpose / mission / vision / value / current_situation の5キーは
+  #   全て含まれているため、バリデーションを通過できる。
   def build_input_snapshot(user_purpose)
     {
       purpose:           user_purpose.purpose,
@@ -328,19 +385,7 @@ class PurposeAnalysisJob < ApplicationJob
   # broadcast_state_update(user_purpose)
   # ----------------------------------------------------------
   # Turbo Streams でブラウザの 16番ページをリアルタイム更新する
-  #
-  # 【locals に ai_analysis を渡す理由】
-  #   _analysis_status_banner.html.erb パーシャルは
-  #   completed 状態のときに ai_analysis ローカル変数を参照する。
-  #   渡さないと "undefined local variable or method 'ai_analysis'" エラーになる。
-  #
-  # 【AiAnalysis.find_by の条件】
-  #   user_purpose_id と is_latest: true で最新の分析結果を取得する。
-  #   分析完了前（pending/analyzing）は nil になる。
-  #   nil のときはバナーに「結果を準備中...」と表示される（設計通り）。
   def broadcast_state_update(user_purpose)
-    # completed 状態のとき「結果を見る →」リンクを表示するために
-    # AiAnalysis を取得して locals に渡す
     ai_analysis = AiAnalysis.where(
       user_purpose_id: user_purpose.id,
       is_latest:       true,
@@ -354,7 +399,6 @@ class PurposeAnalysisJob < ApplicationJob
       locals:  { user_purpose: user_purpose, ai_analysis: ai_analysis }
     )
   rescue => e
-    # Turbo Stream 更新が失敗しても分析結果は保存済みなのでログだけ残す
     Rails.logger.warn "[PurposeAnalysisJob] Turbo Stream 更新失敗（無視）: #{e.message}"
   end
 end

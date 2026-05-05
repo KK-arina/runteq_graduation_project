@@ -78,7 +78,8 @@ flowchart LR
 [![D-6 AIコスト上限管理](https://img.shields.io/badge/D--6_AIコスト上限管理-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-6-ai-cost-limit)
 [![D-7 オンボーディングPMVV](https://img.shields.io/badge/D--7_オンボーディングPMVV-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-7-onboarding-pmvv-step)
 [![D-8 習慣AI編集ページ](https://img.shields.io/badge/D--8_習慣AI編集ページ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-8-habit-ai-edit)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-30%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![D-9 input_snapshotバリデーション](https://img.shields.io/badge/D--9_input__snapshot_バリデーション-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/D-9-ai-analysis-input-snapshot-validation)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-31%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -174,6 +175,7 @@ flowchart LR
 | #D-6 | AIコスト上限管理（ai_analysis_monthly_limit・14-Bモーダル） | 2026-05-03 | feature/D-6-ai-cost-limit |
 | #D-7 | オンボーディング 5/5 PMVV入力ステップ | 2026-05-04 | feature/D-7-onboarding-pmvv-step |
 | #D-8 | AI提案の習慣編集ページ（8番・AI経由限定）session[:ai_context_habit_id]によるアクセス制御・measurement_type変更不可の二重防御・ai_update_params・form_with + data: { turbo: false } | 2026-05-04 | feature/D-8-habit-ai-edit |
+| #D-9 | AiAnalysis input_snapshot JSONBスキーマバリデーション | 2026-05-05 | feature/D-9-ai-analysis-input-snapshot-validation |
 
 <br>
 
@@ -3477,6 +3479,56 @@ D-8テスト: 10 runs, 38 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
+### #D-9: AiAnalysis input_snapshot JSONBスキーマバリデーション
+
+<br>
+
+**ブランチ:** `feature/D-9-ai-analysis-input-snapshot-validation`<br>
+**完了日:** 2026-05-05<br>
+**概要:** `ai_analyses.input_snapshot`（jsonb）は自由形式のため、5つの必須キーが欠落すると<br>
+18番画面（PMVV詳細）のUIが崩壊する。DB保存前にスキーマを強制バリデーションする。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Model | `AiAnalysis` に `validate :input_snapshot_schema_valid` を追加 |
+| Model | `input_snapshot_schema_valid` プライベートメソッドを追加<br>- `purpose_breakdown` 分析のみ対象（`weekly_reflection` はスキップ）<br>- 必須5キー: `purpose` / `mission` / `vision` / `value` / `current_situation`<br>- キーの存在のみチェック（値の nil は許容 / `allow_blank: true` 設計に準拠）<br>- `with_indifferent_access` でシンボルキー・文字列キー両方に対応<br>- `input_snapshot` が nil の場合はスキップ（ジョブ側の事前チェックで保護） |
+| Job | `PurposeAnalysisJob` の Step 4（JSON パース後）に `input_snapshot` 事前バリデーションを追加<br>- `AiAnalysis.new` で仮インスタンスを作成し `valid?` でバリデーション実行<br>- 失敗時は `handle_failure` を呼び `failed` 状態に遷移・エラー詳細を DB に記録 |
+| i18n | `config/locales/ja.yml` に `input_snapshot` フィールドの日本語名（`"PMVV分析データ"`）を追加 |
+| Test | モデルテストに D-9 関連テスト 11 ケースを追加（正常系 5・異常系 7）<br>- `weekly_reflection` は `create!` で作成（フィクスチャ依存を排除）<br>- `private` ヘルパーをファイル末尾に配置（`test` ブロックの非公開化を防止）<br>- nil 値はキーが存在すれば通過するテストに変更（`allow_blank` 設計に準拠） |
+
+<br>
+
+#### バリデーション設計の詳細
+
+<br>
+
+| 設計判断 | 理由 |
+|:---|:---|
+| `json-schema` gem（外部ライブラリ）を使わない | Gemfile 変更不要・Docker 再ビルド不要・今回の要件（5キーの存在チェック）には十分な堅牢性 |
+| キーの「存在」のみチェック、値の nil は許容 | `UserPurpose` の各フィールドは `allow_blank: true` のため未入力時に nil が保存される。18番画面は `.presence \|\| "未入力"` で nil を安全に処理できる |
+| `with_indifferent_access` を使う | `build_input_snapshot` はシンボルキー（`:purpose` 等）で Hash を作るが、DB 読み出し時は文字列キー（`"purpose"`）になる。両形式に対応することで型の違いを吸収する |
+| `input_snapshot` が nil のときはスキップ | 実運用では `build_input_snapshot` が必ず Hash を返すため nil にならない。テストの利便性（`input_snapshot` を省略したモデルテストが書きやすい）のためスキップ設計にし、ジョブ側の事前チェックで保護する |
+| ジョブ側に事前バリデーションを追加する理由 | `create!` 時にバリデーションエラーが発生すると `ActiveRecord::RecordInvalid` が `raise` され、`rescue => e` でキャッチしてジョブ全体を `raise` し直すと `user_purpose` の状態が `analyzing` のまま stuck するリスクがある。事前チェックで確実に `handle_failure` を呼び画面を正しく「失敗」状態に遷移させる |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+D-9テスト: 16 runs, 45 assertions, 0 failures, 0 errors, 0 skips
+全テスト:  549 runs, 1423 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -5232,6 +5284,48 @@ end
 
 <br>
 
+### 69. input_snapshot バリデーションは「キーの存在」のみチェックする（#D-9）
+
+<br>
+
+`jsonb` カラムは自由形式のため、必須キーが欠落していてもDBに保存できてしまう。<br>
+`valid?` + `errors.add` によるカスタムバリデーションで保存前にキーの存在を強制チェックする。<br>
+
+<br>
+
+**なぜ値の nil・空文字を許容するか:**<br>
+`UserPurpose` の各フィールドは `allow_blank: true` の設計のため、<br>
+未入力の場合に nil が保存される。`build_input_snapshot` はその nil をそのまま `input_snapshot` に含める。<br>
+18番画面では `.presence || "未入力"` で nil を安全に表示できるため、<br>
+バリデーションは「キーが存在するかどうか」のみで十分。<br>
+`present?` まで要求すると、未入力フィールドを持つ UserPurpose の分析が全て失敗する設計になってしまう。<br>
+
+```ruby
+# ✅ キーの存在のみチェック（値の nil は許容）
+missing_keys = required_keys.reject do |key|
+  snapshot.key?(key)  # present? ではなく key? のみ
+end
+```
+
+<br>
+
+**2層バリデーション設計:**<br>
+
+| 層 | 実装 | 役割 |
+|:---|:---|:---|
+| Model 層 | `validate :input_snapshot_schema_valid` | DB保存前の最終防波堤。`with_indifferent_access` でキー型の差を吸収 |
+| Job 層 | `AiAnalysis.new(...).valid?` で事前チェック | `create!` 前に確実に検出。失敗時は `handle_failure` → `failed` 状態に遷移 |
+
+<br>
+
+**テストの落とし穴 - nil 値は「エラーになる」ではなく「通過する」:**<br>
+当初「nil 値もエラーにする」設計で実装したが、`PurposeAnalysisJobTest` の正常系テストが失敗した。<br>
+原因: テストの `@user_purpose` は `purpose` / `mission` 等を一部しか設定しておらず、<br>
+`build_input_snapshot` が `mission: nil` のような Hash を生成するため `present?` チェックで弾かれた。<br>
+`key?` のみのチェックに修正することで既存の全テスト（549件）が通過するようになった。
+
+<br>
+
 ---
 
 <br>
@@ -5731,7 +5825,7 @@ habitflow/
 │   │   ├── user_setting.rb                    # ユーザー設定（rest_mode_active?・#B-3で参照）
 │   │   ├── task.rb                        # 変更: toggle_complete!/archive! メソッド追加・done?ガード（#C-2）
 │   │   ├── user_purpose.rb                # #D-1 新規: PMVVモデル（enum:analysis_state / before_validation:set_version / before_save:deactivate_previous_versions / current_for）
-│   │   ├── ai_analysis.rb                 # #D-2 新規: AI分析結果モデル（is_latest 管理・before_create コールバック・analysis_type enum）
+│   │   ├── ai_analysis.rb                 # 変更（D-9）: validate :input_snapshot_schema_valid 追加・input_snapshot_schema_valid プライベートメソッド追加（purpose_breakdown のみ・key? のみチェック・with_indifferent_access 対応）
 │   │   └── concerns/
 │   │       └── crisis_detector.rb         # #D-5 新規: 危機ワード検出モジュール（CRISIS_KEYWORDS 30件・CRISIS_PATTERN・before_validation・crisis_word_detected?）
 │   ├── services/
@@ -5765,7 +5859,7 @@ habitflow/
 │   │   ├── monthly_ai_count_reset_job.rb               # #A-3: 月次AI使用回数リセット
 │   │   ├── hello_good_job.rb                           # #A-3: 動作確認用（確認後削除可）
 │   │   ├── task_alarm_job.rb                           # #C-5 新規: アラーム通知ジョブ（スキップ条件5種・メール送信・ログ記録・atomic更新）
-│   │   ├── purpose_analysis_job.rb        # #D-1 #D-2: PMVV AI分析ジョブ（D-2で完全実装・Chain-of-Thought・JSON パース強化・Turbo Stream 通知）
+│   │   ├── purpose_analysis_job.rb        # 変更（D-9）: Step 4 に input_snapshot 事前バリデーション追加（AiAnalysis.new で valid? チェック・失敗時は handle_failure）
 │   │   └── weekly_reflection_analysis_job.rb # #D-4 新規: 週次振り返りAI分析ジョブ（Chain-of-Thought・PMVV有無による動的プロンプト・月次上限チェック・update_allで原子的インクリメント）
 │   ├── mailers/
 │   │   ├── application_mailer.rb                       # #A-4: 全メール共通設定（fromアドレス）
@@ -5883,7 +5977,7 @@ habitflow/
     │   ├── habit_sort_test.rb             # #B-6: カラー・アイコンバリデーション・acts_as_list 動作確認（8件）
     │   ├── task_test.rb                   # 変更: soft_delete・ai_generated? テスト4件追加（#C-3・計28件）
     │   ├── weekly_reflection_task_summary_test.rb  # #C-4 新規（21件：バリデーション・UNIQUE制約・アソシエーション・クラスメソッド・スコープ・インスタンスメソッド）
-    │   ├── ai_analysis_test.rb            # #D-2 新規（5件：バリデーション・is_latest コールバック・scope :latest）
+    │   ├── ai_analysis_test.rb            # 変更（D-9）: D-9 テスト 11 ケース追加（正常系5・異常系7・weekly_reflection は create! で作成・private ヘルパーをファイル末尾に配置）
     │   └── concerns/
     │       └── crisis_detector_test.rb        # #D-5 新規（11件：各フィールドでの検出・通常ワード非検出・WeeklyReflection/UserPurpose両対応）
     ├── integration/
@@ -5926,7 +6020,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-538 runs, 1391 assertions, 0 failures, 0 errors, 0 skips
+549 runs, 1423 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -5985,6 +6079,7 @@ docker compose exec web bin/rails test
 | `test/services/weekly_reflection_complete_service_test.rb` | サービス | エンキュー確認・上限時スキップ確認（2件追加、`include ActiveJob::TestHelper` 追加）（#D-4） |
 | `test/controllers/onboardings_controller_test.rb` | コントローラー | step5表示・完了・スキップ・再アクセス防止・初回リダイレクト・完了済みガード（#D-7・7件） |
 | `test/controllers/habits_ai_edit_controller_test.rb` | コントローラー | `ai_edit`（正常アクセス・session設定確認・未ログイン302・他ユーザー302）`ai_update`（sessionフラグあり保存・直接アクセスリダイレクト・measurement_type変更不可・バリデーションエラー422・他ユーザー302・session クリア確認）（#D-8・10件） |
+| `test/models/ai_analysis_test.rb` | モデル | 変更（D-9）: D-9 テスト 11 ケース追加（全5キー揃い・nil スキップ・シンボルキー・weekly_reflection スキップ・各キー個別欠落5件・全キー欠落・purpose 値が nil でも通過）<br>weekly_reflection は `create!` で作成（フィクスチャ依存を排除）<br>`private` ヘルパーをファイル末尾に配置（`test` ブロックの非公開化を防止） |
 
 <br>
 
@@ -7859,6 +7954,49 @@ assert_response :not_found  # 失敗
 get ai_edit_habit_path(other_user_habit)
 assert_redirected_to habits_path  # 正解
 ```
+
+<br>
+
+### jsonb バリデーションは「存在チェック」と「値チェック」を分けて設計する（#D-9）
+
+<br>
+
+jsonb カラムへのバリデーションは「キーが存在するか」と「キーの値が空でないか」を<br>
+別々に評価するか一体で評価するかを最初に決めてから実装すること。<br>
+
+<br>
+
+**存在チェック（`key?`）だけで十分な場合:**<br>
+- 参照先フィールドが `allow_blank: true` の設計で、値が nil でも画面がクラッシュしない<br>
+- 18番画面のように `.presence || "未入力"` で nil を安全に処理できる場合<br>
+- `build_input_snapshot` が必ず Hash を作るため「キーがない」ことだけが問題の場合<br>
+
+<br>
+
+**存在チェック + 値チェック（`key?` + `present?`）が必要な場合:**<br>
+- 画面がキーの値を直接 `Hash#fetch` 等で参照し、nil・空文字でクラッシュする場合<br>
+- API の仕様上、必ず値が入っていることが保証されているべきカラムの場合<br>
+
+<br>
+
+`present?` まで要求すると、未入力フィールドを持つ正常なデータ（Purpose は入力済みだが Mission は未入力等）を<br>
+全てバリデーションエラーにしてしまう。`UserPurpose` の設計（`allow_blank: true`）と<br>
+バリデーションの設計を合わせることが重要。<br>
+
+```ruby
+# ❌ present? まで要求 → 未入力フィールドがある正常なデータも弾く
+missing_keys = required_keys.reject { |key| snapshot.key?(key) && snapshot[key].present? }
+
+# ✅ key? のみ → allow_blank: true 設計に準拠し、未入力（nil）は許容する
+missing_keys = required_keys.reject { |key| snapshot.key?(key) }
+```
+
+<br>
+
+また、バリデーションの設計変更はジョブテストにすぐに影響する。<br>
+`present?` から `key?` に変更した場合、`PurposeAnalysisJobTest` の正常系テストが<br>
+失敗から通過に変わる可能性がある（逆も同様）。<br>
+モデルテストだけでなく必ず全テストを実行して影響範囲を確認すること。
 
 <br>
 
