@@ -1,29 +1,20 @@
 <%# app/views/user_purposes/_analysis_status_banner.html.erb %>
 <%#
   ==============================================================================
-  分析状態バナー パーシャル（D-3 更新版）
+  分析状態バナー パーシャル（D-11 更新版）
   ==============================================================================
 
-  【D-3 での変更点】
-    completed 状態のバナーに「結果を見る →」リンクを追加する。
-    以前は "(D-3で結果ページを実装予定)" というプレースホルダーだった。
-    ai_analysis ローカル変数を追加して、結果ページへのリンクを制御する。
+  【D-11 での変更点】
+    failed 状態バナーの改善:
+    ① last_error_message を「ユーザーに分かる言葉」に変換して表示する
+       （エラーコード・英語メッセージをそのまま見せない）
+    ② 「AIなしで続行する」リンクを提示する
+       （タイムアウト時でも振り返りを完了できることを伝える）
+    ③ エラー種別に応じたアイコン・メッセージの出し分け
 
   【ローカル変数】
     user_purpose : UserPurpose インスタンス（必須）
     ai_analysis  : AiAnalysis インスタンスまたは nil
-                   completed 状態のとき「結果を見る →」リンクに使用する。
-
-  【Turbo Stream の仕組み】
-    id="analysis_status_banner" が PurposeAnalysisJob の
-    broadcast_replace_to の target と一致している。
-    ジョブが analysis_state を更新するたびにこのパーシャルが
-    再レンダリングされて DOM が自動で置き換えられる。
-
-  【呼び出し方（show.html.erb より）】
-    render "user_purposes/analysis_status_banner",
-               user_purpose: @current_purpose,
-               ai_analysis:  @ai_analysis
   ==============================================================================
 %>
 
@@ -32,11 +23,6 @@
 
   <%# ── pending: AI分析ジョブのエンキュー待ち ────────────────────── %>
   <% if user_purpose.pending? %>
-    <%#
-      role="status" aria-live="polite":
-        スクリーンリーダーに「この領域は動的に更新される」と伝える。
-        polite = 現在の読み上げが終わってから通知する（穏やか・緊急でない通知向け）。
-    %>
     <div class="mb-6 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl"
          role="status" aria-live="polite">
       <span class="text-xl" aria-hidden="true">⏳</span>
@@ -50,12 +36,6 @@
   <% elsif user_purpose.analyzing? %>
     <div class="mb-6 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl"
          role="status" aria-live="polite">
-      <%#
-        スピナーアニメーション:
-          border-t-transparent で上部だけ透明にすることで回転しているように見せる。
-          animate-spin: Tailwind CSS のアニメーションユーティリティ（360度回転）。
-          flex-shrink-0: スピナーがテキストに押しつぶされないようにする。
-      %>
       <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0"
            aria-hidden="true"></div>
       <div>
@@ -74,26 +54,10 @@
         <div>
           <p class="text-sm font-semibold text-green-800">AI分析が完了しました</p>
           <p class="text-xs text-green-600 mt-0.5">
-            <%#
-              l: Rails の i18n 翻訳ヘルパー。
-              format: :long → config/locales/ja.yml の time.formats.long を参照する。
-              "2026年4月25日 09時23分" のような日本語形式で表示される。
-            %>
             <%= l user_purpose.updated_at, format: :long %> 完了
           </p>
         </div>
       </div>
-      <%#
-        「結果を見る →」ボタン（D-3 で実装）
-        ai_analysis が存在する場合のみ表示する。
-        【なぜ ai_analysis の存在確認が必要か】
-          completed 状態でも何らかの理由で AiAnalysis レコードが
-          作成されていない場合（バグ等）にリンクが壊れないようにする。
-        ai_result_user_purpose_path: routes.rb で定義した 18番ページへのパス。
-        【ルートの確認】
-          GET /user_purpose/ai_result → user_purposes#ai_result
-          named path helper: ai_result_user_purpose_path
-      %>
       <% if ai_analysis.present? %>
         <%= link_to "結果を見る →",
                     ai_result_user_purpose_path,
@@ -101,7 +65,6 @@
                             rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap
                             focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2" %>
       <% else %>
-        <%# AiAnalysis レコードが存在しない稀なケース %>
         <span class="text-xs text-gray-400">結果を準備中...</span>
       <% end %>
     </div>
@@ -109,38 +72,109 @@
   <%# ── failed: AI分析が失敗 ──────────────────────────────────────── %>
   <% elsif user_purpose.failed? %>
     <%#
-      role="alert": エラーメッセージであることをスクリーンリーダーに伝える。
-      pending/analyzing の "status" とは異なり、即座に読み上げる必要があるため "alert"。
+      ============================================================
+      D-11 更新: failed 状態 UI の大幅改善
+      ============================================================
+
+      【変更前】
+        last_error_message をそのまま表示していた。
+        例: "Gemini API エラー: HTTP 429 - Too Many Requests"
+        → ユーザーには意味不明な英語エラーが表示される
+
+      【変更後】
+        1. human_readable_error ヘルパーでエラーメッセージを日本語に変換する
+        2. エラー種別（タイムアウト・レート制限・認証など）に応じたアイコンを表示
+        3. 「AIなしで続行する」選択肢を提示する（D-11要件）
+        4. 「再試行する」ボタンは D-10 レート制限と連携済み
+
+      【human_readable_error を View ヘルパーに出さずにここで定義する理由】
+        このパーシャルだけで使うロジックなので、
+        ApplicationHelper に追加して全体を汚染するよりも
+        ここでローカルに定義する方が保守性が高い。
     %>
-    <div class="mb-6 px-4 py-3 bg-red-50 border border-red-200 rounded-xl"
+
+    <%#
+      error_info: エラーメッセージからユーザー向けの情報を生成するローカル変数。
+      【なぜ Hash で返すのか】
+        icon と message と detail を1つの変数にまとめることで、
+        同じ条件分岐を3回書かなくて済む（DRY の原則）。
+    %>
+    <% error_raw = user_purpose.last_error_message.to_s %>
+
+    <%# エラー種別を判定してアイコンとメッセージを決定する %>
+    <% error_info = if error_raw.include?("タイムアウト") || error_raw.include?("timeout")
+      {
+        icon:   "⏱️",
+        title:  "分析がタイムアウトしました",
+        detail: "AIサーバーの応答に時間がかかりすぎました。「再試行する」か、AIなしで続行できます。",
+        show_without_ai: true
+      }
+    elsif error_raw.include?("429") || error_raw.include?("レート制限") || error_raw.include?("上限")
+      {
+        icon:   "🚦",
+        title:  "AIの利用制限に達しました",
+        detail: "しばらく時間をおいてから再試行してください。通常5〜10分で回復します。",
+        show_without_ai: false
+      }
+    elsif error_raw.include?("401") || error_raw.include?("認証") || error_raw.include?("接続できません")
+      {
+        icon:   "🔑",
+        title:  "AIサービスに接続できません",
+        detail: "システムの設定に問題が発生しています。しばらくお待ちいただくか、管理者にお問い合わせください。",
+        show_without_ai: false
+      }
+    elsif error_raw.include?("解析") || error_raw.include?("パース") || error_raw.include?("JSON")
+      {
+        icon:   "📄",
+        title:  "AI応答の解析に失敗しました",
+        detail: "AIが予期しない形式で応答しました。「再試行する」で再度分析を試みてください。",
+        show_without_ai: false
+      }
+    elsif error_raw.include?("再試行") || error_raw.include?("自動的に")
+      {
+        icon:   "🔄",
+        title:  "一時的なエラーが発生しました",
+        detail: "自動的に再試行しています。しばらくお待ちいただくか、「再試行する」をクリックしてください。",
+        show_without_ai: false
+      }
+    else
+      {
+        icon:   "⚠️",
+        title:  "分析に失敗しました",
+        detail: "予期しないエラーが発生しました。「再試行する」で再度お試しください。",
+        show_without_ai: false
+      }
+    end %>
+
+    <div class="mb-6 px-4 py-4 bg-red-50 border border-red-200 rounded-xl"
          role="alert">
-      <div class="flex items-center gap-3 mb-2">
-        <span class="text-xl" aria-hidden="true">⚠️</span>
-        <p class="text-sm font-semibold text-red-800">分析に失敗しました</p>
+
+      <%# ── エラーヘッダー ───────────────────────────────────────────── %>
+      <div class="flex items-center gap-3 mb-3">
+        <span class="text-xl flex-shrink-0" aria-hidden="true"><%= error_info[:icon] %></span>
+        <p class="text-sm font-semibold text-red-800"><%= error_info[:title] %></p>
       </div>
 
-      <%# エラーメッセージが存在する場合は表示する %>
-      <% if user_purpose.last_error_message.present? %>
-        <p class="text-xs text-red-600 mb-3">
-          エラー: <%= user_purpose.last_error_message %>
-        </p>
-      <% end %>
+      <%# ── エラー詳細（ユーザー向けの言葉で表示） ─────────────────────── %>
+      <p class="text-xs text-red-600 mb-4 leading-relaxed">
+        <%= error_info[:detail] %>
+      </p>
 
-      <div class="flex gap-2">
+      <%# ── ボタンエリア ─────────────────────────────────────────────── %>
+      <div class="flex flex-wrap gap-2">
+
         <%#
-          D-10 変更: 再試行ボタンに ai-throttle コントローラーを適用する。
-          button_to は <form> タグを生成するため、
-          data-controller と data-action を form 要素に付ける必要がある。
-          form: { data: { ... } } オプションで form タグに data 属性を追加できる。
-          
-          【動作の流れ】
-            1. ユーザーが「再試行する」をクリック
-            2. confirm ダイアログが表示される（turbo_confirm）
-            3. OK を押すと submit イベントが発火
-            4. ai-throttle#throttle でボタンが 1 分間 disabled になる
-            5. フォームが POST /user_purpose/retry_analysis に送信される
+          「再試行する」ボタン（D-10 レート制限と連携）
+          D-10 で実装済みの ai-throttle コントローラーを使って
+          1分以内の連打を防ぎながら再試行できる。
+
+          【button_to の form: オプションについて】
+            button_to は <form> タグを生成する。
+            form: { data: { ... } } で <form> タグに data 属性を付けられる。
+            data-controller と data-action は <form> に付ける必要がある
+            （<button> ではなく <form> が submit イベントを発火するため）。
         %>
-        <%= button_to "再試行する",
+        <%= button_to "🔄 再試行する",
                       retry_analysis_user_purpose_path,
                       method: :post,
                       data: {
@@ -158,12 +192,47 @@
                               focus:outline-none focus:ring-2 focus:ring-red-500
                               cursor-pointer border-none" %>
 
-        <%= link_to "目標を更新する",
+        <%#
+          D-11 追加: 「目標を更新する」ボタン（既存）
+        %>
+        <%= link_to "📝 目標を更新する",
                     edit_user_purpose_path,
                     class: "px-3 py-1.5 text-xs font-semibold text-gray-600
                             border border-gray-300 bg-white rounded-lg hover:bg-gray-50
                             transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400" %>
+
+        <%#
+          D-11 追加: 「AIなしで続行する」ボタン
+          タイムアウト時など「AIがなくても目標は保存済みなので続行できる」
+          というフォールバックをユーザーに提示する。
+
+          【show_without_ai フラグについて】
+            タイムアウトエラーの場合のみ表示する。
+            レート制限・認証エラーの場合は「再試行」を促す方が適切なため
+            このボタンは表示しない（error_info[:show_without_ai] で制御）。
+
+          【リンク先が dashboard_path の理由】
+            PMVV は既に保存されているため、ダッシュボードで習慣・タスク管理を
+            続けることができる。AI提案なしでも日常の習慣管理は使える。
+        %>
+        <% if error_info[:show_without_ai] %>
+          <%= link_to "➡️ AIなしで続行する",
+                      dashboard_path,
+                      class: "px-3 py-1.5 text-xs font-semibold text-orange-700
+                              border border-orange-300 bg-orange-50 rounded-lg
+                              hover:bg-orange-100 transition-colors
+                              focus:outline-none focus:ring-2 focus:ring-orange-400" %>
+        <% end %>
       </div>
+
+      <%#
+        D-11 追加: 補足説明テキスト
+        「AIなしでもアプリは使える」ことを常に伝えて
+        ユーザーの離脱を防ぐ。
+      %>
+      <p class="text-xs text-gray-500 mt-3 pt-3 border-t border-red-100">
+        💡 AI分析がなくても、習慣・タスクの記録は通常通りご利用いただけます。
+      </p>
     </div>
   <% end %>
 
