@@ -9,15 +9,17 @@
 #   呼び出し元（PurposeAnalysisJob 等）は AiClient#analyze を呼ぶだけでよく、
 #   どの API を使っているかを意識しなくてよい設計にする。
 #
-# 【なぜ gem なしで REST API を直接呼ぶのか】
-#   Google 公式の Gemini Ruby SDK が存在しないため、
-#   サードパーティ gem に頼らず faraday で REST API を直接呼ぶ。
-#   公式ドキュメント通りの JSON 構造をそのまま使えるため安定している。
+# 【D-11 での変更内容】
+#   ① タイムアウト（Timeout::Error）を明示的に rescue して Sentry に Capture
+#   ② 401エラーを専用クラス（AuthError）で検知して即座にエラーを発生させる
+#   ③ 429エラーを専用クラス（RateLimitError）で検知して指数バックオフリトライ
+#   ④ Sentry 通知ヘルパー（notify_sentry）を追加（Sentry gem がなくても動く）
+#   ⑤ handle_http_error メソッドで HTTP エラー処理を共通化（DRY化）
 #
-# 【Gemini REST API のエンドポイント】
-#   POST https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}
-#   リクエスト/レスポンスの JSON 構造は以下の公式ドキュメントに従う:
-#   https://ai.google.dev/api/generate-content
+# 【設計の絶対原則】
+#   analyze メソッドは「常に nil か Hash を返す」。
+#   例外を Job 側に伝播させない（AuthError のみ例外）。
+#   Job 側は戻り値が nil かどうかだけで判定できる。
 #
 # 【戻り値の設計】
 #   成功時: { text: "AIのレスポンステキスト", model: "使用モデル名" }
@@ -27,60 +29,62 @@
 
 class AiClient
   # ============================================================
+  # カスタムエラークラス定義
+  # ============================================================
+  #
+  # 【なぜカスタムエラークラスを定義するのか】
+  #   「Gemini 401エラー」と「429レート制限」を
+  #   呼び出し元（Job側・gemini_with_retry）で個別にハンドリングするためには
+  #   エラーの種類を判別できるクラスが必要。
+  #   StandardError の message 文字列で判定するのは脆弱なため、
+  #   明示的なエラークラスで rescue する。
+
+  # AuthError: APIキー不正・認証エラー（HTTP 401）
+  # 【即座に failed にする理由】
+  #   APIキーが間違っている場合、リトライしても必ず失敗する。
+  #   GoodJobのリトライは無意味なので即座にfailed確定させ、
+  #   Sentryで開発者に通知して早期解決を促す。
+  AuthError = Class.new(StandardError)
+
+  # RateLimitError: レート制限エラー（HTTP 429）
+  # 【専用クラスを作る理由】
+  #   gemini_with_retry の rescue で「429なのか」を
+  #   rescue AiClient::RateLimitError と明示的に書けるため意図が明確になる。
+  RateLimitError = Class.new(StandardError)
+
+  # ============================================================
   # 定数定義
   # ============================================================
 
   # MAX_RETRIES: Gemini API で 429 エラーが発生したときの最大リトライ回数
-  # 【なぜ 2 回か】
-  #   1回目: 1秒待機 → 2回目: 2秒待機 → 3回失敗で Groq にフォールバック
-  #   これ以上増やすとジョブの実行時間が長くなりすぎる
+  # 1回目: 1秒待機 → 2回目: 2秒待機 → 3回失敗で Groq にフォールバック
   MAX_RETRIES = 2
 
   # GEMINI_MODEL: 使用する Gemini のモデル名
-  # 【gemini-2.0-flash を選んだ理由】
-  #   - 無料枠が広い（1分15リクエスト・1日1500リクエスト）
-  #   - 応答速度が速い（flash = 高速モデル）
-  #   - PMVV 分析程度のタスクには十分な精度がある
-  GEMINI_MODEL = "gemini-2.5-flash".freeze  # 2.0-flash → 2.5-flash に変更
+  GEMINI_MODEL = "gemini-2.5-flash".freeze
 
   # GEMINI_API_BASE: Gemini REST API のベース URL
-  # v1beta: 最新機能が含まれる安定版（v1 より機能が多い）
   GEMINI_API_BASE = "https://generativelanguage.googleapis.com".freeze
 
   # GROQ_MODEL: フォールバック時に使用する Groq のモデル名
-  # 【llama-3.3-70b-versatile を選んだ理由】
-  #   - Groq の無料枠で利用可能
-  #   - 70B パラメータで高品質な日本語対応
-  #   - OpenAI 互換 API なので faraday + JSON で簡単に呼び出せる
   GROQ_MODEL = "llama-3.3-70b-versatile".freeze
 
   # GROQ_API_BASE: Groq API のベース URL
   GROQ_API_BASE = "https://api.groq.com".freeze
 
   # GEMINI_BLOCKED_CACHE_KEY: Rails.cache に記録する Gemini ブロックフラグのキー
-  # 【なぜ定数にするか】
-  #   文字列を直接書くとタイポのリスクがある。定数にすることで安全に参照できる。
   GEMINI_BLOCKED_CACHE_KEY = "ai_client:gemini_blocked".freeze
 
-  # GEMINI_BLOCK_DURATION: Gemini がブロックされる期間
-  # 429 エラー連発後、5分間は Gemini を使わず Groq を使う
+  # GEMINI_BLOCK_DURATION: Gemini がブロックされる期間（5分）
   GEMINI_BLOCK_DURATION = 5.minutes
 
   # API_TIMEOUT: HTTP リクエストのタイムアウト時間（秒）
-  # 【なぜ 30 秒か】
-  #   Gemini の応答は通常 5〜15 秒。30 秒で十分な余裕がある。
-  #   これ以上待つとジョブが詰まってサーバーリソースを圧迫する。
+  # D-11 要件: 30秒でタイムアウト設定
   API_TIMEOUT = 30
 
   # ============================================================
   # 初期化
   # ============================================================
-
-  # initialize(provider:)
-  # 【引数】
-  #   provider: 使用する AI プロバイダ。
-  #             ENV["AI_PROVIDER"] が設定されていればその値を使う。
-  #             未設定なら "gemini" をデフォルトとして使う。
   def initialize(provider: ENV.fetch("AI_PROVIDER", "gemini"))
     @provider = provider
   end
@@ -88,30 +92,46 @@ class AiClient
   # ============================================================
   # メインメソッド: analyze
   # ============================================================
-
-  # analyze(prompt)
-  # 【役割】
-  #   プロンプト文字列を受け取り、AI に送信して結果を返す。
-  #   Gemini → Groq の順でフォールバックを試み、
-  #   全プロバイダが失敗した場合は nil を返す。
   #
-  # 【戻り値】
-  #   成功時: { text: "AIのレスポンステキスト", model: "使用モデル名" }
-  #   失敗時: nil
+  # 【設計の核心】
+  #   このメソッドは「必ず nil か Hash を返す」。
+  #   例外を外部（Job側）に伝播させない。
+  #   AuthError だけは例外として伝播させる（リトライ不要なため）。
+  #
+  # 【なぜ raise しないのか（コメント案の設計が危険な理由）】
+  #   Job 側で rescue => e して raise すると
+  #   GoodJob の ApplicationJob に定義された
+  #   retry_on StandardError が反応してしまい、
+  #   「60秒後に再エンキュー」という D-11 要件と
+  #   「GoodJobの自動リトライ」が二重に動いてしまう。
+  #   「nil を返す → Job 側で再エンキュー判定」という設計を守ることで
+  #   リトライロジックが1箇所に集中して保守しやすくなる。
   def analyze(prompt)
     if @provider == "groq"
-      # 環境変数で Groq 強制指定された場合
       call_groq(prompt)
+    elsif gemini_available?
+      gemini_with_retry(prompt)
     else
-      if gemini_available?
-        gemini_with_retry(prompt)
-      else
-        Rails.logger.warn "[AiClient] Gemini はブロック中のため Groq にフォールバックします"
-        call_groq(prompt)
-      end
+      Rails.logger.warn "[AiClient] Gemini はブロック中のため Groq にフォールバックします"
+      call_groq(prompt)
     end
+
+  rescue AuthError
+    # AuthError だけは Job 側に伝播させる（discard_on で即失敗確定にするため）
+    # Sentry への通知は call_gemini / call_groq 内の handle_http_error で行われる
+    raise
+
+  rescue Faraday::TimeoutError, Timeout::Error => e
+    # タイムアウトは Sentry に記録して nil を返す
+    # 【nil を返す理由】
+    #   Job 側の再エンキューロジック（result.nil? の分岐）に乗せるため。
+    #   raise すると ApplicationJob の retry_on StandardError が誤作動する。
+    notify_sentry(e, level: :warning, extra: { timeout_seconds: API_TIMEOUT })
+    Rails.logger.error "[AiClient] タイムアウト（#{API_TIMEOUT}秒）: #{e.class} → Sentry 通知済み"
+    nil
+
   rescue => e
-    # 予期しない例外が発生した場合のセーフティネット
+    # 予期しない例外のセーフティネット
     Rails.logger.error "[AiClient] 全プロバイダで失敗しました: #{e.class} - #{e.message}"
     nil
   end
@@ -124,9 +144,8 @@ class AiClient
   # ----------------------------------------------------------
   # gemini_available?
   # ----------------------------------------------------------
-  # 【役割】
-  #   Gemini が現在使用可能かどうかを判定する。
-  #   Rails.cache に gemini_blocked フラグが存在する場合は false を返す。
+  # Gemini が現在使用可能かどうかを判定する。
+  # D-11 要件「① 事前フォールバック判定」の実装。
   def gemini_available?
     Rails.cache.read(GEMINI_BLOCKED_CACHE_KEY) != "true"
   end
@@ -134,83 +153,55 @@ class AiClient
   # ----------------------------------------------------------
   # gemini_with_retry(prompt, retries:)
   # ----------------------------------------------------------
-  # 【役割】
-  #   Gemini API を呼び出し、429 エラー（レート制限）の場合は
-  #   指数バックオフでリトライする。
-  #   最大リトライ回数を超えた場合は Groq にフォールバックする。
+  # Gemini API を呼び出し、429 エラーの場合は指数バックオフでリトライする。
+  # D-11 要件「② 429 指数バックオフリトライ」の実装。
+  #
+  # 【AuthError は rescue しない理由】
+  #   401 はリトライしても必ず失敗するため、
+  #   rescue せずに analyze メソッドに伝播させる。
   def gemini_with_retry(prompt, retries: 0)
     call_gemini(prompt)
-  rescue => e
-    if e.message.to_s.include?("429") && retries < MAX_RETRIES
-      wait_seconds = retries + 1
+  rescue RateLimitError => e
+    if retries < MAX_RETRIES
+      wait_seconds = retries + 1  # 1回目: 1秒, 2回目: 2秒
       Rails.logger.warn "[AiClient] Gemini 429 レート制限: #{wait_seconds}秒後にリトライ (#{retries + 1}/#{MAX_RETRIES})"
       sleep(wait_seconds)
       gemini_with_retry(prompt, retries: retries + 1)
     else
-      Rails.logger.warn "[AiClient] Gemini 失敗 (#{e.class}: #{e.message}): Groq にフォールバックします"
+      # リトライ上限超過 → 5分間ブロックフラグを立てて Groq へ
+      Rails.logger.warn "[AiClient] Gemini 429 リトライ上限超過: 5分間ブロックして Groq にフォールバック"
       Rails.cache.write(GEMINI_BLOCKED_CACHE_KEY, "true", expires_in: GEMINI_BLOCK_DURATION)
       call_groq(prompt)
     end
+  rescue AuthError
+    # 401 は analyze に伝播させる
+    raise
+  rescue => e
+    # 429 以外のエラー → Groq にフォールバック
+    Rails.logger.warn "[AiClient] Gemini 失敗 (#{e.class}): Groq にフォールバックします"
+    Rails.cache.write(GEMINI_BLOCKED_CACHE_KEY, "true", expires_in: GEMINI_BLOCK_DURATION)
+    call_groq(prompt)
   end
 
   # ----------------------------------------------------------
   # call_gemini(prompt)
   # ----------------------------------------------------------
-  # 【役割】
-  #   faraday を使って Gemini REST API を直接呼び出す。
-  #   Google 公式の Ruby SDK が存在しないため、REST API を直接叩く。
-  #
-  # 【Gemini REST API のリクエスト構造】
-  #   POST /v1beta/models/{model}:generateContent?key={api_key}
-  #   {
-  #     "contents": [{ "parts": [{ "text": "プロンプト" }] }],
-  #     "generationConfig": { "temperature": 0.7, "maxOutputTokens": 4096 }
-  #   }
-  #
-  # 【Gemini REST API のレスポンス構造】
-  #   {
-  #     "candidates": [{
-  #       "content": {
-  #         "parts": [{ "text": "AIの応答テキスト" }]
-  #       }
-  #     }]
-  #   }
-  #
-  # 【GEMINI_API_KEY の取得方法】
-  #   https://aistudio.google.com/ でアカウント作成後に無料発行できる。
-  #   クレカ不要・上限超過時は課金なし（リクエスト拒否のみ）。
+  # faraday を使って Gemini REST API を直接呼び出す。
+  # D-11 変更: handle_http_error メソッドで HTTP エラー処理を共通化。
   def call_gemini(prompt)
     api_key = ENV["GEMINI_API_KEY"]
     raise ArgumentError, "GEMINI_API_KEY が設定されていません" if api_key.blank?
 
-    # faraday クライアントを作成する
-    # GEMINI_API_BASE をベース URL として設定する
-    conn = build_faraday_connection(GEMINI_API_BASE)
-
-    # Gemini REST API エンドポイント
-    # /v1beta/models/{モデル名}:generateContent?key={APIキー}
+    conn     = build_faraday_connection(GEMINI_API_BASE)
     endpoint = "/v1beta/models/#{GEMINI_MODEL}:generateContent"
 
     response = conn.post(endpoint) do |req|
-      # クエリパラメータに API キーを設定する
-      # Gemini API は Authorization ヘッダーではなく ?key= クエリパラメータで認証する
-      req.params["key"] = api_key
+      req.params["key"]           = api_key
       req.headers["Content-Type"] = "application/json"
-
-      # リクエストボディ（Gemini REST API の公式フォーマット）
       req.body = {
-        # contents: メッセージの配列
-        # parts: テキストの配列（今回は1つのプロンプトのみ）
         contents: [
-          {
-            parts: [
-              { text: prompt }
-            ]
-          }
+          { parts: [{ text: prompt }] }
         ],
-        # generationConfig: レスポンスの生成設定
-        # temperature: 0.7 → やや創造的な回答（0=決定的、1=最もランダム）
-        # maxOutputTokens: 4096 → 最大トークン数（長い JSON 応答に対応）
         generationConfig: {
           temperature:     0.7,
           maxOutputTokens: 4096
@@ -218,61 +209,42 @@ class AiClient
       }
     end
 
-    # HTTP ステータスコードが 200 以外の場合はエラーを発生させる
-    # 429 の場合は gemini_with_retry がキャッチしてリトライする
-    unless response.success?
-      error_body = response.body.is_a?(Hash) ? response.body.dig("error", "message") : response.body.to_s
-      raise "Gemini API エラー: HTTP #{response.status} - #{error_body}"
-    end
+    # HTTPステータスコードごとの専用エラー処理
+    # handle_http_error は Gemini / Groq 共通のメソッド（DRY化）
+    handle_http_error(response, "Gemini") unless response.success?
 
-    # レスポンスからテキストを抽出する
-    # candidates[0].content.parts[0].text の構造になっている
-    # dig を使って安全にネストした値を取得する（nil セーフ）
     text = response.body.dig("candidates", 0, "content", "parts", 0, "text")
     raise "Gemini API からレスポンステキストを取得できませんでした" if text.blank?
 
     Rails.logger.info "[AiClient] Gemini REST API 呼び出し成功（モデル: #{GEMINI_MODEL}）"
-
-    # 使用したモデル名と一緒に返す
-    # Job 側で正確なモデル名を DB に記録できる
     { text: text, model: GEMINI_MODEL }
   end
 
   # ----------------------------------------------------------
   # call_groq(prompt)
   # ----------------------------------------------------------
-  # 【役割】
-  #   Groq API（OpenAI 互換エンドポイント）を faraday で呼び出す。
-  #   Gemini が失敗した場合のフォールバックとして使用する。
-  #
-  # 【Groq API の特徴】
-  #   - OpenAI と同じ API インターフェース（/v1/chat/completions）
-  #   - 無料枠: 1分30リクエスト・1日14,400リクエスト
-  #   - API キー: https://console.groq.com で無料取得
+  # Groq API（OpenAI 互換）を faraday で呼び出す。
+  # D-11 変更: handle_http_error メソッドで HTTP エラー処理を共通化。
   def call_groq(prompt)
     api_key = ENV["GROQ_API_KEY"]
 
     if api_key.blank?
-      Rails.logger.warn "[AiClient] GROQ_API_KEY が設定されていません。Groq フォールバックをスキップします"
+      Rails.logger.warn "[AiClient] GROQ_API_KEY が未設定のため Groq をスキップします"
       return nil
     end
 
     conn = build_faraday_connection(GROQ_API_BASE)
 
     response = conn.post("/openai/v1/chat/completions") do |req|
-      # Groq API は Bearer 認証形式で API キーを渡す
       req.headers["Authorization"] = "Bearer #{api_key}"
       req.headers["Content-Type"]  = "application/json"
-
       req.body = {
         model:    GROQ_MODEL,
         messages: [
-          # system: AI の役割・振る舞いを定義するシステムメッセージ
           {
             role:    "system",
-            content: "あなたは優秀なライフコーチです。ユーザーの目標分析を行い、必ず指定された JSON 形式のみで回答してください。"
+            content: "あなたは優秀なライフコーチです。必ず指定された JSON 形式のみで回答してください。"
           },
-          # user: ユーザーからのメッセージ（分析プロンプト）
           {
             role:    "user",
             content: prompt
@@ -283,12 +255,8 @@ class AiClient
       }
     end
 
-    unless response.success?
-      raise "Groq API エラー: HTTP #{response.status} - #{response.body}"
-    end
+    handle_http_error(response, "Groq") unless response.success?
 
-    # Groq（OpenAI 互換）のレスポンス構造:
-    #   choices[0].message.content
     text = response.body.dig("choices", 0, "message", "content")
     raise "Groq API からレスポンステキストを取得できませんでした" if text.blank?
 
@@ -297,24 +265,93 @@ class AiClient
   end
 
   # ----------------------------------------------------------
-  # build_faraday_connection(base_url)
+  # handle_http_error(response, provider_name)
   # ----------------------------------------------------------
   # 【役割】
-  #   共通の faraday コネクションを生成する。
-  #   Gemini と Groq で同じ設定（タイムアウト・JSON 変換）を使うため
-  #   メソッドに切り出して DRY にする。
+  #   Gemini・Groq 共通の HTTP エラー処理メソッド。
+  #   コメント案の「handle_response で共通化する」という提案の良い部分を
+  #   安全な形で取り込んだもの。
   #
-  # 【各設定の意味】
-  #   open_timeout: 接続確立の最大待機時間（秒）
-  #   timeout:      レスポンス受信の最大待機時間（秒）
-  #   f.request :json  → リクエストボディを自動的に JSON 文字列に変換する
-  #   f.response :json → レスポンスボディを自動的に Ruby Hash に変換する
+  # 【コメント案との違い】
+  #   コメント案は成功レスポンスの処理も含めて共通化しようとしていたが、
+  #   Gemini と Groq はレスポンス構造が異なるため共通化できない。
+  #   エラー処理だけを共通化することで DRY 原則を守りつつ安全に実装する。
+  #
+  # 【なぜ raise するのか】
+  #   このメソッドは call_gemini / call_groq から呼ばれる。
+  #   raise した例外は gemini_with_retry → analyze の順に伝播し、
+  #   それぞれの rescue で適切にハンドリングされる。
+  #
+  # 【引数】
+  #   response      : Faraday::Response オブジェクト
+  #   provider_name : ログに表示するプロバイダ名（"Gemini" or "Groq"）
+  def handle_http_error(response, provider_name)
+    status     = response.status
+    error_body = if response.body.is_a?(Hash)
+                   response.body.dig("error", "message").to_s
+                 else
+                   response.body.to_s[0, 200]  # 長すぎるボディを切り詰める
+                 end
+
+    Rails.logger.error "[AiClient] #{provider_name} HTTP #{status}: #{error_body}"
+
+    case status
+    when 401
+      # 認証エラー: Sentry に fatal 通知してから AuthError を raise
+      # AuthError は analyze まで伝播して Job 側で discard_on に捕捉される
+      auth_error = AuthError.new("#{provider_name} 認証エラー（401）: #{error_body}")
+      notify_sentry(auth_error, level: :fatal, extra: { provider: provider_name, status: 401 })
+      raise auth_error
+    when 429
+      # レート制限: RateLimitError を raise して gemini_with_retry でリトライさせる
+      raise RateLimitError, "#{provider_name} レート制限（429）: #{error_body}"
+    else
+      # その他（500系など）: 汎用エラーを raise → Groq にフォールバック
+      raise "#{provider_name} API エラー: HTTP #{status} - #{error_body}"
+    end
+  end
+
+  # ----------------------------------------------------------
+  # build_faraday_connection(base_url)
+  # ----------------------------------------------------------
+  # 共通の faraday コネクションを生成する。
+  # Gemini と Groq で同じタイムアウト設定を使うため共通化（DRY）。
   def build_faraday_connection(base_url)
     Faraday.new(url: base_url) do |f|
+      # open_timeout: TCP接続確立の最大待機時間（秒）
       f.options.open_timeout = 10
+      # timeout: レスポンス受信の最大待機時間（秒）= API_TIMEOUT（30秒）
+      # D-11 要件: 30秒でタイムアウト
       f.options.timeout      = API_TIMEOUT
+      # f.request :json → リクエストボディを自動的に JSON 文字列に変換する
       f.request  :json
+      # f.response :json → レスポンスボディを自動的に Ruby Hash に変換する
       f.response :json
+    end
+  end
+
+  # ----------------------------------------------------------
+  # notify_sentry(exception, level:, extra: {})
+  # ----------------------------------------------------------
+  # Sentry に例外を通知するヘルパーメソッド。
+  # Sentry gem がない環境でもエラーを起こさず動作する（ログだけ出す）。
+  #
+  # 【defined?(Sentry) で判定する理由】
+  #   I-5（Sentry導入）タスク完了前でも安全に動作する。
+  #   導入後は自動的に Sentry 通知が有効になる。
+  def notify_sentry(exception, level: :error, extra: {})
+    if defined?(Sentry)
+      Sentry.capture_exception(
+        exception,
+        level: level,
+        extra: extra.merge(
+          ai_provider: @provider,
+          timestamp:   Time.current.iso8601
+        )
+      )
+      Rails.logger.info "[AiClient] Sentry 通知完了: level=#{level}, #{exception.class}"
+    else
+      Rails.logger.warn "[AiClient] Sentry 未導入のためログのみ: [#{level.upcase}] #{exception.class} - #{exception.message}"
     end
   end
 end
