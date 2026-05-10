@@ -1,11 +1,26 @@
 <%# app/views/weekly_reflections/new.html.erb %>
 <%#
   ==============================================================================
-  週次振り返り入力ページ（D-5: 危機介入モーダルを追加）
+  週次振り返り入力ページ（E-1: 気分スコア・音声入力追加）
   ==============================================================================
-  【D-5 での変更内容】
-    ① ページ末尾に _crisis_intervention_modal パーシャルを追加する
-    ② flash[:crisis] が true の場合、Stimulus がモーダルを自動表示する
+  【E-1 での変更内容】
+    ① 気分スコア（1〜5）の星評価UIセクションを追加する
+       - ラジオボタン + Stimulus（mood-rating）コントローラーで実装
+       - inline script は Turbo 多重登録問題があるため Stimulus に変更
+    ② background_situation テキストエリアに音声入力🎤ボタンを追加する
+       - data-controller="voice-input" を div に付与（テキストエリアごとに独立）
+    ③ reflection_comment（自由コメント）テキストエリアに音声入力🎤ボタンを追加する
+       - 同じく data-controller="voice-input" で独立したスコープ
+    ④ 数値補正フィールドを達成済み習慣にも表示する
+
+  【voice-input スコープ分離の重要性】
+    各テキストエリアを data-controller="voice-input" で囲んだ独立した div に
+    入れることで、field/button ターゲットが衝突しない。
+    Stimulus の target はコントローラーのスコープ（div）内だけを探索するため、
+    複数の voice-input コントローラーが同一ページにあっても干渉しない。
+
+  【D-5/D-6/D-10 の既存機能は変更なし】
+    crisis_intervention_modal / ai_limit_modal / ai-throttle は既存のまま維持。
   ==============================================================================
 %>
 
@@ -56,6 +71,39 @@
                 <%= stats[:rate] %>%
               </span>
             </div>
+
+            <%#
+              ── E-1 追加: 達成済みの数値型習慣にも補正フィールドを表示する ──────
+              【変更前】未達成の数値型習慣にのみ補正フィールドを表示していた
+              【変更後】達成・未達成に関わらず数値型習慣すべてに補正フィールドを表示する
+              【理由】
+                達成済みでも実際の値が日次入力と異なる場合がある。
+                例: 10冊目標で10冊記録済み（100%）だが、実際は12冊読んだケース。
+                補正フィールドを全数値型習慣に表示することで正確な記録を保証する。
+            %>
+            <% if habit.numeric_type? %>
+              <div class="bg-white border border-emerald-100 rounded-xl px-4 pb-3 pt-2 -mt-1 shadow-sm">
+                <div class="flex items-center gap-2">
+                  <label for="correction_<%= habit.id %>"
+                         class="text-xs text-gray-500 flex-shrink-0">
+                    今週の実際の記録を補正:
+                  </label>
+                  <input type="number"
+                         id="correction_<%= habit.id %>"
+                         name="reflection_numeric_corrections[habit_<%= habit.id %>]"
+                         class="w-24 px-2 py-1 text-sm border border-gray-300 rounded-lg
+                                focus:outline-none focus:ring-2 focus:ring-blue-500
+                                text-center"
+                         min="0"
+                         step="any"
+                         value="<%= format("%g", (stats[:numeric_sum] || 0).round(1)) %>"
+                         placeholder="0">
+                  <span class="text-xs text-gray-500 flex-shrink-0">
+                    <%= habit.unit.presence || "回" %>（現在: <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %><%= habit.unit.presence || "回" %>）
+                  </span>
+                </div>
+              </div>
+            <% end %>
           <% end %>
         </div>
       </section>
@@ -114,15 +162,10 @@
 
   <%# ==========================================
       振り返りフォーム
-  ========================================== %>
-  <%#
-    D-10 変更: data-controller に "ai-throttle" を追加する。
-    Stimulus は data-controller にスペース区切りで複数コントローラーを指定できる。
+  ==========================================
+    D-10 変更: data-controller に "ai-throttle" を追加。
     "form-submit": 送信中のローディング表示（既存）
     "ai-throttle": 送信後 1 分間ボタンを disabled にする（D-10 追加）
-    data-action: submit イベントで両コントローラーのメソッドを順に呼ぶ。
-      form-submit#submit → ローディング表示 + disabled（既存）
-      ai-throttle#throttle → 1 分間 disabled タイマーをセット（D-10 追加）
   %>
   <%= form_with model: @weekly_reflection,
                 url: weekly_reflections_path,
@@ -136,9 +179,121 @@
 
     <%= render "shared/form_errors", model: @weekly_reflection %>
 
+    <%# ============================================================
+        E-1 追加: 気分スコアセクション（Stimulus 版星評価UI）
+        ============================================================
+        【実装方針（レビュー指摘を受けて inline script から Stimulus に変更）】
+
+          ラジオボタン（type="radio"）+ Stimulus の mood-rating コントローラーで
+          星の色・ラベルを管理する。
+
+        【data-controller="mood-rating" について】
+          この div が MoodRatingController のスコープになる。
+          この div の中の data-mood-rating-target="..." だけが対象になる。
+
+        【ラジオボタンの name 属性について】
+          f.radio_button :mood, score を使うと
+          name="weekly_reflection[mood]" が自動設定される。
+          コントローラーの weekly_reflection_params で :mood を permit しているため
+          この値がモデルに渡される。
+
+        【label の for 属性について（レビュー修正）】
+          for="weekly_reflection_mood_#{score}" を明示することで、
+          ① ラベルをクリックしたときにラジオボタンが選択される（HTML標準）
+          ② JS から label[for="..."] でラベルを正確に取得できる
+          ③ アクセシビリティが向上する
+    %>
+    <div class="bg-white border border-gray-200 rounded-xl p-5"
+         data-controller="mood-rating">
+
+      <h3 class="text-sm font-bold text-gray-700 mb-3">
+        😊 今週の気分スコア
+        <span class="font-normal text-gray-400 text-xs ml-1">（任意）</span>
+      </h3>
+      <p class="text-xs text-gray-500 mb-4">今週全体を通してどんな気分でしたか？</p>
+
+      <div class="flex items-center gap-3 flex-wrap">
+
+        <%# ── ラジオボタン + 星ラベル ── %>
+        <div class="flex items-center gap-1" role="radiogroup" aria-label="気分スコア（1〜5）">
+          <% (1..5).each do |score| %>
+            <%#
+              ラジオボタン本体（視覚的に非表示）
+              - id="weekly_reflection_mood_#{score}": label の for 属性と対応させるため明示する
+              - class="sr-only": スクリーンリーダーには読めるが視覚的には非表示
+              - data-mood-rating-target="radio": MoodRatingController が参照するターゲット
+              - data-action="change->mood-rating#update": 選択変更時にコントローラーを呼ぶ
+            %>
+            <%= f.radio_button :mood,
+                  score,
+                  checked: @weekly_reflection.mood == score,
+                  class: "sr-only",
+                  id: "weekly_reflection_mood_#{score}",
+                  data: {
+                    "mood-rating-target": "radio",
+                    action: "change->mood-rating#update"
+                  } %>
+
+            <%#
+              星ラベル（視覚的な星アイコン）
+              - for="weekly_reflection_mood_#{score}": ラジオボタンと紐づける
+                この for 属性が必須。for がないとラベルクリックでラジオが選択されない。
+              - data-mood-rating-target="star": MoodRatingController が参照するターゲット
+              - data-score="<%= score %>": コントローラーがスコアを判別するために使用
+              - 初期テキスト "☆": connect() で update() が走り選択状態に応じて ★ に変わる
+            %>
+            <label for="weekly_reflection_mood_<%= score %>"
+                   class="cursor-pointer select-none"
+                   data-mood-rating-target="star"
+                   data-score="<%= score %>"
+                   title="<%= score %>点">
+              <%#
+                初期テキストは "☆"（未選択）。
+                MoodRatingController の connect() → update() で
+                選択状態に応じて "★" + text-yellow-400 に変わる。
+                初期クラスは text-gray-300（未選択のグレー）。
+              %>
+              <span class="text-3xl leading-none transition-colors duration-100 text-gray-300"
+                    aria-hidden="true">☆</span>
+              <span class="sr-only"><%= score %>点</span>
+            </label>
+          <% end %>
+        </div>
+
+        <%#
+          気分スコアのテキストラベル
+          data-mood-rating-target="label": MoodRatingController が更新するターゲット
+          初期テキストは「選択してください」（未選択時のプレースホルダー）。
+          ラジオボタンを選択すると「😊 良い」などに変わる。
+        %>
+        <span class="text-sm text-gray-400"
+              data-mood-rating-target="label">選択してください</span>
+
+        <%#
+          リセットボタン（任意入力なので選択解除できるようにする）
+          data-action="click->mood-rating#reset": クリックでコントローラーの reset() を呼ぶ
+          type="button": フォーム送信を防ぐために必須
+        %>
+        <button type="button"
+                class="text-xs text-gray-400 hover:text-gray-600 underline"
+                data-action="click->mood-rating#reset"
+                aria-label="気分スコアをリセット">
+          リセット
+        </button>
+
+      </div>
+    </div>
+    <%# ============================================================
+        E-1 気分スコアセクション ここまで
+        ============================================================ %>
+
+    <%# ============================================================
+        振り返りのポイント（なぜ？・どう？・からの？）
+        ============================================================ %>
     <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
       <h3 class="text-sm font-bold text-gray-700">📝 振り返りのポイント</h3>
 
+      <%# ── なぜ？（direct_reason）音声入力なし ───────────────────────────── %>
       <div>
         <%= f.label :direct_reason,
               class: "block text-sm font-semibold text-gray-700 mb-1" do %>
@@ -154,21 +309,53 @@
                     resize-none transition-colors" %>
       </div>
 
-      <div>
+      <%# ── どう？（background_situation）E-1: 音声入力🎤を追加 ────────────── %>
+      <%#
+        【E-1 追加: voice-input コントローラーのスコープ分離】
+
+        この div に data-controller="voice-input" を付けることで、
+        この div の中の field/button ターゲットだけが対象になる。
+
+        【重要】voice-input コントローラーを div ごとに分離する理由:
+          Stimulus の target は「コントローラーのスコープ（div）内だけ」を参照する。
+          もし複数のテキストエリアを1つの data-controller で囲むと
+          this.fieldTarget が最初の1件しか取らず、音声が別のフィールドに入力される。
+          div ごとに独立させることでこの問題を完全に防ぐ。
+      %>
+      <div data-controller="voice-input">
         <%= f.label :background_situation,
               class: "block text-sm font-semibold text-gray-700 mb-1" do %>
           どう？<span class="font-normal text-gray-500 ml-1">（改善策）</span>
         <% end %>
         <p class="text-xs text-gray-500 mb-2">来週どうすれば変えられそうか書いてみましょう</p>
-        <%= f.text_area :background_situation,
-            rows: 3,
-            placeholder: "どうすれば来週は変えられそうですか？（例: 帰宅後ではなく朝に時間を確保する）",
-            maxlength: 1000,
-            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
-                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                    resize-none transition-colors" %>
+        <div class="relative">
+          <%= f.text_area :background_situation,
+              rows: 3,
+              placeholder: "どうすれば来週は変えられそうですか？（例: 帰宅後ではなく朝に時間を確保する）",
+              maxlength: 1000,
+              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                      resize-none transition-colors",
+              data: { "voice-input-target": "field" } %>
+          <%#
+            🎤 音声入力ボタン
+            data-voice-input-target="button": voice-input コントローラーがこのボタンを認識する
+            data-action="click->voice-input#toggle": クリックで音声認識を開始/停止する
+            type="button": フォーム送信を防ぐために必須
+          %>
+          <button type="button"
+                  data-voice-input-target="button"
+                  data-action="click->voice-input#toggle"
+                  class="absolute right-3 top-3 p-1.5 rounded-lg border border-gray-300
+                         text-gray-500 hover:bg-gray-50 transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="音声入力を開始する">
+            🎤
+          </button>
+        </div>
       </div>
 
+      <%# ── からの？（next_action）音声入力なし ───────────────────────────── %>
       <div>
         <%= f.label :next_action,
               class: "block text-sm font-semibold text-gray-700 mb-1" do %>
@@ -185,20 +372,72 @@
       </div>
     </div>
 
-    <div>
-      <%= f.label :reflection_comment, class: "block text-sm font-semibold text-gray-700 mb-1" do %>
-        自由コメント<span class="font-normal text-gray-400 ml-1">（任意）</span>
+    <%# ============================================================
+        E-1 変更: 自由コメント（reflection_comment）に音声入力🎤を追加
+        ============================================================
+        【変更前】音声入力なし、任意入力
+        【変更後】音声入力ボタン追加、presence バリデーション追加（必須化）
+
+        background_situation と同じ voice-input コントローラーを使うが、
+        div でスコープを分離しているため干渉しない。
+    %>
+    <div data-controller="voice-input">
+      <%= f.label :reflection_comment,
+            class: "block text-sm font-semibold text-gray-700 mb-1" do %>
+        自由コメント
+        <%#
+          E-1 変更: 「（任意）」の表記を削除。
+          presence: true バリデーションにより必須項目になったため
+          代わりに「必須」バッジを表示してユーザーに明示する。
+        %>
+        <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">必須</span>
       <% end %>
       <p class="text-xs text-gray-500 mb-2">
-        その他、感じたことを自由に記入してください（1000文字以内）
+        今週を振り返って感じたことを自由に記入してください（1000文字以内）
       </p>
-      <%= f.text_area :reflection_comment,
-          rows: 4,
-          placeholder: "その他、感じたことを自由に記入してください",
-          maxlength: 1000,
-          class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                  resize-none transition-colors" %>
+      <div class="relative">
+        <%= f.text_area :reflection_comment,
+            rows: 4,
+            placeholder: "今週の振り返りを入力してください（AI分析の主要な入力になります）",
+            maxlength: 1000,
+            class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    resize-none transition-colors
+                    #{ @weekly_reflection.errors[:reflection_comment].any? ? 'border-red-400 focus:ring-red-500' : '' }",
+            data: { "voice-input-target": "field" } %>
+        <%#
+          🎤 音声入力ボタン（reflection_comment 用）
+          background_situation と同じ実装。
+          コントローラーのスコープが div ごとに分かれているため
+          各 voice-input コントローラーはそれぞれの field/button だけを制御する。
+        %>
+        <button type="button"
+                data-voice-input-target="button"
+                data-action="click->voice-input#toggle"
+                class="absolute right-3 top-3 p-1.5 rounded-lg border border-gray-300
+                       text-gray-500 hover:bg-gray-50 transition-colors
+                       focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="音声入力を開始する">
+          🎤
+        </button>
+      </div>
+
+      <%#
+        E-1 追加: reflection_comment のエラーメッセージをインラインで表示する
+        フォーム上部のサマリー + フィールド直下 の両方に表示することで
+        「どこを直すべきか」を一目で伝える。
+      %>
+      <% if @weekly_reflection.errors[:reflection_comment].any? %>
+        <p class="mt-1.5 text-xs text-red-600" role="alert">
+          <%#
+            ja.yml の activerecord.attributes.weekly_reflection.reflection_comment
+            で「振り返りコメント」と定義してあるため、
+            errors.full_messages では「振り返りコメントを入力してください」と表示される。
+            ここではフィールド名を先頭に付けて再表示する。
+          %>
+          振り返りコメント<%= @weekly_reflection.errors[:reflection_comment].first %>
+        </p>
+      <% end %>
     </div>
 
     <div class="flex justify-end items-center gap-4 pt-2">
@@ -207,9 +446,7 @@
                   rounded-xl hover:bg-gray-50 transition-colors
                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" %>
       <%#
-        D-10 変更: data-ai-throttle-target="button" を追加する。
-        "form-submit-target": "button"  → form-submit コントローラーのターゲット（既存）
-        "ai-throttle-target": "button"  → ai-throttle コントローラーのターゲット（D-10 追加）
+        D-10: data-ai-throttle-target / data-form-submit-target を両方指定。
         1つのボタンに複数コントローラーのターゲットを同時に指定できる。
       %>
       <%= f.submit "振り返りを完了する",
@@ -231,16 +468,8 @@
   ─────────────────────────────────────────────────────────────────────────────
   D-5: 危機介入モーダル（13-M）
   ─────────────────────────────────────────────────────────────────────────────
-  【なぜ </div> の外（ページの末尾）に置くのか】
-    position: fixed のモーダルは DOM の最上位に近い位置に置くと
-    CSS のスタッキングコンテキストの問題を回避できる。
-    親要素の transform/transition が fixed の基準を変えてしまう問題を防ぐ。
-
-  【flash[:crisis] の引き継ぎについて】
-    この new アクションへのリダイレクト時に flash[:crisis] = true が
-    セットされている場合、このパーシャルの Stimulus コントローラーが
-    connect() で data-crisis-intervention-show-value="true" を確認し、
-    モーダルを自動表示する。
+  position: fixed のモーダルは DOM の最上位に近い位置に置くことで
+  CSS スタッキングコンテキストの問題を回避できる。
 %>
 <%= render "shared/crisis_intervention_modal" %>
 
@@ -248,6 +477,5 @@
   D-6: AI コスト上限モーダル（14-B）
   create アクションで render :new が実行されたとき、
   flash.now[:ai_limit] = true を受け取ってモーダルを自動表示する。
-  「入力を続ける」を選んだ場合、このページのフォームにテキストが残っている。
 %>
 <%= render "weekly_reflections/ai_limit_modal" %>

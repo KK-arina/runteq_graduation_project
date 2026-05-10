@@ -32,6 +32,37 @@ ja:
         input_snapshot: "PMVV分析データ"
         analysis_type:  "分析タイプ"
 
+      # ==============================================================================
+      # E-1: weekly_reflection.reflection_comment の日本語属性名追加
+      # ==============================================================================
+      #
+      # 【追記理由】
+      #   モデルで validates :reflection_comment, presence: true と設定した。
+      #   presenceバリデーションエラーのメッセージは Rails が自動的に
+      #   「#{属性名}を入力してください」という形式で生成する。
+      #
+      #   attributes: セクションに reflection_comment: "振り返りコメント" を追加することで
+      #   エラーメッセージが「振り返りコメントを入力してください」と表示される。
+      #
+      #   追加しない場合は英語の属性名（Reflection comment）がそのまま使われる。
+      #
+      # 【既存の ja.yml への追記場所】
+      #   ja:
+      #     activerecord:
+      #       attributes: セクションに weekly_reflection キーを追加する。
+      #
+      #   既存の attributes セクションは user / habit / task / user_purpose / ai_analysis
+      #   が定義されている。ここに weekly_reflection を追加する。
+      #
+      # ==============================================================================
+
+      weekly_reflection:
+        reflection_comment: "振り返りコメント"
+        mood: "気分スコア"
+        direct_reason: "なぜ？（直接の原因）"
+        background_situation: "どう？（改善策）"
+        next_action: "からの？（次への展開）"
+
   # ============================================================
   # D-6 追加: AI コスト上限関連のメッセージ
   # ============================================================

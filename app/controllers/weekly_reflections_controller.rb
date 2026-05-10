@@ -10,6 +10,9 @@
 #          render :new を実行する（redirect_to ではなく render を使う理由は後述）
 #        ・complete_without_ai アクションを新規追加
 #          → 振り返りを保存してロック解除するが AI 分析ジョブはエンキューしない
+#   E-1: weekly_reflection_params と complete_without_ai_params に :mood を追加
+#        mood は気分スコア（1〜5）。フォームの hidden input または
+#        星評価UIから送られてくる整数値。
 #
 # 【D-6 の最重要設計ポイント: render vs redirect_to】
 #   NG: redirect_to new_weekly_reflection_path
@@ -146,13 +149,6 @@ class WeeklyReflectionsController < ApplicationController
   # ============================================================
   # complete_without_ai アクション（D-6 新規追加）
   # ============================================================
-  #
-  # 【役割】
-  #   Stimulus の submitWithoutAi() から呼ばれる。
-  #   メインフォームの action を /weekly_reflections/complete_without_ai に
-  #   書き換えて送信するため、ユーザーが入力した振り返り内容がそのまま届く。
-  #   振り返りの保存とロック解除は通常通り行うが、
-  #   AI 分析ジョブはエンキューしない（上限チェックで自動スキップされる）。
   def complete_without_ai
     @weekly_reflection = find_pending_last_week_reflection ||
                         WeeklyReflection.find_or_build_for_current_week(current_user)
@@ -226,7 +222,12 @@ class WeeklyReflectionsController < ApplicationController
         :reflection_comment,
         :direct_reason,
         :background_situation,
-        :next_action
+        :next_action,
+        # ── E-1 追加: mood を permit に追加 ─────────────────────────────────
+        # AI なしルートでも気分スコアを保存できるようにする。
+        # permit しないと mood の値は Strong Parameters にブロックされて保存されない。
+        :mood
+        # ───────────────────────────────────────────────────────────────────
       )
     end
   end
@@ -253,12 +254,26 @@ class WeeklyReflectionsController < ApplicationController
   end
 
   def weekly_reflection_params
+    # ── E-1 変更: :mood を permit リストに追加 ────────────────────────────────
+    #
+    # 【Strong Parameters とは】
+    #   Rails のセキュリティ機能。フォームから送られてくるパラメータのうち、
+    #   ここで明示的に permit（許可）したものだけをモデルに渡す。
+    #   permit しないパラメータは自動的に無視される。
+    #
+    # 【:mood を追加する理由】
+    #   E-1 で気分スコア入力フォームを追加するため、
+    #   フォームから送られてくる :mood パラメータを許可する必要がある。
+    #   permit しないと「Unpermitted parameter: mood」という警告が出て
+    #   値が保存されない。
     params.require(:weekly_reflection).permit(
       :reflection_comment,
       :direct_reason,
       :background_situation,
-      :next_action
+      :next_action,
+      :mood           # E-1 追加: 気分スコア（1〜5の整数）
     )
+    # ────────────────────────────────────────────────────────────────────────────
   end
 
   def find_pending_last_week_reflection

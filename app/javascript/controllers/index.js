@@ -39,7 +39,6 @@ application.register("mobile-menu", MobileMenuController)
 //   ファイルを自動検出して index.js を更新する。
 //   ただし、コマンドを手動実行するまで反映されないため、
 //   ここに手動で追記しておく。
-//   次回 stimulus:manifest:update を実行すると自動で整理される。
 //
 // 【登録名 "voice-input" について】
 //   HTML 側の data-controller="voice-input" と対応する。
@@ -61,11 +60,6 @@ application.register("priority-card", PriorityCardController)
 // 【このコントローラーの役割】
 //   タスクの完了チェックボックスをクリックしたとき、
 //   Turbo Stream でページリロードなしに status を切り替える。
-//
-// 【登録名 "task-toggle" について】
-//   HTML 側の data-controller="task-toggle" と対応する。
-//   ファイル名 task_toggle_controller.js が
-//   ケバブケース task-toggle に変換されてHTMLの属性名になる。
 import TaskToggleController from "./task_toggle_controller"
 application.register("task-toggle", TaskToggleController)
 
@@ -74,12 +68,6 @@ application.register("task-toggle", TaskToggleController)
 // 【このコントローラーの役割】
 //   タスク一覧の「⋯」ボタンをクリックしたとき、
 //   削除確認モーダル（デスクトップ）またはボトムシート（スマホ）を表示する。
-//   手動作成タスク（ai_generated=false）のみ「⋯」ボタンを表示する。
-//
-// 【登録名 "task-menu" について】
-//   HTML 側の data-controller="task-menu" と対応する。
-//   ファイル名 task_menu_controller.js が
-//   ケバブケース task-menu に変換されてHTMLの属性名になる。
 import TaskMenuController from "./task_menu_controller"
 application.register("task-menu", TaskMenuController)
 
@@ -88,19 +76,13 @@ application.register("task-menu", TaskMenuController)
 // 【このコントローラーの役割】
 //   振り返り入力・PMVV 入力で危機ワードが検出されたとき、
 //   相談窓口情報を表示するモーダルを制御する。
-//   法規・安全対応として最優先で実装する機能。
-//
-// 【登録名 "crisis-intervention" について】
-//   HTML 側の data-controller="crisis-intervention" と対応する。
 import CrisisInterventionController from "./crisis_intervention_controller"
 application.register("crisis-intervention", CrisisInterventionController)
 
-// ============================================================
-// D-6 追加: AI コスト上限モーダルコントローラー
-// ============================================================
+// ── D-6 追加: AI コスト上限モーダルコントローラー ────────────────────────────
+//
 // "ai-limit-modal" という名前で登録する。
 // HTML の data-controller="ai-limit-modal" と自動的に紐づく。
-// ケバブケース（ハイフン区切り）はStimulusの命名規則。
 import AiLimitModalController from "./ai_limit_modal_controller"
 application.register("ai-limit-modal", AiLimitModalController)
 
@@ -109,11 +91,22 @@ application.register("ai-limit-modal", AiLimitModalController)
 // 【このコントローラーの役割】
 //   振り返り完了ボタン・再試行ボタンを押下後 1 分間 disabled にして
 //   連打による重複 AI 分析ジョブの投入を防ぐ（フロント側防御）。
-//   サーバー側の ApplicationController#throttle_ai_request と組み合わせた
-//   二重防御の実装。
-//
-// 【登録名 "ai-throttle" について】
-//   HTML 側の data-controller="ai-throttle" と対応する。
-//   ファイル名 ai_throttle_controller.js がケバブケース ai-throttle に変換される。
 import AiThrottleController from "./ai_throttle_controller"
 application.register("ai-throttle", AiThrottleController)
+
+// ── E-1 追加: mood-rating コントローラーを登録する ──────────────────────────
+//
+// 【このコントローラーの役割】
+//   振り返りフォームの気分スコア（1〜5）星評価UIを制御する。
+//   ラジオボタンの選択状態に応じて星の色とラベルテキストを更新する。
+//
+// 【なぜ Stimulus コントローラーを使うのか】
+//   inline script による実装は Turbo 遷移で listener が多重登録される問題があった。
+//   Stimulus を使うことで connect()/disconnect() によるライフサイクル管理が自動化され、
+//   Turbo 対応・メモリリーク防止・CSP 対応が実現できる。
+//
+// 【登録名 "mood-rating" について】
+//   HTML 側の data-controller="mood-rating" と対応する。
+//   ファイル名 mood_rating_controller.js がケバブケース mood-rating に変換される。
+import MoodRatingController from "./mood_rating_controller"
+application.register("mood-rating", MoodRatingController)

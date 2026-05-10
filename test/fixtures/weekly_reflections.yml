@@ -1,6 +1,12 @@
 # test/fixtures/weekly_reflections.yml
 #
 # ============================================================
+# 【E-1 での変更内容】
+#   reflection_comment に presence: true バリデーションを追加したため、
+#   モデルを通さずに直接 DB に挿入するフィクスチャでは
+#   既存エントリの reflection_comment が空になっていないか確認する。
+#   → 既存エントリはすべて reflection_comment が入力済みのため変更不要。
+#
 # 【Issue #A-7 で修正】
 # year と week_number を全 fixture に追加する。
 #
