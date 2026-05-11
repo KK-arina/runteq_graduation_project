@@ -1,24 +1,12 @@
 <%# app/views/weekly_reflections/show.html.erb %>
 <%#
   ==============================================================================
-  週次振り返り詳細ページ（リフレクション手法対応版）
+  週次振り返り詳細ページ（E-1: 気分スコア表示追加）
   ==============================================================================
-  【変更内容】
-    「振り返りコメント」セクションに「なぜ？→ どう？→ からの？」の
-    3要素を個別に表示するよう更新する。
-
-  【表示とDBカラムの対応】
-    表示ラベル              | DB カラム
-    ──────────────────────|────────────────────
-    なぜ？（直接の原因）   | direct_reason
-    どう？（改善策）       | background_situation
-    からの？（次への展開） | next_action        ※新規追加
-    自由コメント           | reflection_comment
-
-  【使用するインスタンス変数】
-    @weekly_reflection        ... 対象の振り返りレコード
-    @habit_summaries          ... 習慣スナップショット（達成率降順）
-    @overall_achievement_rate ... 全体の平均達成率
+  【E-1 での変更内容】
+    セクション③（振り返りコメント）内の先頭に気分スコア表示を追加する。
+    mood カラムの値（1〜5）を星（★☆）と絵文字ラベルで表示する。
+    mood が nil（未入力）の場合は「入力されていませんでした」と表示する。
   ==============================================================================
 %>
 
@@ -26,9 +14,7 @@
 
 <div class="max-w-3xl mx-auto px-4 py-8">
 
-  <%# ──────────────────────────────────────────────────────────
-      ページヘッダー
-      ────────────────────────────────────────────────────────── %>
+  <%# ページヘッダー %>
   <div class="mb-8">
     <%= link_to weekly_reflections_path,
           class: "inline-flex items-center text-sm text-gray-500 hover:text-gray-700 mb-4 transition-colors" do %>
@@ -57,9 +43,7 @@
     </p>
   </div>
 
-  <%# ──────────────────────────────────────────────────────────
-      セクション①: 全体達成率サマリー
-      ────────────────────────────────────────────────────────── %>
+  <%# セクション①: 全体達成率サマリー %>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-4">📊 今週の総合達成率</h2>
 
@@ -70,17 +54,13 @@
             @overall_achievement_rate >= 40  ? 'text-yellow-600' : 'text-red-500' %>">
         <%= @overall_achievement_rate %>%
       </span>
-      <span class="text-gray-500 mb-1 text-sm">
-        (<%= @habit_summaries.size %>個の習慣)
-      </span>
+      <span class="text-gray-500 mb-1 text-sm">(<%= @habit_summaries.size %>個の習慣)</span>
     </div>
 
     <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden"
          role="progressbar"
          aria-valuenow="<%= [@overall_achievement_rate, 100].min %>"
-         aria-valuemin="0"
-         aria-valuemax="100"
-         aria-label="総合達成率">
+         aria-valuemin="0" aria-valuemax="100" aria-label="総合達成率">
       <div class="h-4 rounded-full transition-all duration-500
         <%= @overall_achievement_rate >= 100 ? 'bg-green-500' :
             @overall_achievement_rate >= 70  ? 'bg-blue-500' :
@@ -94,9 +74,7 @@
     </p>
   </div>
 
-  <%# ──────────────────────────────────────────────────────────
-      セクション②: 習慣別 実績サマリー
-      ────────────────────────────────────────────────────────── %>
+  <%# セクション②: 習慣別 実績サマリー %>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-5">📋 習慣別 実績サマリー</h2>
 
@@ -109,17 +87,10 @@
         <% @habit_summaries.each do |summary| %>
           <div class="border border-gray-100 rounded-xl p-4
             <%= summary.achievement_rate >= 100 ? 'bg-green-50 border-green-200' : 'bg-gray-50' %>">
-
             <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
               <div class="flex items-center gap-2">
-                <% if summary.achievement_rate >= 100 %>
-                  <span class="text-green-500 text-lg">✅</span>
-                <% else %>
-                  <span class="text-gray-300 text-lg">⬜</span>
-                <% end %>
-                <span class="font-medium text-gray-800 text-sm">
-                  <%= summary.habit_name %>
-                </span>
+                <%= summary.achievement_rate >= 100 ? '<span class="text-green-500 text-lg">✅</span>'.html_safe : '<span class="text-gray-300 text-lg">⬜</span>'.html_safe %>
+                <span class="font-medium text-gray-800 text-sm"><%= summary.habit_name %></span>
               </div>
               <span class="text-xs font-semibold px-2 py-1 rounded-full
                 <%= summary.achievement_rate >= 100 ? 'bg-green-100 text-green-700' :
@@ -129,18 +100,11 @@
                 <%= summary.achievement_rate %>%
               </span>
             </div>
-
             <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
               <span><%= summary.actual_count %> / <%= summary.weekly_target %> 回達成</span>
               <span>週<%= summary.weekly_target %>回目標</span>
             </div>
-
-            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden"
-                 role="progressbar"
-                 aria-valuenow="<%= [summary.achievement_rate, 100].min %>"
-                 aria-valuemin="0"
-                 aria-valuemax="100"
-                 aria-label="<%= summary.habit_name %> の達成率">
+            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
               <div class="h-2 rounded-full transition-all duration-500
                 <%= summary.achievement_rate >= 100 ? 'bg-green-500' :
                     summary.achievement_rate >= 70  ? 'bg-blue-500' :
@@ -161,95 +125,44 @@
     <% end %>
   </div>
 
-  <%# ──────────────────────────────────────────────────────────
-      セクション②-B: タスク実績サマリー（C-4 追加）
-      ──────────────────────────────────────────────────────────
-      【このセクションの役割】
-        振り返り完了時点のタスクスナップショットを優先度別に表示する。
-
-      【使用するインスタンス変数】
-        @task_summaries ... WeeklyReflectionTaskSummary の配列
-                          コントローラーで「優先度昇順（must→should→could）」に並べて渡す
-
-      【スナップショット設計の恩恵】
-        後からタスクを削除しても、振り返り時点のデータがここに残り続ける。
-        task_id が NULL になっても title 等は保持されているため正確に表示できる。
-  %>
+  <%# セクション②-B: タスク実績サマリー %>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-5">✅ タスク実績</h2>
 
     <% if @task_summaries.empty? %>
-      <%# タスクスナップショットが0件の場合（当週にタスクがなかった場合）%>
       <div class="text-center py-8 text-gray-400">
         <p class="text-sm">この振り返り期間に記録されたタスクはありませんでした。</p>
       </div>
-
     <% else %>
-      <%#
-        ── 優先度別サマリー（件数・達成率） ──────────────────────────────────
-        must / should / could それぞれの「完了数 / 総数」を集計して表示する。
-
-        @task_summaries はコントローラーで .to_a 済みのため、
-        ここでは Ruby のメモリ上の配列操作のみ（追加 SQL クエリなし）。
-      %>
       <% must_tasks   = @task_summaries.select(&:must?)   %>
       <% should_tasks = @task_summaries.select(&:should?) %>
       <% could_tasks  = @task_summaries.select(&:could?)  %>
 
-      <%# 達成率サマリーバー（タスクが存在する優先度のみ表示）%>
       <div class="space-y-3 mb-6">
-        <%#
-          each_with_object を使う代わりに、
-          表示する優先度グループを配列で定義してループする。
-
-          { label:, color_class:, tasks: } の構造で統一することで、
-          must / should / could で同じ描画ロジックを使い回せる（DRY）。
-        %>
         <% [
           { label: "Must",   color: "red",   tasks: must_tasks   },
           { label: "Should", color: "blue",  tasks: should_tasks },
           { label: "Could",  color: "green", tasks: could_tasks  }
         ].each do |group| %>
           <% next if group[:tasks].empty? %>
-          <%# タスクが1件もない優先度グループはスキップ %>
-
           <% completed_count = group[:tasks].count(&:was_completed) %>
-          <% total_count     = group[:tasks].size                    %>
-          <%#
-            達成率の計算:
-              completed_count.to_f / total_count で小数を計算
-              * 100 でパーセントに変換
-              .round で丸める
-              total_count.zero? は「0除算」を防ぐためのガード
-          %>
+          <% total_count     = group[:tasks].size %>
           <% rate = total_count.zero? ? 0 : (completed_count.to_f / total_count * 100).round %>
-
           <div>
             <div class="flex items-center justify-between text-sm mb-1">
               <div class="flex items-center gap-2">
-                <%# 優先度バッジ %>
                 <span class="inline-block px-2 py-0.5 rounded text-xs font-bold
                   bg-<%= group[:color] %>-100 text-<%= group[:color] %>-700">
                   <%= group[:label] %>
                 </span>
-                <span class="text-gray-600 text-xs">
-                  <%= completed_count %> / <%= total_count %> 件完了
-                </span>
+                <span class="text-gray-600 text-xs"><%= completed_count %> / <%= total_count %> 件完了</span>
               </div>
               <span class="font-semibold text-gray-700 text-xs"><%= rate %>%</span>
             </div>
-
-            <%# プログレスバー %>
-            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden"
-                role="progressbar"
-                aria-valuenow="<%= [rate, 100].min %>"
-                aria-valuemin="0"
-                aria-valuemax="100"
-                aria-label="<%= group[:label] %> タスク達成率">
+            <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
               <div class="h-2 rounded-full transition-all duration-500
                 <%= rate >= 100 ? "bg-#{group[:color]}-500" :
-                    rate >= 70  ? "bg-#{group[:color]}-400" :
-                                  "bg-#{group[:color]}-300" %>"
+                    rate >= 70  ? "bg-#{group[:color]}-400" : "bg-#{group[:color]}-300" %>"
                   style="width: <%= [rate, 100].min %>%">
               </div>
             </div>
@@ -257,57 +170,26 @@
         <% end %>
       </div>
 
-      <%#
-        ── タスク一覧（優先度別グループ表示） ────────────────────────────────
-        must → should → could の順に並べて表示する。
-
-        @task_summaries は既に by_priority スコープで優先度昇順になっているため
-        ここで再ソートは不要。
-      %>
       <div class="space-y-2">
         <% @task_summaries.each do |summary| %>
           <div class="flex items-start gap-3 p-3 rounded-xl border
             <%= summary.was_completed ? 'bg-gray-50 border-gray-100' : 'bg-white border-gray-200' %>">
-
-            <%# 完了アイコン %>
             <div class="flex-shrink-0 mt-0.5">
-              <% if summary.was_completed %>
-                <%# 完了: チェックマークアイコン %>
-                <span class="text-green-500 text-lg" aria-label="完了">✅</span>
-              <% else %>
-                <%# 未完了: 空チェックボックスアイコン %>
-                <span class="text-gray-300 text-lg" aria-label="未完了">⬜</span>
-              <% end %>
+              <%= summary.was_completed ? '<span class="text-green-500 text-lg">✅</span>'.html_safe : '<span class="text-gray-300 text-lg">⬜</span>'.html_safe %>
             </div>
-
-            <%# タスク内容 %>
             <div class="flex-1 min-w-0">
-              <%# タイトル %>
-              <p class="text-sm font-medium
-                <%= summary.was_completed ? 'text-gray-400 line-through' : 'text-gray-800' %>">
+              <p class="text-sm font-medium <%= summary.was_completed ? 'text-gray-400 line-through' : 'text-gray-800' %>">
                 <%= summary.title %>
               </p>
-
-              <%# メタ情報（優先度バッジ・期限日・完了日時） %>
               <div class="flex items-center gap-2 mt-1 flex-wrap">
-                <%# 優先度バッジ: summary.priority_color_class でカラーを取得 %>
-                <span class="inline-block px-2 py-0.5 rounded text-xs font-bold
-                  <%= summary.priority_color_class %>">
+                <span class="inline-block px-2 py-0.5 rounded text-xs font-bold <%= summary.priority_color_class %>">
                   <%= summary.priority_label %>
                 </span>
-
-                <%# 期限日（存在する場合のみ表示）%>
                 <% if summary.due_date.present? %>
-                  <span class="text-xs text-gray-400">
-                    期限: <%= summary.due_date.strftime("%m/%d") %>
-                  </span>
+                  <span class="text-xs text-gray-400">期限: <%= summary.due_date.strftime("%m/%d") %></span>
                 <% end %>
-
-                <%# 完了日時（完了している場合のみ表示）%>
                 <% if summary.was_completed && summary.completed_at.present? %>
-                  <span class="text-xs text-gray-400">
-                    完了: <%= summary.completed_at.strftime("%m/%d %H:%M") %>
-                  </span>
+                  <span class="text-xs text-gray-400">完了: <%= summary.completed_at.strftime("%m/%d %H:%M") %></span>
                 <% end %>
               </div>
             </div>
@@ -315,32 +197,79 @@
         <% end %>
       </div>
 
-      <%# 達成件数メッセージ %>
       <% completed_total = @task_summaries.count(&:was_completed) %>
       <% if completed_total > 0 %>
         <p class="mt-4 text-sm text-green-700 bg-green-50 rounded-lg px-4 py-2">
           🎉 <span class="font-semibold"><%= completed_total %>件</span>のタスクを完了しました！
         </p>
       <% end %>
-
     <% end %>
   </div>
 
   <%# ──────────────────────────────────────────────────────────
-      セクション③: 振り返りコメント（リフレクション3項目対応）
+      セクション③: 振り返りコメント（E-1: 気分スコアを先頭に追加）
       ────────────────────────────────────────────────────────── %>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-5">💬 振り返りコメント</h2>
 
-    <%# ① なぜ？（直接の原因）direct_reason ──────────────────────────────── %>
-    <%#
-      【表示ロジック】
-        direct_reason が入力されている場合は枠内に表示する。
-        入力されていない場合は「記入されていませんでした」と表示する。
-      【simple_format の役割】
-        ユーザーが入力した改行（\n）を <br> タグに変換して表示する。
-        XSS 対策のエスケープも自動で行われる。
+    <%# ════════════════════════════════════════════════════════
+        E-1 追加: 気分スコア表示ブロック
+        ════════════════════════════════════════════════════════
+        【なぜこの場所に置くのか】
+          振り返りコメントセクションの先頭に置くことで、
+          「感情状態→振り返り内容」の流れで確認できる。
+
+        【mood の値とラベルの対応】
+          1 → 😞 とても悪い
+          2 → 😕 悪い
+          3 → 😐 普通
+          4 → 😊 良い
+          5 → 😄 とても良い
+
+        【星表示の実装】
+          1〜5 を each でループし、mood 値以下を ★（黄色）、
+          mood 値より大きいものを ☆（グレー）で表示する。
+          純粋な Ruby 条件分岐で実装するためJSは不要。
     %>
+    <div class="mb-5 pb-5 border-b border-gray-100">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-sm font-bold text-gray-700">😊 今週の気分スコア</span>
+      </div>
+      <% if @weekly_reflection.mood.present? %>
+        <% mood_labels = {
+          1 => "😞 とても悪い",
+          2 => "😕 悪い",
+          3 => "😐 普通",
+          4 => "😊 良い",
+          5 => "😄 とても良い"
+        } %>
+        <div class="flex items-center gap-3 flex-wrap">
+          <%# 星（★☆）を 1〜5 の順に並べる %>
+          <div class="flex items-center gap-0.5">
+            <% (1..5).each do |score| %>
+              <span class="text-2xl leading-none <%= score <= @weekly_reflection.mood ? 'text-yellow-400' : 'text-gray-300' %>"
+                    aria-hidden="true">
+                <%= score <= @weekly_reflection.mood ? '★' : '☆' %>
+              </span>
+            <% end %>
+          </div>
+          <%# スコア数値 %>
+          <span class="text-sm font-semibold text-gray-700">
+            <%= @weekly_reflection.mood %> / 5
+          </span>
+          <%# テキストラベル %>
+          <span class="text-sm text-gray-500">
+            <%= mood_labels[@weekly_reflection.mood] %>
+          </span>
+        </div>
+      <% else %>
+        <%# mood が nil（未入力）の場合 %>
+        <p class="text-gray-400 text-sm italic px-1">入力されていませんでした。</p>
+      <% end %>
+    </div>
+    <%# ══ E-1 気分スコア表示ブロック ここまで ══ %>
+
+    <%# なぜ？（direct_reason） %>
     <div class="mb-5">
       <div class="flex items-center gap-2 mb-2">
         <span class="text-sm font-bold text-gray-700">なぜ？</span>
@@ -355,13 +284,7 @@
       <% end %>
     </div>
 
-    <%# ② どう？（改善策）background_situation ───────────────────────────── %>
-    <%#
-      【カラム名について】
-        DB カラム名は background_situation（旧: 背景・状況）だが、
-        UI ラベルを「どう？（改善策）」に変更することで対応している。
-        カラム名のリネームは既存マイグレーション不変ルールのため行わない。
-    %>
+    <%# どう？（background_situation） %>
     <div class="mb-5">
       <div class="flex items-center gap-2 mb-2">
         <span class="text-sm font-bold text-gray-700">どう？</span>
@@ -376,14 +299,7 @@
       <% end %>
     </div>
 
-    <%# ③ からの？（次への展開）next_action ──────────────────────────────── %>
-    <%#
-      【新規追加】
-        リフレクション手法の「Next（からの）」に対応する。
-        「この振り返りから他の習慣・行動に活かせること」を表示する。
-        next_action は新規追加カラムのため、
-        既存の振り返りデータでは nil の場合がある（問題なし）。
-    %>
+    <%# からの？（next_action） %>
     <div class="mb-5">
       <div class="flex items-center gap-2 mb-2">
         <span class="text-sm font-bold text-gray-700">からの？</span>
@@ -398,7 +314,7 @@
       <% end %>
     </div>
 
-    <%# 自由コメント reflection_comment ──────────────────────────────────── %>
+    <%# 自由コメント（reflection_comment） %>
     <% if @weekly_reflection.reflection_comment.present? %>
       <div>
         <div class="flex items-center gap-2 mb-2">
@@ -411,9 +327,7 @@
     <% end %>
   </div>
 
-  <%# ──────────────────────────────────────────────────────────
-      セクション④: メタ情報（登録日時）
-      ────────────────────────────────────────────────────────── %>
+  <%# セクション④: メタ情報 %>
   <div class="bg-gray-50 rounded-xl px-5 py-4 mb-8 flex flex-wrap gap-4 text-xs text-gray-500">
     <span>
       📅 振り返り登録日：

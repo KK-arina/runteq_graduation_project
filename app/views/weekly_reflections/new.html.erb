@@ -1,11 +1,15 @@
 <%# app/views/weekly_reflections/new.html.erb %>
 <%#
   ==============================================================================
-  週次振り返り入力ページ（D-5: 危機介入モーダルを追加）
+  週次振り返り入力ページ（E-1修正: 自由コメントを任意に戻す）
   ==============================================================================
-  【D-5 での変更内容】
-    ① ページ末尾に _crisis_intervention_modal パーシャルを追加する
-    ② flash[:crisis] が true の場合、Stimulus がモーダルを自動表示する
+  【E-1修正での変更内容】
+    reflection_comment（自由コメント）を任意入力に戻す。
+    ① ラベルの「必須」バッジを削除し「任意」表記に戻す
+    ② バリデーションエラー時の赤枠処理を削除（エラーは発生しなくなるため）
+    ③ インラインエラーメッセージ表示を削除
+
+    direct_reason / background_situation / next_action は引き続き必須のまま。
   ==============================================================================
 %>
 
@@ -56,6 +60,28 @@
                 <%= stats[:rate] %>%
               </span>
             </div>
+
+            <% if habit.numeric_type? %>
+              <div class="bg-white border border-emerald-100 rounded-xl px-4 pb-3 pt-2 -mt-1 shadow-sm">
+                <div class="flex items-center gap-2">
+                  <label for="correction_<%= habit.id %>"
+                         class="text-xs text-gray-500 flex-shrink-0">
+                    今週の実際の記録を補正:
+                  </label>
+                  <input type="number"
+                         id="correction_<%= habit.id %>"
+                         name="reflection_numeric_corrections[habit_<%= habit.id %>]"
+                         class="w-24 px-2 py-1 text-sm border border-gray-300 rounded-lg
+                                focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                         min="0" step="any"
+                         value="<%= format("%g", (stats[:numeric_sum] || 0).round(1)) %>"
+                         placeholder="0">
+                  <span class="text-xs text-gray-500 flex-shrink-0">
+                    <%= habit.unit.presence || "回" %>（現在: <%= format("%g", (stats[:numeric_sum] || 0).round(1)) %><%= habit.unit.presence || "回" %>）
+                  </span>
+                </div>
+              </div>
+            <% end %>
           <% end %>
         </div>
       </section>
@@ -93,10 +119,8 @@
                          id="correction_<%= habit.id %>"
                          name="reflection_numeric_corrections[habit_<%= habit.id %>]"
                          class="w-24 px-2 py-1 text-sm border border-gray-300 rounded-lg
-                                focus:outline-none focus:ring-2 focus:ring-blue-500
-                                text-center"
-                         min="0"
-                         step="any"
+                                focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
+                         min="0" step="any"
                          value="<%= format("%g", (stats[:numeric_sum] || 0).round(1)) %>"
                          placeholder="0">
                   <span class="text-xs text-gray-500 flex-shrink-0">
@@ -115,15 +139,6 @@
   <%# ==========================================
       振り返りフォーム
   ========================================== %>
-  <%#
-    D-10 変更: data-controller に "ai-throttle" を追加する。
-    Stimulus は data-controller にスペース区切りで複数コントローラーを指定できる。
-    "form-submit": 送信中のローディング表示（既存）
-    "ai-throttle": 送信後 1 分間ボタンを disabled にする（D-10 追加）
-    data-action: submit イベントで両コントローラーのメソッドを順に呼ぶ。
-      form-submit#submit → ローディング表示 + disabled（既存）
-      ai-throttle#throttle → 1 分間 disabled タイマーをセット（D-10 追加）
-  %>
   <%= form_with model: @weekly_reflection,
                 url: weekly_reflections_path,
                 method: :post,
@@ -136,69 +151,211 @@
 
     <%= render "shared/form_errors", model: @weekly_reflection %>
 
-    <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
-      <h3 class="text-sm font-bold text-gray-700">📝 振り返りのポイント</h3>
+    <%# ============================================================
+        E-1: 気分スコアセクション（Stimulus版星評価UI）
+        ============================================================ %>
+    <div class="bg-white border border-gray-200 rounded-xl p-5"
+         data-controller="mood-rating">
 
-      <div>
-        <%= f.label :direct_reason,
-              class: "block text-sm font-semibold text-gray-700 mb-1" do %>
-          なぜ？<span class="font-normal text-gray-500 ml-1">（直接の原因）</span>
-        <% end %>
-        <p class="text-xs text-gray-500 mb-2">できなかった理由を1つ書いてみましょう</p>
-        <%= f.text_area :direct_reason,
-            rows: 3,
-            placeholder: "なぜできなかったのか？理由を1つ書いてみましょう（例: 残業が続き、帰宅後に動ける体力が残っていなかった）",
-            maxlength: 1000,
-            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
-                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                    resize-none transition-colors" %>
-      </div>
+      <h3 class="text-sm font-bold text-gray-700 mb-3">
+        😊 今週の気分スコア
+        <span class="font-normal text-gray-400 text-xs ml-1">（任意）</span>
+      </h3>
+      <p class="text-xs text-gray-500 mb-4">今週全体を通してどんな気分でしたか？</p>
 
-      <div>
-        <%= f.label :background_situation,
-              class: "block text-sm font-semibold text-gray-700 mb-1" do %>
-          どう？<span class="font-normal text-gray-500 ml-1">（改善策）</span>
-        <% end %>
-        <p class="text-xs text-gray-500 mb-2">来週どうすれば変えられそうか書いてみましょう</p>
-        <%= f.text_area :background_situation,
-            rows: 3,
-            placeholder: "どうすれば来週は変えられそうですか？（例: 帰宅後ではなく朝に時間を確保する）",
-            maxlength: 1000,
-            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
-                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                    resize-none transition-colors" %>
-      </div>
-
-      <div>
-        <%= f.label :next_action,
-              class: "block text-sm font-semibold text-gray-700 mb-1" do %>
-          からの？<span class="font-normal text-gray-500 ml-1">（次への展開）</span>
-        <% end %>
-        <p class="text-xs text-gray-500 mb-2">この振り返りから他の習慣・行動に活かせることは？</p>
-        <%= f.text_area :next_action,
-            rows: 3,
-            placeholder: "この振り返りから他の習慣・行動に活かせることは？（例: 朝の時間を有効活用する仕組みを他の習慣にも広げる）",
-            maxlength: 1000,
-            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
-                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                    resize-none transition-colors" %>
+      <div class="flex items-center gap-3 flex-wrap">
+        <div class="flex items-center gap-1" role="radiogroup" aria-label="気分スコア（1〜5）">
+          <% (1..5).each do |score| %>
+            <%= f.radio_button :mood,
+                  score,
+                  checked: @weekly_reflection.mood == score,
+                  class: "sr-only",
+                  id: "weekly_reflection_mood_#{score}",
+                  data: {
+                    "mood-rating-target": "radio",
+                    action: "change->mood-rating#update"
+                  } %>
+            <label for="weekly_reflection_mood_<%= score %>"
+                   class="cursor-pointer select-none"
+                   data-mood-rating-target="star"
+                   data-score="<%= score %>"
+                   title="<%= score %>点">
+              <span class="text-3xl leading-none transition-colors duration-100 text-gray-300"
+                    aria-hidden="true">☆</span>
+              <span class="sr-only"><%= score %>点</span>
+            </label>
+          <% end %>
+        </div>
+        <span class="text-sm text-gray-400" data-mood-rating-target="label">選択してください</span>
+        <button type="button"
+                class="text-xs text-gray-400 hover:text-gray-600 underline"
+                data-action="click->mood-rating#reset"
+                aria-label="気分スコアをリセット">
+          リセット
+        </button>
       </div>
     </div>
 
-    <div>
-      <%= f.label :reflection_comment, class: "block text-sm font-semibold text-gray-700 mb-1" do %>
-        自由コメント<span class="font-normal text-gray-400 ml-1">（任意）</span>
+    <%# ============================================================
+        振り返りのポイント（なぜ？・どう？・からの？）必須
+        ============================================================ %>
+    <div class="bg-white border border-gray-200 rounded-xl p-5 space-y-4">
+      <h3 class="text-sm font-bold text-gray-700">📝 振り返りのポイント</h3>
+
+      <%# ── なぜ？（direct_reason）必須・🎤付き ────────────────────────────── %>
+      <div data-controller="voice-input">
+        <%= f.label :direct_reason,
+              class: "block text-sm font-semibold text-gray-700 mb-1" do %>
+          なぜ？<span class="font-normal text-gray-500 ml-1">（直接の原因）</span>
+          <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">必須</span>
+        <% end %>
+        <p class="text-xs text-gray-500 mb-2">できなかった理由を1つ書いてみましょう</p>
+        <div class="relative">
+          <%= f.text_area :direct_reason,
+              rows: 3,
+              placeholder: "なぜできなかったのか？理由を1つ書いてみましょう（例: 残業が続き、帰宅後に動ける体力が残っていなかった）",
+              maxlength: 1000,
+              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                      resize-none transition-colors
+                      #{ @weekly_reflection.errors[:direct_reason].any? ? 'border-red-400 focus:ring-red-500' : '' }",
+              data: { "voice-input-target": "field" } %>
+          <button type="button"
+                  data-voice-input-target="button"
+                  data-action="click->voice-input#toggle"
+                  class="absolute right-3 top-3 p-1.5 rounded-lg border border-gray-300
+                         text-gray-500 hover:bg-gray-50 transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="音声入力を開始する">
+            🎤
+          </button>
+        </div>
+        <% if @weekly_reflection.errors[:direct_reason].any? %>
+          <p class="mt-1.5 text-xs text-red-600" role="alert">
+            なぜ？（直接の原因）<%= @weekly_reflection.errors[:direct_reason].first %>
+          </p>
+        <% end %>
+      </div>
+
+      <%# ── どう？（background_situation）必須・🎤付き ────────────────────── %>
+      <div data-controller="voice-input">
+        <%= f.label :background_situation,
+              class: "block text-sm font-semibold text-gray-700 mb-1" do %>
+          どう？<span class="font-normal text-gray-500 ml-1">（改善策）</span>
+          <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">必須</span>
+        <% end %>
+        <p class="text-xs text-gray-500 mb-2">来週どうすれば変えられそうか書いてみましょう</p>
+        <div class="relative">
+          <%= f.text_area :background_situation,
+              rows: 3,
+              placeholder: "どうすれば来週は変えられそうですか？（例: 帰宅後ではなく朝に時間を確保する）",
+              maxlength: 1000,
+              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                      resize-none transition-colors
+                      #{ @weekly_reflection.errors[:background_situation].any? ? 'border-red-400 focus:ring-red-500' : '' }",
+              data: { "voice-input-target": "field" } %>
+          <button type="button"
+                  data-voice-input-target="button"
+                  data-action="click->voice-input#toggle"
+                  class="absolute right-3 top-3 p-1.5 rounded-lg border border-gray-300
+                         text-gray-500 hover:bg-gray-50 transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="音声入力を開始する">
+            🎤
+          </button>
+        </div>
+        <% if @weekly_reflection.errors[:background_situation].any? %>
+          <p class="mt-1.5 text-xs text-red-600" role="alert">
+            どう？（改善策）<%= @weekly_reflection.errors[:background_situation].first %>
+          </p>
+        <% end %>
+      </div>
+
+      <%# ── からの？（next_action）必須・🎤付き ────────────────────────────── %>
+      <div data-controller="voice-input">
+        <%= f.label :next_action,
+              class: "block text-sm font-semibold text-gray-700 mb-1" do %>
+          からの？<span class="font-normal text-gray-500 ml-1">（次への展開）</span>
+          <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">必須</span>
+        <% end %>
+        <p class="text-xs text-gray-500 mb-2">この振り返りから他の習慣・行動に活かせることは？</p>
+        <div class="relative">
+          <%= f.text_area :next_action,
+              rows: 3,
+              placeholder: "この振り返りから他の習慣・行動に活かせることは？（例: 朝の時間を有効活用する仕組みを他の習慣にも広げる）",
+              maxlength: 1000,
+              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                      resize-none transition-colors
+                      #{ @weekly_reflection.errors[:next_action].any? ? 'border-red-400 focus:ring-red-500' : '' }",
+              data: { "voice-input-target": "field" } %>
+          <button type="button"
+                  data-voice-input-target="button"
+                  data-action="click->voice-input#toggle"
+                  class="absolute right-3 top-3 p-1.5 rounded-lg border border-gray-300
+                         text-gray-500 hover:bg-gray-50 transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  aria-label="音声入力を開始する">
+            🎤
+          </button>
+        </div>
+        <% if @weekly_reflection.errors[:next_action].any? %>
+          <p class="mt-1.5 text-xs text-red-600" role="alert">
+            からの？（次への展開）<%= @weekly_reflection.errors[:next_action].first %>
+          </p>
+        <% end %>
+      </div>
+    </div>
+
+    <%# ============================================================
+        自由コメント（reflection_comment）任意・🎤付き
+        ============================================================
+        【E-1修正: 必須 → 任意に戻す】
+          ① ラベルの「必須」バッジを削除し「任意」表記を復活させる
+          ② バリデーションエラー時の border-red-400 クラスを削除
+             （reflection_comment はもうエラーにならないため不要）
+          ③ インラインエラーメッセージの表示ブロックを削除
+    %>
+    <div data-controller="voice-input">
+      <%= f.label :reflection_comment,
+            class: "block text-sm font-semibold text-gray-700 mb-1" do %>
+        自由コメント
+        <%#
+          「任意」バッジ:
+            bg-gray-100 / text-gray-600 で必須の赤バッジと区別する。
+            任意項目であることをユーザーに視覚的に伝える。
+        %>
+        <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">任意</span>
       <% end %>
       <p class="text-xs text-gray-500 mb-2">
         その他、感じたことを自由に記入してください（1000文字以内）
       </p>
-      <%= f.text_area :reflection_comment,
-          rows: 4,
-          placeholder: "その他、感じたことを自由に記入してください",
-          maxlength: 1000,
-          class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
-                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                  resize-none transition-colors" %>
+      <div class="relative">
+        <%#
+          エラー時の赤枠を削除:
+            reflection_comment は任意になったためバリデーションエラーは発生しない。
+            条件分岐ごと削除して通常のボーダーのみにする。
+        %>
+        <%= f.text_area :reflection_comment,
+            rows: 4,
+            placeholder: "その他、感じたことを自由に記入してください",
+            maxlength: 1000,
+            class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                    resize-none transition-colors",
+            data: { "voice-input-target": "field" } %>
+        <button type="button"
+                data-voice-input-target="button"
+                data-action="click->voice-input#toggle"
+                class="absolute right-3 top-3 p-1.5 rounded-lg border border-gray-300
+                       text-gray-500 hover:bg-gray-50 transition-colors
+                       focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="音声入力を開始する">
+          🎤
+        </button>
+      </div>
+      <%# インラインエラーメッセージは削除（任意化により不要）%>
     </div>
 
     <div class="flex justify-end items-center gap-4 pt-2">
@@ -206,12 +363,6 @@
           class: "px-5 py-3 bg-white border border-gray-300 text-gray-700 text-sm font-semibold
                   rounded-xl hover:bg-gray-50 transition-colors
                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" %>
-      <%#
-        D-10 変更: data-ai-throttle-target="button" を追加する。
-        "form-submit-target": "button"  → form-submit コントローラーのターゲット（既存）
-        "ai-throttle-target": "button"  → ai-throttle コントローラーのターゲット（D-10 追加）
-        1つのボタンに複数コントローラーのターゲットを同時に指定できる。
-      %>
       <%= f.submit "振り返りを完了する",
           class: "flex-1 py-3 px-4 bg-blue-600 text-white text-sm font-semibold
                   rounded-xl hover:bg-blue-700 transition-colors cursor-pointer
@@ -227,27 +378,5 @@
 
 </div>
 
-<%#
-  ─────────────────────────────────────────────────────────────────────────────
-  D-5: 危機介入モーダル（13-M）
-  ─────────────────────────────────────────────────────────────────────────────
-  【なぜ </div> の外（ページの末尾）に置くのか】
-    position: fixed のモーダルは DOM の最上位に近い位置に置くと
-    CSS のスタッキングコンテキストの問題を回避できる。
-    親要素の transform/transition が fixed の基準を変えてしまう問題を防ぐ。
-
-  【flash[:crisis] の引き継ぎについて】
-    この new アクションへのリダイレクト時に flash[:crisis] = true が
-    セットされている場合、このパーシャルの Stimulus コントローラーが
-    connect() で data-crisis-intervention-show-value="true" を確認し、
-    モーダルを自動表示する。
-%>
 <%= render "shared/crisis_intervention_modal" %>
-
-<%#
-  D-6: AI コスト上限モーダル（14-B）
-  create アクションで render :new が実行されたとき、
-  flash.now[:ai_limit] = true を受け取ってモーダルを自動表示する。
-  「入力を続ける」を選んだ場合、このページのフォームにテキストが残っている。
-%>
 <%= render "weekly_reflections/ai_limit_modal" %>

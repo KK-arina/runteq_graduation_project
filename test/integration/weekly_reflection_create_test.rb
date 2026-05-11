@@ -1,8 +1,9 @@
 # test/integration/weekly_reflection_create_test.rb
 #
-# 【このファイルの役割】
-# 振り返り作成フロー全体を E2E でテストする。
-# ログイン → フォーム表示 → 入力 → 保存 → 一覧ページ確認
+# 振り返り作成フロー E2E テスト（E-1追加: 3フィールド必須化対応）
+#
+# 【E-1追加での変更内容】
+#   post weekly_reflections_path に3フィールドを追加する。
 
 require "test_helper"
 
@@ -12,23 +13,28 @@ class WeeklyReflectionCreateTest < ActionDispatch::IntegrationTest
   end
 
   test "ログイン後に振り返りを作成して一覧ページへリダイレクトされること" do
-    # 日曜AM5:00（振り返り可能な時間帯）に固定
-    # この週の week_start_date = 2026-02-16（fixtures と重複しない）
     travel_to Time.zone.local(2026, 2, 22, 5, 0, 0) do
       log_in_as(@user)
 
-      # フォームページが表示されること
       get new_weekly_reflection_path
       assert_response :success
 
-      # フォームを送信して保存
+      # ── E-1追加: 3フィールドを追加 ──────────────────────────────────────
+      #
+      # 【変更理由】
+      #   direct_reason / background_situation / next_action が必須になったため、
+      #   これらを含まないと 422 Unprocessable Content が返り、
+      #   assert_redirected_to が失敗する。
       post weekly_reflections_path, params: {
         weekly_reflection: {
-          reflection_comment: "今週は筋トレを3日しかできなかった。残業が多かった。"
+          reflection_comment:   "今週は筋トレを3日しかできなかった。残業が多かった。",
+          direct_reason:        "残業が続き、帰宅後に体力が残っていなかった",  # E-1追加
+          background_situation: "朝30分早く起きてトレーニング時間を確保する", # E-1追加
+          next_action:          "朝型の生活リズムを読書にも広げる"             # E-1追加
         }
       }
+      # ────────────────────────────────────────────────────────────────────
 
-      # 保存成功 → 一覧へリダイレクト
       assert_redirected_to weekly_reflections_path
     end
   end
@@ -37,19 +43,14 @@ class WeeklyReflectionCreateTest < ActionDispatch::IntegrationTest
     travel_to Time.zone.local(2026, 2, 22, 5, 0, 0) do
       log_in_as(@user)
 
-      # 1001文字（上限1000文字を超える）
       over_limit_comment = "あ" * 1001
 
-      # カウントが増えないことを確認
       assert_no_difference "WeeklyReflection.count" do
         post weekly_reflections_path, params: {
           weekly_reflection: { reflection_comment: over_limit_comment }
         }
       end
 
-      # バリデーションエラーで 422 が返ること
-      # ※ このテストが通るには WeeklyReflection モデルに
-      #   validates :reflection_comment, length: { maximum: 1000 } が必要
       assert_response :unprocessable_entity
     end
   end

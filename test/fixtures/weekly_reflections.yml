@@ -1,22 +1,17 @@
 # test/fixtures/weekly_reflections.yml
 #
 # ============================================================
-# 【Issue #A-7 で修正】
-# year と week_number を全 fixture に追加する。
+# 【E-1追加 修正内容】
+#   direct_reason / background_situation / next_action が presence: true（必須）
+#   になったため、全フィクスチャに3フィールドを追加する。
 #
-# 【修正理由】
-# fixtures はモデルの before_validation を経由しないため、
-# year/week_number が nil のまま DB に保存される。
-# year/week_number が nil だと UNIQUE 制約(user_id, year, week_number)が
-# 正しく機能せず、テストで予期しないエラーが発生する。
+#   フィクスチャは before_validation を通らないため、
+#   モデルを経由せず DB に直接挿入される。
+#   ただし complete! メソッドが update! を呼ぶとバリデーションが走るため、
+#   フィクスチャデータにも3フィールドが必要。
 #
 # 【week_number の計算方法】
 # Date.new(YYYY, MM, DD).cweek で確認できる。
-# 例: Date.new(2026, 1, 5).cweek  => 2
-#     Date.new(2026, 1, 12).cweek => 3
-#     Date.new(2026, 1, 19).cweek => 4
-#     Date.new(2026, 2, 2).cweek  => 6
-#     Date.new(2026, 2, 9).cweek  => 7
 # ============================================================
 
 # ----------------------------------------------------------------
@@ -27,6 +22,9 @@ for_summary_test:
   week_start_date: "2026-01-12"
   week_end_date:   "2026-01-18"
   reflection_comment: "テスト振り返り1"
+  direct_reason:        "テスト用の直接原因"      # E-1追加: presence必須化対応
+  background_situation: "テスト用の改善策"         # E-1追加: presence必須化対応
+  next_action:          "テスト用の次への展開"      # E-1追加: presence必須化対応
   completed_at: "2026-01-18 15:00:00"
   year: 2026
   week_number: 3
@@ -39,6 +37,9 @@ one_habit_one:
   week_start_date: "2026-01-19"
   week_end_date:   "2026-01-25"
   reflection_comment: "テスト振り返り2"
+  direct_reason:        "テスト用の直接原因"
+  background_situation: "テスト用の改善策"
+  next_action:          "テスト用の次への展開"
   completed_at: "2026-01-25 14:00:00"
   year: 2026
   week_number: 4
@@ -51,6 +52,9 @@ two_habit_one:
   week_start_date: "2026-01-19"
   week_end_date:   "2026-01-25"
   reflection_comment: "ユーザー2の振り返り"
+  direct_reason:        "テスト用の直接原因"
+  background_situation: "テスト用の改善策"
+  next_action:          "テスト用の次への展開"
   completed_at: "2026-01-25 16:00:00"
   year: 2026
   week_number: 4
@@ -63,6 +67,9 @@ completed_one:
   week_start_date: "2026-01-05"
   week_end_date:   "2026-01-11"
   reflection_comment: "completed_oneの振り返り"
+  direct_reason:        "テスト用の直接原因"
+  background_situation: "テスト用の改善策"
+  next_action:          "テスト用の次への展開"
   completed_at: "2026-01-11 15:00:00"
   year: 2026
   week_number: 2
@@ -75,6 +82,9 @@ completed_reflection:
   week_start_date: "2026-02-02"
   week_end_date:   "2026-02-08"
   reflection_comment: "完了済みの振り返り"
+  direct_reason:        "テスト用の直接原因"
+  background_situation: "テスト用の改善策"
+  next_action:          "テスト用の次への展開"
   completed_at: "2026-02-08 15:00:00"
   year: 2026
   week_number: 6
@@ -87,6 +97,9 @@ pending_reflection:
   week_start_date: "2026-02-09"
   week_end_date:   "2026-02-15"
   reflection_comment: "未完了の振り返り"
+  direct_reason:        "テスト用の直接原因"      # E-1追加: complete!でバリデーションが走るため必須
+  background_situation: "テスト用の改善策"         # E-1追加: 同上
+  next_action:          "テスト用の次への展開"      # E-1追加: 同上
   completed_at: ~
   year: 2026
   week_number: 7
