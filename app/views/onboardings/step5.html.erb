@@ -1,59 +1,45 @@
 <%# app/views/onboardings/step5.html.erb %>
 <%#
   ==============================================================================
-  オンボーディング 5/5: PMVV目標入力ページ（D-7）
+  オンボーディング 5/5: PMVV目標入力ページ（E-1修正: 必須バッジ追加）
   ==============================================================================
-  【このページの役割】
-    初回ログインユーザーのオンボーディング最終ステップ。
-    PMVV（Purpose/Mission/Vision/Value/Current）を入力するフォームを表示する。
+  【E-1修正での変更内容】
+    UserPurpose の5フィールドが必須化されたため、
+    情報バナーの「すべて任意入力です」という文言を削除する。
 
-  【スキップ処理について】
-    button_to + method: :post で POST /onboarding/skip を呼び出す。
+  【スキップについての重要な設計メモ】
+    スキップボタン（button_to onboarding_skip_path）は
+    UserPurpose を保存せずにオンボーディングを完了するルート。
+    OnboardingsController#skip は UserPurpose のバリデーションを
+    通らずに first_login_at を更新するだけのため、
+    必須化してもスキップは引き続き正常に動作する。
 
-    ⚠️ 重要: data: { turbo: false } は使わない。
-    turbo: false を指定すると Rails の CSRF トークンがフォームに
-    埋め込まれなくなり、422 エラーが発生する。
-    button_to はデフォルトで Turbo が処理するため、
-    turbo を有効のままにする（= data: { turbo: false } を削除）。
+    一方、完了ボタン（フォーム内の f.submit）は
+    POST /onboarding/complete → OnboardingsController#complete を呼び、
+    こちらは UserPurpose.create! を経由するため必須バリデーションが走る。
 
-  【フォームの送信先】
-    form_with url: onboarding_complete_path, method: :post
-    → POST /onboarding/complete → OnboardingsController#complete
+  【_voice_field.html.erb パーシャルへの変更】
+    必須バッジ・インラインエラー表示は _voice_field.html.erb に追加済みのため、
+    このファイルは情報バナーの文言変更のみ行う。
   ==============================================================================
 %>
 <% content_for :title, "目標を入力（5/5）| HabitFlow" %>
 
 <div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-  <%#
-    ──────────────────────────────────────────────────────────────────────────
-    ステップインジケーター（進捗バー）
-    ──────────────────────────────────────────────────────────────────────────
-    【役割】今が5ステップ中の何番目かをユーザーに視覚的に伝える。
-    ステップ1〜4: 完了済み（緑・チェックマーク）
-    ステップ5:    現在ステップ（青・アクティブ）
-  %>
+  <%# ステップインジケーター %>
   <div class="flex justify-center items-center gap-2 mb-8"
        aria-label="オンボーディング進捗: 5ステップ中の5ステップ目">
     <% (1..4).each do |step| %>
-      <%# 完了済みステップのドット（緑） %>
       <div class="w-8 h-8 rounded-full bg-green-500 text-white flex items-center
                   justify-center text-xs font-bold flex-shrink-0"
-           aria-hidden="true">
-        ✓
-      </div>
-      <%# ステップ間の繋ぎライン（完了済み = 緑） %>
+           aria-hidden="true">✓</div>
       <div class="w-8 h-1 bg-green-400 flex-shrink-0" aria-hidden="true"></div>
     <% end %>
-
-    <%# 5番目のステップドット（現在 = 青） %>
     <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center
                 justify-center text-xs font-bold flex-shrink-0
                 ring-2 ring-blue-500 ring-offset-2"
-         aria-current="step"
-         aria-label="ステップ 5（現在）">
-      5
-    </div>
+         aria-current="step" aria-label="ステップ 5（現在）">5</div>
   </div>
 
   <%# ページヘッダー %>
@@ -68,12 +54,18 @@
     </p>
   </div>
 
-  <%# 情報バナー %>
+  <%#
+    情報バナー（E-1修正: 文言変更）
+    ──────────────────────────────────────────────────────────
+    【変更前】「すべて任意入力です。スキップして後から入力することもできます。」
+    【変更後】任意入力の記述を削除（5フィールドが必須化されたため）
+              スキップ自体は引き続き可能なので、スキップの案内は維持する。
+  %>
   <div class="mb-6 flex items-start gap-3 px-4 py-3
               bg-violet-50 border border-violet-200 rounded-xl">
     <span class="text-xl flex-shrink-0" aria-hidden="true">✨</span>
     <p class="text-sm text-violet-700 leading-relaxed">
-      すべて任意入力です。スキップして後から入力することもできます。<br>
+      スキップして後から入力することもできます。<br>
       保存後、バックグラウンドでAI分析を開始します。
     </p>
   </div>
@@ -81,23 +73,7 @@
   <%# バリデーションエラー表示 %>
   <%= render "shared/form_errors", model: @user_purpose %>
 
-  <%#
-    ──────────────────────────────────────────────────────────────────────────
-    PMVV 入力フォーム
-
-    【form_with の設定】
-      url: onboarding_complete_path → POST /onboarding/complete に送信する
-      method: :post               → HTTP POST を明示する
-      local: true                 → Turbo を使わず通常フォーム送信にする
-                                     （完了後は redirect_to でページ遷移するため）
-      data-controller="form-submit" → 二重送信防止 Stimulus コントローラー
-
-    【url: を明示する理由】
-      model: @user_purpose（単数形リソース）だと Rails が
-      user_purposes_path を探しに行くが存在しないためエラーになる。
-      オンボーディング専用 POST に送るため url: を明示する。
-    ──────────────────────────────────────────────────────────────────────────
-  %>
+  <%# PMVV 入力フォーム %>
   <%= form_with model: @user_purpose,
                 url: onboarding_complete_path,
                 method: :post,
@@ -163,14 +139,7 @@
           rows: 3,
           maxlength: 1000 %>
 
-    <%#
-      完了ボタン（フォーム内）
-      スキップボタンはフォームの外に配置するため完了ボタンのみここに残す。
-      スキップボタンをフォーム内に置くと button_to が生成する <form> が
-      メインフォームの内側に入り HTML 仕様違反になる。
-      その結果、スキップ時にメインフォームのバリデーションが走り
-      「少なくとも1つ入力してください」エラーが表示される。
-    %>
+    <%# 完了ボタン（フォーム内）%>
     <div class="pt-2">
       <%= f.submit t("onboarding.complete_button"),
             class: "w-full py-3 px-6 bg-violet-600 text-white
@@ -184,18 +153,20 @@
     </div>
 
   <% end %>
-  <%#
-    ↑ここで form_with を閉じる。
-    スキップボタンは必ずこの下（フォームの外）に配置する。
-  %>
 
   <%#
     スキップボタン（フォームの外）
+    ────────────────────────────────────────────────────────
     【なぜフォームの外に置くのか】
       button_to は独自の <form method="post"> を生成する。
       HTML の仕様では form の中に form を入れることができない。
-      フォームの外に出すことでスキップは完全に独立した
-      POST リクエストになり正常に動作する。
+      フォームの外に出すことでスキップは完全に独立した POST リクエストになる。
+
+    【スキップとバリデーションの関係】
+      スキップは POST /onboarding/skip → OnboardingsController#skip
+      skip アクションは UserPurpose を保存しないため、
+      presence: true バリデーションは走らない。
+      必須化してもスキップは引き続き正常に動作する。
   %>
   <div class="mt-3">
     <%= button_to t("onboarding.skip_button"),
@@ -216,5 +187,4 @@
 
 </div>
 
-<%# 危機介入モーダル（D-5 実装済み） %>
 <%= render "shared/crisis_intervention_modal" %>

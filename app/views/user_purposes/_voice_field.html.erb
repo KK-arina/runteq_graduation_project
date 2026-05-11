@@ -1,21 +1,30 @@
 <%# app/views/user_purposes/_voice_field.html.erb %>
 <%#
   ==============================================================================
-  音声入力付きテキストエリア パーシャル
+  音声入力付きテキストエリア パーシャル（E-1修正: 必須化対応）
   ==============================================================================
-
   【このファイルの役割】
     PMVV 入力フォームの各フィールド（Purpose/Mission/Vision/Value/Current）を
     共通テンプレートとして定義する。
-    new.html.erb と edit.html.erb の両方から呼び出される。
+    new.html.erb / edit.html.erb / step5.html.erb の3つから呼び出される。
+    このパーシャルを1か所修正するだけで全てのフォームに反映される。
+
+  【E-1修正での変更内容】
+    UserPurpose の5フィールドが presence: true（必須）になったため、
+    以下の3点を追加する:
+    ① ラベル行に「必須」バッジを追加する
+    ② バリデーションエラー時にテキストエリアの境界線を赤くする
+       （エラーなし: border-gray-300 / エラーあり: border-red-400）
+    ③ テキストエリアの直下にインラインエラーメッセージを表示する
+       （「Purposeを入力してください」など）
 
   【引数（locals）】
-    f          : フォームオブジェクト（form_with の do |f| で生成されるもの）
-    field      : カラム名（シンボル）例: :purpose, :mission
-    label_text : フィールドのラベル表示名 例: "Purpose"
-    hint_text  : ラベル横に表示するサブテキスト 例: "人生で一番大切にしていることは？"
-    placeholder: テキストエリアのプレースホルダー
-    example    : 入力例（グレーで小さく表示）
+    f          : フォームオブジェクト（form_with の do |f| で生成されるもの）（必須）
+    field      : カラム名のシンボル 例: :purpose, :mission（必須）
+    label_text : フィールドのラベル表示名 例: "Purpose"（必須）
+    hint_text  : ラベル横に表示するサブテキスト 例: "人生で一番大切にしていることは？"（必須）
+    placeholder: テキストエリアのプレースホルダー（必須）
+    example    : 入力例（グレーで小さく表示。省略時は表示しない）
     rows       : テキストエリアの行数（省略時は 3）
     maxlength  : 最大文字数（省略時は 1000）
 
@@ -25,22 +34,26 @@
     data-voice-input-target="field" → 音声認識テキストの書き込み先
     data-voice-input-target="button" → 🎤 ボタン本体
 
-  【呼び出し方】
-    <%= render "user_purposes/voice_field",
-          f: f,
-          field: :purpose,
-          label_text: "Purpose",
-          hint_text: "人生で一番大切にしていることは？",
-          placeholder: "人生で一番大切にしていることを自由に書いてください",
-          example: "例: 家族と過ごす時間を大切にしながら、仕事でも成果を出したい",
-          rows: 3,
-          maxlength: 1000 %>
+  【バリデーションエラーの判定方法】
+    f.object でフォームオブジェクトが参照している ActiveRecord モデルを取得する。
+    f.object は @user_purpose と同じインスタンス。
+    f.object.errors[field].any? でそのフィールドにエラーがあるか確認する。
+    f.object.errors[field].first で最初のエラーメッセージを取得する。
+    例: field = :purpose のとき
+      errors[:purpose].first → "を入力してください"
+      label_text + first → "Purposeを入力してください"
+  ==============================================================================
+%>
 
 <%#
-  locals: でデフォルト値を定義する。
-  rows と maxlength は省略可能にしておく。
-  rows のデフォルト値は 3（一般的なテキストエリアの高さ）。
-  maxlength のデフォルト値は 1000（UserPurpose モデルの上限に合わせる）。
+  デフォルト値の設定:
+    rows と maxlength は省略可能なため、
+    渡されない場合のデフォルト値を設定する。
+
+    【|| を使う理由】
+      元の実装で使用されていた書き方を維持する。
+      local_assigns.fetch を使う方法もあるが、
+      既存コードとの一貫性のため || を使う。
 %>
 <% rows ||= 3 %>
 <% maxlength ||= 1000 %>
@@ -50,24 +63,65 @@
     このブロック全体を voice-input Stimulus コントローラーのスコープにする。
     この div 内の data-voice-input-target="field/button" が
     このコントローラーに属する target として認識される。
+    複数の voice-input が同一ページにあっても
+    div ごとにスコープが独立するため干渉しない。
 %>
 <div data-controller="voice-input">
 
-  <%# ラベルと音声入力ボタンを横並びにする %>
+  <%# ─────────────────────────────────────────────────────
+      ラベル行（ラベル・必須バッジ・🎤ボタンを横並び）
+      ───────────────────────────────────────────────────── %>
+  <%#
+    既存の「justify-between で左にラベル・右に🎤」のレイアウトを維持しつつ、
+    ラベルの中に「必須」バッジを追加する。
+
+    【変更前】
+      <div class="flex items-center justify-between mb-1">
+        <label>label_text + hint_text</label>
+        <button>🎤</button>
+      </div>
+
+    【変更後】
+      <div class="flex items-center justify-between mb-1">
+        <label>label_text + 必須バッジ + hint_text</label>  ← バッジを追加
+        <button>🎤</button>
+      </div>
+  %>
   <div class="flex items-center justify-between mb-1">
 
     <%#
       f.label: フォームオブジェクト経由でラベルを生成する。
-      block 形式にすることでラベルテキストと hint_text を同一 label タグ内に収められる。
+      block 形式にすることでラベルテキスト・必須バッジ・hint_text を
+      同一 label タグ内に収められる。
       for 属性が自動設定されるのでアクセシビリティが向上する。
     %>
     <%= f.label field, class: "block text-sm font-semibold text-gray-700" do %>
+      <%# フィールド名（例: "Purpose"）%>
       <%= label_text %>
+
+      <%#
+        「必須」バッジ（E-1修正で追加）:
+          presence: true バリデーションを追加したため
+          ユーザーに必須項目であることを視覚的に伝える。
+
+          inline-flex items-center: テキストを縦中央揃えにする
+          px-1.5 py-0.5: 内側余白でバッジらしく見せる
+          rounded: 角丸にする
+          text-xs: フィールド名より小さく見せる
+          font-medium: 中太字（font-semibold より柔らかい）
+          bg-red-100 text-red-700: 赤系で「必須」を強調する
+      %>
+      <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded
+                   text-xs font-medium bg-red-100 text-red-700">
+        必須
+      </span>
+
+      <%# 補足テキスト（例: "人生で一番大切にしていることは？"）%>
       <span class="font-normal text-violet-600 ml-1 text-xs"><%= hint_text %></span>
     <% end %>
 
     <%#
-      音声入力ボタン
+      音声入力ボタン（変更なし）
       data-action="click->voice-input#toggle":
         クリック時に voice_input_controller.js の toggle() を呼び出す。
       data-voice-input-target="button":
@@ -87,22 +141,61 @@
     </button>
   </div>
 
-  <%# 入力例（任意）%>
+  <%# 入力例（example が渡された場合のみ表示）%>
   <% if defined?(example) && example.present? %>
     <p class="text-xs text-gray-400 mb-2"><%= example %></p>
   <% end %>
 
   <%#
-    f.text_area: フォームオブジェクト経由でテキストエリアを生成する。
-    name="user_purpose[:field]" が自動設定される。
-    data-voice-input-target="field": 音声認識テキストの書き込み先として指定する。
+    テキストエリア（E-1修正: エラー時の赤枠を追加）
+    ────────────────────────────────────────────────────────────
+    【変更前】class に "border-gray-300" を固定で指定していた
+    【変更後】エラーの有無に応じてボーダーカラーを切り替える
+
+    f.object.errors[field].any?
+      → このフィールドにエラーがあるか確認する
+      → エラーあり: border-red-400（赤） + focus:ring-red-500（赤フォーカス）
+      → エラーなし: border-gray-300（グレー） + focus:ring-violet-500（紫フォーカス）
+
+    ERB の文字列補間 #{ } を使って条件分岐したクラス名をクラス文字列に埋め込む。
+
+    data-voice-input-target="field":
+      音声認識テキストの書き込み先として VoiceInputController が認識する。
   %>
   <%= f.text_area field,
         rows: rows,
         maxlength: maxlength,
         placeholder: placeholder,
         data: { "voice-input-target": "field" },
-        class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
-                focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-violet-500
-                resize-none transition-colors" %>
+        class: "w-full px-4 py-3 border rounded-xl text-sm
+                focus:outline-none focus:ring-2 focus:border-transparent
+                resize-none transition-colors
+                #{ f.object.errors[field].any? ? 'border-red-400 focus:ring-red-500' : 'border-gray-300 focus:ring-violet-500' }" %>
+
+  <%#
+    インラインエラーメッセージ（E-1修正で追加）
+    ────────────────────────────────────────────────────────────
+    【なぜインラインエラーを追加するのか】
+      フォーム上部の shared/form_errors パーシャルでも
+      エラー一覧が表示されるが、フィールドが多いと
+      「どのフィールドが問題か」が一目でわからない。
+      フィールド直下にエラーを表示することで UX が向上する。
+
+    f.object.errors[field].any?
+      → このフィールドにエラーがあるか確認する
+    f.object.errors[field].first
+      → 最初のエラーメッセージを取得する
+      → 例: "を入力してください"
+    label_text + first
+      → 「Purpose」+「を入力してください」=「Purposeを入力してください」
+
+    role="alert":
+      スクリーンリーダーがエラーを自動読み上げするための属性。
+  %>
+  <% if f.object.errors[field].any? %>
+    <p class="mt-1.5 text-xs text-red-600" role="alert">
+      <%= label_text %><%= f.object.errors[field].first %>
+    </p>
+  <% end %>
+
 </div>

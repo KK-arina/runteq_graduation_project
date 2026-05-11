@@ -43,8 +43,8 @@ class WeeklyReflectionCompleteServiceCrisisTest < ActiveSupport::TestCase
     @reflection.assign_attributes(
       direct_reason:        "死にたいと思っています",  # 危機ワードを含む
       background_situation: "つらいです",
-      next_action:          "",
-      reflection_comment:   "今週はとてもつらかった"   # E-1 追加: presence: true 対応
+      next_action:          "何もわからない",            # E-1追加: presence必須化のため空文字不可
+      reflection_comment:   "今週はとてもつらかった",  # E-1 追加: presence: true 対応
     )
     # ────────────────────────────────────────────────────────────────────────────
   end
@@ -104,9 +104,9 @@ class WeeklyReflectionCompleteServiceCrisisTest < ActiveSupport::TestCase
     # 通常ワードテストでも reflection_comment が必要。
     @reflection.assign_attributes(
       direct_reason:        "今週はつらかったけど頑張りました",
-      background_situation: "",
-      next_action:          "",
-      reflection_comment:   "今週を振り返って前向きに取り組めた" # E-1 追加
+      background_situation: "朝型に切り替えたい",                  # E-1追加: presence必須化のため空文字不可
+      next_action:          "来週から実践する",                    # E-1追加: presence必須化のため空文字不可
+      reflection_comment:   "今週を振り返って前向きに取り組めた", # E-1 追加
     )
     # ────────────────────────────────────────────────────────────────────────────
 

@@ -121,7 +121,12 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
       post login_path, params: { session: { email: @user.email, password: "password123" } }
       assert_difference "WeeklyReflection.count", 1 do
         post weekly_reflections_path, params: {
-          weekly_reflection: { reflection_comment: "今週は読書を7日間達成できました。" }
+          weekly_reflection: {
+            reflection_comment:   "今週は読書を7日間達成できました。",
+            direct_reason:        "読書の習慣が定着してきた",       # E-1追加
+            background_situation: "朝の時間を有効活用した",         # E-1追加
+            next_action:          "他の習慣にも同様の工夫を広げる"   # E-1追加
+          }
         }
       end
       assert_response :redirect
@@ -142,6 +147,9 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
         week_start_date:    Date.new(2026, 3, 2),
         week_end_date:      Date.new(2026, 3, 8),
         reflection_comment: "テスト振り返りコメント",
+        direct_reason:        "テスト用の直接原因", # E-1追加: presence必須化対応
+        background_situation: "テスト用の改善策",   # E-1追加: presence必須化対応
+        next_action:          "テスト用の次への展開", # E-1追加: presence必須化対応
         completed_at:       Time.zone.local(2026, 3, 9, 9, 0, 0),
         is_locked:          true
       )
@@ -159,7 +167,10 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
         week_end_date:      Date.new(2026, 3, 8),
         completed_at:       nil,
         is_locked:          false,
-        reflection_comment: "ロックテスト用コメント" # E-1 追加
+        reflection_comment: "ロックテスト用コメント", # E-1 追加
+        direct_reason:        "テスト用の直接原因", # E-1追加
+        background_situation: "テスト用の改善策",   # E-1追加
+        next_action:          "テスト用の次への展開", # E-1追加
       )
       # ────────────────────────────────────────────────────────────────────────
 
@@ -179,7 +190,10 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
         week_end_date:      Date.new(2026, 3, 8),
         completed_at:       nil,
         is_locked:          false,
-        reflection_comment: "AM3:59テスト用コメント" # E-1 追加
+        reflection_comment: "AM3:59テスト用コメント", # E-1 追加
+        direct_reason:        "テスト用の直接原因", # E-1追加
+        background_situation: "テスト用の改善策",   # E-1追加
+        next_action:          "テスト用の次への展開", # E-1追加
       )
       # ────────────────────────────────────────────────────────────────────────
 
@@ -199,7 +213,10 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
         week_end_date:      Date.new(2026, 3, 8),
         completed_at:       nil,
         is_locked:          false,
-        reflection_comment: "AM4:00境界値テスト用コメント" # E-1 追加
+        reflection_comment: "AM4:00境界値テスト用コメント", # E-1 追加
+        direct_reason:        "テスト用の直接原因", # E-1追加
+        background_situation: "テスト用の改善策",   # E-1追加
+        next_action:          "テスト用の次への展開", # E-1追加
       )
       # ────────────────────────────────────────────────────────────────────────
 
@@ -219,7 +236,10 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
         week_end_date:      Date.new(2026, 3, 8),
         completed_at:       nil,
         is_locked:          false,
-        reflection_comment: "ロック解除テスト用コメント" # E-1 追加
+        reflection_comment: "ロック解除テスト用コメント", # E-1 追加
+        direct_reason:        "テスト用の直接原因", # E-1追加
+        background_situation: "テスト用の改善策",   # E-1追加
+        next_action:          "テスト用の次への展開", # E-1追加
       )
       # ────────────────────────────────────────────────────────────────────────
 

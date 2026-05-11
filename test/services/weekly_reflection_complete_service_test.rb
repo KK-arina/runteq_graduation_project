@@ -28,7 +28,10 @@ class WeeklyReflectionCompleteServiceTest < ActiveSupport::TestCase
     @reflection = @user.weekly_reflections.build(
       week_start_date:    @week_start,
       week_end_date:      @week_end,
-      reflection_comment: "サービステスト用振り返りコメント" # E-1 追加
+      reflection_comment: "サービステスト用振り返りコメント", # E-1 追加
+      direct_reason:        "テスト用の直接原因", # E-1追加
+      background_situation: "テスト用の改善策",   # E-1追加
+      next_action:          "テスト用の次への展開", # E-1追加
     )
     # ────────────────────────────────────────────────────────────────────────────
 
@@ -205,7 +208,10 @@ class WeeklyReflectionCompleteServiceTest < ActiveSupport::TestCase
     other_reflection = @user.weekly_reflections.build(
       week_start_date:    Date.parse("2026-04-06"),
       week_end_date:      Date.parse("2026-04-12"),
-      reflection_comment: "不正補正値テスト用コメント" # E-1 追加
+      reflection_comment: "不正補正値テスト用コメント", # E-1 追加
+      direct_reason:        "テスト用の直接原因", # E-1追加
+      background_situation: "テスト用の改善策",   # E-1追加
+      next_action:          "テスト用の次への展開", # E-1追加
     )
     # ────────────────────────────────────────────────────────────────────────────
 
@@ -223,7 +229,10 @@ class WeeklyReflectionCompleteServiceTest < ActiveSupport::TestCase
     other_reflection = @user.weekly_reflections.build(
       week_start_date:    Date.parse("2026-04-13"),
       week_end_date:      Date.parse("2026-04-19"),
-      reflection_comment: "不正キーテスト用コメント" # E-1 追加
+      reflection_comment: "不正キーテスト用コメント", # E-1 追加
+      direct_reason:        "テスト用の直接原因", # E-1追加
+      background_situation: "テスト用の改善策",   # E-1追加
+      next_action:          "テスト用の次への展開", # E-1追加
     )
     # ────────────────────────────────────────────────────────────────────────────
 
@@ -247,7 +256,10 @@ class WeeklyReflectionCompleteServiceTest < ActiveSupport::TestCase
     other_reflection = @user.weekly_reflections.build(
       week_start_date:    Date.parse("2026-04-20"),
       week_end_date:      Date.parse("2026-04-26"),
-      reflection_comment: "correctionsなしテスト用コメント" # E-1 追加
+      reflection_comment: "correctionsなしテスト用コメント", # E-1 追加
+      direct_reason:        "テスト用の直接原因", # E-1追加
+      background_situation: "テスト用の改善策",   # E-1追加
+      next_action:          "テスト用の次への展開", # E-1追加
     )
     # ────────────────────────────────────────────────────────────────────────────
 

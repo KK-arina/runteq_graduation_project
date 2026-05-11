@@ -84,7 +84,10 @@ class TasksControllerTest < ActionDispatch::IntegrationTest
     @user.weekly_reflections.create!(
       week_start_date:    last_week_start,
       week_end_date:      last_week_start + 6.days,
-      reflection_comment: "ロック中チェックテスト用コメント" # E-1 追加
+      reflection_comment: "ロック中チェックテスト用コメント", # E-1 追加
+      direct_reason:        "テスト用の直接原因", # E-1追加
+      background_situation: "テスト用の改善策",   # E-1追加
+      next_action:          "テスト用の次への展開", # E-1追加
     )
     # ────────────────────────────────────────────────────────────────────────────
 
@@ -191,7 +194,10 @@ class TasksControllerTest < ActionDispatch::IntegrationTest
         week_end_date:      Date.new(2026, 4, 12),
         year:               2026,
         week_number:        15,
-        reflection_comment: "ロック中タスク削除テスト用コメント" # E-1 追加
+        reflection_comment: "ロック中タスク削除テスト用コメント", # E-1 追加
+      direct_reason:        "テスト用の直接原因", # E-1追加
+      background_situation: "テスト用の改善策",   # E-1追加
+      next_action:          "テスト用の次への展開", # E-1追加
       )
       # ────────────────────────────────────────────────────────────────────────────
 

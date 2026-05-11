@@ -91,7 +91,10 @@ class HabitsMenuControllerTest < ActionDispatch::IntegrationTest
     @user.weekly_reflections.create!(
       week_start_date:    last_week_start,
       week_end_date:      last_week_start + 6.days,
-      reflection_comment: "ロック状態テスト用コメント" # E-1 追加
+      reflection_comment: "ロック状態テスト用コメント", # E-1 追加
+      direct_reason:        "テスト用の直接原因", # E-1追加
+      background_situation: "テスト用の改善策",   # E-1追加
+      next_action:          "テスト用の次への展開", # E-1追加
     )
     # ────────────────────────────────────────────────────────────────────────────
 

@@ -15,10 +15,13 @@ class AiAnalysisTest < ActiveSupport::TestCase
   def setup
     @user = users(:one)
     @user_purpose = UserPurpose.create!(
-      user:           @user,
-      purpose:        "テスト Purpose",
-      vision:         "テスト Vision",
-      analysis_state: :completed
+      user:             @user,
+      purpose:          "テスト Purpose",
+      mission:          "テスト Mission",     # E-1修正: presence必須化対応
+      vision:           "テスト Vision",
+      value:            "テスト Value",       # E-1修正: presence必須化対応
+      current_situation: "テスト Current",    # E-1修正: presence必須化対応
+      analysis_state:   :completed
     )
   end
 
@@ -77,9 +80,13 @@ class AiAnalysisTest < ActiveSupport::TestCase
 
   test "scope latest は is_latest=true のレコードのみ返す" do
     other_purpose = UserPurpose.create!(
-      user:           @user,
-      purpose:        "別の Purpose",
-      analysis_state: :completed
+      user:             @user,
+      purpose:          "別の Purpose",
+      mission:          "別の Mission",       # E-1修正: presence必須化対応
+      vision:           "別の Vision",
+      value:            "別の Value",         # E-1修正: presence必須化対応
+      current_situation: "別の Current",      # E-1修正: presence必須化対応
+      analysis_state:   :completed
     )
 
     latest = AiAnalysis.create!(
@@ -167,7 +174,10 @@ class AiAnalysisTest < ActiveSupport::TestCase
       week_end_date:      Date.current.end_of_week,
       year:               Date.current.year,
       week_number:        Date.current.cweek,
-      reflection_comment: "D-9テスト用振り返りコメント" # E-1 追加
+      reflection_comment: "D-9テスト用振り返りコメント", # E-1 追加
+      direct_reason:        "テスト用の直接原因", # E-1追加
+      background_situation: "テスト用の改善策",   # E-1追加
+      next_action:          "テスト用の次への展開", # E-1追加
     )
     # ────────────────────────────────────────────────────────────────────────────
 

@@ -36,6 +36,9 @@ class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
         week_start_date:    Date.new(2026, 2, 23),
         week_end_date:      Date.new(2026, 3, 1),
         reflection_comment: "他ユーザーの振り返りコメント",
+        direct_reason:        "テスト用の直接原因", # E-1追加: presence必須化対応
+        background_situation: "テスト用の改善策",   # E-1追加: presence必須化対応
+        next_action:          "テスト用の次への展開", # E-1追加: presence必須化対応
         completed_at:       Time.zone.local(2026, 3, 2, 10, 0, 0),
         is_locked:          true
       )
@@ -135,7 +138,10 @@ class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
         week_end_date:      Date.new(2026, 3, 8),
         completed_at:       nil,
         is_locked:          false,
-        reflection_comment: "ロック中削除テスト用コメント" # E-1 追加
+        reflection_comment: "ロック中削除テスト用コメント", # E-1 追加
+        direct_reason:        "テスト用の直接原因", # E-1追加
+        background_situation: "テスト用の改善策",   # E-1追加
+        next_action:          "テスト用の次への展開", # E-1追加
       )
       # ────────────────────────────────────────────────────────────────────────
 
@@ -153,6 +159,9 @@ class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
         week_start_date:    Date.new(2026, 3, 2),
         week_end_date:      Date.new(2026, 3, 8),
         reflection_comment: "完了済み",
+        direct_reason:        "テスト用の直接原因", # E-1追加: presence必須化対応
+        background_situation: "テスト用の改善策",   # E-1追加: presence必須化対応
+        next_action:          "テスト用の次への展開", # E-1追加: presence必須化対応
         completed_at:       Time.zone.local(2026, 3, 9, 10, 0, 0),
         is_locked:          false
       )

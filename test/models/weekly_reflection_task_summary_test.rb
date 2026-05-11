@@ -95,7 +95,10 @@ class WeeklyReflectionTaskSummaryTest < ActiveSupport::TestCase
       week_start_date:    Date.new(2025, 11, 3),
       week_end_date:      Date.new(2025, 11, 9),
       is_locked:          true,
-      reflection_comment: "タスクサマリーテスト用コメント" # E-1 追加
+      reflection_comment: "タスクサマリーテスト用コメント", # E-1 追加
+      direct_reason:        "テスト用の直接原因", # E-1追加
+      background_situation: "テスト用の改善策",   # E-1追加
+      next_action:          "テスト用の次への展開", # E-1追加
     )
     # ────────────────────────────────────────────────────────────────────────────
 
@@ -210,7 +213,10 @@ class WeeklyReflectionTaskSummaryTest < ActiveSupport::TestCase
       week_start_date:    Date.new(2025, 10, 6),
       week_end_date:      Date.new(2025, 10, 12),
       is_locked:          true,
-      reflection_comment: "by_priorityスコープテスト用コメント" # E-1 追加
+      reflection_comment: "by_priorityスコープテスト用コメント", # E-1 追加
+      direct_reason:        "テスト用の直接原因", # E-1追加
+      background_situation: "テスト用の改善策",   # E-1追加
+      next_action:          "テスト用の次への展開", # E-1追加
     )
     # ────────────────────────────────────────────────────────────────────────────
 
