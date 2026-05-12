@@ -1,43 +1,30 @@
 // app/javascript/controllers/habit_form_controller.js
 // =============================================================
 // Stimulus コントローラー: 習慣作成フォームの動的切り替えを管理する
-// （B-6: カラー・アイコン選択処理を追加、レビュー修正適用）
-// （C-6: チェック型の週次目標値フィールドの表示切り替えを追加）
+// （E-2 修正: toggleUnit を Stimulus targets から querySelector ベースに変更）
 // =============================================================
 
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  // ===========================================================
-  // Targets の定義
-  // ===========================================================
   static targets = [
     "measurementType",
     "measurementLabel",
     "unitField",
     "weeklyTargetLabel",
-    // C-6 追加: 週次目標値フィールドの表示切り替えに使用するターゲット
-    // weeklyTargetField        : 数値型のときだけ表示する入力エリア全体
-    // weeklyTargetHiddenWrapper: チェック型のときに weekly_target=7 を送信する hidden input のラッパー
     "weeklyTargetField",
-    "weeklyTargetHiddenWrapper",
+    "weeklyTargetInput",
     "colorInput",
     "colorSwatch",
     "iconInput",
     "iconButton"
   ]
 
-  // ===========================================================
-  // connect（ライフサイクル）
-  // ===========================================================
   connect() {
     this.toggleUnit()
     this.syncInitialState()
   }
 
-  // ===========================================================
-  // syncInitialState（B-6 レビュー修正: 新規追加）
-  // ===========================================================
   syncInitialState() {
     if (this.hasColorInputTarget) {
       const currentColor = this.colorInputTarget.value
@@ -64,20 +51,16 @@ export default class extends Controller {
     }
   }
 
-  // ===========================================================
-  // toggleUnit（C-6: 週次目標値フィールドの表示切り替えを追加）
-  // ===========================================================
-  // 【変更点】
-  //   数値型のときだけ weeklyTargetField（入力エリア）を表示する。
-  //   チェック型のときは weeklyTargetField を非表示にし、
-  //   代わりに weeklyTargetHiddenWrapper（hidden input: value=7）を有効にする。
-  //
-  //   【なぜ weeklyTargetHiddenWrapper で包むのか】
-  //   数値型のときは hidden input が不要なため、
-  //   ラッパーを hidden にすることで DOM には残しつつ送信を防げる。
-  //   hidden 属性がついた div の中の input は送信されない（HTML の仕様）。
   toggleUnit() {
-    const selectedType = this.measurementTypeTargets.find(radio => radio.checked)?.value
+    // ── querySelector ベースに変更する理由 ─────────────────────────
+    // Stimulus の targets は DOM の読み込みタイミングによって
+    // 正しく取得できないケースがあった。
+    // element（フォーム要素）から直接 querySelector で取得することで
+    // 確実に対象要素を操作できる。
+    // ───────────────────────────────────────────────────────────────
+    const form = this.element
+
+    const selectedType = this.measurementTypeTargets.find(r => r.checked)?.value
     const isNumeric = selectedType === "numeric_type"
 
     // ── 測定タイプラベルのスタイル切り替え ────────────────────────
@@ -93,62 +76,53 @@ export default class extends Controller {
     })
 
     // ── 単位フィールドの表示切り替え ─────────────────────────────
-    if (isNumeric) {
-      this.unitFieldTarget.removeAttribute("hidden")
-    } else {
-      this.unitFieldTarget.setAttribute("hidden", "")
-      const unitInput = this.unitFieldTarget.querySelector("input")
-      if (unitInput) unitInput.value = ""
-    }
-
-    // ── 週次目標値フィールドの表示切り替え（C-6 追加）──────────────
-    // weeklyTargetField ターゲットが存在するときだけ切り替える。
-    // edit.html.erb ではこのターゲットを使わない（チェック型は hidden のみ）ため
-    // has*** で存在確認してから操作する。
-    if (this.hasWeeklyTargetFieldTarget) {
+    const unitField = form.querySelector("[data-habit-form-target='unitField']")
+    if (unitField) {
       if (isNumeric) {
-        // 数値型: 入力エリアを表示する
-        this.weeklyTargetFieldTarget.removeAttribute("hidden")
+        unitField.removeAttribute("hidden")
       } else {
-        // チェック型: 入力エリアを非表示にする
-        this.weeklyTargetFieldTarget.setAttribute("hidden", "")
+        unitField.setAttribute("hidden", "")
+        const unitInput = unitField.querySelector("input")
+        if (unitInput) unitInput.value = ""
       }
     }
 
-    // ── hidden input（weekly_target=7）のラッパーの表示切り替え（C-6 追加）──
-    // チェック型のとき: hidden input を有効にして weekly_target=7 を送信する
-    // 数値型のとき:     hidden input を無効にして入力エリアの値を送信する
-    if (this.hasWeeklyTargetHiddenWrapperTarget) {
+    // ── 週次目標値フィールドの表示切り替え ───────────────────────
+    // 【設計方針】
+    //   number_field 1つで管理する（hidden input 廃止）。
+    //   チェック型: フィールドを非表示にして value=7 に固定する。
+    //   数値型:     フィールドを表示してユーザー入力値をそのまま送信する。
+    const weeklyTargetField = form.querySelector("[data-habit-form-target='weeklyTargetField']")
+    const weeklyTargetInput = form.querySelector("[data-habit-form-target='weeklyTargetInput']")
+
+    if (weeklyTargetField) {
       if (isNumeric) {
-        // 数値型: hidden input のラッパーを非表示にする（送信しない）
-        this.weeklyTargetHiddenWrapperTarget.setAttribute("hidden", "")
+        // 数値型: フィールドを表示する
+        weeklyTargetField.removeAttribute("hidden")
+        if (weeklyTargetInput) {
+          weeklyTargetInput.removeAttribute("max")
+          // 値が未入力または7（チェック型デフォルト）の場合は5にリセット
+          if (!weeklyTargetInput.value || weeklyTargetInput.value === "7") {
+            weeklyTargetInput.value = 5
+          }
+        }
       } else {
-        // チェック型: hidden input のラッパーを表示して weekly_target=7 を送信する
-        this.weeklyTargetHiddenWrapperTarget.removeAttribute("hidden")
+        // チェック型: フィールドを非表示にして value=7 に固定する
+        weeklyTargetField.setAttribute("hidden", "")
+        if (weeklyTargetInput) {
+          weeklyTargetInput.value = 7
+          weeklyTargetInput.setAttribute("max", "7")
+        }
       }
     }
 
     // ── 週次目標値ラベルのテキスト切り替え ───────────────────────
-    if (this.hasWeeklyTargetLabelTarget) {
-      this.weeklyTargetLabelTarget.textContent = isNumeric
-        ? "（単位: 1以上の数値）"
-        : "（1〜7回）"
-    }
-
-    // ── 週次目標値の max 属性の切り替え ──────────────────────────
-    const weeklyTargetInput = this.element.querySelector("input[name='habit[weekly_target]']")
-    if (weeklyTargetInput) {
-      if (isNumeric) {
-        weeklyTargetInput.removeAttribute("max")
-      } else {
-        weeklyTargetInput.setAttribute("max", "7")
-      }
+    const weeklyTargetLabel = form.querySelector("[data-habit-form-target='weeklyTargetLabel']")
+    if (weeklyTargetLabel) {
+      weeklyTargetLabel.textContent = isNumeric ? "（単位: 1以上の数値）" : "（1〜7回）"
     }
   }
 
-  // ===========================================================
-  // selectColor（B-6: レビュー修正適用）
-  // ===========================================================
   selectColor(event) {
     const button = event.currentTarget
     const color = button.dataset.colorValue
@@ -162,9 +136,6 @@ export default class extends Controller {
     button.classList.add("ring-2", "ring-offset-2", "ring-gray-800", "scale-110")
   }
 
-  // ===========================================================
-  // selectIcon（B-6: レビュー修正適用）
-  // ===========================================================
   selectIcon(event) {
     const button = event.currentTarget
     const icon = button.dataset.iconValue

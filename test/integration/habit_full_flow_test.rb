@@ -111,7 +111,10 @@ class HabitFullFlowTest < ActionDispatch::IntegrationTest
     assert_equal "text/vnd.turbo-stream.html", response.media_type
 
     # 作成した記録を確認
-    record = HabitRecord.order(created_at: :desc).first
+    # HabitRecord.order(created_at: :desc).first は全ユーザーの最新レコードを取得するため
+    # フィクスチャの挿入順序によって別ユーザーのレコードを拾うことがある。
+    # @user と new_habit で絞り込むことで確実に対象レコードを取得する。
+    record = HabitRecord.find_by!(user: @user, habit: new_habit)
     assert record.completed,   "completed: '1' を送信したので true になるはず"
     assert_equal @user.id,     record.user_id
     assert_equal new_habit.id, record.habit_id

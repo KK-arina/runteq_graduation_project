@@ -1,4 +1,22 @@
-# test/fixtures/habits.yml
+# test/fixtures/habits.yml への追記分（E-2 追加）
+#
+# 【user: fixture_only_user にする理由】
+#   user: one にすると users(:one).habits.active.count が増加し、
+#   habit_deletion_test.rb などの既存テストが壊れる。
+#   user: two にしても同様に @other_user.habits.active.count が増加して壊れる。
+#   habit_numeric はスナップショットテスト専用であり、
+#   users(:one) / users(:two) のどちらの件数にも影響しない
+#   fixture_only_user に割り当てることで既存テストを完全に保護する。
+#
+# 【measurement_type: 1 の意味】
+#   Habit モデルの enum より numeric_type: 1
+habit_numeric:
+  user: fixture_only_user
+  name: "ジョギング"
+  weekly_target: 120
+  measurement_type: 1
+  unit: "分"
+
 # ============================================================
 # 習慣のテスト用固定データ（フィクスチャ）
 #

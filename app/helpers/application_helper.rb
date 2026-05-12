@@ -5,35 +5,32 @@
 # ==============================================================================
 
 module ApplicationHelper
-  # rate_color（C-6 追加）
-  # 達成率に応じた色名（"green"/"blue"/"red"）を返す。
-  # Tailwind の動的クラス生成では CSS が生成されないため、
-  # このメソッドは rate_hex_color と組み合わせてインラインスタイルで使う。
-  def rate_color(rate)
-    if rate >= 80
-      "green"
-    elsif rate >= 50
-      "blue"
-    else
-      "red"
-    end
-  end
 
-  # rate_hex_color（C-6 追加）
+  # rate_hex_color（E-2 修正: 3段階→4段階に変更）
+  #
   # 達成率に応じた16進数カラーコードを返す。
   # インラインスタイル（background-color / color）で色を指定する場合に使用する。
   # Tailwind の動的クラス（bg-<%= rate_color %>-500）は
   # ビルド時の静的解析で検出されないため、このメソッドを使う。
   #
-  # 【戻り値】
-  #   "#22c55e"（緑: 80%以上）/ "#60a5fa"（青: 50〜79%）/ "#f87171"（赤: 未満）
+  # 【4段階の閾値と対応する Tailwind カラー】
+  #   100%以上 → "#22c55e"（green-500:  目標達成）
+  #    70%以上 → "#3b82f6"（blue-500:   順調）
+  #    40%以上 → "#facc15"（yellow-400: 要改善）
+  #    40%未満 → "#f87171"（red-400:    未達成）
+  #
+  # 【使用箇所】
+  #   ダッシュボード / 習慣管理 / 週次振り返り一覧 / 週次振り返り詳細
+  #   → 全画面でこのメソッドを参照することで閾値変更時に1箇所の修正で全体反映（DRY）
   def rate_hex_color(rate)
-    if rate >= 80
-      "#22c55e"
-    elsif rate >= 50
-      "#60a5fa"
+    if rate >= 100
+      "#22c55e"   # Tailwind green-500: 目標達成
+    elsif rate >= 70
+      "#3b82f6"   # Tailwind blue-500:  順調
+    elsif rate >= 40
+      "#facc15"   # Tailwind yellow-400: 要改善
     else
-      "#f87171"
+      "#f87171"   # Tailwind red-400:   未達成
     end
   end
 

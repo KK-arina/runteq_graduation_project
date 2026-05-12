@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_05_05_094158) do
+ActiveRecord::Schema[7.2].define(version: 2026_05_12_120319) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -340,6 +340,8 @@ ActiveRecord::Schema[7.2].define(version: 2026_05_05_094158) do
     t.decimal "achievement_rate", precision: 5, scale: 2, default: "0.0", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.decimal "actual_value", precision: 10, scale: 2, comment: "数値型習慣の週次実績値合計（SUM）。チェック型はNULL。"
+    t.string "unit", comment: "数値型習慣の単位スナップショット（例: 分, 冊）。チェック型はNULL。"
     t.index ["habit_id"], name: "index_weekly_reflection_habit_summaries_on_habit_id"
     t.index ["weekly_reflection_id", "habit_id"], name: "idx_wr_habit_summaries_on_wr_id_and_habit_id", unique: true
     t.index ["weekly_reflection_id"], name: "idx_on_weekly_reflection_id_641bf747c5"
