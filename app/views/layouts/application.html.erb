@@ -88,8 +88,21 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
-    <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
-    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%#
+      stylesheet_link_tag の preload 警告対策（E-2 修正）
+      
+      【問題】
+        stylesheet_link_tag はデフォルトで Link: preload ヘッダーを付与する。
+        しかし Tailwind CSS + importmap 環境では CSS の実際の適用タイミングと
+        preload のタイミングがズレ、ブラウザが以下の警告を出す：
+        「preloaded but not used within a few seconds」
+      
+      【修正】
+        preload: false を明示することで不要な preload ヘッダーを抑制する。
+        CSS は通常の link タグとして読み込まれるため表示への影響はない。
+    %>
+    <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload", preload: false %>
+    <%= stylesheet_link_tag "application", "data-turbo-track": "reload", preload: false %>
     <%= javascript_importmap_tags %>
   </head>
 

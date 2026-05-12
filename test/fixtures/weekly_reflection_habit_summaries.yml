@@ -1,112 +1,111 @@
 # test/fixtures/weekly_reflection_habit_summaries.yml
 #
-# ═══════════════════════════════════════════════════════════════════
-# 【このファイルの役割】
-#   週次振り返りに紐づく習慣スナップショットのテスト用データ。
+# ==============================================================================
+# 【E-2 変更内容】
+#   actual_value / unit カラムを追加したため、数値型テスト用フィクスチャを追加する。
 #
-# 【キー一覧】
-#   - one_habit_one  : for_summary_test × habit_two（completedスコープテスト用）
-#                      ※キー名は「one_habit_one」だが habit: habit_two を参照する。
-#                        理由：モデルテストの setup が
-#                        「for_summary_test × habit_one」を .new で使うため
-#                        UNIQUE制約違反を避けるために habit_two を割り当てている。
-#   - two_habit_one  : for_summary_test × habit_one（incompleteスコープテスト用）
-#                      ※setup の @summary（habit_one）と組み合わせは別の週なので
-#                        UNIQUE制約には違反しない。
-#   - summary_one    : completed_one × habit_one（showページ表示テスト用）
-#   - summary_two    : completed_one × habit_two（showページ表示テスト用）
+# 【カラム一覧】
+#   habit_name       : 振り返り時点の習慣名（スナップショット）
+#   weekly_target    : 振り返り時点の目標値（スナップショット）
+#   actual_count     : チェック型の完了日数（数値型では 0）
+#   actual_value     : 数値型の週次実績値合計（チェック型では NULL）
+#   unit             : 数値型の単位スナップショット（チェック型では NULL）
+#   achievement_rate : 達成率（0.00〜100.00）
 #
-# 【カラム名について】
-#   habit_name    ... 振り返り時点の習慣名を保存（スナップショット）
-#   weekly_target ... 振り返り時点の目標回数を保存（スナップショット）
-#   ※カラム名に _snapshot サフィックスは付かない。
-#     DB の実際のカラム名は habit_name / weekly_target。
-#
-# 【UNIQUE制約について】
-#   weekly_reflection_habit_summaries には
-#   (weekly_reflection_id, habit_id) の UNIQUE 制約がある。
-#   同じ振り返り × 同じ習慣の組み合わせが重複するとエラーになる。
-# ═══════════════════════════════════════════════════════════════════
+# 【UNIQUE 制約】
+#   (weekly_reflection_id, habit_id) の組み合わせが重複するとエラーになる。
+#   各フィクスチャで異なる combination を使うこと。
+# ==============================================================================
 
 # ---------------------------------------------------------------
-# one_habit_one（既存キー・削除禁止）
+# one_habit_one（completedスコープテスト用・変更禁止）
 #
-# 【なぜこのデータが必要か】
-#   weekly_reflection_habit_summary_test.rb のスコープテストで
-#   weekly_reflection_habit_summaries(:one_habit_one) として参照される。
-#   achievement_rate: 100.0 → completed スコープに含まれることを確認するため。
-#
-# 【fixture衝突回避の設計】
-#   モデルテストの setup では「for_summary_test × habit_one」を .new で使う。
-#   このフィクスチャは「for_summary_test × habit_two」にしておくことで
-#   UNIQUE制約（weekly_reflection_id + habit_id）の違反を防いでいる。
+# 【役割】
+#   completed スコープ（achievement_rate: 100）のテストで参照される。
+#   for_summary_test × habit_two を使う理由：
+#     モデルテストの setup が「for_summary_test × habit_one」を .new で使うため
+#     UNIQUE 制約違反を避けるために habit_two を割り当てている。
 # ---------------------------------------------------------------
 one_habit_one:
-  weekly_reflection: for_summary_test  # weekly_reflections の for_summary_test を参照
-  habit: habit_two                     # habit_one は setup の .new で使うため habit_two を使用
+  weekly_reflection: for_summary_test
+  habit: habit_two
   habit_name: "筋トレ"
   weekly_target: 3
   actual_count: 3
-  achievement_rate: 100.0             # completed スコープのテストに使用（100% = 達成）
+  # actual_value は NULL（チェック型のため）
+  # unit は NULL（チェック型のため）
+  achievement_rate: 100.0
 
 # ---------------------------------------------------------------
-# two_habit_one（既存キー・削除禁止）
+# two_habit_one（incompleteスコープテスト用・変更禁止）
 #
-# 【なぜこのデータが必要か】
-#   weekly_reflection_habit_summary_test.rb のスコープテストで
-#   weekly_reflection_habit_summaries(:two_habit_one) として参照される。
-#   achievement_rate: 71.0 → incomplete スコープに含まれることを確認するため。
-#
-# 【なぜ for_summary_test を使うのか】
-#   setup の @reflection は for_summary_test を参照しているため、
-#   スコープテストも同じ振り返りのデータを使う方が整合性が高い。
-#   habit: habit_one は setup の .new と同じだが、
-#   フィクスチャは DB に保存済みの状態なので .new とは別レコードになる。
-#   ただし UNIQUE 制約違反の可能性があるため、
-#   completed_one に紐づけることで完全に分離している。
+# 【役割】
+#   incomplete スコープ（achievement_rate < 100）のテストで参照される。
 # ---------------------------------------------------------------
 two_habit_one:
-  weekly_reflection: completed_one     # for_summary_test × habit_one は .new で使うため
-                                       # completed_one に紐づけて UNIQUE 違反を回避
+  weekly_reflection: completed_one
   habit: habit_one
   habit_name: "読書"
   weekly_target: 7
   actual_count: 5
-  achievement_rate: 71.0              # incomplete スコープのテストに使用（71% = 未達成）
+  # actual_value は NULL（チェック型のため）
+  # unit は NULL（チェック型のため）
+  achievement_rate: 71.0
 
 # ---------------------------------------------------------------
-# summary_one（Issue #23 追加）
+# summary_one（showページ表示テスト用・変更禁止）
 #
-# 【なぜこのデータが必要か】
-#   show アクションテストで習慣別実績サマリーが表示されることを確認するため。
-#   completed_one の振り返りに紐づく達成済みサマリー（達成率100%）。
+# 【役割】
+#   show アクションテストで達成済みサマリーが表示されることを確認する。
 # ---------------------------------------------------------------
 summary_one:
   weekly_reflection: completed_one
-  habit: habit_two                    # two_habit_one が habit_one を使うため habit_two を使用
+  habit: habit_two
   habit_name: "ランニング"
   weekly_target: 3
   actual_count: 3
+  # actual_value は NULL（チェック型のため）
+  # unit は NULL（チェック型のため）
   achievement_rate: 100.0
 
 # ---------------------------------------------------------------
-# summary_two（Issue #23 追加）
+# summary_two（showページ表示テスト用・変更禁止）
 #
-# 【なぜこのデータが必要か】
-#   show アクションテストで未達成サマリーも表示されることを確認するため。
-#   completed_one の振り返りに紐づく未達成サマリー（達成率40%）。
-#
-# 【habit に habit_deleted を使う理由】
-#   completed_one × habit_one は two_habit_one が使用中。
-#   completed_one × habit_two は summary_one が使用中。
-#   habit_deleted（論理削除済み習慣）を参照することで UNIQUE 制約を回避する。
-#   belongs_to :habit, optional: true なので削除済み習慣を参照しても valid。
-#   スナップショット設計の意図（「習慣を削除しても過去の振り返りは残る」）とも合致する。
+# 【役割】
+#   show アクションテストで未達成サマリーが表示されることを確認する。
+#   habit_deleted（論理削除済み習慣）を参照する理由：
+#     completed_one × habit_one, habit_two は上で使用済みのため UNIQUE 制約回避。
+#     optional: true なので削除済み習慣を参照しても valid。
 # ---------------------------------------------------------------
 summary_two:
   weekly_reflection: completed_one
-  habit: habit_deleted                # 論理削除済み習慣（optional: true のため参照可能）
+  habit: habit_deleted
   habit_name: "瞑想"
   weekly_target: 5
   actual_count: 2
+  # actual_value は NULL（チェック型のため）
+  # unit は NULL（チェック型のため）
   achievement_rate: 40.0
+
+# ---------------------------------------------------------------
+# numeric_summary_one（E-2 新規追加：数値型テスト用）
+#
+# 【役割】
+#   数値型習慣のサマリーが正しく作成・表示されることをテストするための
+#   フィクスチャ。
+#   summary_text が「90 / 120 分（75%）」形式で返ることを確認する。
+#
+# 【なぜ for_summary_test × habit_numeric を使うのか】
+#   for_summary_test には habit_two（one_habit_one）しかないため
+#   habit_numeric を追加しても UNIQUE 制約に違反しない。
+#   habit_numeric は数値型習慣（fixtures/habits.yml で定義）。
+# ---------------------------------------------------------------
+numeric_summary_one:
+  weekly_reflection: for_summary_test
+  habit: habit_numeric
+  habit_name: "ジョギング"
+  weekly_target: 120
+  actual_count: 0
+  actual_value: 90.00
+  unit: "分"
+  achievement_rate: 75.0

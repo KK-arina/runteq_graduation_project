@@ -1,5 +1,32 @@
-# test/fixtures/users.yml
+# fixture_only_user（E-2 新規追加）
 #
+# 【役割】
+#   habit_numeric フィクスチャ専用のユーザー。
+#
+# 【なぜ専用ユーザーが必要か】
+#   users(:one) / users(:two) の habits.active.count を
+#   アサートしている既存テスト（habit_deletion_test.rb 等）に
+#   影響を与えないため、habit_numeric 専用のユーザーを隔離する。
+#   user: one / user: two のどちらに割り当てても既存テストが壊れるため
+#   テストで参照されない専用ユーザーを新設する。
+#
+# 【cost: 1 を使う理由】
+#   BCrypt のコストパラメータを下げることでテスト実行を高速化する。
+#   本番は cost: 12 以上を推奨するが、テスト用途では cost: 1 で十分。
+#   既存フィクスチャと同じ cost: 1 に統一する。
+#
+# 【first_login_at を設定する理由】
+#   first_login_at が NULL のユーザーは ApplicationController の
+#   redirect_to_onboarding_if_needed により /onboarding/step5 へ
+#   リダイレクトされる（D-7 実装）。
+#   フィクスチャ専用ユーザーでもリダイレクトで意図しない動作を起こさないよう
+#   オンボーディング完了済みとして設定しておく。
+fixture_only_user:
+  name: "フィクスチャ専用ユーザー"
+  email: "fixture_only@example.com"
+  password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
+  first_login_at: "2026-01-01 00:00:00"
+
 # 【このファイルの役割】
 # テスト用のユーザーサンプルデータ。
 # Issue #25 では「前週の振り返りが未完了でロック中」のユーザーを追加する。

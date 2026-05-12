@@ -57,15 +57,18 @@
       <span class="text-gray-500 mb-1 text-sm">(<%= @habit_summaries.size %>個の習慣)</span>
     </div>
 
+    <%#
+      総合達成率プログレスバー（E-2 修正: rate_hex_color に統一）
+        Tailwind クラス直書きから rate_hex_color ヘルパーに変更する。
+        ヘルパーを経由することで全画面で閾値・色が統一される（DRY）。
+    %>
     <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden"
          role="progressbar"
          aria-valuenow="<%= [@overall_achievement_rate, 100].min %>"
          aria-valuemin="0" aria-valuemax="100" aria-label="総合達成率">
-      <div class="h-4 rounded-full transition-all duration-500
-        <%= @overall_achievement_rate >= 100 ? 'bg-green-500' :
-            @overall_achievement_rate >= 70  ? 'bg-blue-500' :
-            @overall_achievement_rate >= 40  ? 'bg-yellow-400' : 'bg-red-400' %>"
-           style="width: <%= [@overall_achievement_rate, 100].min %>%">
+      <div class="h-4 rounded-full transition-all duration-500"
+           style="width: <%= [@overall_achievement_rate, 100].min %>%;
+                  background-color: <%= rate_hex_color(@overall_achievement_rate) %>">
       </div>
     </div>
 
@@ -75,6 +78,33 @@
   </div>
 
   <%# セクション②: 習慣別 実績サマリー %>
+  <%#
+    ============================================================
+    【E-2 変更内容】
+      数値型習慣の実績を正しく表示するために summary_text メソッドを使う。
+
+    【変更前の問題】
+      「N / M 回達成」と決め打ちで表示していた。
+      → 数値型（例: ジョギング90分）でも「0 / 5 回達成」と誤表示されていた。
+
+    【変更後】
+      summary.summary_text を呼び出すことで
+        チェック型 → 「5 / 7 日（71%）」
+        数値型     → 「90 / 120 分（75%）」
+      と正しく表示される。
+
+    【UI重複の解消（E-2 レビュー反映）】
+      summary_text に「実績 / 目標 単位（達成率%）」が含まれているため、
+      右側の「週X目標」表示は削除してシンプルにした。
+      情報が重複すると読みにくくなるため。
+
+    【summary_text の実装場所】
+      app/models/weekly_reflection_habit_summary.rb の
+      summary_text インスタンスメソッドで一元管理している。
+      ビューでロジックを持たせず、モデルに委譲するのが
+      Rails の設計原則（Fat Model, Thin View）。
+    ============================================================
+  %>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-5">📋 習慣別 実績サマリー</h2>
 
@@ -87,29 +117,61 @@
         <% @habit_summaries.each do |summary| %>
           <div class="border border-gray-100 rounded-xl p-4
             <%= summary.achievement_rate >= 100 ? 'bg-green-50 border-green-200' : 'bg-gray-50' %>">
+
             <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
               <div class="flex items-center gap-2">
-                <%= summary.achievement_rate >= 100 ? '<span class="text-green-500 text-lg">✅</span>'.html_safe : '<span class="text-gray-300 text-lg">⬜</span>'.html_safe %>
+                <%#
+                  達成アイコンの表示：
+                    三項演算子で達成時と未達成時のアイコンを切り替える。
+                    絵文字を直接テキストとして出力するため html_safe 不要。
+                    ERB の =  は文字列をそのまま出力し、
+                    絵文字は HTML エンティティではないためエスケープの影響を受けない。
+                %>
+                <span class="text-lg">
+                  <%= summary.achievement_rate >= 100 ? "✅" : "⬜" %>
+                </span>
                 <span class="font-medium text-gray-800 text-sm"><%= summary.habit_name %></span>
               </div>
+
+              <%#
+                達成率バッジ：
+                  achievement_rate_text メソッドを使うことで
+                  常に「75.00%」のような統一フォーマットで表示される。
+                  直接 achievement_rate を表示すると「75.0%」「75.33%」など
+                  桁数が揺れてしまうため、メソッドに委譲する。
+              %>
               <span class="text-xs font-semibold px-2 py-1 rounded-full
                 <%= summary.achievement_rate >= 100 ? 'bg-green-100 text-green-700' :
                     summary.achievement_rate >= 70  ? 'bg-blue-100 text-blue-700' :
                     summary.achievement_rate >= 40  ? 'bg-yellow-100 text-yellow-700' :
                                                       'bg-red-100 text-red-600' %>">
-                <%= summary.achievement_rate %>%
+                <%= summary.achievement_rate_text %>
               </span>
             </div>
-            <div class="flex items-center justify-between text-xs text-gray-500 mb-2">
-              <span><%= summary.actual_count %> / <%= summary.weekly_target %> 回達成</span>
-              <span>週<%= summary.weekly_target %>回目標</span>
+
+            <%#
+              【E-2 変更・レビュー反映】実績表示を summary_text に統一
+                summary_text は以下を一括で返す:
+                  チェック型: 「5 / 7 日（71%）」
+                  数値型:     「90 / 120 分（75%）」
+                  数値型0件:  「0 / 120 分（0%）」
+
+                右側の「週X目標」は summary_text に既に目標値が含まれているため削除。
+                情報重複を排除してUIをシンプルにする（E-2 レビュー反映）。
+            %>
+            <div class="text-xs text-gray-500 mb-2">
+              <span><%= summary.summary_text %></span>
             </div>
+
+            <%#
+              習慣別プログレスバー（E-2 修正: rate_hex_color に統一）
+                Tailwind クラス直書きから rate_hex_color ヘルパーに変更する。
+                総合達成率・ダッシュボード・習慣管理と同じ4段階の閾値で色が統一される。
+            %>
             <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-              <div class="h-2 rounded-full transition-all duration-500
-                <%= summary.achievement_rate >= 100 ? 'bg-green-500' :
-                    summary.achievement_rate >= 70  ? 'bg-blue-500' :
-                    summary.achievement_rate >= 40  ? 'bg-yellow-400' : 'bg-red-400' %>"
-                   style="width: <%= [summary.achievement_rate, 100].min %>%">
+              <div class="h-2 rounded-full transition-all duration-500"
+                   style="width: <%= [summary.achievement_rate, 100].min %>%;
+                          background-color: <%= rate_hex_color(summary.achievement_rate) %>">
               </div>
             </div>
           </div>

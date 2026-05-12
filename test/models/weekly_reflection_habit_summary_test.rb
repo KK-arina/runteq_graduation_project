@@ -1,10 +1,13 @@
 # test/models/weekly_reflection_habit_summary_test.rb
 #
 # ==============================================================================
-# 【E-1 修正内容】
-#   reflection_comment に presence: true バリデーションを追加したため、
-#   WeeklyReflection.create! に reflection_comment を追加する。
-#   （「異なる振り返りなら同じ習慣のサマリーを作成できること」テスト）
+# 【E-2 変更内容】
+#   数値型習慣のスナップショット保存・summary_text 表示に関するテストを追加する。
+#
+# 【E-2 レビュー反映】
+#   - numeric? の 0.0 テストを正しい仕様（true を返す）に修正
+#   - actual_value=0.0 でも単位付き表示されることを確認するテストを追加
+#   - habit_numeric は user: two のため、HabitRecord は @user（users:one）で作成
 # ==============================================================================
 
 require "test_helper"
@@ -15,15 +18,23 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
     @habit      = habits(:habit_one)
     @reflection = weekly_reflections(:for_summary_test)
 
+    # チェック型サマリーのベースオブジェクト
+    # actual_value: nil, unit: nil → チェック型を表す
     @summary = WeeklyReflectionHabitSummary.new(
       weekly_reflection: @reflection,
       habit:             @habit,
       habit_name:        "読書",
       weekly_target:     7,
       actual_count:      5,
+      actual_value:      nil,
+      unit:              nil,
       achievement_rate:  71.43
     )
   end
+
+  # ============================================================
+  # 基本バリデーションテスト
+  # ============================================================
 
   test "有効なデータでサマリーが作成できること" do
     assert @summary.valid?, "有効なデータなのにバリデーションエラーが発生: #{@summary.errors.full_messages}"
@@ -97,6 +108,42 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
     assert @summary.valid?, "achievement_rate=0 は有効なはずです: #{@summary.errors.full_messages}"
   end
 
+  # ============================================================
+  # E-2 追加: actual_value / unit バリデーションテスト
+  # ============================================================
+
+  test "actual_valueがnilなら有効であること（チェック型）" do
+    # チェック型では actual_value は NULL を許容する
+    @summary.actual_value = nil
+    assert @summary.valid?, "actual_value=nil は有効なはずです: #{@summary.errors.full_messages}"
+  end
+
+  test "actual_valueが0.0なら有効であること（数値型・記録なし）" do
+    # 数値型で実績が0のケースも許容する
+    @summary.actual_value = 0.0
+    assert @summary.valid?, "actual_value=0.0 は有効なはずです: #{@summary.errors.full_messages}"
+  end
+
+  test "actual_valueが負数なら無効であること" do
+    @summary.actual_value = -1.0
+    assert_not @summary.valid?
+    assert @summary.errors[:actual_value].any?, "actual_value が負数のときエラーが出るべき"
+  end
+
+  test "unitが11文字以上なら無効であること" do
+    @summary.unit = "a" * 11
+    assert_not @summary.valid?
+  end
+
+  test "unitがnilなら有効であること（チェック型）" do
+    @summary.unit = nil
+    assert @summary.valid?, "unit=nil は有効なはずです: #{@summary.errors.full_messages}"
+  end
+
+  # ============================================================
+  # UNIQUE 制約テスト
+  # ============================================================
+
   test "同じ振り返りに同じ習慣のサマリーは重複作成できないこと" do
     @summary.save!
     duplicate = WeeklyReflectionHabitSummary.new(
@@ -113,24 +160,16 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
 
   test "異なる振り返りなら同じ習慣のサマリーを作成できること" do
     @summary.save!
-
-    # ── E-1 修正: reflection_comment を追加 ──────────────────────────────────
-    #
-    # 【修正理由】
-    #   E-1 で presence: true を追加したため、reflection_comment なしの
-    #   create! はバリデーションエラーになる。
     other_reflection = WeeklyReflection.create!(
-      user:               @user,
-      week_start_date:    Date.new(2025, 11, 3),
-      week_end_date:      Date.new(2025, 11, 9),
-      is_locked:          true,
-      reflection_comment: "異なる振り返りテスト用コメント", # E-1 追加
-      direct_reason:        "テスト用の直接原因", # E-1追加
-      background_situation: "テスト用の改善策",   # E-1追加
-      next_action:          "テスト用の次への展開", # E-1追加
+      user:                 @user,
+      week_start_date:      Date.new(2025, 11, 3),
+      week_end_date:        Date.new(2025, 11, 9),
+      is_locked:            true,
+      reflection_comment:   "異なる振り返りテスト用コメント",
+      direct_reason:        "テスト用の直接原因",
+      background_situation: "テスト用の改善策",
+      next_action:          "テスト用の次への展開"
     )
-    # ────────────────────────────────────────────────────────────────────────────
-
     other_summary = WeeklyReflectionHabitSummary.new(
       weekly_reflection: other_reflection,
       habit:             @habit,
@@ -141,6 +180,10 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
     )
     assert other_summary.valid?, "異なる振り返りなら有効なはずです: #{other_summary.errors.full_messages}"
   end
+
+  # ============================================================
+  # アソシエーション・CASCADE テスト
+  # ============================================================
 
   test "WeeklyReflectionに紐づいていること" do
     @summary.save!
@@ -154,7 +197,11 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
     assert_not WeeklyReflectionHabitSummary.exists?(summary_id)
   end
 
-  test "build_from_habit でスナップショットが正しく構築されること" do
+  # ============================================================
+  # build_from_habit テスト（チェック型）
+  # ============================================================
+
+  test "build_from_habit でチェック型のスナップショットが正しく構築されること" do
     @habit.habit_records.where(user: @user).destroy_all
     week_start = @reflection.week_start_date
     3.times do |i|
@@ -166,14 +213,17 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
       )
     end
     summary = WeeklyReflectionHabitSummary.build_from_habit(@reflection, @habit)
+
     assert_equal @habit.name,          summary.habit_name
     assert_equal @habit.weekly_target, summary.weekly_target
     assert_equal 3,                    summary.actual_count
+    assert_nil                         summary.actual_value, "チェック型の actual_value は nil であるべき"
+    assert_nil                         summary.unit,         "チェック型の unit は nil であるべき"
     expected_rate = (3.0 / @habit.weekly_target * 100).clamp(0, 100).round(2)
-    assert_equal expected_rate, summary.achievement_rate
+    assert_equal expected_rate,        summary.achievement_rate
   end
 
-  test "build_from_habit で未完了レコードは実績に含まれないこと" do
+  test "build_from_habit で未完了レコードは実績に含まれないこと（チェック型）" do
     @habit.habit_records.where(user: @user).destroy_all
     week_start = @reflection.week_start_date
     HabitRecord.create!(user: @user, habit: @habit, record_date: week_start,          completed: true)
@@ -187,11 +237,61 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
     @habit.habit_records.where(user: @user).destroy_all
     week_start = @reflection.week_start_date
     other_user = users(:two)
-    2.times { |i| HabitRecord.create!(user: @user,       habit: @habit, record_date: week_start + i.days, completed: true) }
-    3.times { |i| HabitRecord.create!(user: other_user,  habit: @habit, record_date: week_start + i.days, completed: true) }
+    2.times { |i| HabitRecord.create!(user: @user,      habit: @habit, record_date: week_start + i.days, completed: true) }
+    3.times { |i| HabitRecord.create!(user: other_user, habit: @habit, record_date: week_start + i.days, completed: true) }
     summary = WeeklyReflectionHabitSummary.build_from_habit(@reflection, @habit)
     assert_equal 2, summary.actual_count
   end
+
+  # ============================================================
+  # build_from_habit テスト（数値型）E-2 追加
+  # ============================================================
+
+  test "build_from_habit で数値型のスナップショットが正しく構築されること" do
+    # habit_numeric は user: two のフィクスチャだが、
+    # build_from_habit は weekly_reflection.user（@user = users(:one)）で
+    # habit_records を集計するため、HabitRecord は @user で作成する。
+    # （習慣の所有者とレコードの所有者が異なるケースはスナップショット設計上あり得る）
+    numeric_habit = habits(:habit_numeric)
+    numeric_habit.habit_records.where(user: @user).destroy_all
+
+    week_start = @reflection.week_start_date
+    # 月: 30分、水: 30分、金: 30分 → 合計 90分
+    [ 0, 2, 4 ].each do |offset|
+      HabitRecord.create!(
+        user:          @user,
+        habit:         numeric_habit,
+        record_date:   week_start + offset.days,
+        completed:     true,
+        numeric_value: 30.0
+      )
+    end
+
+    summary = WeeklyReflectionHabitSummary.build_from_habit(@reflection, numeric_habit)
+
+    assert_equal numeric_habit.name,          summary.habit_name
+    assert_equal numeric_habit.weekly_target, summary.weekly_target
+    assert_equal 0,    summary.actual_count,       "数値型の actual_count は 0 であるべき"
+    assert_equal 90.0, summary.actual_value.to_f,  "numeric_value の SUM が actual_value にセットされるべき"
+    assert_equal "分", summary.unit,               "習慣の unit がスナップショットとして保存されるべき"
+    expected_rate = (90.0 / numeric_habit.weekly_target * 100).clamp(0, 100).round(2)
+    assert_equal expected_rate, summary.achievement_rate
+  end
+
+  test "build_from_habit で数値型の記録がない場合 actual_value が 0.0 になること" do
+    # 記録なしのケース（actual_value = 0.0, achievement_rate = 0.0）
+    numeric_habit = habits(:habit_numeric)
+    numeric_habit.habit_records.where(user: @user).destroy_all
+
+    summary = WeeklyReflectionHabitSummary.build_from_habit(@reflection, numeric_habit)
+    assert_equal 0.0,  summary.actual_value.to_f, "記録なしの場合 actual_value は 0.0 であるべき"
+    assert_equal 0.0,  summary.achievement_rate,  "記録なしの場合 achievement_rate は 0.0 であるべき"
+    assert_equal "分", summary.unit,              "記録なしでも unit はスナップショットとして保存されるべき"
+  end
+
+  # ============================================================
+  # create_all_for_reflection! テスト
+  # ============================================================
 
   test "create_all_for_reflection! で全習慣のサマリーが作成されること" do
     active_habits      = @user.habits.active
@@ -212,6 +312,10 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
     end
   end
 
+  # ============================================================
+  # インスタンスメソッドテスト
+  # ============================================================
+
   test "achievement_rate_text が正しい形式で返ること" do
     @summary.achievement_rate = 71.43
     assert_equal "71.43%", @summary.achievement_rate_text
@@ -231,6 +335,79 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
     @summary.achievement_rate = 99
     assert_not @summary.achieved?
   end
+
+  # ============================================================
+  # E-2 追加: numeric? メソッドのテスト
+  # ============================================================
+
+  test "numeric? は actual_value が存在するとき true を返すこと" do
+    # actual_value に値があれば数値型サマリーと判定する
+    @summary.actual_value = 90.0
+    assert @summary.numeric?, "actual_value が存在するとき numeric? は true を返すべき"
+  end
+
+  test "numeric? は actual_value が nil のとき false を返すこと" do
+    # actual_value が NULL（チェック型）のときは false
+    @summary.actual_value = nil
+    assert_not @summary.numeric?, "actual_value が nil のとき numeric? は false を返すべき"
+  end
+
+  test "numeric? は actual_value が 0.0 のとき true を返すこと" do
+    # Rails では 0.0.present? == true（数値は 0 でも「存在する」と判定される）
+    # 「今週0分だった」数値型習慣も「0 / 120 分（0%）」と表示するため true が正しい仕様
+    @summary.actual_value = 0.0
+    assert @summary.numeric?, "actual_value=0.0 のとき numeric? は true を返すべき（0.0.present? == true）"
+  end
+
+  # ============================================================
+  # E-2 追加: summary_text メソッドのテスト
+  # ============================================================
+
+  test "summary_text はチェック型で「N / M 日（XX%）」形式を返すこと" do
+    @summary.actual_count     = 5
+    @summary.weekly_target    = 7
+    @summary.actual_value     = nil
+    @summary.achievement_rate = 71.43
+    assert_equal "5 / 7 日（71%）", @summary.summary_text
+  end
+
+  test "summary_text は数値型で「N / M 単位（XX%）」形式を返すこと" do
+    @summary.actual_value     = 90.0
+    @summary.weekly_target    = 120
+    @summary.unit             = "分"
+    @summary.achievement_rate = 75.0
+    assert_equal "90 / 120 分（75%）", @summary.summary_text
+  end
+
+  test "summary_text は数値型で小数点を正しく表示すること" do
+    @summary.actual_value     = 6.5
+    @summary.weekly_target    = 10
+    @summary.unit             = "km"
+    @summary.achievement_rate = 65.0
+    assert_equal "6.5 / 10 km（65%）", @summary.summary_text
+  end
+
+  test "summary_text は数値型で整数値の末尾ゼロを除去すること" do
+    @summary.actual_value     = 90.0
+    @summary.weekly_target    = 120
+    @summary.unit             = "分"
+    @summary.achievement_rate = 75.0
+    assert_equal "90 / 120 分（75%）", @summary.summary_text
+  end
+
+  test "summary_text は数値型で実績0のとき単位付きで表示すること" do
+    # 実績が0でも「0 / 120 分（0%）」と表示されるべき
+    # チェック型の「0 / 7 日（0%）」と区別できることを確認する
+    @summary.actual_value     = 0.0
+    @summary.weekly_target    = 120
+    @summary.unit             = "分"
+    @summary.achievement_rate = 0.0
+    assert_equal "0 / 120 分（0%）", @summary.summary_text
+  end
+
+  # ============================================================
+  # スコープテスト
+  # ============================================================
 
   test "completed スコープが達成率100%のサマリーのみ返すこと" do
     completed_fixture = weekly_reflection_habit_summaries(:one_habit_one)

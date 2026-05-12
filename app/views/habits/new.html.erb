@@ -182,6 +182,12 @@
         hidden 状態でも hidden input として weekly_target=7 を送信するため
         バリデーションは通過する。
     %>
+    <%#
+      週次目標値フィールド。
+      数値型: ユーザーが入力した値を送信する（表示状態）
+      チェック型: Stimulus が value=7 に固定して送信する（非表示状態）
+      hidden input を廃止することで同一name inputの競合問題を完全に解消する。
+    %>
     <div data-habit-form-target="weeklyTargetField"
          <%= @habit.numeric_type? ? "" : "hidden" %>>
       <%= f.label :weekly_target, "週次目標値",
@@ -192,24 +198,11 @@
       <%= f.number_field :weekly_target,
             min: 1,
             value: @habit.weekly_target || 5,
+            data: { habit_form_target: "weeklyTargetInput" },
             class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                     transition-colors" %>
     </div>
-
-    <%#
-      チェック型用の hidden input。
-      週次目標値フィールドが非表示の場合でも weekly_target=7 を送信する。
-      data-habit-form-target="weeklyTargetHidden" を付与して
-      Stimulus から数値型切り替え時に無効化（disabled）できるようにする。
-    %>
-    <div data-habit-form-target="weeklyTargetHiddenWrapper"
-         <%= @habit.numeric_type? ? "hidden" : "" %>>
-      <%= f.hidden_field :weekly_target,
-            value: 7,
-            data: { habit_form_target: "weeklyTargetHidden" } %>
-    </div>
-
     <%# 除外する曜日 %>
     <div>
       <label class="block text-sm font-semibold text-gray-700 mb-1">除外する曜日</label>
