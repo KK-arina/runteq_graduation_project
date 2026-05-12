@@ -82,7 +82,8 @@ flowchart LR
 [![D-10 AI APIレート制限](https://img.shields.io/badge/D--10_AI_APIレート制限-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/d-10-ai-rate-limit)
 [![D-11 AIエラーハンドリングUX改善](https://img.shields.io/badge/D--11_AIエラーハンドリングUX改善-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/d-11-ai-error-handling-ux)
 [![E-1 振り返りポイント必須化・気分スコア](https://img.shields.io/badge/E--1_振り返りポイント必須化・気分スコア-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/e-1-weekly-reflection-mood-enhancements)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-34%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![E-2 振り返りスナップショット数値型対応](https://img.shields.io/badge/E--2_振り返りスナップショット数値型対応-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/e-2-habit-snapshot-numeric)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-35%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -182,6 +183,8 @@ flowchart LR
 | #D-10 | AI API レート制限（連打防止）・favicon.ico UnknownFormat修正 | 2026-05-05 | feature/d-10-ai-rate-limit |
 | #D-11 | AI APIエラーハンドリングUX改善（タイムアウト・失敗時） | 2026-05-06 | feature/d-11-ai-error-handling-ux |
 | #E-1 | 振り返りポイント必須化・PMVV必須化・気分スコア・音声入力 | 2026-05-11 | feature/e-1-weekly-reflection-mood-enhancements |
+| #E-2 | 振り返りの習慣スナップショット更新（数値型・単位対応） | 2026-05-13 | feature/e-2-habit-snapshot-numeric |
+
 
 <br>
 
@@ -3829,6 +3832,150 @@ PMVV目標管理の5フィールドも必須化し、入力フォームに必須
 
 <br>
 
+### #E-2: 振り返りの習慣スナップショット更新（数値型・単位対応）
+
+<br>
+
+**ブランチ:** `feature/e-2-habit-snapshot-numeric`<br>
+**完了日:** 2026-05-13<br>
+**概要:** `weekly_reflection_habit_summaries` に数値型習慣の実績値（`actual_value`）と<br>
+単位（`unit`）カラムを追加し、スナップショット保存ロジックをチェック型・数値型の両対応に更新。<br>
+振り返り詳細ページで数値型の実績を「N 分（XX%）」形式で正しく表示できるようにした。
+
+<br>
+
+#### 追加カラム
+
+<br>
+
+| テーブル | 追加カラム | 型 | 目的 |
+|:---|:---|:---|:---|
+| `weekly_reflection_habit_summaries` | `actual_value` | decimal(10,2) | 数値型習慣の週次実績値合計（SUM）。チェック型は NULL |
+| `weekly_reflection_habit_summaries` | `unit` | string | 数値型習慣の単位スナップショット（例: 分, 冊）。チェック型は NULL |
+
+<br>
+
+#### スナップショット保存ロジックの変更
+
+<br>
+
+| 習慣タイプ | 集計方式 | 保存先 | 表示例 |
+|:---|:---|:---|:---|
+| チェック型 | `completed: true` の COUNT | `actual_count` | 「5 / 7 日（71%）」 |
+| 数値型 | `numeric_value` の SUM | `actual_value` + `unit` | 「90 / 120 分（75%）」 |
+
+<br>
+
+#### 技術的な設計ポイント
+
+<br>
+
+**① `to_d`（BigDecimal）でSUMを集計する理由**
+
+<br>
+
+Rails の `decimal` カラムは `BigDecimal` で管理されている。<br>
+`.to_f`（Float）に変換すると浮動小数点の誤差（例: `0.1 + 0.2 ≠ 0.3`）が発生する可能性がある。<br>
+`.to_d`（BigDecimal変換）を使うことで精度を保護した。
+
+<br>
+
+**② `unit` をスナップショットとして保存する理由**
+
+<br>
+
+後から習慣の単位（例: 「分」→「時間」）を変更しても、<br>
+過去の振り返り詳細ページは振り返り時点の単位で正しく表示される。<br>
+習慣名・目標値と同じスナップショット設計を踏襲している。
+
+<br>
+
+**③ `deleted_at: nil` 条件をチェック型にも追加（レビュー反映）**
+
+<br>
+
+変更前はチェック型の `COUNT` クエリに `deleted_at: nil` 条件がなかった。<br>
+数値型（`SUM`）側には設定済みだったため、論理削除除外の条件を両型で統一した。
+
+<br>
+
+**④ `numeric?` メソッドで型判定をスナップショットデータから行う**
+
+<br>
+
+`habit_id` が `on_delete: :nullify` で NULL になっている可能性があるため、<br>
+`habit.numeric_type?` ではなく `actual_value.present?` で判定する設計を採用。<br>
+スナップショットデータ（`actual_value`）を信頼することで、習慣が削除された後も正しく表示できる。
+
+<br>
+
+#### 追加メソッド
+
+<br>
+
+| メソッド | 種別 | 内容 |
+|:---|:---|:---|
+| `numeric?` | インスタンス | `actual_value.present?` で数値型かどうかを判定 |
+| `summary_text` | インスタンス | チェック型:「5 / 7 日（71%）」/ 数値型:「90 / 120 分（75%）」形式で返す |
+
+<br>
+
+**`format("%g")` を使う理由:**<br>
+`%g` は末尾のゼロを除去する書式指定子。<br>
+`90.0 → "90"`、`6.5 → "6.5"` と自動整形されるため「90.0 分」のような冗長な表示を防げる。
+
+<br>
+
+#### あわせて実施した修正
+
+<br>
+
+| 修正内容 | 対象 |
+|:---|:---|
+| プログレスバーの色閾値を3段階（80/50）→4段階（100/70/40）に変更 | `rate_hex_color` / `rate_color` ヘルパー |
+| 全画面のプログレスバーを `rate_hex_color` インラインスタイルに統一 | ダッシュボード / 習慣管理 / 振り返り一覧 / 振り返り詳細 |
+| 習慣管理の進捗数値色を `rate_hex_color` に統一 | `habits/index.html.erb` |
+| 習慣作成フォームの週次目標値送信バグを修正 | `habit_form_controller.js`（hidden input 廃止・number_field 1つで管理） |
+| favicon.ico を追加（404エラー解消） | `public/favicon.ico` |
+| stylesheet の preload 警告を抑制 | `application.html.erb`（`preload: false`） |
+| `achievement_rate_text` メソッドを使い達成率表示を小数点2桁に統一 | `show.html.erb` |
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `db/migrate/20260512120319_add_actual_value_and_unit_to_weekly_reflection_habit_summaries.rb` | 新規作成（actual_value / unit カラム追加） |
+| `app/models/weekly_reflection_habit_summary.rb` | `build_from_habit` を数値型対応・`numeric?` / `summary_text` メソッド追加・バリデーション追加 |
+| `app/views/weekly_reflections/show.html.erb` | 習慣別実績を `summary_text` に統一・`rate_hex_color` に統一・`achievement_rate_text` 使用 |
+| `app/helpers/application_helper.rb` | `rate_hex_color` / `rate_color` を3段階→4段階に変更 |
+| `app/views/habits/index.html.erb` | プログレスバー・進捗数値色を `rate_hex_color` に統一 |
+| `app/views/weekly_reflections/index.html.erb` | プログレスバーを `rate_hex_color` に統一 |
+| `app/javascript/controllers/habit_form_controller.js` | `querySelector` ベースに変更（週次目標値の送信バグ修正） |
+| `app/views/habits/new.html.erb` | hidden input 廃止・number_field 1つで週次目標値を管理 |
+| `app/views/layouts/application.html.erb` | `preload: false` 追加（preload 警告抑制） |
+| `public/favicon.ico` | 新規作成（404エラー解消） |
+| `test/models/weekly_reflection_habit_summary_test.rb` | 数値型テストケース追加・`numeric?` / `summary_text` テスト追加 |
+| `test/fixtures/weekly_reflection_habit_summaries.yml` | `actual_value` / `unit` カラム対応・数値型フィクスチャ追加 |
+| `test/fixtures/habits.yml` | `habit_numeric` フィクスチャ追加 |
+| `test/fixtures/users.yml` | `fixture_only_user` 追加（既存テストの件数アサーション保護） |
+| `test/integration/habit_full_flow_test.rb` | `HabitRecord` 取得をユーザー・習慣で絞り込みに変更 |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+全テスト: 586 runs, 1481 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -5967,6 +6114,96 @@ for line in lines:
 
 <br>
 
+### 83. actual_value.present? でスナップショットの型判定をする（#E-2）
+
+<br>
+
+`weekly_reflection_habit_summaries` の `habit_id` は `on_delete: :nullify` のため、<br>
+習慣が削除されると `NULL` になる可能性がある。<br>
+`habit.numeric_type?` で型判定するとこのケースで `NoMethodError` になる。<br>
+`actual_value.present?` で判定することでスナップショットデータを信頼し、<br>
+習慣が削除された後も「数値型だったか」を正確に判定できる。
+
+<br>
+
+```ruby
+# ❌ habit が nil の可能性がある
+def numeric?
+  habit&.numeric_type?
+end
+
+# ✅ スナップショットデータから判定する
+def numeric?
+  actual_value.present?  # 0.0.present? == true のため実績0の数値型も正しく判定される
+end
+```
+
+<br>
+
+`0.0.present? == true` である点に注意。<br>
+「今週0分だった数値型習慣」も `numeric? = true` となり、「0 / 120 分（0%）」と表示される。<br>
+チェック型（`actual_value: nil`）との区別が正しく行える。
+
+<br>
+
+### 84. 同名の input が2つあるとブラウザは後の値を優先する（#E-2）
+
+<br>
+
+`name="habit[weekly_target]"` を持つ `number_field` と `hidden_field` が両方 DOM に存在すると、<br>
+ブラウザはフォーム送信時に後の方の値（`hidden_field` の `value=7`）を優先する。<br>
+`hidden` 属性を div に付けても内部の input は送信されるため、<br>
+`disabled` 属性の付与も Stimulus のターゲット取得タイミングの問題で不完全になった。<br>
+根本解決は **「同名の input を1つだけにする」** こと。<br>
+`number_field` 1つだけを DOM に残し、Stimulus でチェック型のとき `value=7` に固定して<br>
+数値型のとき入力可能にする設計が最も安定する。
+
+<br>
+
+```javascript
+// ✅ 1つの input をJSで状態制御する
+if (isNumeric) {
+  weeklyTargetField.removeAttribute("hidden")
+  weeklyTargetInput.removeAttribute("max")
+  if (!weeklyTargetInput.value || weeklyTargetInput.value === "7") {
+    weeklyTargetInput.value = 5  // 初期値をリセット
+  }
+} else {
+  weeklyTargetField.setAttribute("hidden", "")
+  weeklyTargetInput.value = 7   // チェック型は7に固定
+  weeklyTargetInput.setAttribute("max", "7")
+}
+```
+
+<br>
+
+### 85. Stimulus の targets より querySelector の方が Turbo 環境で安定する場合がある（#E-2）
+
+<br>
+
+Stimulus の `this.xxxTarget` はコントローラーの `connect()` タイミングやTurboキャッシュの影響で<br>
+正しく取得できないケースが稀に発生する。<br>
+`form.querySelector("[data-habit-form-target='weeklyTargetField']")` のように<br>
+`this.element`（フォーム要素）から直接 `querySelector` で取得することで<br>
+DOM から毎回直接参照するため Turbo 環境でも安定して動作する。<br>
+特に「toggle 系の表示切替」に関わるターゲットは `querySelector` ベースにすることを検討すること。
+
+<br>
+
+### 86. テストの HabitRecord 取得は user と habit で絞り込む（#E-2）
+
+<br>
+
+`HabitRecord.order(created_at: :desc).first` は全ユーザーの最新レコードを取得するため、<br>
+フィクスチャの挿入順序（テストシードの変化）によって別ユーザーのレコードを拾う<br>
+フレーキーテストになる。<br>
+`HabitRecord.find_by!(user: @user, habit: new_habit)` のように<br>
+ユーザーと習慣で絞り込むことで確実に対象レコードを取得できる。<br>
+フィクスチャを追加した際は既存テストの「件数や最新レコードに依存した取得」を<br>
+必ず見直すこと。
+
+<br>
+
 ---
 
 <br>
@@ -6459,7 +6696,7 @@ habitflow/
 │   │   ├── habit.rb                       # 習慣・論理削除・週次進捗計算
 │   │   ├── habit_record.rb                # 日次記録・AM4:00 基準・UNIQUE 制約
 │   │   ├── weekly_reflection.rb           # 変更（E-1）: direct_reason/background_situation/next_action を presence: true・reflection_comment を任意化・mood バリデーション追加（1〜5 整数・allow_nil: true）
-│   │   ├── weekly_reflection_habit_summary.rb # スナップショット・達成率計算
+│   │   ├── weekly_reflection_habit_summary.rb # 変更（E-2）: build_from_habit を数値型対応（SUM集計・to_d）・numeric? / summary_text メソッド追加・actual_value / unit バリデーション追加・deleted_at 条件をチェック型にも統一
 │   │   ├── weekly_reflection_task_summary.rb  # #C-4 新規: タスクスナップショット（was_completedフラグ・priority_label/color_class・create_all_for_reflection!）
 │   │   ├── habit_template.rb                  # #A-5: オンボーディング用習慣テンプレートマスタ
 │   │   ├── habit_excluded_day.rb              # #B-2: 除外日モデル（DAY_NAMES定数・バリデーション）
@@ -6494,7 +6731,7 @@ habitflow/
 │   │       ├── mood_rating_controller.js  # #E-1 新規: 気分スコア★UI（クリックで色変更・ラベル更新・Stimulusコントローラー）
 │   │       └── voice_input_controller.js      # #B-7 新規→#D-1 で voice_field パーシャルと連携強化: 音声入力（Web Speech API）
 │   ├── helpers/
-│   │   └── application_helper.rb                       # #C-6 追加: rate_hex_color / habit_progress_text（達成率カラー・表記の全画面統一）
+│   │   └── application_helper.rb                       # 変更（E-2）: rate_hex_color / rate_color を3段階(80/50)から4段階(100/70/40)に変更・全画面プログレスバー色を統一
 │   ├── jobs/
 │   │   ├── application_job.rb                          # 変更: retry_on / discard_on 追加（#A-3）
 │   │   ├── streak_calculation_job.rb                   # #A-3 #B-3: ストリーク計算（本実装完了）
@@ -6573,7 +6810,8 @@ habitflow/
 │   │   ├── YYYYMMDDHHMMSS_create_weekly_reflection_task_summaries.rb  # #C-4: タスクスナップショットテーブル（on_delete: :nullify・UNIQUE部分インデックス）
 │   │   ├── YYYYMMDDHHMMSS_rename_model_name_in_ai_analyses.rb  # #D-2: model_name → ai_model_name にリネーム（ActiveRecord 予約語回避）
 │   │   ├── YYYYMMDDHHMMSS_add_channel_hash_to_solid_cable_messages.rb  # #D-3: solid_cable 3.0.12 が要求する channel_hash bigint カラムを追加
-│   │   └── YYYYMMDDHHMMSS_add_last_ai_requested_at_to_user_settings.rb  # #D-10: AI レート制限用 last_ai_requested_at カラム追加
+│   │   ├── YYYYMMDDHHMMSS_add_last_ai_requested_at_to_user_settings.rb  # #D-10: AI レート制限用 last_ai_requested_at カラム追加
+│   │   └── 20260512120319_add_actual_value_and_unit_to_weekly_reflection_habit_summaries.rb  # #E-2: actual_value(decimal) / unit(string) カラムを weekly_reflection_habit_summaries に追加
 │   ├── explain_analyze_audit.sql          # #A-6: インデックス監査用SQLスクリプト（7クエリ）
 │   ├── schema.rb                          # 現在のDBスキーマ（自動生成）
 │   └── seeds.rb                           # デモ用サンプルデータ
