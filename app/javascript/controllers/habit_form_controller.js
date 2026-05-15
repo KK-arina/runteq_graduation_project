@@ -101,10 +101,18 @@ export default class extends Controller {
         weeklyTargetField.removeAttribute("hidden")
         if (weeklyTargetInput) {
           weeklyTargetInput.removeAttribute("max")
-          // 値が未入力または7（チェック型デフォルト）の場合は5にリセット
-          if (!weeklyTargetInput.value || weeklyTargetInput.value === "7") {
-            weeklyTargetInput.value = 5
+          // ── E-3 修正: デフォルト値を 5 → 7 に変更する ─────────────────
+          // 変更前: 値が未入力または7（チェック型デフォルト）の場合は5にリセット
+          // 変更後: 値が未入力の場合のみ7にリセット
+          //
+          // 【変更理由】
+          //   チェック型のデフォルトが7なのに、数値型に切り替えると5になる
+          //   という不整合をなくす。新規登録フォームのデフォルトを7に統一する。
+          //   ユーザーが自分で値を入力した場合（"7"以外）はそのまま維持する。
+          if (!weeklyTargetInput.value) {
+          weeklyTargetInput.value = 7
           }
+          // ────────────────────────────────────────────────────────────────
         }
       } else {
         // チェック型: フィールドを非表示にして value=7 に固定する

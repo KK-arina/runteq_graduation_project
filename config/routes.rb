@@ -1,32 +1,15 @@
 # config/routes.rb
 #
-# 【D-8 変更点】
-#   habits リソースの member ブロックに ai_edit / ai_update を追加する。
+# 【E-3 変更点】
+#   weekly_reflections の collection に以下を追加:
+#     post :confirm_proposals  → AI提案を確定してDBに保存する
+#     delete :dismiss_proposal → 個別提案を提案リストから除外する
 #
-# 【変更前】
-#   member do
-#     post  :archive
-#     patch :unarchive
-#   end
-#
-# 【変更後】
-#   member do
-#     post  :archive
-#     patch :unarchive
-#     get   :ai_edit    ← 追加
-#     patch :ai_update  ← 追加
-#   end
-#
-# 【なぜ member を使うのか】
-#   member は /habits/:id/アクション名 の形式になる。
-#   特定の習慣（:id）に対する操作なので member が適切。
-#   collection は /habits/アクション名（:id なし）のため不適切。
-#
-# 【ai_edit に GET を使う理由】
-#   ai_edit はフォームを「表示する」だけ（データを読む）→ GET
-#
-# 【ai_update に PATCH を使う理由】
-#   ai_update は既存レコードの「部分更新」→ PATCH（REST 準拠）
+# 【なぜ collection を使うのか】
+#   confirm_proposals は特定の1件ではなく
+#   「今週の振り返りに紐づく全提案」を対象とする操作のため
+#   :id パラメータが不要 → collection が適切。
+#   member は /resources/:id/action の形式（:id が必須）。
 
 Rails.application.routes.draw do
   root "pages#index"
@@ -47,15 +30,11 @@ Rails.application.routes.draw do
   post   "/login",  to: "sessions#create"
   delete "/logout", to: "sessions#destroy", as: :logout
 
-  # ──────────────────────────────────────────────────────────────────────────
-  # D-7 追加: オンボーディングルーティング
-  # ──────────────────────────────────────────────────────────────────────────
   scope "/onboarding", controller: :onboardings do
     get  "step5",    action: :step5,    as: :onboarding_step5
     post "complete", action: :complete, as: :onboarding_complete
     post "skip",     action: :skip,     as: :onboarding_skip
   end
-  # ──────────────────────────────────────────────────────────────────────────
 
   get "dashboard", to: "dashboards#index", as: :dashboard
 
@@ -80,9 +59,6 @@ Rails.application.routes.draw do
     end
   end
 
-  # ============================================================
-  # D-8 変更: habits の member に ai_edit / ai_update を追加
-  # ============================================================
   resources :habits, only: [ :index, :new, :create, :edit, :update, :destroy ] do
     collection do
       get   :archived
@@ -92,29 +68,37 @@ Rails.application.routes.draw do
     member do
       post  :archive
       patch :unarchive
-      # ── D-8 追加 ────────────────────────────────────────────
-      # ai_edit:
-      #   GET /habits/:id/ai_edit → habits#ai_edit
-      #   AI提案モーダルの「✏️ 編集する」リンクの遷移先。
-      #   session に ai_context フラグを立てて編集フォームを表示する。
-      #   ルートヘルパー: ai_edit_habit_path(@habit)
-      #
-      # ai_update:
-      #   PATCH /habits/:id/ai_update → habits#ai_update
-      #   ai_edit フォームの送信先。
-      #   session のフラグを検証してから保存する。
-      #   ルートヘルパー: ai_update_habit_path(@habit)
       get   :ai_edit
       patch :ai_update
-      # ────────────────────────────────────────────────────────
     end
 
     resources :habit_records, only: [ :create, :update ]
   end
 
+  # ============================================================
+  # E-3 変更: weekly_reflections の collection に AI提案確定を追加
+  # ============================================================
   resources :weekly_reflections, only: [:index, :new, :create, :show] do
     collection do
       post :complete_without_ai
+
+      # ── E-3 追加 ────────────────────────────────────────────────────────
+      #
+      # confirm_proposals:
+      #   POST /weekly_reflections/confirm_proposals
+      #   → weekly_reflections#confirm_proposals
+      #
+      #   「来週の計画を確定」ボタンの送信先。
+      #   AI提案（habits/tasks）を正式にDBへ保存し、
+      #   ai_generated=true をタスクにセットする。
+      #   ルートヘルパー: confirm_proposals_weekly_reflections_path
+      #
+      # ロック解除について:
+      #   WeeklyReflection の complete! はすでに create アクションで
+      #   呼ばれているため、ここではロック解除は不要。
+      #   ただし、is_locked が false になっているかの確認は行う。
+      post :confirm_proposals
+      # ────────────────────────────────────────────────────────────────────
     end
   end
 

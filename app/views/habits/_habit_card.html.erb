@@ -1,0 +1,130 @@
+<%# app/views/habits/_habit_card.html.erb %>
+<%#
+  ==============================================================================
+  習慣カード パーシャル（E-3 新規作成）
+  ==============================================================================
+
+  【このファイルの役割】
+    habits/index.html.erb の習慣カード1件分を切り出したパーシャル。
+    habit_records_controller.rb の Turbo Stream 応答で
+    /habits ページのチェック/数値変更後にカード全体（プログレスバー含む）を
+    置き換えるために使う。
+
+  【受け取るローカル変数】
+    habit           : Habit インスタンス（必須）
+    stats           : { rate:, completed_count:, numeric_sum:, effective_target: } のHash
+    habit_record    : HabitRecord インスタンス or nil（今日の記録）
+    locked          : boolean（PDCAロック中かどうか）
+  ==============================================================================
+%>
+
+<div id="habit_record_<%= habit.id %>"
+     data-habit-id="<%= habit.id %>"
+     class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow flex flex-col"
+     style="border-left: 4px solid <%= habit.color.presence || '#3b82f6' %>">
+
+  <%# カードヘッダー %>
+  <div class="flex justify-between items-start p-4 pb-2">
+    <div class="flex-1 min-w-0 mr-2">
+      <h3 class="text-base font-bold text-gray-800 leading-snug flex items-center gap-2 flex-wrap">
+        <span aria-hidden="true"><%= habit.icon.presence || "📋" %></span>
+        <%= habit.name %>
+        <% if habit.numeric_type? %>
+          <span class="text-xs font-normal text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded">数値型</span>
+        <% end %>
+      </h3>
+      <% if habit.current_streak > 0 %>
+        <div class="mt-1 flex items-center gap-2 flex-wrap">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold
+                       <%= habit.current_streak >= 7 ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700' %>">
+            🔥 <%= habit.current_streak %>日 継続中
+          </span>
+          <% if habit.longest_streak > habit.current_streak %>
+            <span class="text-xs text-gray-400">最高: <%= habit.longest_streak %>日</span>
+          <% end %>
+        </div>
+      <% end %>
+    </div>
+
+    <div class="flex items-center gap-1 flex-shrink-0">
+      <% unless locked %>
+        <button type="button"
+                data-sort-handle
+                class="p-1.5 rounded text-gray-300 hover:text-gray-500
+                       cursor-grab active:cursor-grabbing
+                       focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="ドラッグして並び替え"
+                title="ドラッグして並び替え">
+          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+            <circle cx="7"  cy="5"  r="1.5"/>
+            <circle cx="13" cy="5"  r="1.5"/>
+            <circle cx="7"  cy="10" r="1.5"/>
+            <circle cx="13" cy="10" r="1.5"/>
+            <circle cx="7"  cy="15" r="1.5"/>
+            <circle cx="13" cy="15" r="1.5"/>
+          </svg>
+        </button>
+      <% end %>
+
+      <%= link_to "編集", edit_habit_path(habit),
+            class: "text-xs px-2 py-1 rounded bg-blue-50 text-blue-600
+                    hover:bg-blue-100 transition-colors
+                    focus:outline-none focus:ring-2 focus:ring-blue-500" %>
+
+      <%= render "habits/habit_card_actions", habit: habit, locked: locked %>
+    </div>
+  </div>
+
+  <%# 週次目標と除外日 %>
+  <div class="px-4 pb-2">
+    <% if habit.check_type? %>
+      <span class="text-xs text-gray-400">週次目標: <%= habit.effective_weekly_target %>日</span>
+    <% else %>
+      <span class="text-xs text-gray-400">週次目標: <%= habit.weekly_target %><%= habit.unit.presence || "回" %>/週</span>
+    <% end %>
+    <% excluded_numbers = habit.excluded_day_numbers %>
+    <% if excluded_numbers.any? %>
+      <span class="ml-2 text-xs text-orange-500">
+        除外: <%= excluded_numbers.map { |n| HabitExcludedDay::DAY_NAMES[n] }.join("・") %>
+      </span>
+    <% end %>
+  </div>
+
+  <%# 今日のチェックボックス or 数値入力 %>
+  <div class="px-4 pb-3">
+    <%= render "habit_records/habit_record",
+          habit: habit,
+          habit_record: habit_record %>
+  </div>
+
+  <%# 今週の進捗バー %>
+  <div class="px-4 pb-4 mt-auto">
+    <div class="flex justify-between items-center mb-1">
+      <span class="text-xs text-gray-500">今週の進捗</span>
+      <% if habit.check_type? %>
+        <span class="text-xs font-bold whitespace-nowrap"
+              style="color: <%= rate_hex_color(stats[:rate]) %>">
+          <%= stats[:completed_count] %>/<%= stats[:effective_target] %>日（<%= stats[:rate] %>%）
+        </span>
+      <% else %>
+        <% numeric_sum_display = stats[:numeric_sum].nil? ? 0.0 : stats[:numeric_sum] %>
+        <span class="text-xs font-bold whitespace-nowrap"
+              style="color: <%= rate_hex_color(stats[:rate]) %>">
+          <%= format("%g", numeric_sum_display.round(1)) %>/<%= habit.weekly_target %><%= habit.unit.presence || "回" %>（<%= stats[:rate] %>%）
+        </span>
+      <% end %>
+    </div>
+    <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
+         role="progressbar"
+         aria-valuenow="<%= stats[:rate] %>"
+         aria-valuemin="0"
+         aria-valuemax="100"
+         aria-label="<%= habit.name %> の今週の達成率">
+      <div class="h-2 rounded-full transition-all duration-300"
+           style="width: <%= [stats[:rate].to_i, 100].min %>%;
+                  background-color: <%= rate_hex_color(stats[:rate]) %>">
+      </div>
+    </div>
+  </div>
+
+</div>

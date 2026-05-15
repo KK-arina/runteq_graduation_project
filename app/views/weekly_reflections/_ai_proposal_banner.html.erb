@@ -1,0 +1,90 @@
+<%# app/views/weekly_reflections/_ai_proposal_banner.html.erb %>
+<%#
+  ==============================================================================
+  AI提案バナー パーシャル（E-3 新規作成）
+  ==============================================================================
+
+  【このファイルの役割】
+    AI分析の状態（分析中 / 完了）に応じてバナーを表示する。
+    WeeklyReflectionAnalysisJob の broadcast_completion でリアルタイム更新される。
+
+  【id="weekly_reflection_ai_banner" が必須の理由】
+    WeeklyReflectionAnalysisJob の broadcast_replace_to の target 名と
+    完全に一致させる必要がある。一致しないと DOM が更新されない。
+
+  【受け取るローカル変数】
+    latest_reflection  : WeeklyReflection インスタンス or nil
+    latest_ai_analysis : AiAnalysis インスタンス or nil
+    current_purpose    : UserPurpose インスタンス or nil
+  ==============================================================================
+%>
+
+<div id="weekly_reflection_ai_banner">
+
+  <% if latest_ai_analysis.present? %>
+    <%# AI分析完了: モーダルと提案確認バナーを表示 %>
+    <%= render "weekly_reflections/ai_proposal_modal",
+          ai_analysis:  latest_ai_analysis,
+          user_purpose: current_purpose,
+          reflection:   latest_reflection %>
+
+    <div class="max-w-3xl mx-auto px-4 pb-6">
+      <div class="bg-indigo-50 border border-indigo-200 rounded-2xl p-5">
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+          <div class="flex items-center gap-3">
+            <span class="text-2xl" aria-hidden="true">🤖</span>
+            <div>
+              <p class="font-bold text-indigo-800 text-sm">来週のAI提案が完了しました！</p>
+              <p class="text-xs text-indigo-600 mt-0.5">
+                習慣・タスクの提案をチェックして来週の計画を確定しましょう
+              </p>
+            </div>
+          </div>
+          <%#
+            onclick で window.dispatchEvent:
+              ai-proposal-modal コントローラーの connect() で登録した
+              'open-ai-proposal-modal' リスナーを呼び出す。
+          %>
+          <button type="button"
+                  onclick="window.dispatchEvent(new CustomEvent('open-ai-proposal-modal'))"
+                  class="flex-shrink-0 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700
+                         text-white font-bold text-sm rounded-xl transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+            AI提案を確認する →
+          </button>
+        </div>
+      </div>
+    </div>
+
+  <% elsif latest_reflection.present? %>
+    <%#
+      AI分析中バナー:
+        ai_analyses が既に存在する（crisis スキップ / パース失敗）場合は表示しない。
+        存在しない（= ジョブが実行中）場合のみ「分析中」を表示する。
+    %>
+    <% has_analysis_record = latest_reflection.ai_analyses.exists? %>
+    <% unless has_analysis_record %>
+      <div class="max-w-3xl mx-auto px-4 pb-6">
+        <div class="bg-gray-50 border border-gray-200 rounded-2xl p-5">
+          <div class="flex items-center gap-3">
+            <span class="text-2xl animate-spin" aria-hidden="true">⏳</span>
+            <div>
+              <p class="font-bold text-gray-700 text-sm">AI分析中です...</p>
+              <p class="text-xs text-gray-500 mt-0.5">
+                分析が完了するとこのバナーが自動で更新されます（リロード不要）
+              </p>
+            </div>
+            <button type="button"
+                    onclick="location.reload()"
+                    class="ml-auto flex-shrink-0 px-4 py-2 bg-gray-200 hover:bg-gray-300
+                           text-gray-700 text-sm font-semibold rounded-xl transition-colors">
+              更新する
+            </button>
+          </div>
+        </div>
+      </div>
+    <% end %>
+
+  <% end %>
+
+</div>

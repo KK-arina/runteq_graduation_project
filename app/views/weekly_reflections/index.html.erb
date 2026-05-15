@@ -24,6 +24,18 @@
 
 <% content_for :title, "週次振り返り | HabitFlow" %>
 
+<%# ── E-3 追加: AI分析完了をリアルタイムで受信する ──────────────────────── %>
+<%#
+  turbo_stream_from:
+    WeeklyReflectionAnalysisJob の broadcast_completion が送信する
+    "weekly_reflection_#{reflection.id}" チャンネルを購読する。
+    AI分析が完了したとき id="weekly_reflection_ai_banner" が自動更新される。
+    solid_cable（PostgreSQL ブローカー）を使うため Redis 不要。
+%>
+<% if @latest_reflection %>
+  <%= turbo_stream_from "weekly_reflection_#{@latest_reflection.id}" %>
+<% end %>
+
 <div class="max-w-3xl mx-auto px-4 py-8">
 
   <%# ── ページヘッダー ── %>
@@ -188,6 +200,12 @@
   </div>
 
 </div>
+
+<%# E-3: AI提案バナー（分析中 / 完了をリアルタイム切替） %>
+<%= render "weekly_reflections/ai_proposal_banner",
+      latest_reflection:  @latest_reflection,
+      latest_ai_analysis: @latest_ai_analysis,
+      current_purpose:    @current_purpose %>
 
 <%#
   ─────────────────────────────────────────────────────────────────────────────
