@@ -37,6 +37,19 @@ class WeeklyReflection < ApplicationRecord
   has_many :task_summaries,
            class_name: "WeeklyReflectionTaskSummary",
            dependent: :destroy
+  
+  # ── E-3 追加: ai_analyses アソシエーション ────────────────────────────────
+  #
+  # 【なぜ has_many :ai_analyses が必要なのか】
+  #   weekly_reflections_controller.rb の index アクションで
+  #   latest_completed_reflection.ai_analyses.latest.where.not(actions_json: nil).first
+  #   のようにアソシエーション経由で AI 分析結果を取得するため。
+  #
+  # dependent: :destroy
+  #   WeeklyReflection を削除したとき、紐付く AiAnalysis も削除する。
+  #   schema.rb で add_foreign_key "ai_analyses", "weekly_reflections", on_delete: :cascade
+  #   と定義されているが、Rails 側にも書くことでコードの意図が明確になる。
+  has_many :ai_analyses, dependent: :destroy
 
   # ============================================================
   # コールバック

@@ -118,34 +118,15 @@
 
       <% @habits.each do |habit| %>
         <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
-        <div class="mb-3">
-          <div class="flex justify-between items-center mb-1 gap-2">
-            <span class="text-sm text-gray-700 flex-1 min-w-0 flex items-center gap-2">
-              <span aria-hidden="true" class="flex-shrink-0"><%= habit.icon.presence || "📋" %></span>
-              <span class="truncate"><%= habit.name %></span>
-              <% if habit.current_streak > 0 %>
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold flex-shrink-0
-                             <%= habit.current_streak >= 7 ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700' %>">
-                  🔥 <%= habit.current_streak %>日
-                </span>
-              <% end %>
-            </span>
-            <span class="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
-              <%= habit_progress_text(habit, stats) %>
-            </span>
-          </div>
-          <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
-               role="progressbar"
-               aria-valuenow="<%= stats[:rate] %>"
-               aria-valuemin="0"
-               aria-valuemax="100"
-               aria-label="<%= habit.name %> の今週の達成率">
-            <div class="h-2 rounded-full transition-all duration-300"
-                 style="width: <%= stats[:rate] %>%;
-                        background-color: <%= rate_hex_color(stats[:rate]) %>">
-            </div>
-          </div>
-        </div>
+        <%#
+          id="dashboard_habit_stat_#{habit.id}":
+            habit_records_controller の Turbo Stream 応答で
+            ダッシュボードの習慣達成率バーを個別に置き換えるために使う。
+            _dashboard_habit_stat パーシャルに切り出してリアルタイム更新に対応する。
+        %>
+        <%= render "dashboards/habit_stat_row",
+              habit:  habit,
+              stats:  stats %>
       <% end %>
     <% end %>
   </div>

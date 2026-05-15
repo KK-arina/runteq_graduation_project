@@ -1,0 +1,51 @@
+<%# app/views/dashboards/_habit_stat_row.html.erb %>
+<%#
+  ==============================================================================
+  ダッシュボード 習慣達成率バー パーシャル（E-3 新規作成）
+  ==============================================================================
+
+  【このファイルの役割】
+    ダッシュボードの「今週の習慣達成率」カード内の
+    習慣1件分のプログレスバー行を切り出したパーシャル。
+    habit_records_controller の Turbo Stream 応答で
+    チェック/数値変更後にリアルタイム更新される。
+
+  【id="dashboard_habit_stat_#{habit.id}" が必須の理由】
+    habit_records_controller の build_turbo_stream_response が
+    このIDを target にして turbo_stream.replace を送信する。
+    IDが一致しないと DOM が更新されない。
+
+  【受け取るローカル変数】
+    habit : Habit インスタンス
+    stats : { rate:, completed_count:, numeric_sum:, effective_target: } のHash
+  ==============================================================================
+%>
+
+<div id="dashboard_habit_stat_<%= habit.id %>" class="mb-3">
+  <div class="flex justify-between items-center mb-1 gap-2">
+    <span class="text-sm text-gray-700 flex-1 min-w-0 flex items-center gap-2">
+      <span aria-hidden="true" class="flex-shrink-0"><%= habit.icon.presence || "📋" %></span>
+      <span class="truncate"><%= habit.name %></span>
+      <% if habit.current_streak > 0 %>
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-bold flex-shrink-0
+                     <%= habit.current_streak >= 7 ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700' %>">
+          🔥 <%= habit.current_streak %>日
+        </span>
+      <% end %>
+    </span>
+    <span class="text-xs text-gray-500 flex-shrink-0 whitespace-nowrap">
+      <%= habit_progress_text(habit, stats) %>
+    </span>
+  </div>
+  <div class="h-2 bg-gray-200 rounded-full overflow-hidden"
+       role="progressbar"
+       aria-valuenow="<%= stats[:rate] %>"
+       aria-valuemin="0"
+       aria-valuemax="100"
+       aria-label="<%= habit.name %> の今週の達成率">
+    <div class="h-2 rounded-full transition-all duration-300"
+         style="width: <%= stats[:rate] %>%;
+                background-color: <%= rate_hex_color(stats[:rate]) %>">
+    </div>
+  </div>
+</div>

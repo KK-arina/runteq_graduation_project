@@ -46,30 +46,21 @@ class UserPurposesController < ApplicationController
     @user_purpose.analysis_state = :pending
 
     if @user_purpose.save
-      # ── D-5 追加: 危機ワード検出時の分岐 ────────────────────────────────
-      #
-      # 【なぜ save 後に確認するのか】
-      #   before_validation コールバックで crisis_word_detected が
-      #   セットされるため、save（バリデーション実行後）のタイミングで
-      #   このフラグを確認できる。
+      # ── 古い UserPurpose を非アクティブ化する ────────────────────────────
+      current_user.user_purposes
+                  .where(is_active: true)
+                  .where.not(id: @user_purpose.id)
+                  .update_all(is_active: false)
+      # ────────────────────────────────────────────────────────────────────────
+
       if @user_purpose.crisis_word_detected?
         Rails.logger.warn "[UserPurposesController#create] 危機ワード検出: user_id=#{current_user.id}"
-
-        # ── D-5 修正: analysis_state を failed に更新する ──────────────────
-        # 【理由】
-        #   crisis 検出時は AI 分析ジョブをスキップするため、
-        #   pending のままだと「AI分析待機中...」バナーが永久に表示される。
-        #   update_columns でバリデーション・コールバックをスキップして
-        #   状態だけ更新する（deactivate_previous_versions の再実行を防ぐ）。
         @user_purpose.update_columns(analysis_state: UserPurpose.analysis_states[:failed])
-
         record_crisis_analysis_for_purpose(@user_purpose)
         flash[:crisis] = true
-        redirect_to user_purpose_path,
-                    notice: "目標を保存しました。"
+        redirect_to user_purpose_path, notice: "目標を保存しました。"
         return
       end
-      # ────────────────────────────────────────────────────────────────────────
 
       PurposeAnalysisJob.perform_later(@user_purpose.id)
       redirect_to user_purpose_path,
@@ -92,20 +83,33 @@ class UserPurposesController < ApplicationController
     @user_purpose.analysis_state = :pending
 
     if @user_purpose.save
-      # ── D-5 追加: 危機ワード検出時の分岐 ────────────────────────────────
+      # ── 古い UserPurpose を非アクティブ化する ────────────────────────────
+      #
+      # 【なぜ必要か】
+      #   update アクションは既存レコードを更新せず、
+      #   新しいレコードを build + save して「バージョン管理」する設計。
+      #   しかし保存後に古いレコードを is_active: false にしないと、
+      #   UserPurpose.current_for（active_for スコープ）が複数件返してしまい
+      #   「最新の目標」が正しく取得できない。
+      #
+      # 【update_all を使う理由】
+      #   each { update! } は N+1 更新になる。
+      #   update_all は1回の SQL UPDATE で全件処理できる。
+      #   自分自身（@user_purpose.id）は除外する。
+      current_user.user_purposes
+                  .where(is_active: true)
+                  .where.not(id: @user_purpose.id)
+                  .update_all(is_active: false)
+      # ────────────────────────────────────────────────────────────────────────
+
       if @user_purpose.crisis_word_detected?
         Rails.logger.warn "[UserPurposesController#update] 危機ワード検出: user_id=#{current_user.id}"
-
-        # ── D-5 修正: analysis_state を failed に更新する ──────────────────
         @user_purpose.update_columns(analysis_state: UserPurpose.analysis_states[:failed])
-
         record_crisis_analysis_for_purpose(@user_purpose)
         flash[:crisis] = true
-        redirect_to user_purpose_path,
-                    notice: "目標を更新しました。"
+        redirect_to user_purpose_path, notice: "目標を更新しました。"
         return
       end
-      # ────────────────────────────────────────────────────────────────────────
 
       PurposeAnalysisJob.perform_later(@user_purpose.id)
       redirect_to user_purpose_path,
@@ -166,49 +170,82 @@ class UserPurposesController < ApplicationController
       redirect_to new_user_purpose_path, alert: "目標が登録されていません。"
       return
     end
+
     @ai_analysis = AiAnalysis.where(
       user_purpose_id: @current_purpose.id,
       is_latest:       true,
       analysis_type:   AiAnalysis.analysis_types[:purpose_breakdown]
     ).first
+
     unless @ai_analysis
       redirect_to user_purpose_path, alert: "AI分析結果が見つかりません。"
       return
     end
+
+    # ── 二重送信防止チェック ─────────────────────────────────────────────
+    #
+    # 【判定ロジック】
+    #   この AI 分析が作成された時刻以降に
+    #   ai_generated: true かつ task_type: improve のタスクが存在すれば確定済みとみなす。
+    #   weekly_reflections#confirm_proposals と同じ設計方針。
+    already_confirmed = current_user.tasks
+                                    .where(ai_generated: true, task_type: :improve)
+                                    .where('created_at > ?', @ai_analysis.created_at)
+                                    .exists?
+
+    if already_confirmed
+      redirect_to dashboard_path, notice: "提案は既に反映済みです。"
+      return
+    end
+
     actions = (@ai_analysis.actions_json || []).map { |a|
       a.is_a?(Hash) ? a.with_indifferent_access : a
     }
     habit_proposals = actions.select { |a| a[:type] == "habit" }
     task_proposals  = actions.select { |a| a[:type] == "task" }
+
     selected_habit_indices = Array(params[:habit_indices]).map(&:to_i)
     selected_task_indices  = Array(params[:task_indices]).map(&:to_i)
+
     if selected_habit_indices.empty? && selected_task_indices.empty?
       redirect_to ai_result_user_purpose_path,
                   alert: "少なくとも1つの提案を選択してください。"
       return
     end
+
     created_habits = 0
     created_tasks  = 0
+
     ActiveRecord::Base.transaction do
       selected_habit_indices.each do |idx|
         proposal = habit_proposals[idx]
         next unless proposal
+
+        # ── weekly_target を frequency から計算する（修正: 5 → 動的計算）──
+        # 変更前: weekly_target: 5 のハードコード
+        # 変更後: frequency 文字列から weekly_target を計算する
+        #         WeeklyReflectionsController と同じロジックを使う
+        weekly_target = parse_frequency_to_weekly_target(proposal[:frequency])
+
         current_user.habits.create!(
           name:             proposal[:title].to_s.truncate(50),
           measurement_type: :check_type,
-          weekly_target:    5
+          weekly_target:    weekly_target
         )
         created_habits += 1
       end
+
       selected_task_indices.each do |idx|
         proposal = task_proposals[idx]
         next unless proposal
+
         priority_value = case proposal[:priority].to_s.downcase
                          when "must"   then :must
                          when "should" then :should
                          when "could"  then :could
                          else               :should
                          end
+
         current_user.tasks.create!(
           title:        proposal[:title].to_s.truncate(100),
           priority:     priority_value,
@@ -218,10 +255,12 @@ class UserPurposesController < ApplicationController
         created_tasks += 1
       end
     end
+
     parts = []
     parts << "習慣 #{created_habits} 件" if created_habits > 0
     parts << "タスク #{created_tasks} 件" if created_tasks > 0
     redirect_to dashboard_path, notice: "#{parts.join('、')}をダッシュボードに追加しました！"
+
   rescue ActiveRecord::RecordInvalid => e
     Rails.logger.error "[apply_proposals] RecordInvalid: #{e.message}"
     redirect_to ai_result_user_purpose_path,
@@ -269,5 +308,27 @@ class UserPurposesController < ApplicationController
       :value,
       :current_situation
     )
+  end
+
+    # ── E-3 追加: parse_frequency_to_weekly_target ────────────────────────────
+  #
+  # 【役割】
+  #   AI が返す frequency 文字列（"毎日", "週3回" など）を
+  #   Habit の weekly_target（整数）に変換する。
+  #   WeeklyReflectionsController と同じロジックを共有する。
+  #
+  # 【変換ルール】
+  #   "毎日"   → 7
+  #   "週N回"  → N（1〜7 の範囲に clamp）
+  #   それ以外 → 7（毎日をデフォルトにする）
+  def parse_frequency_to_weekly_target(frequency)
+    return 7 if frequency.blank?
+    freq_str = frequency.to_s
+    return 7 if freq_str.include?("毎日")
+    if freq_str =~ /週(\d+)回/
+      $1.to_i.clamp(1, 7)
+    else
+      7
+    end
   end
 end

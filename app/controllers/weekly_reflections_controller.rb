@@ -56,6 +56,32 @@ class WeeklyReflectionsController < ApplicationController
     @current_week_reflection = WeeklyReflection.find_or_build_for_current_week(current_user)
     @habits = current_user.habits.active.includes(:habit_excluded_days)
     @habit_stats = build_habit_stats(@habits, current_user)
+
+    # ── E-3 追加: AI提案モーダル用の変数をセットする ─────────────────────────
+    #
+    # @latest_reflection:
+    #   直近の完了済み振り返りレコード。
+    #   _ai_proposal_modal_content.html.erb の hidden_field_tag に渡すため別変数で保持する。
+    #
+    # @latest_ai_analysis:
+    #   @latest_reflection に紐付く最新の AI 分析結果。
+    #   actions_json が nil のもの（crisis スキップ・パース失敗）は除外する。
+    #
+    # @current_purpose:
+    #   PMVV との整合性表示に使う現在有効な UserPurpose。
+    #   nil の場合（PMVV 未設定）は整合性セクションを非表示にする。
+    @latest_reflection = @weekly_reflections.first
+
+    if @latest_reflection
+      @latest_ai_analysis = @latest_reflection
+                              .ai_analyses
+                              .latest
+                              .where.not(actions_json: nil)
+                              .first
+    end
+
+    @current_purpose = UserPurpose.current_for(current_user)
+    # ────────────────────────────────────────────────────────────────────────
   end
 
   def new
@@ -197,6 +223,112 @@ class WeeklyReflectionsController < ApplicationController
     end
   end
 
+  def confirm_proposals
+    reflection = current_user.weekly_reflections.find(params[:reflection_id])
+
+    unless reflection.completed?
+      redirect_to weekly_reflections_path, alert: "この振り返りはまだ完了していません。"
+      return
+    end
+
+    # ── 二重送信防止チェック（修正版）────────────────────────────────────
+    #
+    # 【変更前の問題】
+    #   「週の範囲に ai_generated タスクが存在するか」で判定していたため、
+    #   目標管理（user_purposes#apply_proposals）から登録した ai_generated タスクも
+    #   「確定済み」と誤判定してしまい、振り返りからの確定ができなくなっていた。
+    #
+    # 【変更後の設計】
+    #   この振り返りに紐付く AiAnalysis の actions_json から生成されたタスクが
+    #   既に存在するかを判定する。
+    #   具体的には「この AiAnalysis が作成された時刻以降に作成された
+    #   ai_generated タスクが存在するか」で判定する。
+    #   AiAnalysis の created_at を基準にすることで、目標管理からの登録と
+    #   振り返りからの登録を区別できる。
+    ai_analysis = reflection.ai_analyses.latest.where.not(actions_json: nil).first
+
+    unless ai_analysis&.actions_json.present?
+      redirect_to weekly_reflections_path,
+                  alert: "AI分析結果が見つかりませんでした。分析完了後に再度お試しください。"
+      return
+    end
+
+    # ai_analysis が作成されてから確定ボタンを押すまでの間に
+    # 同じユーザーが ai_generated タスクを作成していれば「確定済み」とみなす。
+    # ai_analysis.created_at を基準にすることで目標管理からの登録と区別する。
+    already_confirmed = current_user.tasks
+                                    .where(ai_generated: true, task_type: :improve)
+                                    .where('created_at > ?', ai_analysis.created_at)
+                                    .exists?
+
+    if already_confirmed
+      Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] 二重送信を検知: reflection_id=#{reflection.id}"
+      redirect_to dashboard_path, notice: "来週の計画は既に確定済みです。"
+      return
+    end
+
+    # ── インデックスから提案を特定する ────────────────────────────────────
+    habit_indices = Array(params[:habit_indices]).map(&:to_i)
+    task_indices  = Array(params[:task_indices]).map(&:to_i)
+
+    all_actions   = ai_analysis.actions_json.map { |a| a.with_indifferent_access }
+    habit_actions = all_actions.select { |a| a[:type] == "habit" }
+    task_actions  = all_actions.select { |a| a[:type] == "task" }
+
+    saved_habit_count = 0
+    saved_task_count  = 0
+
+    ApplicationRecord.transaction do
+      if reflection.is_locked?
+        reflection.update!(is_locked: false)
+        Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] is_locked を false に更新: reflection_id=#{reflection.id}"
+      end
+
+      habit_indices.each do |idx|
+        proposal = habit_actions[idx]
+        next unless proposal
+        weekly_target = parse_frequency_to_weekly_target(proposal[:frequency])
+        habit = current_user.habits.build(
+          name:             proposal[:title].to_s.truncate(50),
+          weekly_target:    weekly_target,
+          measurement_type: :check_type
+        )
+        habit.save!
+        saved_habit_count += 1
+      end
+
+      task_indices.each do |idx|
+        proposal = task_actions[idx]
+        next unless proposal
+        priority = %w[must should could].include?(proposal[:priority].to_s.downcase) ?
+                     proposal[:priority].to_s.downcase : "should"
+        task = current_user.tasks.build(
+          title:        proposal[:title].to_s.truncate(100),
+          priority:     priority,
+          task_type:    :improve,
+          ai_generated: true,
+          status:       :todo
+        )
+        task.save!
+        saved_task_count += 1
+      end
+    end
+
+    total = saved_habit_count + saved_task_count
+    flash[:notice] = total > 0 ?
+      "来週の計画を確定しました！習慣#{saved_habit_count}件・タスク#{saved_task_count}件を追加しました🎉" :
+      "来週の計画を確定しました！（提案の選択なし）"
+
+    redirect_to dashboard_path
+
+  rescue ActiveRecord::RecordNotFound
+    redirect_to weekly_reflections_path, alert: "振り返りが見つかりませんでした。"
+
+  rescue ActiveRecord::RecordInvalid => e
+    Rails.logger.error "[WeeklyReflectionsController#confirm_proposals] RecordInvalid: #{e.message}"
+    redirect_to weekly_reflections_path, alert: "保存中にエラーが発生しました。再試行してください。"
+  end
+
   def show
     @habit_summaries = @weekly_reflection.habit_summaries
                                          .order(achievement_rate: :desc)
@@ -325,6 +457,38 @@ class WeeklyReflectionsController < ApplicationController
         hash[habit.id] = { rate: rate, completed_count: nil, numeric_sum: numeric_sum,
                            effective_target: habit.weekly_target }
       end
+    end
+  end
+
+  # ── E-3 修正: parse_frequency_to_weekly_target ────────────────────────────
+  #
+  # 【修正内容】
+  #   デフォルト値を 5 → 7 に変更する。
+  #
+  # 【変更理由】
+  #   習慣の新規登録フォームでは check_type のデフォルトが weekly_target: 7（毎日）。
+  #   AI提案から登録される習慣も同じ基準に合わせる。
+  #   frequency が "毎日" 以外の場合（"週N回" 以外の不明な文字列）も
+  #   7（毎日）をデフォルトにすることで、ユーザーが後で減らす方向で調整できる。
+  #   「5日のつもりが7日になった」より
+  #   「7日のつもりが5日になった」の方が困らないという UX 判断。
+  #
+  # 【変換ルール】
+  #   "毎日"   → 7
+  #   "週N回"  → N（1〜7 の範囲に clamp）
+  #   それ以外 → 7（変更: 5 → 7）
+  def parse_frequency_to_weekly_target(frequency)
+    return 7 if frequency.blank?  # 変更: 5 → 7
+
+    freq_str = frequency.to_s
+    return 7 if freq_str.include?("毎日")
+
+    # "週N回" のパターンから数値を抽出する
+    # /週(\d+)回/ : "週" の後の数字を capture group で取得する
+    if freq_str =~ /週(\d+)回/
+      $1.to_i.clamp(1, 7)
+    else
+      7  # 変更: 5 → 7（"週N回" 以外の不明なパターンも毎日をデフォルトにする）
     end
   end
 end

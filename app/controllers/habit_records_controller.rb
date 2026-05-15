@@ -1,27 +1,34 @@
 # app/controllers/habit_records_controller.rb
 #
 # ==============================================================================
-# HabitRecordsController（B-7 最終修正版）
+# HabitRecordsController（E-3 修正: ページ別 Turbo Stream 対応）
 # ==============================================================================
 #
-# 【修正内容】
+# 【E-3 修正内容】
+#   リクエスト元のページ（/habits or /dashboard）を判定して
+#   Turbo Stream の応答を切り替える。
 #
-#   Service が NOT_PROVIDED を使った部分更新設計になったため、
-#   「送られてきた項目だけ」をサービスに渡す。
+#   /habits ページ:
+#     turbo_stream.replace("habit_record_#{@habit.id}", partial: "habits/habit_card", ...)
+#     → カード全体（プログレスバー含む）を置き換える
+#     → id="habit_record_#{habit.id}" が habits/_habit_card.html.erb のラッパーと一致
 #
-#   NOT_PROVIDED = :not_provided は HabitRecordSaveService で定義した定数。
-#   params にキー自体がない場合は NOT_PROVIDED を渡すことで
-#   「この項目は更新しない」という意図を Service に伝える。
+#   /dashboard ページ（その他）:
+#     turbo_stream.replace("habit_record_row_#{@habit.id}", partial: "habit_records/habit_record", ...)
+#     → チェックボックス/数値入力部分だけを置き換える（既存の動作を維持）
+#     → ダッシュボードにプログレスバーは個別カードとして存在しないため不要
 #
+#   【なぜ referer で判定するのか】
+#     Turbo Stream リクエストは Accept ヘッダーで識別できるが、
+#     「どのページから来たか」は request.referer で判定する。
+#     params に page: "habits" を含める方法もあるが、
+#     既存の JS（habit_record_controller.js）を変更せずに済む referer 判定を採用。
 # ==============================================================================
 
 class HabitRecordsController < ApplicationController
   before_action :require_login
   before_action :set_habit
 
-  # ============================================================
-  # POST /habits/:habit_id/habit_records
-  # ============================================================
   def create
     service_params = parse_service_params
 
@@ -37,11 +44,7 @@ class HabitRecordsController < ApplicationController
       @habit_record = result[:habit_record]
       respond_to do |format|
         format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            "habit_record_row_#{@habit.id}",
-            partial: "habit_records/habit_record",
-            locals:  { habit: @habit, habit_record: @habit_record }
-          )
+          render turbo_stream: build_turbo_stream_response(@habit_record)
         end
         format.html { redirect_to dashboard_path, notice: "記録を保存しました" }
       end
@@ -54,9 +57,6 @@ class HabitRecordsController < ApplicationController
     end
   end
 
-  # ============================================================
-  # PATCH /habits/:habit_id/habit_records/:id
-  # ============================================================
   def update
     @habit_record = current_user.habit_records.find(params[:id])
 
@@ -78,11 +78,7 @@ class HabitRecordsController < ApplicationController
       @habit_record = result[:habit_record]
       respond_to do |format|
         format.turbo_stream do
-          render turbo_stream: turbo_stream.replace(
-            "habit_record_row_#{@habit.id}",
-            partial: "habit_records/habit_record",
-            locals:  { habit: @habit, habit_record: @habit_record }
-          )
+          render turbo_stream: build_turbo_stream_response(@habit_record)
         end
         format.html { redirect_to dashboard_path, notice: "記録を更新しました" }
       end
@@ -103,22 +99,90 @@ class HabitRecordsController < ApplicationController
     head :not_found and return
   end
 
-  # ── parse_service_params（最終修正版）──────────────────────────────────────
+  # ── E-3 修正: build_turbo_stream_response ─────────────────────────────────
   #
-  # 【修正後の設計】
-  #   params にキーが存在するかどうかで「送られてきたか」を判断する。
-  #   params.key?(:memo) が false → memo は送られていない → NOT_PROVIDED を渡す
-  #   params.key?(:memo) が true  → memo が送られてきた  → その値を渡す
+  # 【修正内容】
+  #   ダッシュボードの「今週の習慣達成率」カードも更新対象に追加する。
   #
-  # 【params.key? を使う理由】
-  #   params[:memo] だと、キーがない場合も nil が返るため
-  #   「送られなかった」と「空文字で送られた」の区別ができない。
-  #   params.key?(:memo) ならキー自体の有無を確認できる。
+  # 【返す Turbo Stream の数】
+  #   /habits ページ: 1件（habit_card 全体の置き換え）
+  #   それ以外:       2件（habit_record_row + dashboard_habit_stat）
+  #
+  # 【配列で複数の Turbo Stream を返す方法】
+  #   render turbo_stream: [stream1, stream2] で複数の置き換えを1回のレスポンスで送れる。
+  #   Turbo はレスポンス内の全ての <turbo-stream> 要素を順番に処理する。
+  def build_turbo_stream_response(habit_record)
+    from_habits_page = request.referer&.include?("/habits")
+
+    if from_habits_page
+      # /habits ページ: カード全体（プログレスバー含む）を置き換える
+      turbo_stream.replace(
+        "habit_record_#{@habit.id}",
+        partial: "habits/habit_card",
+        locals:  {
+          habit:        @habit,
+          stats:        build_habit_stats(@habit, current_user),
+          habit_record: habit_record,
+          locked:       locked?
+        }
+      )
+    else
+      # ダッシュボード等: チェックボックス部分 + 達成率バーの2件を更新する
+      #
+      # 【なぜ配列で返すのか】
+      #   ダッシュボードには2つの更新対象がある:
+      #   1. id="habit_record_row_#{habit.id}": 今日の習慣チェックエリア
+      #   2. id="dashboard_habit_stat_#{habit.id}": 今週の習慣達成率バー
+      #   両方を1回のリクエストで同時に更新するために配列で返す。
+      stats = build_habit_stats(@habit, current_user)
+
+      [
+        # 今日の習慣チェックエリア（既存の動作を維持）
+        turbo_stream.replace(
+          "habit_record_row_#{@habit.id}",
+          partial: "habit_records/habit_record",
+          locals:  { habit: @habit, habit_record: habit_record }
+        ),
+        # 今週の習慣達成率バー（新規追加）
+        turbo_stream.replace(
+          "dashboard_habit_stat_#{@habit.id}",
+          partial: "dashboards/habit_stat_row",
+          locals:  { habit: @habit, stats: stats }
+        )
+      ]
+    end
+  end
+
+  # ── E-3 追加: build_habit_stats ───────────────────────────────────────────
+  #
+  # 【役割】
+  #   1件の習慣の今週の達成統計を計算して返す。
+  #   チェック/数値変更後に最新のプログレスバー用データを生成する。
+  def build_habit_stats(habit, user)
+    today      = HabitRecord.today_for_record
+    week_start = today.beginning_of_week(:monday)
+    week_range = week_start..today
+
+    if habit.check_type?
+      target          = habit.effective_weekly_target
+      completed_count = HabitRecord
+                          .where(user: user, habit: habit, record_date: week_range, completed: true)
+                          .count
+      rate = target.zero? ? 0 : ((completed_count.to_f / target) * 100).clamp(0, 100).floor
+      { rate: rate, completed_count: completed_count, numeric_sum: nil, effective_target: target }
+    else
+      numeric_sum = HabitRecord
+                     .where(user: user, habit: habit, record_date: week_range, deleted_at: nil)
+                     .sum(:numeric_value)
+                     .to_f
+      rate = habit.weekly_target.zero? ? 0 : ((numeric_sum / habit.weekly_target) * 100).clamp(0, 100).floor
+      { rate: rate, completed_count: nil, numeric_sum: numeric_sum, effective_target: habit.weekly_target }
+    end
+  end
+
   def parse_service_params
-    # NOT_PROVIDED 定数を Service から参照する
     not_provided = HabitRecordSaveService::NOT_PROVIDED
 
-    # completed: チェック型でのみ送られてくる
     completed =
       if params.key?(:completed)
         params[:completed] == "1"
@@ -126,7 +190,6 @@ class HabitRecordsController < ApplicationController
         not_provided
       end
 
-    # numeric_value: 数値型でのみ送られてくる
     numeric_value =
       if params.key?(:numeric_value)
         parse_numeric_value
@@ -134,10 +197,8 @@ class HabitRecordsController < ApplicationController
         not_provided
       end
 
-    # memo: メモ保存操作のときのみ送られてくる
     memo =
       if params.key?(:memo)
-        # &.strip.presence で nil/空文字/スペースのみを nil に変換する
         params[:memo]&.strip.presence
       else
         not_provided
@@ -145,12 +206,10 @@ class HabitRecordsController < ApplicationController
 
     { completed: completed, numeric_value: numeric_value, memo: memo }
   end
-  # ────────────────────────────────────────────────────────────────────────────
 
   def parse_numeric_value
     raw = params[:numeric_value].presence
     return nil if raw.nil?
-
     Float(raw)
   rescue ArgumentError, TypeError
     nil

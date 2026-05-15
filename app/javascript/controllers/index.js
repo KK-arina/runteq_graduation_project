@@ -110,3 +110,15 @@ application.register("ai-throttle", AiThrottleController)
 //   ファイル名 mood_rating_controller.js がケバブケース mood-rating に変換される。
 import MoodRatingController from "./mood_rating_controller"
 application.register("mood-rating", MoodRatingController)
+
+// ── E-3 追加: ai-proposal-modal コントローラーを登録する ──────────────────
+//
+// 【このコントローラーの役割】
+//   14-A: AI提案プレビューモーダル（週次振り返りのAI提案確認・確定）を制御する。
+//   モーダルの開閉・「編集して再解析」確認ダイアログ・タスク提案除外を担当する。
+//
+// 【登録名 "ai-proposal-modal" について】
+//   HTML の data-controller="ai-proposal-modal" と対応する。
+//   ファイル名 ai_proposal_modal_controller.js がケバブケースに変換される。
+import AiProposalModalController from "./ai_proposal_modal_controller"
+application.register("ai-proposal-modal", AiProposalModalController)
