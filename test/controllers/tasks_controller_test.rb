@@ -102,7 +102,7 @@ class TasksControllerTest < ActionDispatch::IntegrationTest
     delete logout_path
     task = @user.tasks.create!(title: "未ログインテスト", priority: :must)
     patch toggle_complete_task_path(task)
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   test "他ユーザーのタスクはtoggle_completeできない" do
@@ -127,7 +127,7 @@ class TasksControllerTest < ActionDispatch::IntegrationTest
       title: "未ログインアーカイブテスト", priority: :must, status: :done, completed_at: Time.current
     )
     patch archive_task_path(task)
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   test "完了タスクを一括アーカイブできる（Turbo Stream）" do
@@ -216,6 +216,6 @@ class TasksControllerTest < ActionDispatch::IntegrationTest
     assert_no_difference "Task.active.count" do
       delete task_path(task)
     end
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 end

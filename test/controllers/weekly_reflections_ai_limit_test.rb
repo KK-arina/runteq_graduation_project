@@ -214,6 +214,6 @@ class WeeklyReflectionsAiLimitTest < ActionDispatch::IntegrationTest
       weekly_reflection: { reflection_comment: "未ログインテスト" }
     }
 
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 end

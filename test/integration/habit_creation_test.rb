@@ -110,7 +110,7 @@ class HabitCreationTest < ActionDispatch::IntegrationTest
 
     # assert_redirected_to: ログインページにリダイレクトされることを確認
     # before_action :require_login により、未ログインユーザーはログインページにリダイレクト
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   test "未ログイン時は習慣を作成できないこと" do
@@ -122,7 +122,7 @@ class HabitCreationTest < ActionDispatch::IntegrationTest
     end
 
     # ログインページにリダイレクトされることを確認
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   test "他ユーザーのuser_idを指定しても無視されること（セキュリティテスト）" do

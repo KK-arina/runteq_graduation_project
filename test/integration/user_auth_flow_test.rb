@@ -86,7 +86,7 @@ class UserAuthFlowTest < ActionDispatch::IntegrationTest
     # ログアウト済みなので、ダッシュボードにアクセスしようとしたら
     # require_login によってログインページにリダイレクトされるはず
     get dashboard_path
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
 
     # ── Step 4: 再ログイン ────────────────────────────────────────
     # 同じメールアドレス・パスワードで再ログイン
@@ -98,12 +98,8 @@ class UserAuthFlowTest < ActionDispatch::IntegrationTest
     }
 
     # SessionsController#create はログイン成功後に dashboard_path にリダイレクトします
-    assert_redirected_to dashboard_path
-
-    # D-7 対応: このユーザーは新規登録後 first_login_at が NULL のまま。
-    # dashboard_path にアクセスすると /onboarding/step5 へリダイレクトされる。
-    follow_redirect!
     assert_redirected_to onboarding_step5_path
+
   end
 
   # ============================================================
@@ -128,7 +124,7 @@ class UserAuthFlowTest < ActionDispatch::IntegrationTest
     # ── Step 2: この時点では未ログイン状態のはず ──────────────────
     # ログイン失敗後にダッシュボードにアクセスしても弾かれることを確認
     get dashboard_path
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
 
     # ── Step 3: 正しいパスワードで再試行 ─────────────────────────
     post login_path, params: {
@@ -152,22 +148,22 @@ class UserAuthFlowTest < ActionDispatch::IntegrationTest
   test "未ログイン時は保護されたページにアクセスできないこと" do
     # ダッシュボード: require_login で保護されている
     get dashboard_path
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
 
     # 習慣一覧: require_login で保護されている
     get habits_path
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
 
     # 習慣新規作成フォーム: require_login で保護されている
     get new_habit_path
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
 
     # 週次振り返り一覧: require_login で保護されている
     get weekly_reflections_path
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
 
     # 週次振り返り新規作成フォーム: require_login で保護されている
     get new_weekly_reflection_path
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 end

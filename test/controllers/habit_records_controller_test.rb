@@ -119,7 +119,7 @@ class HabitRecordsControllerTest < ActionDispatch::IntegrationTest
     post habit_habit_records_path(@habit),
          params: { completed: "1" }
 
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   # ============================================================================

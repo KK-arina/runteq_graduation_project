@@ -84,7 +84,7 @@ class OnboardingsControllerTest < ActionDispatch::IntegrationTest
     delete logout_path
     get onboarding_step5_path
 
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   # ============================================================

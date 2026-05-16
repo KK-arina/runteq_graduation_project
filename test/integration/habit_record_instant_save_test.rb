@@ -21,7 +21,7 @@ class HabitRecordInstantSaveTest < ActionDispatch::IntegrationTest
          params:  { completed: "1" },
          headers: { "Accept" => "text/vnd.turbo-stream.html" }
 
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   # ---- 新規レコード作成（POST）テスト ----

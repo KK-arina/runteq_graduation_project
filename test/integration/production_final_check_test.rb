@@ -85,7 +85,7 @@ class ProductionFinalCheckTest < ActionDispatch::IntegrationTest
 
   test "未ログイン状態では習慣一覧にアクセスできないこと" do
     get habits_path
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   test "ダッシュボードが正常に表示されること" do

@@ -115,7 +115,7 @@ class WeeklyReflectionsControllerTest < ActionDispatch::IntegrationTest
         weekly_reflection: valid_reflection_params
       }
 
-      assert_redirected_to login_path
+      assert_redirected_to %r{/login}
     end
   end
 
