@@ -129,6 +129,6 @@ class HabitsControllerTest < ActionDispatch::IntegrationTest
     get habits_path
 
     # assert_redirected_to → 指定URLへリダイレクトされることを確認
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 end

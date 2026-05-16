@@ -200,7 +200,7 @@ class HabitManagementTest < ActionDispatch::IntegrationTest
     # ログインせずに新規作成ページへアクセス
     get new_habit_path
     # require_login によって login_path へリダイレクトされる
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   test "未ログイン時は習慣を作成できないこと" do
@@ -209,7 +209,7 @@ class HabitManagementTest < ActionDispatch::IntegrationTest
         habit: { name: "テスト", weekly_target: 7 }
       }
     end
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   # ===========================================================
@@ -292,7 +292,7 @@ class HabitManagementTest < ActionDispatch::IntegrationTest
     assert_no_difference("Habit.active.count") do
       delete habit_path(@habit)
     end
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   # ===========================================================

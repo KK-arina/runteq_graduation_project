@@ -126,7 +126,7 @@ class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
       post login_path, params: { session: { email: @user.email, password: "password123" } }
       delete logout_path
       get dashboard_path
-      assert_redirected_to login_path
+      assert_redirected_to %r{/login}
     end
   end
 

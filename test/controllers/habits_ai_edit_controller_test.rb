@@ -72,8 +72,7 @@ class HabitsAiEditControllerTest < ActionDispatch::IntegrationTest
 
     get ai_edit_habit_path(@habit)
 
-    assert_redirected_to login_path,
-                         "ログインページへのリダイレクトが発生していません"
+    assert_match %r{/login}, response.location, "ログインページへのリダイレクトが発生していません"
   end
 
   # テスト④: 他ユーザーの習慣にアクセスすると習慣一覧にリダイレクトされる

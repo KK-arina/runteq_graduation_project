@@ -117,7 +117,7 @@ class TasksAiEditControllerTest < ActionDispatch::IntegrationTest
     get ai_edit_task_path(@task)
 
     # require_login により login_path へリダイレクトされること
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 
   # ============================================================

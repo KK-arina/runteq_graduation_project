@@ -346,3 +346,12 @@ ja:
           attributes:
             ai_analysis_monthly_limit:
               greater_than_or_equal_to: "は%{count}以上の値にしてください"
+
+  # ── E-4 追加: 通知ディープリンク関連メッセージ ──────────────────────────
+  #
+  # 【deep_link セクションの用途】
+  #   redirect_to パラメータが安全でない（外部URLなど）と判定された場合の
+  #   内部ログ用メッセージ。
+  #   %{path} はログ出力時に実際のパスで置き換えられる。
+  deep_link:
+    invalid_redirect: "不正な redirect_to パラメータを検出しました（外部URL等）: %{path}"

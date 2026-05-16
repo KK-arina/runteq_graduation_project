@@ -121,6 +121,6 @@ class HabitDeletionTest < ActionDispatch::IntegrationTest
     end
 
     # ログインページにリダイレクトされることを確認
-    assert_redirected_to login_path
+    assert_redirected_to %r{/login}
   end
 end

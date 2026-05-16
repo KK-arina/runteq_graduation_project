@@ -68,31 +68,15 @@ class ApplicationController < ActionController::Base
   # ActiveRecord::RecordNotFound:
   #   find(id) で該当レコードがDBに存在しない場合に Rails が発生させる例外。
   #   例: /habits/99999 にアクセスしたが id=99999 の習慣が存在しない場合。
-  #
-  #   【セキュリティ上の意味】
-  #   404を返すことで、存在しないリソースへのアクセスに対して
-  #   「存在しない」とだけ伝え、DBの内部構造などを漏らさない。
-  rescue_from ActiveRecord::RecordNotFound, with: :render_404
+  rescue_from ActiveRecord::RecordNotFound,               with: :render_404
 
   # ActionController::InvalidAuthenticityToken:
   #   CSRFトークンが不正なときに発生する例外。
-  #   例: 古いタブからフォームを送信した場合や、
-  #       外部サイトからフォームを偽装して送信しようとした場合。
-  #
-  #   【セキュリティ上の意味】
-  #   CSRF攻撃を検知した場合に 422 を返し、処理を中断する。
   rescue_from ActionController::InvalidAuthenticityToken, with: :render_422
 
   # StandardError（本番環境のみ）:
   #   上記以外の予期しないエラー全般。
-  #
-  #   【なぜ本番環境限定にするのか】
-  #   rescue_from StandardError を全環境で有効にすると、
-  #   開発中のバグ（typoやnilエラーなど）まで全部 500ページとして表示されてしまい、
-  #   どの行でどんなエラーが起きたかが分からなくなる。
-  #   開発・テスト環境では Rails デフォルトのデバッグ画面（行番号・スタックトレース付き）
-  #   を使うほうが圧倒的にデバッグしやすい。
-  #   そのため production のみ有効にするのが実務の標準的な設計。
+  #   開発・テスト環境では Rails デフォルトのデバッグ画面を使うほうがデバッグしやすい。
   rescue_from StandardError, with: :render_500 if Rails.env.production?
 
   # ============================================================
@@ -132,20 +116,42 @@ class ApplicationController < ActionController::Base
   end
 
   # ----------------------------------------------------------
-  # require_login（D-7 更新: オンボーディングリダイレクトを追加）
+  # require_login（E-4 変更: redirect_to パラメータ対応を追加）
   # ----------------------------------------------------------
-  # 【変更内容】
-  #   ログイン済みかつ first_login_at が NULL のユーザー（初回ログイン）を
-  #   オンボーディングページへリダイレクトする処理を追加した。
+  # ログインしていないユーザーをログインページへリダイレクトします。
   #
-  # 【redirect_to_onboarding_if_needed の役割】
-  #   ログイン後に全ページで初回ユーザーをチェックする。
-  #   オンボーディング自体のページ（/onboarding/*）では
-  #   リダイレクトしない（無限ループ防止）。
+  # 【E-4 変更内容】
+  #   未ログインユーザーがアクセスしようとしたパス（request.fullpath）を
+  #   クエリパラメータ redirect_to として /login に付与する。
+  #   例: /weekly_reflections/new にアクセス
+  #       → /login?redirect_to=%2Fweekly_reflections%2Fnew にリダイレクト
+  #
+  # 【なぜ request.fullpath を使うのか】
+  #   request.fullpath は現在アクセスしようとしているパスとクエリ文字列を
+  #   すべて含む文字列を返す。
+  #   例: "/weekly_reflections/new" や "/tasks?tab=must" など。
+  #
+  # 【なぜ safe_redirect_path? チェックが必要なのか（オープンリダイレクト防止）】
+  #   redirect_to パラメータは URL に含まれるため、攻撃者が
+  #   /login?redirect_to=http://evil.com のように外部URLを指定できてしまう。
+  #   ログイン後に外部の悪意あるサイトへ飛ばされる「オープンリダイレクト攻撃」を防ぐため、
+  #   必ず「自アプリ内のパスかどうか」を検証してから遷移する。
+  #
+  # 【D-7 追加: 初回ログインユーザーをオンボーディングへリダイレクト】
+  #   ログイン済みかつ first_login_at が NULL のユーザーを
+  #   オンボーディングページへリダイレクトする処理は変更なし。
   def require_login
     unless logged_in?
       flash[:alert] = "ログインしてください"
-      redirect_to login_path
+
+      # ── E-4 追加: アクセスしようとしたパスをクエリパラメータとして付与する ──
+      #
+      # login_path(redirect_to: request.fullpath):
+      #   Rails のルーティングヘルパーにキーワード引数を渡すと、
+      #   自動的にクエリパラメータとして URL に追加してくれる。
+      #   結果: "/login?redirect_to=%2Fweekly_reflections%2Fnew"
+      #   (%2F は / を URL エンコードしたもの。Rails が自動で行う)
+      redirect_to login_path(redirect_to: request.fullpath)
       return
     end
 
@@ -160,30 +166,13 @@ class ApplicationController < ActionController::Base
   # locked?
   #   月曜AM4:00以降かつ前週の振り返りが未完了の場合に true を返す。
   #
-  # ============================================================
-  # Issue #29: クエリ最適化（修正版）
-  # ============================================================
-  # 【問題の経緯】
-  #   初版の .completed.exists? 変更では「前週レコードが存在しない場合」の
-  #   考慮が不足していた。
-  #
-  #   exists? は「完了済みレコードが存在するか」を返すため:
-  #   - 前週レコードが存在しない → exists? = false → !false = true（ロックあり）❌
-  #   - 前週レコードが未完了    → exists? = false → !false = true（ロックあり）✅
-  #   → 初週ユーザー（前週レコードなし）が誤ってロックされてしまう
-  #
-  # 【解決方法】
-  #   「前週レコードが存在するか」を先に確認し、存在しない場合は初週として
-  #   ロックしない（return false）。
-  #   存在する場合のみ「完了済みか」を確認する。
-  #
   # 【最終的なSQLの流れ】
   #   1. SELECT 1 FROM weekly_reflections WHERE user_id=? AND week_start_date=? LIMIT 1
   #      → 前週レコードの存在確認（EXISTS）
   #   2. SELECT 1 FROM weekly_reflections WHERE user_id=? AND week_start_date=?
   #      AND completed_at IS NOT NULL LIMIT 1
   #      → 完了済みかの確認（EXISTS）
-  #   両方とも SELECT * ではなく SELECT 1 なのでレコードをメモリにロードしない（高速）
+  #   両方とも SELECT 1 なのでレコードをメモリにロードしない（高速）
   def locked?
     return false unless logged_in?
 
@@ -214,12 +203,6 @@ class ApplicationController < ActionController::Base
   # ----------------------------------------------------------
   # before_action として使用します。
   # ロック中は create / destroy などの書き込み操作を禁止します。
-  #
-  # 【セキュリティ上の意味】
-  # ロック判定をコントローラー層で行うことで、
-  # ビューのボタン非活性化だけに頼らない多重防御になっている。
-  # （ビューのボタン非活性は見た目だけで、HTTPリクエストを直接送れば
-  #   バイパスできてしまうため、サーバー側でも必ずチェックする）
   def require_unlocked
     return unless locked?
 
@@ -228,12 +211,8 @@ class ApplicationController < ActionController::Base
         flash[:alert] = "先週の振り返りが未完了のため、この操作はできません。先に振り返りを完了してください。"
         redirect_back fallback_location: habits_path
       end
-      format.turbo_stream do
-        head :locked
-      end
-      format.json do
-        render json: { error: "locked" }, status: :locked
-      end
+      format.turbo_stream { head :locked }
+      format.json { render json: { error: "locked" }, status: :locked }
     end
   end
 
@@ -244,16 +223,6 @@ class ApplicationController < ActionController::Base
   # 【役割】
   #   現在ログイン中のユーザーが AI 分析の月次上限に達しているかを返す。
   #
-  # 【なぜ ApplicationController に置くのか】
-  #   WeeklyReflectionsController だけでなく、将来的に他のコントローラー
-  #   （例: AI チャット機能など）でも AI 上限チェックが必要になる可能性がある。
-  #   共通の親クラスに置くことで全コントローラーで再利用できる。
-  #
-  # 【helper_method とは】
-  #   通常、private メソッドはコントローラー内でしか使えない。
-  #   helper_method に登録すると ERB（ビューファイル）からも呼び出せるようになる。
-  #   例: ビューで `<% if ai_limit_exceeded? %>` という条件分岐が書ける。
-  #
   # 【戻り値】
   #   true  : 上限に達している（今月はこれ以上 AI 分析できない）
   #   false : まだ余裕がある or user_setting が存在しない（安全側に倒す）
@@ -261,12 +230,8 @@ class ApplicationController < ActionController::Base
     # current_user&.user_setting:
     #   &. は Safe Navigation Operator（ぼっち演算子）。
     #   current_user が nil（未ログイン）の場合、user_setting を呼ばずに nil を返す。
-    #   これにより NoMethodError を防げる。
     return false unless current_user&.user_setting
 
-    # ai_analysis_count         : 今月の使用回数
-    # ai_analysis_monthly_limit : 月間上限（デフォルト: 10）
-    # >= を使うことで「上限に達した瞬間」から制限をかける
     current_user.user_setting.ai_analysis_count >= current_user.user_setting.ai_analysis_monthly_limit
   end
   helper_method :ai_limit_exceeded?
@@ -274,118 +239,41 @@ class ApplicationController < ActionController::Base
   # ============================================================
   # D-10 追加: AI API レート制限（連打防止）
   # ============================================================
-  #
-  # throttle_ai_request
-  # ----------------------------------------------------------
-  # 【役割】
-  #   before_action として WeeklyReflectionsController と
-  #   UserPurposesController の AI 分析トリガーアクション（create / retry_analysis）
-  #   に適用する。
-  #   同一ユーザーから 1 分以内の重複リクエストを拒否する。
-  #
-  # 【2段階の重複判定】
-  #
-  #   判定①: user_settings.last_ai_requested_at による時刻チェック
-  #     → 「1分以内に既にリクエストを受け付けた」かどうか
-  #     → Redis 不使用・DB のみで管理（Render 無料プラン対応）
-  #
-  #   判定②: analysis_state が :pending / :analyzing のジョブが存在するか
-  #     → ジョブが既にキューに積まれている・実行中の場合もスキップ
-  #     → WeeklyReflection と UserPurpose の両方を確認する
-  #
-  # 【429 を使わず flash + redirect で返す理由】
-  #   Turbo / Stimulus との相性を考慮し、
-  #   シンプルな flash[:notice] + redirect_back で UX を統一する。
-  #   rack-attack（#F-5）と組み合わせる場合は 429 ステータスを追加する。
-  #
-  # 【スキップ対象アクション】
-  #   complete_without_ai: AI を使わない完了なので throttle 不要
-  # ----------------------------------------------------------
   def throttle_ai_request
-    # current_user が nil（未ログイン）の場合は require_login が先に動くため
-    # ここでは nil チェックのみ行い、早期リターンする
     return unless current_user
 
     setting = current_user.user_setting
-
-    # user_setting が存在しない稀なケースはスルーする
-    # （user_setting がなければ last_ai_requested_at も参照できない）
     return unless setting
 
-    # ── 判定①: 1分以内の重複リクエストチェック ──────────────────────────
-    #
-    # ai_recently_requested? は UserSetting モデルに定義したメソッド。
-    # last_ai_requested_at が「1分以内」なら true を返す。
     if setting.ai_recently_requested?
-      # 429 レスポンス時のフラッシュメッセージを設定する
-      # notice を使う理由: alert だと赤いエラーバナーになり、
-      # 「受け付けました」という案内メッセージとトーンが合わない
       flash[:notice] = I18n.t("ai_throttle.too_soon")
-
-      # redirect_back: 直前のページ（振り返りフォームや PMVV ページ）に戻る
-      # fallback_location: 直前ページが不明な場合のフォールバック先
       redirect_back fallback_location: root_path
       return
     end
 
-    # ── 判定②: pending / analyzing ジョブの存在チェック ─────────────────
-    #
-    # analysis_state が pending または analyzing のレコードが
-    # 既に存在する場合は、ジョブが積まれている・実行中と判断してスキップする。
-    #
-    # 【なぜ WeeklyReflection と UserPurpose の両方を確認するのか】
-    #   リクエストが振り返りからなのか PMVV からなのかに関わらず、
-    #   「このユーザーの AI 分析が進行中かどうか」を総合的に判断する。
-    #   ただし、パフォーマンスを考慮して EXISTS? クエリ（SELECT 1 のみ）を使う。
-    #
-    # 【.pending と .analyzing について】
-    #   analysis_state の enum 値（0: pending, 1: analyzing）に対応するスコープ。
-    #   UserPurpose に定義済み（user_purpose.rb 参照）。
-    #   WeeklyReflection には analysis_state がないため確認不要。
     if current_user.user_purposes.where(analysis_state: [:pending, :analyzing]).exists?
       flash[:notice] = I18n.t("ai_throttle.already_processing")
       redirect_back fallback_location: root_path
       return
     end
 
-    # ── 全チェック通過: last_ai_requested_at を現在時刻で更新する ─────────
-    #
-    # チェックを通過したリクエストのみ更新する（2重カウント防止）。
-    # touch_ai_requested_at! は update_columns で単一カラムのみ更新するため高速。
     setting.touch_ai_requested_at!
   end
-  # throttle_ai_request の helper_method 登録は不要
-  # （before_action として使うためビューからは呼ばない）
 
   # ============================================================
   # Issue #27: カスタムエラーページ表示メソッド
   # ============================================================
 
-  # render_404
-  #   404 Not Found エラー時に呼ばれます。
-  #   【セキュリティ上の意味】
-  #   詳細なエラーメッセージを返さないことで、
-  #   DBの構造やデータの存在有無を攻撃者に教えない。
   def render_404(exception = nil)
     Rails.logger.info "404 Not Found: #{exception&.message}"
     render_error_page("errors/not_found", :not_found)
   end
 
-  # render_422
-  #   422 Unprocessable Entity エラー時に呼ばれます。
-  #   CSRFトークン不正など、セキュリティ上重要なイベントを
-  #   logger.warn（警告レベル）で記録します。
   def render_422(exception = nil)
     Rails.logger.warn "422 Unprocessable Entity: #{exception&.message}"
     render_error_page("errors/unprocessable", :unprocessable_entity)
   end
 
-  # render_500
-  #   500 Internal Server Error エラー時に呼ばれます。
-  #   本番環境のみ有効（開発環境ではRailsのデバッグ画面を使う）。
-  #   【セキュリティ上の意味】
-  #   スタックトレースをユーザーに見せないことで、
-  #   内部実装の詳細が攻撃者に漏れることを防ぐ。
   def render_500(exception = nil)
     Rails.logger.error "500 Internal Server Error: #{exception&.message}"
     Rails.logger.error exception&.backtrace&.first(5)&.join("\n")
@@ -393,55 +281,11 @@ class ApplicationController < ActionController::Base
   end
 
   # render_error_page（共通ヘルパー）
-  #   render_404 / render_422 / render_500 から呼ばれる共通処理。
-  #
-  # ============================================================
-  # Issue #29: turbo_stream 形式への対応を追加
-  # ============================================================
-  # 【問題の経緯】
-  #   Turbo Stream リクエスト（headers: { Accept: "text/vnd.turbo-stream.html" }）に対して
-  #   render template: "errors/not_found", layout: "application" を実行すると、
-  #   Rails が turbo_stream 形式のテンプレート（errors/not_found.turbo_stream.erb）を
-  #   探しに行くが存在しないため MissingTemplate エラーが発生していた。
-  #
-  # 【解決方法】
-  #   respond_to で形式を分岐する。
-  #   - turbo_stream の場合: head :status のみを返す（ボディなし）
-  #     → テンプレート不要で確実に動作する
-  #     → Turbo はステータスコードを見てエラーを判断できる
-  #   - html の場合: 既存のエラーページをレンダリング（変更なし）
-  #
-  # 【head :status とは？】
-  #   ボディ（HTML）を含まずにHTTPステータスコードだけを返すメソッド。
-  #   例: head :not_found → HTTP/1.1 404 Not Found のレスポンスだけを返す
-  #   テンプレートを必要としないため MissingTemplate エラーが起きない。
   def render_error_page(template, status)
     respond_to do |format|
-      # turbo_stream リクエスト（Stimulusからのfetchなど）の場合
-      # テンプレートなしでステータスコードだけを返す
       format.turbo_stream { head status }
-
-      # 通常の HTML リクエストの場合
-      # 既存のエラーページテンプレートをレンダリングする（変更なし）
       format.html { render template: template, layout: "application", status: status }
-
-      # JSON リクエストの場合（APIからのアクセスや将来の拡張を考慮）
-      # シンプルなエラーメッセージをJSONで返す
       format.json { render json: { error: status.to_s }, status: status }
-
-      # ── D-10 修正: favicon.ico など未知フォーマットへの対応 ──────────────
-      #
-      # 【なぜ必要か】
-      #   ブラウザは自動的に /favicon.ico へ GET リクエストを送る。
-      #   このリクエストが catch-all ルートにマッチして ErrorsController#not_found
-      #   → render_error_page に到達する。
-      #   respond_to に ico フォーマットの処理がないと
-      #   ActionController::UnknownFormat が発生して 500 エラーになる。
-      #
-      # 【any で全フォーマットを受け入れる】
-      #   format.any はここまでの format.html / format.json 等に
-      #   マッチしなかった全フォーマット（ico, xml, png 等）を受け取る。
-      #   head status のみ返してボディなしで応答する（最小限の応答）。
       format.any { head status }
     end
   end
@@ -454,23 +298,67 @@ class ApplicationController < ActionController::Base
   #   オンボーディングページ（5/5 PMVV入力）へリダイレクトする。
   #
   # 【無限ループ防止の仕組み】
-  #   オンボーディングページ自体でも before_action :require_login が
-  #   呼ばれるため、このメソッドが呼ばれる。
-  #   オンボーディングコントローラーにいるときはリダイレクトしないよう
-  #   controller_name == 'onboardings' でガードする。
-  #
-  #   同様に sessions コントローラーと users コントローラーも除外する。
-  #   ログアウト処理中や登録中にリダイレクトが発生しないようにするため。
-  #
-  # 【current_user.first_login_at.nil? の意味】
-  #   first_login_at が NULL = オンボーディング未完了
-  #   NULL 以外（DateTime）= オンボーディング完了済み
+  #   controller_name で除外リストを確認し、
+  #   オンボーディング・認証関連コントローラーでは実行しない。
   def redirect_to_onboarding_if_needed
-    # オンボーディング・認証関連コントローラーでは実行しない
     return if controller_name.in?(%w[onboardings sessions users errors pages])
     return unless current_user&.first_login_at.nil?
 
-    # 初回ログインユーザーをオンボーディング 5/5 へリダイレクト
     redirect_to onboarding_step5_path, notice: t("onboarding.welcome")
+  end
+
+  # ============================================================
+  # E-4 追加: safe_redirect_path?（オープンリダイレクト防止）
+  # ============================================================
+  #
+  # 【役割】
+  #   redirect_to パラメータとして渡されたパスが、
+  #   自アプリ内のパスかどうかを検証する。
+  #
+  # 【なぜこのチェックが必要なのか（オープンリダイレクト攻撃の説明）】
+  #   攻撃者が以下のような URL を作成してユーザーにクリックさせる:
+  #     https://habitflow.example.com/login?redirect_to=http://evil.com/phishing
+  #   ユーザーがログインすると http://evil.com/phishing に飛ばされてしまう。
+  #   これを「オープンリダイレクト攻撃」と呼ぶ。
+  #
+  # 【検証方法の詳細（すべての条件を満たす必要がある）】
+  #   1. path が nil や空文字でないこと
+  #   2. path が "//" で始まっていないこと（ダブルスラッシュ攻撃対策）
+  #      → "//evil.com" はブラウザによっては外部ホスト指定として解釈される
+  #      → URI.parse("//evil.com").host が "evil.com" を返すため先に弾く必要がある
+  #   3. URI.parse が例外なく解析できること
+  #   4. uri.host が nil であること
+  #      → ホスト名がない = 相対パス（/tasks や /weekly_reflections/new）
+  #      → ホスト名がある = 絶対URL（http://evil.com）→ 拒否
+  #   5. path が "/" で始まること
+  #      → "javascript:alert(1)" のような攻撃を拒否
+  #
+  # 【各入力値の結果】
+  #   "/tasks"              → host: nil → ✅ 安全（true）
+  #   "/tasks?tab=must"     → host: nil → ✅ 安全（true）
+  #   "http://evil.com"     → host: "evil.com" → ❌ 危険（false）
+  #   "//evil.com"          → ② で先に弾く → ❌ 危険（false）
+  #   "javascript:alert(1)" → 例外発生 → ❌ 危険（false）
+  #   nil / ""              → ① blank?チェックで弾く → ❌ 危険（false）
+  def safe_redirect_path?(path)
+    # ① path が nil や空文字の場合は安全でないとみなす
+    return false if path.blank?
+
+    # ② ダブルスラッシュ始まりは外部ホスト指定として悪用できるため先に弾く
+    #    URI.parse("//evil.com").host が "evil.com" を返してしまうブラウザがある。
+    #    この1行で "//evil.com" を確実に排除できる。
+    return false if path.start_with?("//")
+
+    # ③ URI.parse でパスを解析する
+    #    解析に失敗した場合（不正な URI）は例外が発生するため rescue で false を返す
+    uri = URI.parse(path)
+
+    # ④ ホスト名がない（相対パス）かつ "/" で始まるパスのみ安全とみなす
+    #    uri.host.nil?           → "/tasks" のような相対パスは host が nil になる
+    #    path.start_with?("/")   → "javascript:alert()" のような攻撃を弾く
+    uri.host.nil? && path.start_with?("/")
+  rescue URI::InvalidURIError
+    # URI.parse が例外を発生させた場合（不正な URI）は安全でない
+    false
   end
 end
