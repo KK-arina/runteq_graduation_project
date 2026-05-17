@@ -137,4 +137,29 @@ Rails.application.configure do
   # ジョブが「Queued」のまま実行されない（ダッシュボードで確認できた症状）。
   # :async にすることで docker compose up だけで即座にジョブが実行される。
   config.good_job.execution_mode = :async
+
+  # =========================================================================
+  # Turbo CSS preload 警告の抑制（開発環境限定）
+  # =========================================================================
+  # 【なぜ development.rb に書くのか】
+  #   config/application.rb に書くと本番・テスト環境にも影響する。
+  #   開発コンソールの警告のみ解消したいため development 限定にする。
+  #
+  # 【何を防ぐか】
+  #   Rails 7.2 + Turbo 環境では stylesheet_link_tag が
+  #   HTTP レスポンスヘッダーに Link: rel=preload を自動付与する。
+  #   Turbo のページ遷移では CSS がすでに読み込み済みのため
+  #   ブラウザが「使われなかった preload」として警告を出す。
+  #
+  # 【なぜ respond_to? で条件分岐するのか】
+  #   Rails のバージョンによって preload_links_header= が存在しない場合がある。
+  #   respond_to? で存在確認してから呼ぶことで
+  #   将来の Rails アップデート時も安全に動作する。
+  #
+  # 【画面・スタイルへの影響】
+  #   なし。CSS は HTML の <link rel="stylesheet"> タグで引き続き読み込まれる。
+  # =========================================================================
+  if config.action_view.respond_to?(:preload_links_header=)
+    config.action_view.preload_links_header = false
+  end
 end

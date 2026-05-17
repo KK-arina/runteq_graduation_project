@@ -407,6 +407,121 @@
     <% end %>
   </div>
 
+  <%# ===========================================================
+      セクション⑤: AI分析コメント（E-5 追加）
+      ===========================================================
+      【表示ロジックの全体像】
+        @ai_analysis が nil（レコード自体なし）→ セクション全体を非表示
+        @ai_analysis あり + analysis_comment あり → 分析完了UI
+        @ai_analysis あり + analysis_comment なし → 待機中UI（自動ポーリング）
+  =========================================================== %>
+  <% if @ai_analysis.present? %>
+    <div id="ai-analysis-section" class="bg-white rounded-2xl shadow-sm border border-indigo-100 p-6 mb-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-5">🤖 AI分析コメント</h2>
+
+      <% if @ai_analysis.analysis_comment.present? %>
+        <%# -------------------------------------------------------
+            【パターンA】AI分析が完了している場合の表示
+        ------------------------------------------------------- %>
+
+        <%# --- 総合コメント（analysis_comment が存在する前提のため nil チェック不要）--- %>
+        <%# simple_format を使う理由:                                                    %>
+        <%#   AI が返すテキストは改行コード(\n)を含む複数段落のテキスト。               %>
+        <%#   simple_format は \n を <br>、\n\n を <p> に変換する Rails 標準ヘルパー。  %>
+        <%#   内部で html_escape が動くため XSS（悪意ある HTML 挿入）も自動防止される。 %>
+        <div class="mb-5">
+          <div class="flex items-center gap-2 mb-2">
+            <span class="text-sm font-bold text-gray-700">💬 総合コメント</span>
+          </div>
+          <div class="text-gray-700 text-sm leading-relaxed bg-indigo-50 rounded-xl p-4">
+            <%= simple_format(@ai_analysis.analysis_comment) %>
+          </div>
+        </div>
+
+        <%# --- 根本原因（任意項目: nil・空文字の場合はブロックごと非表示）--- %>
+        <%# .present? は nil と空文字("")の両方を false と判定する。              %>
+        <%# これにより「空のカード」が表示される問題を防ぐ。                      %>
+        <% if @ai_analysis.root_cause.present? %>
+          <div class="mb-5">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-sm font-bold text-gray-700">🔍 根本原因</span>
+            </div>
+            <div class="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-xl p-4">
+              <%= simple_format(@ai_analysis.root_cause) %>
+            </div>
+          </div>
+        <% end %>
+
+        <%# --- 改善提案（任意項目）--- %>
+        <% if @ai_analysis.improvement_suggestions.present? %>
+          <div class="mb-5">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-sm font-bold text-gray-700">💡 改善提案</span>
+            </div>
+            <div class="text-gray-700 text-sm leading-relaxed bg-yellow-50 rounded-xl p-4">
+              <%= simple_format(@ai_analysis.improvement_suggestions) %>
+            </div>
+          </div>
+        <% end %>
+
+        <%# --- コーチングメッセージ（任意項目）--- %>
+        <% if @ai_analysis.coaching_message.present? %>
+          <div class="mb-5">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-sm font-bold text-gray-700">🎯 コーチングメッセージ</span>
+            </div>
+            <div class="text-gray-700 text-sm leading-relaxed bg-green-50 rounded-xl p-4">
+              <%= simple_format(@ai_analysis.coaching_message) %>
+            </div>
+          </div>
+        <% end %>
+
+      <% else %>
+        <%# -------------------------------------------------------
+            【パターンB】AI分析が待機中・処理中の場合の表示
+            -------------------------------------------------------
+            data-controller="ai-analysis-polling":
+              Stimulus コントローラを接続する属性。
+              この div が DOM に追加されると connect() が自動実行される。
+
+            data-ai-analysis-polling-url-value:
+              ポーリングで叩く URL をコントローラに渡す。
+              url_for を使うことで routes.rb の変更に追従できる。
+              文字列ハードコードより安全。
+
+            data-ai-analysis-polling-interval-value="10000":
+              ポーリング間隔（ミリ秒）。10秒ごとに状態確認する。
+              短すぎるとサーバー負荷が上がるため 10000ms を推奨。
+        ------------------------------------------------------- %>
+        <div
+          data-controller="ai-analysis-polling"
+          data-ai-analysis-polling-url-value="<%= weekly_reflection_path(@weekly_reflection) %>"
+          data-ai-analysis-polling-interval-value="10000"
+          class="flex flex-col items-center justify-center p-8 bg-gray-50 rounded-xl border border-dashed border-gray-200"
+        >
+          <%# animate-spin: Tailwind CSS のスピナーアニメーション。           %>
+          <%# border-b-2 border-indigo-600 の組み合わせで回転するリングを表現。 %>
+          <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-3"
+               aria-hidden="true"></div>
+          <p class="text-sm font-medium text-gray-600">
+            🤖 AIが今週を分析しています...
+          </p>
+          <p class="text-xs text-gray-400 mt-1">
+            完了すると自動で表示が切り替わります
+          </p>
+        </div>
+      <% end %>
+    </div>
+
+    <%# AI免責バナー: AI分析レコードが存在する場合のみ描画する。              %>
+    <%# render "shared/ai_disclaimer" はパーシャルの呼び出し。                %>
+    <%# ファイル名は _ai_disclaimer.html.erb だが render 時は _ を省略する。 %>
+    <div class="mb-8">
+      <%= render "shared/ai_disclaimer" %>
+    </div>
+  <% end %>
+  <%# セクション⑤ ここまで %>
+
   <%# フッターボタン %>
   <div class="flex flex-col sm:flex-row gap-3 justify-between">
     <%= link_to "← 振り返り一覧", weekly_reflections_path,
