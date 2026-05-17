@@ -330,13 +330,63 @@ class WeeklyReflectionsController < ApplicationController
   end
 
   def show
+    # ─────────────────────────────────────────────────────────────────────
+    # @habit_summaries:
+    #   この振り返りに紐づく習慣スナップショットを達成率の高い順で取得する。
+    #   order(achievement_rate: :desc) → 達成率が高い習慣から表示することで
+    #   ユーザーが「今週うまくいった習慣」を先に確認できる。
+    #   .to_a → ActiveRecord::Relation を配列に変換する。
+    #   配列にしておくと、ビューで複数回参照するときに SQL が重複発行されない。
+    # ─────────────────────────────────────────────────────────────────────
     @habit_summaries = @weekly_reflection.habit_summaries
                                          .order(achievement_rate: :desc)
                                          .to_a
+
+    # ─────────────────────────────────────────────────────────────────────
+    # @task_summaries:
+    #   この振り返りに紐づくタスクスナップショットを優先度順で取得する。
+    #   by_priority スコープ → must(0) → should(1) → could(2) の昇順。
+    #   数値が小さい方が重要度が高い（Must が最優先）。
+    #   .to_a → 配列に変換してビューでの N+1 を防ぐ。
+    # ─────────────────────────────────────────────────────────────────────
     @task_summaries  = @weekly_reflection.task_summaries
                                          .by_priority
                                          .to_a
+
+    # ─────────────────────────────────────────────────────────────────────
+    # @overall_achievement_rate:
+    #   全習慣の達成率の平均値（0〜100の小数）。
+    #   セクション①の「今週の総合達成率」に使う。
+    #   @habit_summaries.empty? の場合は 0 を返す（ゼロ除算防止）。
+    # ─────────────────────────────────────────────────────────────────────
     @overall_achievement_rate = calculate_overall_achievement_rate
+
+    # =========================================================================
+    # @ai_analysis（E-5 追加）
+    #
+    # 【なぜ .latest スコープを使うのか】
+    #   AiAnalysis モデルの scope :latest は is_latest: true のレコードのみを
+    #   返す。before_create コールバック(deactivate_previous_analyses)が
+    #   古い分析を is_latest: false に更新するため、常に最新の1件だけが
+    #   is_latest: true になる設計になっている。
+    #
+    # 【なぜ .order(created_at: :desc) を追加するのか】
+    #   .latest は「is_latest: true でフィルタする」だけのスコープであり、
+    #   並び順を保証しない。理論上は1件しか存在しないが、ジョブの
+    #   二重実行などで複数件になった場合に最新のものが取れるよう
+    #   明示的に降順ソートを付加して安全を担保する。
+    #
+    # 【なぜ .where.not(analysis_comment: nil) を付けないのか】
+    #   analysis_comment が nil = AI分析ジョブが処理中（待機状態）を意味する。
+    #   ここで除外してしまうと待機中の状態を画面に表示できず、
+    #   ユーザーには「何も起きていない」ように見える。
+    #   nil か否かの判定はビュー側で行い、待機中UIと完了UIを出し分ける。
+    # =========================================================================
+    @ai_analysis = @weekly_reflection
+                     .ai_analyses
+                     .latest
+                     .order(created_at: :desc)
+                     .first
   end
 
   private
