@@ -1,53 +1,14 @@
 <%# app/views/sessions/new.html.erb %>
-<%# ============================================================ %>
-<%# 【このファイルの役割】 %>
-<%# ログインページのビュー。 %>
-<%# SessionsController の new アクション（GET /login）で表示される。 %>
-<%# %>
-<%# 【E-4 変更点】 %>
-<%#   hidden_field_tag を追加して redirect_to パラメータを POST body に含める。 %>
-<%#   これにより、ログイン失敗して再表示されても redirect_to が消えない。 %>
-<%# %>
-<%# 【Issue #32 での変更点】 %>
-<%#   フォームをカード（白い枠付きボックス）で囲み、users/new.html.erb と %>
-<%#   デザインを統一した。 %>
-<%# ============================================================ %>
 <% content_for :title, "ログイン | HabitFlow" %>
 
-<%#
-  max-w-md: 最大幅 448px（ログインフォームに適した幅）
-  mx-auto: 中央揃え
-  px-4 sm:px-6 lg:px-8: レスポンシブパディング
-  py-8: 上下パディング 32px
-%>
 <div class="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
   <h2 class="text-2xl font-bold mb-6 text-gray-900 text-center">
     ログイン
   </h2>
 
-  <%#
-    カードコンテナ
-    bg-white: 白背景
-    rounded-xl: 角丸 12px
-    shadow-sm: 薄いドロップシャドウ
-    border border-gray-200: 薄いグレーの枠線
-    p-6: 内側パディング 24px
-  %>
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
 
-    <%#
-      form_with: Rails のフォームヘルパー
-      url: login_path: 送信先 POST /login
-        注意: redirect_to はクエリパラメータとして URL に付けず、
-              hidden_field_tag で POST body に含める。
-              理由: ログイン失敗時に render :new するとブラウザの URL が変わる場合があり、
-                    URL のクエリパラメータが消えることがある。
-                    POST body (hidden field) に入れることで確実に維持できる。
-      scope: :session: パラメータを params[:session][:email] の形にまとめる
-      local: true: Turbo の非同期送信を無効化し、通常のHTMLフォーム送信にする
-      data-controller="form-submit": フォーム送信ローディングコントローラーを紐付ける
-    %>
     <%= form_with url: login_path,
                   scope: :session,
                   local: true,
@@ -56,45 +17,12 @@
                     action: "submit->form-submit#submit"
                   } do |f| %>
 
-      <%# ── E-4 追加: redirect_to パラメータを hidden field として埋め込む ── %>
-      <%#
-        hidden_field_tag :redirect_to, params[:redirect_to]
-          第1引数 :redirect_to : POST パラメータのキー名
-          第2引数 params[:redirect_to] : URL の ?redirect_to=... から取得した値
-
-        生成される HTML:
-          <input type="hidden" name="redirect_to" value="/weekly_reflections/new">
-
-        この hidden field により:
-          - ログイン成功時 → SessionsController#create で params[:redirect_to] が取れる
-          - ログイン失敗時 → render :new で再描画されても値が維持され、
-                             再送信時も redirect_to が保持される
-
-        params[:redirect_to] が nil の場合:
-          value が空になるが、create 側で present? チェックしているため問題なし。
-      %>
       <%= hidden_field_tag :redirect_to, params[:redirect_to] %>
 
       <%# メールアドレス入力エリア %>
       <div class="mb-4">
-        <%#
-          f.label: ラベルタグを生成する Rails ヘルパー
-          class の意味:
-            block: ブロック要素にしてラベルとフィールドを縦並びにする
-            text-sm font-medium text-gray-700: ラベルの標準スタイル
-            mb-2: ラベルとフィールドの間の余白 8px
-        %>
         <%= f.label :email, "メールアドレス",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
-
-        <%#
-          f.email_field: type="email" の input タグを生成
-          w-full: 幅 100%
-          px-4 py-2: 内側の余白（左右 16px, 上下 8px）
-          border border-gray-300: 薄いグレーの枠線
-          rounded-md: 角丸 6px
-          focus:ring-2 focus:ring-blue-500: フォーカス時に青いリング
-        %>
         <%= f.email_field :email,
             placeholder: "email@example.com",
             class: "w-full px-4 py-2 border border-gray-300 rounded-md
@@ -105,19 +33,12 @@
       <div class="mb-6">
         <%= f.label :password, "パスワード",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
-
-        <%# f.password_field: type="password" の input タグを生成（入力内容が隠れる） %>
         <%= f.password_field :password,
             placeholder: "パスワードを入力",
             class: "w-full px-4 py-2 border border-gray-300 rounded-md
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
-      <%#
-        送信ボタン
-        data-form-submit-target="button": form-submit コントローラーから参照できるようにする
-        data-loading-text="ログイン中...": 送信後に表示するローディングテキスト
-      %>
       <%= f.submit "ログイン",
           class: "w-full px-4 py-2 bg-blue-600 text-white rounded-md
                   hover:bg-blue-700 transition font-medium",
@@ -127,7 +48,36 @@
           } %>
     <% end %>
 
-  </div><%# end カードコンテナ %>
+    <%# ============================================================ %>
+    <%# F-1 追加: Google ログインボタン %>
+    <%# ============================================================ %>
+
+    <%# メールログインと Google ログインの視覚的な区切り線 %>
+    <div class="relative my-6">
+      <div class="absolute inset-0 flex items-center">
+        <div class="w-full border-t border-gray-200"></div>
+      </div>
+      <div class="relative flex justify-center text-sm">
+        <span class="px-2 bg-white text-gray-500">または</span>
+      </div>
+    </div>
+
+    <%# 共通部分テンプレートを呼び出す。button_text でボタンのラベルを渡す %>
+    <%= render "shared/google_auth_button", button_text: "Google アカウントでログイン" %>
+
+    <%#
+      omniauth_error パラメータが URL に存在する場合のエラーメッセージ表示。
+      config/initializers/omniauth.rb の on_failure または
+      OmniauthCallbacksController#failure からリダイレクトされた場合に付与される。
+      ja.yml の omniauth.google.login_error から日本語メッセージを取得する。
+    %>
+    <% if params[:omniauth_error].present? %>
+      <p class="mt-3 text-center text-sm text-red-600">
+        <%= t("omniauth.google.login_error") %>
+      </p>
+    <% end %>
+
+  </div>
 
   <%# 新規登録へのリンク %>
   <div class="mt-4 text-center text-sm text-gray-600">
@@ -135,4 +85,5 @@
     <%= link_to "新規登録", new_user_path,
         class: "text-blue-600 hover:text-blue-700 hover:underline" %>
   </div>
+
 </div>
