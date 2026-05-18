@@ -1,43 +1,36 @@
-<%# app/views/users/new.html.erb の先頭（最初の行）に追加 %>
+<%# app/views/users/new.html.erb %>
 <% content_for :title, "新規登録 | HabitFlow" %>
-<%#
-  【このファイルの役割】
-    ユーザー登録ページのビュー。
-    UsersController の new アクション（GET /users/new）で表示される。
-
-  【Issue #32 での変更点】
-    ・送信ボタンに font-medium を追加（sessions/new と揃える）
-    ・フォームに form-submit コントローラーを紐付けてローディング実装
-    ・ログインリンクに hover:underline を追加（sessions/new と統一）
-    ・既存のカードデザインはそのまま維持（変更なし）
-%>
 
 <div class="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-8">
-  <%#
-    ページタイトル
-    sessions/new.html.erb と同じクラスで統一
-    text-2xl font-bold mb-6 text-gray-900 text-center
-  %>
+
   <h2 class="text-2xl font-bold mb-6 text-gray-900 text-center">
     新規登録
   </h2>
 
-  <%#
-    フォームを囲むカードコンテナ（既存のまま維持）
-    sessions/new.html.erb と同じ bg-white rounded-xl shadow-sm border border-gray-200 p-6
-  %>
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
 
+    <%# ============================================================ %>
+    <%# F-1 追加: Google 登録ボタン（UX 向上のためフォーム上部に配置） %>
+    <%# ============================================================ %>
+
     <%#
-      form_with: Rails のフォームヘルパー
-      model: @user: UsersController#new で設定された空の User オブジェクト
-        → 新規作成なので POST /users に送信される
-      local: true: 通常のHTMLフォーム送信（Turbo の Ajax を無効化）
-      【Issue #32 追加】
-      data-controller="form-submit": 送信ローディングコントローラーを紐付ける
-      data-action="submit->form-submit#submit":
-        フォームの submit イベントで form-submit コントローラーの submit() を呼ぶ
+      Google ボタンをフォームより上に置く理由:
+        入力不要でワンクリック完了のため、フォームより先に目に入る位置が UX 上最適。
     %>
+    <%= render "shared/google_auth_button", button_text: "Google アカウントで登録" %>
+
+    <%# Google ボタンとメールフォームの区切り線（Google ボタンが表示されている場合のみ） %>
+    <% if ENV["GOOGLE_CLIENT_ID"].present? %>
+      <div class="relative my-6">
+        <div class="absolute inset-0 flex items-center">
+          <div class="w-full border-t border-gray-200"></div>
+        </div>
+        <div class="relative flex justify-center text-sm">
+          <span class="px-2 bg-white text-gray-500">またはメールで登録</span>
+        </div>
+      </div>
+    <% end %>
+
     <%= form_with model: @user,
                   local: true,
                   data: {
@@ -45,33 +38,17 @@
                     action: "submit->form-submit#submit"
                   } do |f| %>
 
-      <%#
-        shared/_form_errors パーシャルの呼び出し
-        model: @user を渡すことで、パーシャル内で @user.errors を参照できる
-        バリデーションエラーがある場合のみ表示される（エラーがなければ何も出ない）
-      %>
       <%= render "shared/form_errors", model: @user %>
 
-      <%# ユーザー名入力 %>
       <div class="mb-4">
-        <%#
-          block text-sm font-medium text-gray-700 mb-2:
-            全フォームで統一したラベルスタイル
-        %>
         <%= f.label :name, "ユーザー名",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
-        <%#
-          w-full px-4 py-2 border border-gray-300 rounded-md
-          focus:ring-2 focus:ring-blue-500 focus:border-blue-500:
-            全フォームフィールドで統一したスタイル
-        %>
         <%= f.text_field :name,
             placeholder: "山田太郎",
             class: "w-full px-4 py-2 border border-gray-300 rounded-md
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
-      <%# メールアドレス入力 %>
       <div class="mb-4">
         <%= f.label :email, "メールアドレス",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
@@ -81,7 +58,6 @@
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
-      <%# パスワード入力 %>
       <div class="mb-4">
         <%= f.label :password, "パスワード",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
@@ -91,8 +67,6 @@
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
-      <%# パスワード確認入力 %>
-      <%# mb-6: 最後のフィールドはボタンとの間隔を広めにとる %>
       <div class="mb-6">
         <%= f.label :password_confirmation, "パスワード（確認）",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
@@ -102,13 +76,6 @@
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
-      <%#
-        送信ボタン
-        sessions/new.html.erb と同じスタイルで統一
-        【Issue #32 追加】
-        data-form-submit-target="button": コントローラーから参照できるようにする
-        data-loading-text="登録中...": 送信後のローディングテキスト
-      %>
       <%= f.submit "登録する",
           class: "w-full px-4 py-2 bg-blue-600 text-white rounded-md
                   hover:bg-blue-700 transition font-medium",
@@ -118,16 +85,12 @@
           } %>
     <% end %>
 
-  </div><%# end カードコンテナ %>
+  </div>
 
-  <%#
-    ログインページへのリンク
-    sessions/new.html.erb と同じスタイルで統一
-    hover:underline を追加（sessions/new に合わせる）
-  %>
   <div class="mt-4 text-center text-sm text-gray-600">
     すでにアカウントをお持ちの方は
     <%= link_to "ログイン", login_path,
         class: "text-blue-600 hover:text-blue-700 hover:underline" %>
   </div>
+
 </div>

@@ -1,15 +1,8 @@
 # config/routes.rb
 #
-# 【E-3 変更点】
-#   weekly_reflections の collection に以下を追加:
-#     post :confirm_proposals  → AI提案を確定してDBに保存する
-#     delete :dismiss_proposal → 個別提案を提案リストから除外する
-#
-# 【なぜ collection を使うのか】
-#   confirm_proposals は特定の1件ではなく
-#   「今週の振り返りに紐づく全提案」を対象とする操作のため
-#   :id パラメータが不要 → collection が適切。
-#   member は /resources/:id/action の形式（:id が必須）。
+# ============================================================
+# F-1 追加: OmniAuth コールバックルートを追加
+# ============================================================
 
 Rails.application.routes.draw do
   root "pages#index"
@@ -29,6 +22,27 @@ Rails.application.routes.draw do
   get    "/login",  to: "sessions#new",     as: :login
   post   "/login",  to: "sessions#create"
   delete "/logout", to: "sessions#destroy", as: :logout
+
+  # ============================================================
+  # F-1 追加: OmniAuth コールバック & 失敗ルート
+  # ============================================================
+  #
+  # GET /auth/google_oauth2/callback:
+  #   Google 認証完了後に Google からリダイレクトされるエンドポイント。
+  get "/auth/google_oauth2/callback",
+      to:  "omniauth_callbacks#google",
+      as:  :omniauth_google_callback
+
+  # GET /auth/failure:
+  #   OmniAuth がエラーと判定した場合のフォールバックエンドポイント。
+  #
+  # 【なぜ redirect("/login") ではなくコントローラーに委譲するのか】
+  #   redirect("/login") にすると params[:message] 等のエラー情報が失われる。
+  #   コントローラーの failure アクションで受け取ることでログ出力と
+  #   omniauth_error フラグの付与が確実にできる。
+  get "/auth/failure",
+      to:  "omniauth_callbacks#failure",
+      as:  :omniauth_failure
 
   scope "/onboarding", controller: :onboardings do
     get  "step5",    action: :step5,    as: :onboarding_step5
@@ -75,30 +89,10 @@ Rails.application.routes.draw do
     resources :habit_records, only: [ :create, :update ]
   end
 
-  # ============================================================
-  # E-3 変更: weekly_reflections の collection に AI提案確定を追加
-  # ============================================================
   resources :weekly_reflections, only: [:index, :new, :create, :show] do
     collection do
       post :complete_without_ai
-
-      # ── E-3 追加 ────────────────────────────────────────────────────────
-      #
-      # confirm_proposals:
-      #   POST /weekly_reflections/confirm_proposals
-      #   → weekly_reflections#confirm_proposals
-      #
-      #   「来週の計画を確定」ボタンの送信先。
-      #   AI提案（habits/tasks）を正式にDBへ保存し、
-      #   ai_generated=true をタスクにセットする。
-      #   ルートヘルパー: confirm_proposals_weekly_reflections_path
-      #
-      # ロック解除について:
-      #   WeeklyReflection の complete! はすでに create アクションで
-      #   呼ばれているため、ここではロック解除は不要。
-      #   ただし、is_locked が false になっているかの確認は行う。
       post :confirm_proposals
-      # ────────────────────────────────────────────────────────────────────
     end
   end
 

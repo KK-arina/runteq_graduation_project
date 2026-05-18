@@ -32,7 +32,7 @@ class OnboardingsControllerTest < ActionDispatch::IntegrationTest
     @user = User.create!(
       name:     "テストユーザー",
       email:    "onboarding_test_#{SecureRandom.hex(4)}@example.com",
-      password: "password123"
+      password: "password123", password_confirmation: "password123"
     )
 
     post login_path, params: { session: { email: @user.email, password: "password123" } }

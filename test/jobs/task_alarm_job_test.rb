@@ -20,7 +20,8 @@ class TaskAlarmJobTest < ActiveJob::TestCase
     @user = User.create!(
       name:     "テストユーザー",
       email:    "alarm_test@example.com",
-      password:       "password123",
+      password:              "password123",
+      password_confirmation: "password123",
       # D-7 追加: first_login_at が NULL だと /onboarding/step5 へリダイレクトされテストが失敗する
       first_login_at: 1.month.ago
     )

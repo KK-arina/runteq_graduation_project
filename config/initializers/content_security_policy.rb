@@ -1,81 +1,47 @@
 # config/initializers/content_security_policy.rb
 #
 # ============================================================
-# Issue #28: Content Security Policy（CSP）設定
+# F-1 追加: Google OAuth2 のための CSP 設定更新
 # ============================================================
 #
-# 【B-7 最終修正】
+# 【変更内容】
+#   form_action に Google の認証エンドポイントを追加する。
 #
-#   問題の経緯:
-#     ① nonce_directives = ["script-src"] の状態
-#        → Turbo Drive のページ遷移時に nonce が引き継がれず
-#          Turbo Stream の DOM 差し替えがブロックされていた
+# 【なぜ form_action の設定が必要なのか】
+#   OmniAuth は button_to（フォーム POST）で認証を開始する。
+#   CSP の form-action ディレクティブは「このフォームの送信先（action属性）
+#   として許可するURL」を制御する。
 #
-#     ② nonce_directives = [] に変更
-#        → nonce によるブロックは解消したが、
-#          Importmap が生成するインラインスクリプト
-#          （<script type="importmap">、<script type="module">）が
-#          'self' でも 'https:' でもないインラインコードのため
-#          引き続き CSP エラーが出る
+#   form_action を設定しない場合、デフォルトは default_src の設定に従う。
+#   :self のみでは外部URL（accounts.google.com）へのフォーム送信が
+#   ブロックされてしまう。
 #
-#   解決策:
-#     script_src に :unsafe_inline を追加する。
-#
-#   【:unsafe_inline のセキュリティリスクについて】
-#     :unsafe_inline を付けると「全てのインラインスクリプト」を許可する。
-#     本来は XSS 攻撃でインライン JS を注入されるリスクがある。
-#     ただし Rails の Importmap + Turbo の構成では
-#     nonce による制御が困難なため、開発・プロトタイプ段階では
-#     :unsafe_inline で対応するのが現実的な選択肢となる。
-#
-#     【リスク軽減の方針】
-#     - script_src :self のみにすることで外部ドメインの JS はブロック
-#     - 入力値のサニタイズをモデル・ビューで徹底することで
-#       XSS の根本原因を防ぐ
-#
-# ============================================================
+#   → form_action に :self と Google 認証 URL のドメインを追加する。
 
 Rails.application.config.content_security_policy do |policy|
   policy.default_src :self
   policy.font_src    :self, :https, :data
   policy.img_src     :self, :https, :data
   policy.object_src  :none
+  policy.script_src  :self, :https, :unsafe_inline
+  policy.style_src   :self, :https, :unsafe_inline
 
-  # --------------------------------------------------------
-  # script_src :self, :https, :unsafe_inline
-  # --------------------------------------------------------
-  # 【:unsafe_inline を追加する理由】
-  #   Rails 7 の Importmap は以下のインラインスクリプトを HTML に直接埋め込む:
-  #     <script type="importmap">{"imports": {...}}</script>
-  #     <script type="module">import "application"</script>
-  #   これらは「インラインスクリプト」扱いになるため、
-  #   :unsafe_inline なしでは CSP にブロックされる。
+  # ── F-1 追加: フォーム送信先の許可設定 ──────────────────────────────────
   #
-  #   nonce 方式を使えば :unsafe_inline は不要だが、
-  #   Turbo Drive のページ遷移時に nonce が引き継がれない問題があり、
-  #   Turbo Stream の DOM 差し替えが失敗する。
+  # form_action:
+  #   フォームの action 属性として許可する送信先を制限する CSP ディレクティブ。
   #
-  #   :self, :https だけでは外部ドメインの JS はブロックできるため、
-  #   外部スクリプト注入のリスクは残らない。
-  policy.script_src :self, :https, :unsafe_inline
-
-  policy.style_src :self, :https, :unsafe_inline
+  # :self:
+  #   同じオリジン（自アプリ）へのフォーム送信を許可する。
+  #   通常のフォーム（ログイン・習慣登録等）のため必須。
+  #
+  # "https://accounts.google.com":
+  #   Google OAuth2 の認証開始エンドポイント。
+  #   OmniAuth が /auth/google_oauth2 への POST 後、
+  #   内部で Google 認証 URL へリダイレクトする際に必要。
+  policy.form_action :self, "https://accounts.google.com"
 end
 
-# ============================================================
-# nonce の設定
-# ============================================================
-#
-# 【nonce_directives を [] にしている理由】
-#   Turbo Drive がページ遷移時に body を差し替えるとき、
-#   新しい body 内の <script> タグには古いページの nonce が
-#   引き継がれないため、CSP エラーが発生していた。
-#   nonce_directives を [] にすることで nonce による制御を無効化し、
-#   Turbo Stream の DOM 差し替えが正常に動作するようにする。
-#
-# 【nonce_generator を残している理由】
-#   将来的に nonce 方式に戻す可能性を考慮して残している。
-#   nonce_directives = [] の状態では実質的に使用されない。
 Rails.application.config.content_security_policy_nonce_generator =
   ->(_request) { SecureRandom.base64(16) }
 

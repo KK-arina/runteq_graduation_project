@@ -73,6 +73,23 @@ gem "jbuilder"
 # Issue #5で使用開始
 gem "bcrypt", "~> 3.1.7"
 
+# ============================================================
+# F-1 追加: OmniAuth Google OAuth2 ログイン
+# ============================================================
+#
+# 【omniauth-google-oauth2 とは何か】
+#   Google アカウントでのログイン・新規登録を実現する gem。
+#   OmniAuth という認証統一インターフェースの Google 専用実装。
+#   バージョン 1.x は OmniAuth 2.x に対応した安定版。
+#
+# 【omniauth-rails_csrf_protection とは何か】
+#   OmniAuth の認証開始リクエスト（POST /auth/google_oauth2）に
+#   Rails の CSRF 保護を適用するための gem。
+#   CVE-2015-9284（CSRF 脆弱性）への対策として必須。
+#   button_to で POST する際に authenticity_token を検証してくれる。
+gem "omniauth-google-oauth2", "~> 1.2"
+gem "omniauth-rails_csrf_protection"
+
 # ==================== 非同期ジョブ処理 ====================
 #
 # ============================================================
