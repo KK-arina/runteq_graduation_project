@@ -90,9 +90,13 @@ class User < ApplicationRecord
   #   パスワードが nil の場合はバリデーションをスキップ（変更なしとして扱う）。
   #   新規登録時に password が入力されていれば 8 文字以上を検証する。
   validates :password,
+            presence:  true,
             length:    { minimum: 8 },
-            allow_nil: true,
-            if:        :email_provider?
+            if:        ->(u) { u.provider.blank? || u.provider == "email" }
+  validates :password, confirmation: true, if: ->(u) { u.provider.blank? || u.provider == "email" }
+  validates :password_confirmation,
+            presence:  true,
+            if:        ->(u) { (u.provider.blank? || u.provider == "email") && u.password.present? }
 
   # ============================================================
   # コールバック
