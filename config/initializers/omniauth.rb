@@ -2,110 +2,87 @@
 #
 # ==============================================================================
 # F-1: OmniAuth Google OAuth2 設定ファイル
+# F-2: OmniAuth LINE ログイン設定を追加
 # ==============================================================================
 #
 # 【このファイルの役割】
 #   アプリ起動時に OmniAuth ミドルウェアを Rails に組み込む。
-#   Google OAuth2 の認証フローに必要な設定をここで一元管理する。
+#   Google OAuth2 と LINE Login の認証フローに必要な設定をここで一元管理する。
 #
 # 【OmniAuth の認証フローの概要】
-#   1. ユーザーが「Googleでログイン」ボタンをクリック
-#      → POST /auth/google_oauth2 がリクエストされる
-#   2. OmniAuth が Google の認証ページへリダイレクトする
-#   3. ユーザーが Google でログインを許可する
-#   4. Google がコールバック URL へリダイレクトする
-#      → GET /auth/google_oauth2/callback
-#   5. OmniauthCallbacksController#google が呼び出される
+#   1. ユーザーが「LINEでログイン」ボタンをクリック
+#      → POST /auth/line_v21 がリクエストされる
+#   2. OmniAuth が LINE の認証ページへリダイレクトする
+#   3. ユーザーが LINE でログインを許可する
+#   4. LINE が コールバック URL へリダイレクトする
+#      → GET /auth/line_v21/callback
+#   5. OmniauthCallbacksController#line アクションが呼び出される
 #   6. request.env['omniauth.auth'] に認証情報が入っている
 #
 # 【ENV.fetch の使い方】
-#   ENV.fetch("GOOGLE_CLIENT_ID", nil)
-#   → 環境変数 GOOGLE_CLIENT_ID が設定されていればその値を返す
+#   ENV.fetch("LINE_CHANNEL_ID", nil)
+#   → 環境変数 LINE_CHANNEL_ID が設定されていればその値を返す
 #   → 設定されていなければ nil を返す（アプリは起動できる）
 #
 # 【nil を許容する理由】
-#   - 開発環境で Google Cloud Console 設定前でもアプリが起動できる
-#   - 環境変数が未設定の場合は Google 認証を使わない運用も可能
-#   - nil の場合は Google 認証ボタンを非表示にすることで対応する
+#   - 開発環境で LINE Developers Console 設定前でもアプリが起動できる
+#   - 環境変数が未設定の場合は LINE 認証を使わない運用も可能
+#   - nil の場合は LINE 認証ボタンを非表示にすることで対応する
 #
 # ==============================================================================
 
 Rails.application.config.middleware.use OmniAuth::Builder do
   # ============================================================
-  # Google OAuth2 プロバイダの設定
+  # Google OAuth2 プロバイダの設定（F-1 から継続）
   # ============================================================
-  #
-  # 第1引数 :google_oauth2:
-  #   使用するプロバイダ名。OmniAuth が内部で omniauth-google-oauth2 gem を呼ぶ。
-  #   コールバックは /auth/google_oauth2/callback になる。
-  #   users.provider カラムには "google_oauth2" が保存される。
-  #   ※ Issue タスクでは 'google' と書いているが、実際の値は 'google_oauth2'
-  #
-  # 第2引数 ENV.fetch("GOOGLE_CLIENT_ID", nil):
-  #   Google Cloud Console で発行した「クライアント ID」。
-  #   環境変数 GOOGLE_CLIENT_ID から読み込む。
-  #
-  # 第3引数 ENV.fetch("GOOGLE_CLIENT_SECRET", nil):
-  #   Google Cloud Console で発行した「クライアント シークレット」。
-  #   環境変数 GOOGLE_CLIENT_SECRET から読み込む。
-  #
-  # scope:
-  #   Google に要求する情報の範囲（スコープ）。
-  #   "email"   → メールアドレスへのアクセス許可
-  #   "profile" → 名前・プロフィール画像へのアクセス許可
-  #   この2つは OmniAuth Google のデフォルトだが、明示的に書くことで意図を明確にする。
-  #
-  # skip_jwt:
-  #   Google の ID トークン（JWT）の検証をスキップするかどうか。
-  #   false = JWT 検証を行う（デフォルト・推奨）。
-  #   本番環境では必ず false にしてセキュリティを確保する。
-  #
-  # prompt: "select_account":
-  #   Google のアカウント選択画面を毎回表示する設定。
-  #   複数の Google アカウントを持つユーザーがアカウントを選択できるようにする。
-  #   これがないと前回ログインしたアカウントが自動選択されてしまう。
   provider :google_oauth2,
            ENV.fetch("GOOGLE_CLIENT_ID", nil),
            ENV.fetch("GOOGLE_CLIENT_SECRET", nil),
            scope:    "email,profile",
            skip_jwt: false,
            prompt:   "select_account"
+
+  # ============================================================
+  # F-2 追加: LINE Login プロバイダの設定
+  # ============================================================
+  #
+  # 【重要】プロバイダ名は :line_v21（アンダースコア区切り）を使用する。
+  #
+  #   gem 名: omniauth-line-v2_1
+  #   OmniAuth のストラテジークラス名: OmniAuth::Strategies::LineV21
+  #   provider シンボル: :line_v21（OmniAuth が LineV21 を snake_case 変換した名前）
+  #
+  #   NG: provider :line      → OmniAuth::Strategies::Line を探してしまい
+  #       「uninitialized constant OmniAuth::Strategies::Line」エラーになる
+  #   OK: provider :line_v21  → OmniAuth::Strategies::LineV21 が正しく読み込まれる
+  #
+  # 【コールバック URL の変化】
+  #   :line_v21 を使うと OmniAuth が自動生成するコールバック URL は
+  #   /auth/line_v21/callback になる。
+  #   routes.rb と LINE Developers Console のコールバック URL もこれに合わせる。
+  #
+  # 【users.provider カラムに保存される値】
+  #   auth["provider"] には "line_v21" が入る。
+  #   DB の provider カラムには "line_v21" が保存される。
+  #
+  # scope: "profile openid":
+  #   "profile"  → 表示名・プロフィール画像へのアクセス許可（必須）
+  #   "openid"   → OpenID Connect による uid（sub）取得に必須
+  provider :line_v21,
+           ENV.fetch("LINE_CHANNEL_ID", nil),
+           ENV.fetch("LINE_CHANNEL_SECRET", nil),
+           scope: "profile openid"
 end
 
 # ============================================================
 # OmniAuth のグローバル設定
 # ============================================================
-#
-# 【on_failure の設定】
-#   認証が失敗したとき（ユーザーがキャンセルした・エラーが起きた）に
-#   どこへリダイレクトするかを設定する。
-#
-# 【env['omniauth.error.type'] とは】
-#   OmniAuth が認証失敗時にセットするエラーの種類。
-#   例: :access_denied（ユーザーがキャンセル）
-#       :invalid_credentials（認証情報が無効）
-#
-# 【Rack::Response.new での redirect の仕組み】
-#   Rack（Rails の下のレイヤー）で直接レスポンスを返す。
-#   Rails のコントローラーを経由しない。
-#   [302, { 'Location' => url }, []] の形式でリダイレクトを返す。
 OmniAuth.config.on_failure = proc do |env|
-  # エラー種類を取得する（:access_denied など）
   error_type = env["omniauth.error.type"]
 
-  # ユーザーがキャンセルした場合は静かにログインページへ戻す
-  # それ以外のエラーはアラートメッセージを付けてログインページへ
   if error_type == :access_denied
-    Rack::Response.new(
-      [],
-      302,
-      "Location" => "/login"
-    ).finish
+    Rack::Response.new([], 302, "Location" => "/login").finish
   else
-    Rack::Response.new(
-      [],
-      302,
-      "Location" => "/login?omniauth_error=true"
-    ).finish
+    Rack::Response.new([], 302, "Location" => "/login?omniauth_error=true").finish
   end
 end

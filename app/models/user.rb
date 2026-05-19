@@ -18,17 +18,33 @@
 #      Google OAuth2 の認証情報を元に User を検索または新規作成する。
 #
 #   3. email バリデーションに allow_nil: true を追加。
-#      将来の LINE ログインではメールアドレスが取得できない場合があるため。
+#      LINE ログインではメールアドレスが取得できない場合があるため。
 #
 #   4. password バリデーションに if: :email_provider? 条件を追加。
 #      Google ログインユーザーにはパスワードバリデーションを適用しない。
 #
+# 【F-2 での変更内容】
+#   from_omniauth クラスメソッドを LINE にも対応するよう拡張する。
+#   LINE はメールアドレスを返さない（email が nil になる）ため、
+#   メールによるマージ処理を条件付きにする。
+#
+#   LINE の auth ハッシュ構造:
+#     {
+#       "provider" => "line",
+#       "uid"      => "U1234567890abcdef",  # LINE の一意ユーザー ID
+#       "info"     => {
+#         "name"  => "山田太郎",
+#         "image" => "https://profile.line.me/..."
+#         # email は原則含まれない（特権スコープで別途申請が必要）
+#       }
+#     }
+#
 # 【provider の値について】
 #   OmniAuth Google OAuth2 gem は auth["provider"] に "google_oauth2" を返す。
+#   OmniAuth LINE gem は auth["provider"] に "line" を返す。
 #   この値をそのまま DB に保存することで:
 #     ① find_by(provider: auth["provider"]) と保存値が一致してバグが起きない
-#     ② 将来 LINE（"line"）等を追加しても変換ルールが不要でシンプル
-#   タスク要件の「provider='google'」は「Google系プロバイダ」の意味として解釈する。
+#     ② provider の変換ルールが不要でシンプル
 #
 # ==============================================================================
 class User < ApplicationRecord
@@ -42,10 +58,8 @@ class User < ApplicationRecord
   #   validations: false でそれを無効化する。
   #
   # 【なぜ validations: false にするのか】
-  #   Google ログインユーザーは password_digest が NULL でも正常なユーザー。
-  #   デフォルトのバリデーションがあると Google ユーザーの create! が失敗してしまう。
-  #   そのため自動バリデーションを切り、下部の独自バリデーションで
-  #   「メールログインユーザーのみパスワードを必須」と制御する。
+  #   Google / LINE ログインユーザーは password_digest が NULL でも正常なユーザー。
+  #   デフォルトのバリデーションがあると OAuth ユーザーの create! が失敗してしまう。
   has_secure_password validations: false
 
   # ============================================================
@@ -65,13 +79,9 @@ class User < ApplicationRecord
 
   # email バリデーション
   #
-  # 【F-1 変更点: allow_nil: true を追加】
-  #   Google ログインではメールアドレスは必ず取得できるため今回は実質影響なし。
-  #   将来の LINE ログイン（メールなし）に備えて now_nil: true を付与しておく。
-  #
-  # 【presence: true と allow_nil: true の共存について】
-  #   allow_nil: true を付けると nil の場合は全バリデーションをスキップする。
-  #   presence: true は空文字（""）を弾くが nil はスキップされる。
+  # 【allow_nil: true について】
+  #   LINE ログインではメールアドレスが取得できない場合がある。
+  #   nil の場合は全バリデーションをスキップする。
   #   これにより「nil は許可（LINE用）」「空文字は不許可」という挙動になる。
   validates :email,
             presence:   true,
@@ -82,13 +92,10 @@ class User < ApplicationRecord
 
   # password バリデーション
   #
-  # 【F-1 変更点: if: :email_provider? を追加】
-  #   変更前: validates :password, length: { minimum: 8 }, allow_nil: true
-  #   変更後: if: :email_provider? を追加して Google ユーザーには適用しない
-  #
-  # 【allow_nil: true の意味】
-  #   パスワードが nil の場合はバリデーションをスキップ（変更なしとして扱う）。
-  #   新規登録時に password が入力されていれば 8 文字以上を検証する。
+  # 【if: lambda の意味】
+  #   provider が "email" または nil（メール登録ユーザー）の場合のみ
+  #   パスワードのバリデーションを実行する。
+  #   Google / LINE ユーザーにはパスワードバリデーションを適用しない。
   validates :password,
             presence:  true,
             length:    { minimum: 8 },
@@ -103,99 +110,87 @@ class User < ApplicationRecord
   # ============================================================
   before_save :downcase_email
 
-  # after_create :create_user_setting（D-4 追加）
+  # after_create :create_user_setting
   #
   # 【役割】
   #   ユーザー新規作成時に UserSetting レコードを自動作成する。
-  #   Google ログインで新規ユーザーが作成された場合も同様に実行される。
+  #   Google / LINE ログインで新規ユーザーが作成された場合も同様に実行される。
   after_create :create_user_setting
 
   # ============================================================
-  # クラスメソッド（F-1 追加）
+  # クラスメソッド（F-1 追加、F-2 拡張）
   # ============================================================
 
   # from_omniauth
   #
   # 【役割】
-  #   Google 認証完了後に OmniAuth から渡される認証情報（auth ハッシュ）を元に、
+  #   OAuth 認証完了後に OmniAuth から渡される認証情報（auth ハッシュ）を元に、
   #   既存ユーザーを検索、または新規ユーザーを作成して返す。
-  #
-  # 【auth ハッシュの構造（Google OAuth2 gem が返す値）】
-  #   {
-  #     "provider" => "google_oauth2",           # gem のデフォルト値
-  #     "uid"      => "100000000000000000000",   # Google の一意ユーザー ID（sub 値）
-  #     "info"     => {
-  #       "email" => "user@example.com",
-  #       "name"  => "山田太郎"
-  #     }
-  #   }
+  #   Google OAuth2（F-1）と LINE Login（F-2）の両方に対応する。
   #
   # 【3段階の処理フロー】
   #   ① provider + uid で完全一致のユーザーを検索（2回目以降のログイン）
-  #   ② 見つからない場合、同じメールの既存ユーザーを検索してマージ（初回 Google ログイン）
+  #   ② 見つからない場合、同じメールの既存ユーザーを検索してマージ（初回 Google ログイン時）
+  #      ※ LINE はメールを返さないため、② は email が存在する場合のみ実行する
   #   ③ それも見つからない場合、新規ユーザーを作成
+  #
+  # 【Google と LINE の auth ハッシュの違い】
+  #   Google: provider="google_oauth2", email あり, name あり
+  #   LINE:   provider="line",          email なし（原則）, name あり
   #
   def self.from_omniauth(auth)
     # ── ① provider + uid で既存ユーザーを検索する ──────────────────────────
     #
-    # auth["provider"] は "google_oauth2"（gem のデフォルト値）。
+    # auth["provider"] は "google_oauth2" または "line"。
     # この値をそのまま保存・検索することで一致が保証される。
-    # "google" に変換すると find_by の検索キーと保存値が食い違いバグの原因になる。
     user = find_by(provider: auth["provider"], uid: auth["uid"])
     return user if user.present?
 
     # ── ② メールアドレスで既存ユーザーを検索してマージする ─────────────────
-    #
-    # 【この処理が必要な理由（完了条件「重複しない」の実装）】
-    #   "taro@example.com" でメール登録済みのユーザーが
-    #   同じメールの Google アカウントで初めてログインする場合、
-    #   ① の provider + uid では見つからない（初回のため）。
-    #   しかしメールで見つかった場合は「同一人物」として
-    #   既存アカウントに Google 情報を追加する（新規作成しない）。
-    #
-    # auth.dig("info", "email"):
-    #   ネストしたハッシュを安全に掘り下げるメソッド。
-    #   "info" キーや "email" キーが存在しない場合は nil を返す（例外なし）。
-    #
-    # &.downcase:
-    #   Safe Navigation Operator（ぼっち演算子）。
-    #   email が nil の場合 downcase を呼ばずに nil を返す。
-    #   DB は before_save で小文字保存のため比較前に lowercase にする。
     email = auth.dig("info", "email")&.downcase
-    existing_user = find_by(email: email) if email.present?
 
-    if existing_user
-      # ── 既存メールアカウントに Google 情報を紐付ける（マージ）──
-      #
-      # 【なぜ update_columns を使うのか】
-      #   update! を使うと email の uniqueness バリデーションが実行される。
-      #   このとき Rails は「自分自身のメールと重複している」と判定して
-      #   バリデーションエラーが発生するリスクがある（同じメールを持つ自分自身との衝突）。
-      #   update_columns はバリデーションをスキップして指定カラムのみ直接更新するため安全。
-      #   provider と uid を上書きするだけで他のカラムには触れない。
-      existing_user.update_columns(
-        provider: auth["provider"],
-        uid:      auth["uid"]
-      )
-      return existing_user
+    if email.present?
+      existing_user = find_by(email: email)
+
+      if existing_user
+        # ── 既存メールアカウントに OAuth 情報を紐付ける（マージ）──
+        #
+        # 【なぜ update_columns を使うのか】
+        #   update! を使うと email の uniqueness バリデーションが実行され
+        #   バリデーションエラーが発生するリスクがある。
+        #   update_columns はバリデーションをスキップして指定カラムのみ直接更新するため安全。
+        #
+        # 【updated_at を明示的に更新する理由】
+        #   update_columns はデフォルトで updated_at を更新しない。
+        #   将来のログ分析・監査で「いつ OAuth マージされたか」を追跡できるよう
+        #   明示的に Time.current を設定する。
+        existing_user.update_columns(
+          provider:   auth["provider"],
+          uid:        auth["uid"],
+          updated_at: Time.current
+        )
+        return existing_user
+      end
     end
 
     # ── ③ 完全な新規ユーザーを作成する ────────────────────────────────────
     #
-    # create!:
-    #   保存に失敗した場合 ActiveRecord::RecordInvalid 例外を発生させる。
-    #   呼び出し元（OmniauthCallbacksController）で rescue して対応する。
+    # 【LINE の uid について】
+    #   LINE Login (OpenID Connect) の uid は auth["uid"] に入る「sub」値。
+    #   ※ sub は LINE のユーザー識別子で、形式は固定されていない文字列。
+    #   ※ Messaging API の userId（U から始まる）とは別物。混同しないこと。
     #
-    # 【password: nil について】
-    #   has_secure_password validations: false にしているため nil で保存できる。
-    #   Google ユーザーはパスワードでログインしないため password_digest は NULL で正常。
-    #   email_provider? が false を返すため password バリデーションも実行されない。
+    #   users.uid     = LINE Login の sub（OmniAuth ログイン識別子）← 今回設定
+    #   users.line_user_id = Messaging API 通知用 userId ← 今回は触らない
+    #
+    # 【LINE ユーザーの email について】
+    #   LINE はメールアドレスを返さないため email は nil になる。
+    #   email バリデーションに allow_nil: true を設定済みのため問題ない。
     create!(
       provider: auth["provider"],
       uid:      auth["uid"],
-      name:     auth.dig("info", "name").presence || "Google User",
-      email:    email
-      # password を明示しない = nil = has_secure_password validations: false により OK
+      name:     auth.dig("info", "name").presence || fallback_name_for(auth["provider"]),
+      email:    email   # LINE の場合は nil になる（許容済み）
     )
   end
 
@@ -226,14 +221,26 @@ class User < ApplicationRecord
   #
   # 【判定ロジック】
   #   provider が "email" または nil（古いユーザーで未設定）→ true（パスワード必須）
-  #   provider が "google_oauth2" 等 → false（パスワード不要）
-  #
-  # 【なぜ nil も含めるのか】
-  #   A-1 マイグレーション前から存在する古いユーザーレコードは
-  #   provider が NULL の場合がある。
-  #   これらはメールログインユーザーとして扱いパスワードを必須にする。
+  #   provider が "google_oauth2" / "line" 等 → false（パスワード不要）
   def email_provider?
     provider.blank? || provider == "email"
+  end
+
+  # fallback_name_for（F-2 追加）
+  #
+  # 【役割】
+  #   OAuth プロバイダから名前が取得できなかった場合のフォールバック名を返す。
+  #   from_omniauth の create! 内で使用する。
+  #
+  # 【なぜプロバイダ別にフォールバック名を分けるのか】
+  #   "Google User" / "LINE User" と区別することで、
+  #   管理画面等で登録元プロバイダが分かりやすくなる。
+  def self.fallback_name_for(provider)
+    case provider
+    when "google_oauth2" then "Google User"
+    when "line_v21"      then "LINE User"   # :line_v21 を使うため "line_v21" が入る
+    else                      "SNS User"
+    end
   end
 
   def create_user_setting
