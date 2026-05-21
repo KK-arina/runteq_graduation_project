@@ -39,7 +39,7 @@
       NG: "/auth/line"     → OmniAuth::Strategies::Line がないため 404 になる
       OK: "/auth/line_v21" → OmniAuth::Strategies::LineV21 が正しく処理する
   %>
-  <%= form_tag "/auth/line_v21",
+  <%= form_tag "/auth/line_v2_1",
                method: :post,
                data: { turbo: "false" } do %>
     <%#

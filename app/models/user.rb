@@ -238,7 +238,7 @@ class User < ApplicationRecord
   def self.fallback_name_for(provider)
     case provider
     when "google_oauth2" then "Google User"
-    when "line_v21"      then "LINE User"   # :line_v21 を使うため "line_v21" が入る
+    when "line_v2_1"     then "LINE User"
     else                      "SNS User"
     end
   end

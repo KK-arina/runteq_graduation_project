@@ -47,8 +47,15 @@ class SessionsController < ApplicationController
   # ログインフォームを表示する
   # ============================================================
   def new
-    # new.html.erb を表示するだけなので、特に処理は不要
-    # Railsは自動的に app/views/sessions/new.html.erb を探して表示する
+    # ログイン済みユーザーが /login にアクセスした場合はダッシュボードへリダイレクトする。
+    #
+    # 【なぜこの処理が必要なのか】
+    #   OmniAuth 認証後にブラウザの「戻る」ボタンを押すと、
+    #   /login?omniauth_error=true のような URL が表示され、
+    #   ログイン済みにもかかわらずエラーメッセージが表示されてしまう。
+    #   ログイン済みユーザーにはログインページを表示する必要がないため、
+    #   ダッシュボードへリダイレクトする。
+    redirect_to dashboard_path if logged_in?
   end
 
   # ============================================================

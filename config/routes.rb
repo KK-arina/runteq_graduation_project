@@ -41,7 +41,7 @@ Rails.application.routes.draw do
   # 【重要】omniauth-line-v2_1 gem のプロバイダ名は :line_v21 のため、
   #   OmniAuth が自動生成するコールバック URL は /auth/line_v21/callback になる。
   #   routes.rb もこれに合わせて /auth/line_v21/callback を定義する。
-  get "/auth/line_v21/callback",
+  get "/auth/line_v2_1/callback",
       to:  "omniauth_callbacks#line",
       as:  :omniauth_line_callback
 
