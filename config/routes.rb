@@ -1,7 +1,8 @@
 # config/routes.rb
 #
 # ============================================================
-# F-1 追加: OmniAuth コールバックルートを追加
+# F-1 追加: OmniAuth Google コールバックルートを追加
+# F-2 追加: OmniAuth LINE コールバックルートを追加
 # ============================================================
 
 Rails.application.routes.draw do
@@ -24,7 +25,7 @@ Rails.application.routes.draw do
   delete "/logout", to: "sessions#destroy", as: :logout
 
   # ============================================================
-  # F-1 追加: OmniAuth コールバック & 失敗ルート
+  # F-1 追加: OmniAuth Google コールバック & 失敗ルート
   # ============================================================
   #
   # GET /auth/google_oauth2/callback:
@@ -33,13 +34,20 @@ Rails.application.routes.draw do
       to:  "omniauth_callbacks#google",
       as:  :omniauth_google_callback
 
+  # ============================================================
+  # F-2 追加: OmniAuth LINE コールバックルート
+  # ============================================================
+  #
+  # 【重要】omniauth-line-v2_1 gem のプロバイダ名は :line_v21 のため、
+  #   OmniAuth が自動生成するコールバック URL は /auth/line_v21/callback になる。
+  #   routes.rb もこれに合わせて /auth/line_v21/callback を定義する。
+  get "/auth/line_v2_1/callback",
+      to:  "omniauth_callbacks#line",
+      as:  :omniauth_line_callback
+
   # GET /auth/failure:
   #   OmniAuth がエラーと判定した場合のフォールバックエンドポイント。
-  #
-  # 【なぜ redirect("/login") ではなくコントローラーに委譲するのか】
-  #   redirect("/login") にすると params[:message] 等のエラー情報が失われる。
-  #   コントローラーの failure アクションで受け取ることでログ出力と
-  #   omniauth_error フラグの付与が確実にできる。
+  #   Google/LINE いずれかの認証失敗でもここに来る。
   get "/auth/failure",
       to:  "omniauth_callbacks#failure",
       as:  :omniauth_failure

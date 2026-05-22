@@ -343,3 +343,20 @@ gem "solid_cable"
 # Active Storageで画像を扱う際に必要
 # 現在は不要なのでコメントアウト
 # gem "image_processing", "~> 1.2"
+
+# ============================================================
+# F-2 追加: OmniAuth LINE ログイン
+# ============================================================
+#
+# 【omniauth-line-v2_1 とは何か】
+#   LINE アカウントでのログイン・新規登録を実現する gem。
+#   OmniAuth 2.x に完全対応した公式互換の LINE ストラテジー。
+#   旧 omniauth-line（kazasiki版）は OmniAuth 1.x 向けで廃止済み。
+#   cadenza-tech 社製の omniauth-line-v2_1 が 2025年に新規開発され
+#   最新の OmniAuth 2.x / Rails 7.x 環境で安定稼働する。
+#   gem 名と require 名が異なる点に注意（require: "omniauth/line_v2_1"）。
+#
+# 【なぜ ~> 1.2 でバージョン固定するのか】
+#   1.2.0 が 2025年11月の最新安定版。
+#   ~> 1.2 は「1.2.x の最新パッチ」を許可し、2.0 への破壊的変更を防ぐ。
+gem "omniauth-line-v2_1", "~> 1.2"

@@ -17,10 +17,15 @@ services:
       - .:/rails
     ports:
       - "3000:3000"
+# docker-compose.yml の environment セクションを以下に更新
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/habitflow_development
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GROQ_API_KEY: ${GROQ_API_KEY}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      LINE_CHANNEL_ID: ${LINE_CHANNEL_ID}
+      LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET}
     depends_on:
       - db
     stdin_open: true

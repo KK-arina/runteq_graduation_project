@@ -94,4 +94,71 @@ class UserTest < ActiveSupport::TestCase
   test "authenticated? should return false for a user with nil digest" do
     assert_not @user.authenticate("password")
   end
+
+  # ============================================================
+  # F-2 追加: LINE OmniAuth テスト
+  # ============================================================
+
+  test "from_omniauth creates a new LINE user without email" do
+    auth = {
+      "provider" => "line_v2_1",   # :line_v21 プロバイダなので "line_v21" が入る
+      "uid"      => "sub_#{SecureRandom.hex(8)}",
+      "info"     => {
+        "name"  => "LINE ユーザー太郎",
+        "image" => "https://profile.line.me/sample.png"
+      }
+    }
+
+    assert_difference "User.count", 1 do
+      user = User.from_omniauth(auth)
+
+      assert_equal auth["uid"], user.uid
+      assert_equal "line_v2_1",          user.provider  # "line_v21" で保存される
+      assert_equal "LINE ユーザー太郎", user.name
+      assert_nil user.email
+      assert user.persisted?
+    end
+  end
+
+  test "from_omniauth returns existing LINE user on second login" do
+    uid = "sub_existing_#{SecureRandom.hex(8)}"
+    auth = {
+      "provider" => "line_v2_1",   # 修正
+      "uid"      => uid,
+      "info"     => { "name" => "LINE ユーザー二郎" }
+    }
+
+    first_user = User.from_omniauth(auth)
+    assert first_user.persisted?
+
+    assert_no_difference "User.count" do
+      second_user = User.from_omniauth(auth)
+      assert_equal first_user.id, second_user.id
+    end
+  end
+
+  test "from_omniauth uses LINE User as fallback name when LINE name is blank" do
+    auth = {
+      "provider" => "line_v2_1",   # 修正
+      "uid"      => "sub_noname_#{SecureRandom.hex(8)}",
+      "info"     => { "name" => nil }
+    }
+
+    user = User.from_omniauth(auth)
+    assert_equal "LINE User", user.name
+    assert user.persisted?
+  end
+
+  test "LINE user is valid without password" do
+    line_user = User.new(
+      provider: "line_v21",        # 修正
+      uid:      "sub_valid_#{SecureRandom.hex(8)}",
+      name:     "LINE テストユーザー",
+      email:    nil,
+      password: nil
+    )
+
+    assert line_user.valid?,
+           "LINE ユーザーがパスワードなしで invalid になっています: #{line_user.errors.full_messages}"
+  end
 end

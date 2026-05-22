@@ -10,17 +10,32 @@
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
 
     <%# ============================================================ %>
-    <%# F-1 追加: Google 登録ボタン（UX 向上のためフォーム上部に配置） %>
+    <%# F-1 追加: Google 登録ボタン %>
+    <%# F-2 追加: LINE 登録ボタン %>
+    <%# （UX 向上のためフォーム上部に配置） %>
     <%# ============================================================ %>
 
     <%#
       Google ボタンをフォームより上に置く理由:
         入力不要でワンクリック完了のため、フォームより先に目に入る位置が UX 上最適。
+      ENV["GOOGLE_CLIENT_ID"] が未設定の場合はパーシャル内で非表示になる。
     %>
     <%= render "shared/google_auth_button", button_text: "Google アカウントで登録" %>
 
-    <%# Google ボタンとメールフォームの区切り線（Google ボタンが表示されている場合のみ） %>
-    <% if ENV["GOOGLE_CLIENT_ID"].present? %>
+    <%#
+      F-2 追加: LINE 登録ボタン。
+      Google ボタンとの間にマージンを設ける（mt-3）。
+      ENV["LINE_CHANNEL_ID"] が未設定の場合はパーシャル内で非表示になる。
+    %>
+    <div class="mt-3">
+      <%= render "shared/line_auth_button", button_text: "LINEで登録" %>
+    </div>
+
+    <%#
+      Google ボタン・LINE ボタンとメールフォームの区切り線。
+      少なくとも1つのソーシャルログインが有効な場合のみ表示する。
+    %>
+    <% if ENV["GOOGLE_CLIENT_ID"].present? || ENV["LINE_CHANNEL_ID"].present? %>
       <div class="relative my-6">
         <div class="absolute inset-0 flex items-center">
           <div class="w-full border-t border-gray-200"></div>

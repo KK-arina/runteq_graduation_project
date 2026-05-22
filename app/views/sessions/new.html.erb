@@ -50,30 +50,48 @@
 
     <%# ============================================================ %>
     <%# F-1 追加: Google ログインボタン %>
+    <%# F-2 追加: LINE ログインボタン %>
     <%# ============================================================ %>
 
-    <%# メールログインと Google ログインの視覚的な区切り線 %>
-    <div class="relative my-6">
-      <div class="absolute inset-0 flex items-center">
-        <div class="w-full border-t border-gray-200"></div>
+    <%# メールログインと SNS ログインの視覚的な区切り線 %>
+    <%# Google または LINE の少なくとも1つが有効な場合に区切り線を表示する %>
+    <% if ENV["GOOGLE_CLIENT_ID"].present? || ENV["LINE_CHANNEL_ID"].present? %>
+      <div class="relative my-6">
+        <div class="absolute inset-0 flex items-center">
+          <div class="w-full border-t border-gray-200"></div>
+        </div>
+        <div class="relative flex justify-center text-sm">
+          <span class="px-2 bg-white text-gray-500">または</span>
+        </div>
       </div>
-      <div class="relative flex justify-center text-sm">
-        <span class="px-2 bg-white text-gray-500">または</span>
-      </div>
-    </div>
+    <% end %>
 
-    <%# 共通部分テンプレートを呼び出す。button_text でボタンのラベルを渡す %>
+    <%#
+      Google ログインボタンを呼び出す。
+      button_text でボタンのラベルを渡す。
+      ENV["GOOGLE_CLIENT_ID"] が未設定の場合はパーシャル内で非表示になる。
+    %>
     <%= render "shared/google_auth_button", button_text: "Google アカウントでログイン" %>
+
+    <%#
+      F-2 追加: LINE ログインボタンを呼び出す。
+      button_text でボタンのラベルを渡す。
+      Google ボタンとの間にマージンを設ける（mt-3）。
+      ENV["LINE_CHANNEL_ID"] が未設定の場合はパーシャル内で非表示になる。
+    %>
+    <div class="mt-3">
+      <%= render "shared/line_auth_button", button_text: "LINEでログイン" %>
+    </div>
 
     <%#
       omniauth_error パラメータが URL に存在する場合のエラーメッセージ表示。
       config/initializers/omniauth.rb の on_failure または
       OmniauthCallbacksController#failure からリダイレクトされた場合に付与される。
-      ja.yml の omniauth.google.login_error から日本語メッセージを取得する。
+      Google / LINE どちらのエラーにも対応する汎用メッセージを表示する。
     %>
     <% if params[:omniauth_error].present? %>
       <p class="mt-3 text-center text-sm text-red-600">
-        <%= t("omniauth.google.login_error") %>
+        <%= t("omniauth.error.login_error") %>
       </p>
     <% end %>
 
