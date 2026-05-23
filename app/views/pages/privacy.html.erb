@@ -1,0 +1,120 @@
+<%# app/views/pages/privacy.html.erb %>
+<%# F-3: プライバシーポリシーページ（未ログインでも閲覧可能） %>
+<% content_for :title, "プライバシーポリシー | HabitFlow" %>
+
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <h1 class="text-3xl font-bold text-gray-900 mb-2">プライバシーポリシー</h1>
+  <p class="text-sm text-gray-500 mb-8">最終更新日: 2026年5月22日</p>
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-8">
+
+    <section>
+      <p class="text-gray-700 leading-relaxed">
+        HabitFlow（以下「当サービス」）は、ユーザーの個人情報の取り扱いについて、
+        以下のとおりプライバシーポリシーを定めます。
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">1. 収集する情報</h2>
+      <p class="text-gray-700 leading-relaxed mb-3">当サービスは以下の情報を収集します。</p>
+      <ul class="list-disc list-inside text-gray-700 space-y-1">
+        <li>氏名・ニックネーム</li>
+        <li>メールアドレス（メール登録の場合）</li>
+        <li>OAuth プロバイダーから提供されるユーザーID・名前（Google/LINEログインの場合）</li>
+        <li>習慣記録・タスク・振り返りコメント等の利用データ</li>
+        <li>アクセスログ（IPアドレス、ブラウザ情報等）</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">2. 情報の利用目的</h2>
+      <p class="text-gray-700 leading-relaxed mb-3">収集した情報は以下の目的で利用します。</p>
+      <ul class="list-disc list-inside text-gray-700 space-y-1">
+        <li>当サービスの提供・維持・改善</li>
+        <li>ユーザーへの通知・サポート対応</li>
+        <li>AI を活用した習慣分析・アドバイスの提供</li>
+        <li>不正利用の防止・セキュリティ確保</li>
+        <li>利用状況の分析・サービス改善</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">3. 第三者への提供</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスは、以下の場合を除き、ユーザーの個人情報を第三者に提供しません。
+        法令に基づく場合、人の生命・身体・財産の保護のために必要がある場合、
+        ユーザー本人の同意がある場合が該当します。
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">4. 利用する外部サービス</h2>
+      <p class="text-gray-700 leading-relaxed mb-3">
+        当サービスは以下の外部サービスを利用しており、それぞれのプライバシーポリシーが適用されます。
+      </p>
+      <ul class="list-disc list-inside text-gray-700 space-y-1">
+        <li>Google OAuth2（ログイン認証）</li>
+        <li>LINE Login（ログイン認証）</li>
+        <li>Google Gemini API / Groq API（AI習慣分析）</li>
+        <li>Resend（メール送信）</li>
+        <li>Neon（データベース）</li>
+        <li>Render（ホスティング）</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">5. 情報の管理・保護</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスは、収集した個人情報の漏洩・滅失・毀損を防ぐため、
+        適切なセキュリティ対策（通信の暗号化、アクセス制御等）を講じます。
+        ただし、インターネット上の完全な安全性を保証することはできません。
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">6. Cookie の使用</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスは、セッション管理・認証状態の維持のために Cookie を使用します。
+        ブラウザの設定により Cookie を無効にすることができますが、
+        当サービスの一部機能が利用できなくなる場合があります。
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">7. 個人情報の開示・修正・削除</h2>
+      <p class="text-gray-700 leading-relaxed">
+        ユーザーは、自身の個人情報の開示・修正・削除を当サービスに請求することができます。
+        当サービス内の設定ページから情報の確認・変更が可能です。
+        アカウントの削除についてはお問い合わせください。
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">8. プライバシーポリシーの変更</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスは、必要に応じてプライバシーポリシーを改定することがあります。
+        重要な変更がある場合は、サービス内でお知らせします。
+        改定後もサービスを継続してご利用いただいた場合、改定後のポリシーに同意したとみなします。
+      </p>
+    </section>
+
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">9. お問い合わせ</h2>
+      <p class="text-gray-700 leading-relaxed">
+        本プライバシーポリシーに関するお問い合わせは、当サービスのサポート窓口までお願いします。
+      </p>
+    </section>
+
+  </div>
+
+  <div class="mt-6 text-center text-sm text-gray-600">
+    <%= link_to "← トップページへ戻る", root_path,
+        class: "text-blue-600 hover:text-blue-700 hover:underline" %>
+    <span class="mx-2">|</span>
+    <%= link_to "利用規約", terms_path,
+        class: "text-blue-600 hover:text-blue-700 hover:underline" %>
+  </div>
+
+</div>

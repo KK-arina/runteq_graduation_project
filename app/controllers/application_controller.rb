@@ -59,6 +59,13 @@ class ApplicationController < ActionController::Base
   #   古いブラウザの脆弱性を突いた攻撃リスクを低減する。
   allow_browser versions: :modern
 
+  # F-3 追加: 未同意ユーザーのサービス利用を全面的に防ぐセーフティガード
+  #
+  # 【なぜ before_action として全コントローラーに適用するのか】
+  #   OAuthログイン後に /terms_agreement を経由せず直接URLを叩いて
+  #   ダッシュボード等にアクセスするのを防ぐため。法規上、同意なしの利用は認めてはいけない。
+  before_action :redirect_to_terms_agreement_if_needed
+
   # ============================================================
   # Issue #27: カスタムエラーハンドリングの設定
   # ============================================================
@@ -301,10 +308,56 @@ class ApplicationController < ActionController::Base
   #   controller_name で除外リストを確認し、
   #   オンボーディング・認証関連コントローラーでは実行しない。
   def redirect_to_onboarding_if_needed
-    return if controller_name.in?(%w[onboardings sessions users errors pages])
+    # terms_agreement を除外リストに追加（F-3 追加）
+    #
+    # 【なぜ terms_agreement を除外するのか】
+    #   first_login_at が nil のユーザーが /terms_agreement にアクセスしたとき、
+    #   除外リストがないと onboarding_step5_path にリダイレクトされてしまう。
+    #   「同意 → オンボーディング」の順番を守るため除外する。
+    return if controller_name.in?(%w[onboardings sessions users errors pages terms_agreement])
     return unless current_user&.first_login_at.nil?
 
     redirect_to onboarding_step5_path, notice: t("onboarding.welcome")
+  end
+
+  # ============================================================
+  # F-3 追加: 利用規約未同意ユーザーを同意ページへ強制リダイレクト
+  # ============================================================
+  #
+  # 【ホワイトリスト方式 vs コントローラー名リスト方式の違い】
+  #   controller_name で除外リストを管理すると、
+  #   コントローラーを追加するたびにリストの更新が必要になり漏れやすい。
+  #   request.path で許可パスを明示する方が安全で漏れにくい。
+  #
+  # 【除外パスの説明】
+  #   terms_agreement_path: 同意ページ自体（無限ループ防止のため除外）
+  #   terms_path:           利用規約を読むページ（未同意でも読む必要がある）
+  #   privacy_path:         プライバシーポリシーを読むページ（同上）
+  #   logout_path:          同意しないユーザーがログアウトできるようにするため
+  def redirect_to_terms_agreement_if_needed
+    # 未ログインユーザーは require_login に処理を委ねるためスキップ
+    return unless logged_in?
+
+    # すでに同意済みのユーザーはそのまま通す
+    return if current_user.terms_agreed?
+
+    # OmniAuth コールバックとエラーページは除外する
+    # （コールバック中にリダイレクトするとループする）
+    return if controller_name.in?(%w[omniauth_callbacks errors])
+
+    # 許可された特定パスへのアクセスは除外する
+    # （同意ページ・規約ページ・ログアウトは未同意でもアクセス可能にする）
+    allowed_paths = [
+      terms_agreement_path,
+      terms_path,
+      privacy_path,
+      logout_path
+    ]
+    return if request.path.in?(allowed_paths)
+
+    # 上記以外にアクセスしようとした未同意ログイン済みユーザーを同意ページへ強制リダイレクト
+    redirect_to terms_agreement_path,
+                alert: "サービスをご利用いただくには、利用規約およびプライバシーポリシーへの同意が必要です。"
   end
 
   # ============================================================

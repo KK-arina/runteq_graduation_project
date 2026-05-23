@@ -15,7 +15,8 @@ class FinalCheckAdditionalTest < ActionDispatch::IntegrationTest
       email:                 "additional_check@example.com",
       password:              "password123",
       password_confirmation: "password123",
-      first_login_at:        1.month.ago
+      first_login_at:        1.month.ago,
+      terms_agreed_at:       1.month.ago   # F-3 追加
     )
   end
 

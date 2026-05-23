@@ -1,15 +1,18 @@
 # app/controllers/pages_controller.rb
 #
 # 【このファイルの役割】
-#   静的ページ（トップページ）と、開発環境でのエラーページ確認用アクションを管理する。
+#   静的ページ（トップページ・利用規約・プライバシーポリシー）と、
+#   開発環境でのエラーページ確認用アクションを管理する。
+#
+# 【F-3 での変更内容】
+#   /terms と /privacy の静的ページアクションを追加した。
+#   未ログインでも閲覧できるよう before_action を設定しない（デフォルト）。
 
 class PagesController < ApplicationController
   # ============================================================
   # トップページ
   # ============================================================
   # GET /
-  # ログイン済みならダッシュボードへリダイレクト。
-  # 未ログインならランディングページを表示。
   def index
     if logged_in?
       redirect_to dashboard_path
@@ -17,37 +20,43 @@ class PagesController < ApplicationController
   end
 
   # ============================================================
+  # F-3 追加: 利用規約ページ
+  # ============================================================
+  # GET /terms
+  #
+  # 【なぜ before_action :require_login を付けないのか】
+  #   利用規約は「登録前のユーザー」「未ログインユーザー」も
+  #   閲覧できる必要がある（法規上の要件）。
+  #   ApplicationController の redirect_to_onboarding_if_needed は
+  #   controller_name で "pages" を除外済みのため未ログインでもアクセス可能。
+  #   redirect_to_terms_agreement_if_needed も terms_path を許可リストに入れているため
+  #   未同意ユーザーもアクセスできる。
+  def terms
+    # ビューを表示するだけ（インスタンス変数の設定は不要）
+  end
+
+  # ============================================================
+  # F-3 追加: プライバシーポリシーページ
+  # ============================================================
+  # GET /privacy
+  #
+  # 利用規約と同じ理由で未ログインでも閲覧可能にする。
+  def privacy
+    # ビューを表示するだけ（インスタンス変数の設定は不要）
+  end
+
+  # ============================================================
   # Issue #27: エラーページ確認用アクション（開発環境のみ使用）
   # ============================================================
-  # routes.rb の if Rails.env.development? ブロック内にのみ定義されているため、
-  # 本番環境ではこれらのURLは存在しない。
-
-  # GET /errors/404
   def error_404
-    # render_404 は ApplicationController で定義したメソッド。
-    # 404ページの見た目を開発環境で確認するために呼び出す。
     render_404
   end
 
-  # GET /errors/422
   def error_422
     render_422
   end
 
-  # GET /errors/500
   def error_500
-    # 【重要】render file: ではなく render template: を使う。
-    #
-    # render file: との違い:
-    #   render file:     → ファイルをそのままテキストとして返す場合がある。
-    #                       ERB として処理されず、コードが画面にそのまま表示されてしまう。
-    #   render template: → Rails が ERB テンプレートとして正しく処理して HTML を生成する。
-    #
-    # なぜ render_500 を直接呼ばないのか:
-    #   render_500 は Rails.env.development? のとき raise するため、
-    #   開発環境でこのアクションから呼ぶとデバッグ画面になってしまう。
-    #   ここでは「500ページの見た目だけを確認したい」ので
-    #   render template: で直接ビューを表示する。
     render template: "errors/internal_server_error",
            layout: "application",
            status: :internal_server_error

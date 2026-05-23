@@ -1,3 +1,27 @@
+# test/fixtures/users.yml
+#
+# ==============================================================================
+# F-3 対応: 既存ユーザー全員に terms_agreed_at を追加
+# ==============================================================================
+#
+# 【なぜ terms_agreed_at を fixture に追加するのか】
+#   F-3 で ApplicationController に redirect_to_terms_agreement_if_needed を追加した。
+#   このフィルターは「ログイン済みかつ terms_agreed_at が nil」のユーザーを
+#   /terms_agreement へ強制リダイレクトする。
+#
+#   fixture のユーザーは DB 上で terms_agreed_at = NULL になるため、
+#   F-3 実装前から存在する全テストが「未同意ユーザー」と判定されてしまい、
+#   期待したページではなく /terms_agreement にリダイレクトされてテストが全滅する。
+#
+#   解決方法: 既存の全 fixture ユーザーに terms_agreed_at を設定する。
+#   これにより「同意済みユーザー」として扱われ、既存テストへの影響がなくなる。
+#
+# 【新規 fixture ユーザーを追加する場合のルール】
+#   - 同意済みユーザーとしてテストする場合: terms_agreed_at を設定する
+#   - 未同意ユーザーとしてテストする場合: terms_agreed_at を省略（nil になる）
+#     ただし、テスト内で /terms_agreement へのリダイレクトを明示的に考慮すること
+# ==============================================================================
+
 # fixture_only_user（E-2 新規追加）
 #
 # 【役割】
@@ -19,13 +43,17 @@
 #   first_login_at が NULL のユーザーは ApplicationController の
 #   redirect_to_onboarding_if_needed により /onboarding/step5 へ
 #   リダイレクトされる（D-7 実装）。
-#   フィクスチャ専用ユーザーでもリダイレクトで意図しない動作を起こさないよう
-#   オンボーディング完了済みとして設定しておく。
+#
+# 【F-3 追加: terms_agreed_at を設定する理由】
+#   terms_agreed_at が NULL のユーザーは redirect_to_terms_agreement_if_needed
+#   により /terms_agreement へリダイレクトされる。
+#   テストで意図しないリダイレクトが起きないよう同意済みとして設定する。
 fixture_only_user:
   name: "フィクスチャ専用ユーザー"
   email: "fixture_only@example.com"
   password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
   first_login_at: "2026-01-01 00:00:00"
+  terms_agreed_at: "2026-01-01 00:00:00"
 
 # 【このファイルの役割】
 # テスト用のユーザーサンプルデータ。
@@ -41,6 +69,12 @@ fixture_only_user:
 #   redirect_to_onboarding_if_needed により /onboarding/step5 へリダイレクトされる。
 #   既存テストユーザーはオンボーディング完了済みとして扱うため
 #   全エントリに first_login_at を設定する。
+#
+# 【F-3 追加: terms_agreed_at について】
+#   terms_agreed_at が NULL のユーザーは redirect_to_terms_agreement_if_needed
+#   により /terms_agreement へリダイレクトされる。
+#   既存テストユーザーは同意済みとして扱うため全エントリに設定する。
+
 # ---- 既存のフィクスチャ（Week 1 で追加済み） ----
 one:
   name: "テストユーザー1"
@@ -49,6 +83,8 @@ one:
   password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
   # D-7 追加: オンボーディング完了済みとして扱う（NULL だとリダイレクトされる）
   first_login_at: "2026-01-01 00:00:00"
+  # F-3 追加: 利用規約同意済みとして扱う（NULL だと /terms_agreement にリダイレクトされる）
+  terms_agreed_at: "2026-01-01 00:00:00"
 
 two:
   name: "テストユーザー2"
@@ -56,6 +92,8 @@ two:
   password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
   # D-7 追加: オンボーディング完了済みとして扱う
   first_login_at: "2026-01-01 00:00:00"
+  # F-3 追加: 利用規約同意済みとして扱う
+  terms_agreed_at: "2026-01-01 00:00:00"
 
 # ============================================================
 # Issue #25 で追加するフィクスチャ
@@ -70,3 +108,5 @@ locked_user:
   password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
   # D-7 追加: オンボーディング完了済みとして扱う
   first_login_at: "2026-01-01 00:00:00"
+  # F-3 追加: 利用規約同意済みとして扱う
+  terms_agreed_at: "2026-01-01 00:00:00"

@@ -187,6 +187,7 @@ ja:
         email:                 "メールアドレス"
         password:              "パスワード"
         password_confirmation: "パスワード（確認）"
+        terms_agreed:          "利用規約への同意"   # F-3 追加
 
       # ──────────────────────────────────────────────────────
       # Habit モデルの属性名
@@ -310,6 +311,8 @@ ja:
               too_short: "は%{count}文字以上で入力してください"
             password_confirmation:
               confirmation: "とパスワードの入力が一致しません"
+            terms_agreed:
+              accepted: "利用規約・プライバシーポリシーへの同意が必要です"
         habit_record:
           attributes:
             record_date:
@@ -379,3 +382,15 @@ ja:
   #   %{path} はログ出力時に実際のパスで置き換えられる。
   deep_link:
     invalid_redirect: "不正な redirect_to パラメータを検出しました（外部URL等）: %{path}"
+
+  # ============================================================
+  # F-3 追加: 利用規約・プライバシーポリシー同意関連のメッセージ
+  # ============================================================
+  #
+  # 【terms_agreement セクションの用途】
+  #   TermsAgreementController で使用するフラッシュメッセージ・エラーメッセージ。
+  #   t("terms_agreement.agreed") のように呼び出す。
+  terms_agreement:
+    agreed: "利用規約・プライバシーポリシーへの同意を確認しました。"
+    agreed_and_onboarding: "利用規約・プライバシーポリシーへの同意を確認しました。続いて目標を設定しましょう。"
+    not_agreed: "利用規約・プライバシーポリシーへの同意が必要です。チェックボックスをオンにしてください。"

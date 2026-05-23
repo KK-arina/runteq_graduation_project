@@ -1,0 +1,2 @@
+module TermsAgreementHelper
+end

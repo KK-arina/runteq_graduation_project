@@ -122,3 +122,16 @@ application.register("mood-rating", MoodRatingController)
 //   ファイル名 ai_proposal_modal_controller.js がケバブケースに変換される。
 import AiProposalModalController from "./ai_proposal_modal_controller"
 application.register("ai-proposal-modal", AiProposalModalController)
+
+// ── F-3 追加: terms-agreement コントローラーを登録する ─────────────────────
+//
+// 【このコントローラーの役割】
+//   登録フォームの利用規約同意チェックボックスの ON/OFF に応じて
+//   送信ボタンの活性/非活性を切り替える。
+//
+// 【なぜ手動登録するのか】
+//   bin/rails generate stimulus でファイルは生成されるが、
+//   index.js への自動追記は環境によって行われない場合がある。
+//   ここで明示的に登録することで確実に動作させる。
+import TermsAgreementController from "./terms_agreement_controller"
+application.register("terms-agreement", TermsAgreementController)

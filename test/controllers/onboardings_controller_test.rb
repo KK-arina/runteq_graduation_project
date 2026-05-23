@@ -29,10 +29,18 @@ require "test_helper"
 class OnboardingsControllerTest < ActionDispatch::IntegrationTest
   def setup
     # first_login_at が NULL のユーザー（オンボーディング未完了）を作成する
+    #
+    # 【F-3 追加: terms_agreed_at を設定する理由】
+    #   terms_agreed_at が nil だと redirect_to_terms_agreement_if_needed により
+    #   /terms_agreement へリダイレクトされてテストが失敗する。
+    #   オンボーディングテストは terms_agreed_at を設定した上で
+    #   first_login_at = nil（オンボーディング未完了）の状態を作る。
     @user = User.create!(
-      name:     "テストユーザー",
-      email:    "onboarding_test_#{SecureRandom.hex(4)}@example.com",
-      password: "password123", password_confirmation: "password123"
+      name:             "テストユーザー",
+      email:            "onboarding_test_#{SecureRandom.hex(4)}@example.com",
+      password:         "password123",
+      password_confirmation: "password123",
+      terms_agreed_at:  Time.current   # F-3 追加
     )
 
     post login_path, params: { session: { email: @user.email, password: "password123" } }

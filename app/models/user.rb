@@ -10,41 +10,22 @@
 #
 # 【F-1 での変更内容】
 #   1. has_secure_password に validations: false を追加。
-#      Google ログインユーザーはパスワードを持たないため、
-#      デフォルトの「パスワード必須」バリデーションを無効化して
-#      独自バリデーション（email_provider? 条件付き）で制御する。
-#
 #   2. from_omniauth クラスメソッドを追加。
-#      Google OAuth2 の認証情報を元に User を検索または新規作成する。
-#
 #   3. email バリデーションに allow_nil: true を追加。
-#      LINE ログインではメールアドレスが取得できない場合があるため。
-#
 #   4. password バリデーションに if: :email_provider? 条件を追加。
-#      Google ログインユーザーにはパスワードバリデーションを適用しない。
 #
 # 【F-2 での変更内容】
-#   from_omniauth クラスメソッドを LINE にも対応するよう拡張する。
-#   LINE はメールアドレスを返さない（email が nil になる）ため、
-#   メールによるマージ処理を条件付きにする。
+#   from_omniauth クラスメソッドを LINE にも対応するよう拡張。
 #
-#   LINE の auth ハッシュ構造:
-#     {
-#       "provider" => "line",
-#       "uid"      => "U1234567890abcdef",  # LINE の一意ユーザー ID
-#       "info"     => {
-#         "name"  => "山田太郎",
-#         "image" => "https://profile.line.me/..."
-#         # email は原則含まれない（特権スコープで別途申請が必要）
-#       }
-#     }
+# 【F-3 での変更内容】
+#   1. terms_agreed バリデーション（:acceptance）を追加。
+#      allow_nil: true で OAuth ユーザーの create! には影響しない。
+#   2. before_save :set_terms_agreed_at を追加。
+#      同意チェック時に terms_agreed_at へ現在時刻を記録する。
 #
 # 【provider の値について】
 #   OmniAuth Google OAuth2 gem は auth["provider"] に "google_oauth2" を返す。
 #   OmniAuth LINE gem は auth["provider"] に "line" を返す。
-#   この値をそのまま DB に保存することで:
-#     ① find_by(provider: auth["provider"]) と保存値が一致してバグが起きない
-#     ② provider の変換ルールが不要でシンプル
 #
 # ==============================================================================
 class User < ApplicationRecord
@@ -54,13 +35,23 @@ class User < ApplicationRecord
   #
   # has_secure_password validations: false:
   #   password / password_digest / authenticate メソッドを提供する Rails の機能。
-  #   デフォルトでは「パスワードは必須」バリデーションが自動で付くが、
-  #   validations: false でそれを無効化する。
-  #
-  # 【なぜ validations: false にするのか】
+  #   validations: false でデフォルトの「パスワード必須」バリデーションを無効化する。
   #   Google / LINE ログインユーザーは password_digest が NULL でも正常なユーザー。
-  #   デフォルトのバリデーションがあると OAuth ユーザーの create! が失敗してしまう。
   has_secure_password validations: false
+
+  # ============================================================
+  # F-3 追加: 利用規約同意用の仮想属性
+  # ============================================================
+  #
+  # 【なぜ attr_accessor が必要なのか】
+  #   terms_agreed は DB に存在しないカラムで、フォームのチェックボックスの
+  #   値（"1" または "0"）を一時的に保持するだけの仮想属性。
+  #   attr_accessor がないと「undefined method `terms_agreed'」エラーになる。
+  #
+  # 【acceptance バリデーションだけでは不十分な理由】
+  #   Rails の :acceptance バリデーションは attr_accessor を自動生成しない。
+  #   明示的に attr_accessor を定義する必要がある。
+  attr_accessor :terms_agreed
 
   # ============================================================
   # アソシエーション
@@ -82,7 +73,6 @@ class User < ApplicationRecord
   # 【allow_nil: true について】
   #   LINE ログインではメールアドレスが取得できない場合がある。
   #   nil の場合は全バリデーションをスキップする。
-  #   これにより「nil は許可（LINE用）」「空文字は不許可」という挙動になる。
   validates :email,
             presence:   true,
             length:     { maximum: 255 },
@@ -93,9 +83,7 @@ class User < ApplicationRecord
   # password バリデーション
   #
   # 【if: lambda の意味】
-  #   provider が "email" または nil（メール登録ユーザー）の場合のみ
-  #   パスワードのバリデーションを実行する。
-  #   Google / LINE ユーザーにはパスワードバリデーションを適用しない。
+  #   provider が "email" または nil（メール登録ユーザー）の場合のみ実行する。
   validates :password,
             presence:  true,
             length:    { minimum: 8 },
@@ -106,15 +94,45 @@ class User < ApplicationRecord
             if:        ->(u) { (u.provider.blank? || u.provider == "email") && u.password.present? }
 
   # ============================================================
+  # F-3 追加: 利用規約同意バリデーション
+  # ============================================================
+  #
+  # 【:acceptance バリデーションとは】
+  #   チェックボックスの「同意」が必須であることを検証する Rails 組み込みバリデーション。
+  #   フォームから terms_agreed="1" が送られてくれば valid になる。
+  #   "0" や "" は falsy として扱われ、バリデーションに失敗する。
+  #
+  # 【if: :email_provider? を使う理由（allow_nil: true より安全）】
+  #   allow_nil: true にすると terms_agreed=nil でも通ってしまう。
+  #   Strong Parameters 漏れやフォーム変更時に未同意登録を許してしまう危険がある。
+  #   email_provider? で「メール登録ユーザーのみ必須」とすることで、
+  #   OAuth ユーザーの create!（terms_agreed を渡さない）は自然にスキップされる。
+  #   既存の email_provider? メソッドを再利用できるため保守性も高い。
+  validates :terms_agreed,
+            acceptance: true,
+            if:         :email_provider?
+
+  # ============================================================
   # コールバック
   # ============================================================
   before_save :downcase_email
+
+  # F-3 追加: メール登録時のみ、同意チェックが入っていれば terms_agreed_at を記録する
+  #
+  # 【before_validation を使う理由】
+  #   before_save だとプロフィール更新など全保存で毎回走る。
+  #   before_validation にすることで「バリデーション前」に処理が入り、
+  #   不要な保存時に走らせずに済む。
+  #
+  # 【if 条件を付ける理由】
+  #   email_provider? のユーザーのみ（メール登録）に限定する。
+  #   OAuth ユーザーは /terms_agreement ページで update_column で直接記録する。
+  before_validation :set_terms_agreed_at, if: :email_provider?
 
   # after_create :create_user_setting
   #
   # 【役割】
   #   ユーザー新規作成時に UserSetting レコードを自動作成する。
-  #   Google / LINE ログインで新規ユーザーが作成された場合も同様に実行される。
   after_create :create_user_setting
 
   # ============================================================
@@ -126,23 +144,13 @@ class User < ApplicationRecord
   # 【役割】
   #   OAuth 認証完了後に OmniAuth から渡される認証情報（auth ハッシュ）を元に、
   #   既存ユーザーを検索、または新規ユーザーを作成して返す。
-  #   Google OAuth2（F-1）と LINE Login（F-2）の両方に対応する。
   #
-  # 【3段階の処理フロー】
-  #   ① provider + uid で完全一致のユーザーを検索（2回目以降のログイン）
-  #   ② 見つからない場合、同じメールの既存ユーザーを検索してマージ（初回 Google ログイン時）
-  #      ※ LINE はメールを返さないため、② は email が存在する場合のみ実行する
-  #   ③ それも見つからない場合、新規ユーザーを作成
-  #
-  # 【Google と LINE の auth ハッシュの違い】
-  #   Google: provider="google_oauth2", email あり, name あり
-  #   LINE:   provider="line",          email なし（原則）, name あり
-  #
+  # 【F-3 の影響】
+  #   terms_agreed を渡さないため nil になる。
+  #   allow_nil: true のバリデーション設定により create! は問題なく通過する。
+  #   OAuth ユーザーの terms_agreed_at は /terms_agreement ページで記録する。
   def self.from_omniauth(auth)
     # ── ① provider + uid で既存ユーザーを検索する ──────────────────────────
-    #
-    # auth["provider"] は "google_oauth2" または "line"。
-    # この値をそのまま保存・検索することで一致が保証される。
     user = find_by(provider: auth["provider"], uid: auth["uid"])
     return user if user.present?
 
@@ -153,17 +161,10 @@ class User < ApplicationRecord
       existing_user = find_by(email: email)
 
       if existing_user
-        # ── 既存メールアカウントに OAuth 情報を紐付ける（マージ）──
+        # 既存メールアカウントに OAuth 情報を紐付ける（マージ）
         #
-        # 【なぜ update_columns を使うのか】
-        #   update! を使うと email の uniqueness バリデーションが実行され
-        #   バリデーションエラーが発生するリスクがある。
-        #   update_columns はバリデーションをスキップして指定カラムのみ直接更新するため安全。
-        #
-        # 【updated_at を明示的に更新する理由】
-        #   update_columns はデフォルトで updated_at を更新しない。
-        #   将来のログ分析・監査で「いつ OAuth マージされたか」を追跡できるよう
-        #   明示的に Time.current を設定する。
+        # 【update_columns を使う理由】
+        #   バリデーションをスキップして指定カラムのみ直接更新する。
         existing_user.update_columns(
           provider:   auth["provider"],
           uid:        auth["uid"],
@@ -174,23 +175,13 @@ class User < ApplicationRecord
     end
 
     # ── ③ 完全な新規ユーザーを作成する ────────────────────────────────────
-    #
-    # 【LINE の uid について】
-    #   LINE Login (OpenID Connect) の uid は auth["uid"] に入る「sub」値。
-    #   ※ sub は LINE のユーザー識別子で、形式は固定されていない文字列。
-    #   ※ Messaging API の userId（U から始まる）とは別物。混同しないこと。
-    #
-    #   users.uid     = LINE Login の sub（OmniAuth ログイン識別子）← 今回設定
-    #   users.line_user_id = Messaging API 通知用 userId ← 今回は触らない
-    #
-    # 【LINE ユーザーの email について】
-    #   LINE はメールアドレスを返さないため email は nil になる。
-    #   email バリデーションに allow_nil: true を設定済みのため問題ない。
     create!(
       provider: auth["provider"],
       uid:      auth["uid"],
       name:     auth.dig("info", "name").presence || fallback_name_for(auth["provider"]),
       email:    email   # LINE の場合は nil になる（許容済み）
+      # terms_agreed は渡さない → nil → allow_nil: true でパス
+      # terms_agreed_at は /terms_agreement ページで別途記録する
     )
   end
 
@@ -208,6 +199,18 @@ class User < ApplicationRecord
     !last_week_completed
   end
 
+  # terms_agreed_at?（F-3 追加）
+  #
+  # 【役割】
+  #   ユーザーが利用規約に同意済みかどうかを返す。
+  #   terms_agreed_at が NULL でない = 同意済み。
+  #
+  # 【使用場所】
+  #   OAuthコントローラーで初回ログイン後の同意チェックに使用する。
+  def terms_agreed?
+    terms_agreed_at.present?
+  end
+
   # ============================================================
   # プライベートメソッド
   # ============================================================
@@ -217,11 +220,6 @@ class User < ApplicationRecord
   #
   # 【役割】
   #   メールとパスワードで登録したユーザーかどうかを判定する。
-  #   password バリデーションの if 条件として使用する。
-  #
-  # 【判定ロジック】
-  #   provider が "email" または nil（古いユーザーで未設定）→ true（パスワード必須）
-  #   provider が "google_oauth2" / "line" 等 → false（パスワード不要）
   def email_provider?
     provider.blank? || provider == "email"
   end
@@ -230,11 +228,6 @@ class User < ApplicationRecord
   #
   # 【役割】
   #   OAuth プロバイダから名前が取得できなかった場合のフォールバック名を返す。
-  #   from_omniauth の create! 内で使用する。
-  #
-  # 【なぜプロバイダ別にフォールバック名を分けるのか】
-  #   "Google User" / "LINE User" と区別することで、
-  #   管理画面等で登録元プロバイダが分かりやすくなる。
   def self.fallback_name_for(provider)
     case provider
     when "google_oauth2" then "Google User"
@@ -251,5 +244,26 @@ class User < ApplicationRecord
 
   def downcase_email
     self.email = email.to_s.downcase if email.present?
+  end
+
+  # set_terms_agreed_at（F-3 追加）
+  #
+  # 【役割】
+  #   before_validation コールバックとして呼ばれる。
+  #   terms_agreed が真値（"1" または true）であり、
+  #   かつ terms_agreed_at がまだ未設定の場合にのみ現在時刻を記録する。
+  #
+  # 【なぜ terms_agreed_at.blank? を条件にするのか】
+  #   プロフィール更新など2回目以降の保存で、最初に同意した日時を
+  #   上書きしないように保護するため。
+  #
+  # 【ActiveModel::Type::Boolean.new.cast について】
+  #   フォームから来る "1"（文字列）を true（bool）に確実に変換する。
+  #   "1" → true / "0" → false / nil → nil のように変換される。
+  def set_terms_agreed_at
+    agreed = ActiveModel::Type::Boolean.new.cast(terms_agreed)
+    if agreed && terms_agreed_at.blank?
+      self.terms_agreed_at = Time.current
+    end
   end
 end
