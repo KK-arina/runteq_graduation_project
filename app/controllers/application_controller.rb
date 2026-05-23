@@ -276,6 +276,20 @@ class ApplicationController < ActionController::Base
     render_error_page("errors/not_found", :not_found)
   end
 
+  # ============================================================
+  # F-5 追加: 429 Too Many Requests カスタムエラーページ
+  # ============================================================
+  #
+  # 【なぜ rack-attack の throttled_responder と別に render_429 が必要なのか】
+  #   rack-attack の throttled_responder は Rack レベルで動作するため
+  #   Turbo Stream・JSON フォーマットには対応できない。
+  #   Rails コントローラー内から 429 を返したい場面（将来の API 拡張など）のために
+  #   ApplicationController にも render_429 を用意しておく。
+  def render_429(exception = nil)
+    Rails.logger.warn "429 Too Many Requests: #{exception&.message}"
+    render_error_page("errors/too_many_requests", :too_many_requests)
+  end
+
   def render_422(exception = nil)
     Rails.logger.warn "422 Unprocessable Entity: #{exception&.message}"
     render_error_page("errors/unprocessable", :unprocessable_entity)
