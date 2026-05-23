@@ -314,7 +314,7 @@ class ApplicationController < ActionController::Base
     #   first_login_at が nil のユーザーが /terms_agreement にアクセスしたとき、
     #   除外リストがないと onboarding_step5_path にリダイレクトされてしまう。
     #   「同意 → オンボーディング」の順番を守るため除外する。
-    return if controller_name.in?(%w[onboardings sessions users errors pages terms_agreement])
+    return if controller_name.in?(%w[onboardings sessions users errors pages terms_agreement password_resets])
     return unless current_user&.first_login_at.nil?
 
     redirect_to onboarding_step5_path, notice: t("onboarding.welcome")

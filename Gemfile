@@ -267,7 +267,14 @@ group :development do
   # 【production環境には含めない理由】
   # development グループに限定することで、本番環境では
   # letter_openerが読み込まれず、Resendが使われる。
-  gem "letter_opener"
+  #
+  # 【なぜ letter_opener_web に変更するのか】
+  #   letter_opener は送信時にブラウザを自動で開こうとするが、
+  #   Docker コンテナ内にはブラウザが存在しないため開かれない。
+  #   letter_opener_web は /letter_opener にアクセスするだけで
+  #   送信済みメールの一覧を確認できる Web UI を提供する。
+  #   Docker 環境での開発に最適。
+  gem "letter_opener_web"
 
   # ============================================================
   # Issue #A-6: Bullet（N+1問題の自動検出）
