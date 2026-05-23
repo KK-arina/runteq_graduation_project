@@ -3,6 +3,7 @@
 # ============================================================
 # F-1 追加: OmniAuth Google コールバックルートを追加
 # F-2 追加: OmniAuth LINE コールバックルートを追加
+# F-3 追加: 利用規約・プライバシーポリシー・OAuth同意ルートを追加
 # ============================================================
 
 Rails.application.routes.draw do
@@ -25,11 +26,37 @@ Rails.application.routes.draw do
   delete "/logout", to: "sessions#destroy", as: :logout
 
   # ============================================================
-  # F-1 追加: OmniAuth Google コールバック & 失敗ルート
+  # F-3 追加: 利用規約・プライバシーポリシー静的ページ
   # ============================================================
   #
-  # GET /auth/google_oauth2/callback:
-  #   Google 認証完了後に Google からリダイレクトされるエンドポイント。
+  # GET /terms:
+  #   利用規約ページ。PagesController#terms が処理する。
+  #   未ログインでも閲覧できる（before_action :require_login を付けていない）。
+  get "/terms",   to: "pages#terms",   as: :terms
+
+  # GET /privacy:
+  #   プライバシーポリシーページ。PagesController#privacy が処理する。
+  #   未ログインでも閲覧できる。
+  get "/privacy", to: "pages#privacy", as: :privacy
+
+  # ============================================================
+  # F-3 追加: OAuth 初回ログイン時の利用規約同意ルート
+  # ============================================================
+  #
+  # GET /terms_agreement:
+  #   OAuth 初回ログイン後に表示する同意確認ページ。
+  #   TermsAgreementController#show が処理する。
+  #
+  # POST /terms_agreement:
+  #   同意チェックボックスを送信して terms_agreed_at を記録する。
+  #   TermsAgreementController#agree が処理する。
+  #   as: を付けると terms_agreement_agree_path ヘルパーが生成される。
+  get  "/terms_agreement", to: "terms_agreement#show",  as: :terms_agreement
+  post "/terms_agreement", to: "terms_agreement#agree", as: :terms_agreement_agree
+
+  # ============================================================
+  # F-1 追加: OmniAuth Google コールバック & 失敗ルート
+  # ============================================================
   get "/auth/google_oauth2/callback",
       to:  "omniauth_callbacks#google",
       as:  :omniauth_google_callback
@@ -37,17 +64,12 @@ Rails.application.routes.draw do
   # ============================================================
   # F-2 追加: OmniAuth LINE コールバックルート
   # ============================================================
-  #
-  # 【重要】omniauth-line-v2_1 gem のプロバイダ名は :line_v21 のため、
-  #   OmniAuth が自動生成するコールバック URL は /auth/line_v21/callback になる。
-  #   routes.rb もこれに合わせて /auth/line_v21/callback を定義する。
   get "/auth/line_v2_1/callback",
       to:  "omniauth_callbacks#line",
       as:  :omniauth_line_callback
 
   # GET /auth/failure:
-  #   OmniAuth がエラーと判定した場合のフォールバックエンドポイント。
-  #   Google/LINE いずれかの認証失敗でもここに来る。
+  #   OmniAuth がエラーと判定した場合のフォールバック。
   get "/auth/failure",
       to:  "omniauth_callbacks#failure",
       as:  :omniauth_failure

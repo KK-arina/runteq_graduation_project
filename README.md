@@ -88,7 +88,8 @@ flowchart LR
 [![E-5 振り返り詳細ページ強化](https://img.shields.io/badge/E--5_振り返り詳細ページ強化-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/e-5-reflection-show-enhancement)
 [![F-1 OmniAuthGoogle](https://img.shields.io/badge/F--1_OmniAuth_Google-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/f-1-omniauth-google)
 [![F-2 OmniAuth LINE](https://img.shields.io/badge/F--2_OmniAuth_LINE-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/f-2-omniauth-line)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-42%2F67_ISSUE-f59e0b?style=flat-square)]()
+[![F-3 利用規約同意](https://img.shields.io/badge/F--3_利用規約同意-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/f3-terms-agreement)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-43%2F67_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -194,6 +195,7 @@ flowchart LR
 | #E-5 | 振り返り詳細ページ（15番）の強化（AI分析コメント・ポーリング・免責バナー） | 2026-05-17 | feature/e-5-reflection-show-enhancement |
 | #F-1 | OmniAuth Google ログイン | 2026-05-18 | feature/f-1-omniauth-google |
 | #F-2 | OmniAuth LINE ログイン | 2026-05-21 | feature/f-2-omniauth-line |
+| #F-3 | 利用規約・プライバシーポリシー同意（登録時必須） | 2026-05-23 | feature/f3-terms-agreement |
 
 <br>
 
@@ -4538,6 +4540,150 @@ LINE ユーザーの登録時に `PG::NotNullViolation` が発生する。<br>
 
 <br>
 
+### #F-3: 利用規約・プライバシーポリシー同意（登録時必須）
+
+<br>
+
+**ブランチ:** `feature/f3-terms-agreement`<br>
+**完了日:** 2026-05-23<br>
+**概要:** ユーザー登録時に利用規約・プライバシーポリシーへの同意を必須化する機能を実装。<br>
+OAuth（Google/LINE）初回ログイン時も同意ページを表示し、同意日時を DB に記録する。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Migration | `users` テーブルに `terms_agreed_at datetime` カラムを追加（NULL許容・同意済みのみ部分インデックス） |
+| Model | `User` に `attr_accessor :terms_agreed` 仮想属性を追加 |
+| Model | `validates :terms_agreed, acceptance: true, if: :email_provider?` バリデーションを追加 |
+| Model | `before_validation :set_terms_agreed_at, if: :email_provider?` で同意時に日時を自動記録 |
+| Model | `terms_agreed?` を public メソッドとして定義（ApplicationController から呼ぶため） |
+| Controller | `ApplicationController` に `redirect_to_terms_agreement_if_needed` を追加（全画面ガード） |
+| Controller | `redirect_to_onboarding_if_needed` の除外リストに `terms_agreement` を追加 |
+| Controller | `OmniauthCallbacksController` の遷移優先度1を `terms_agreed?` チェックに変更 |
+| Controller | `TermsAgreementController` を新規作成（show / agree アクション） |
+| Controller | `PagesController` に `terms` / `privacy` アクションを追加 |
+| View | `users/new.html.erb` に同意チェックボックスを追加（未チェック時ボタン非活性） |
+| View | `terms_agreement/show.html.erb` を新規作成（OAuth初回ログイン用同意ページ） |
+| View | `pages/terms.html.erb` / `pages/privacy.html.erb` を新規作成（未ログイン閲覧可） |
+| View | `shared/_footer.html.erb` を新規作成（利用規約・プライバシーポリシーリンク） |
+| JS | `terms_agreement_controller.js` を新規作成（チェックボックスOFF時ボタン非活性） |
+| JS | `index.js` に `TermsAgreementController` を手動登録 |
+| Route | `/terms` / `/privacy` / `/terms_agreement`（GET/POST）を追加 |
+| i18n | `ja.yml` に `terms_agreement.*` メッセージを追加 |
+| i18n | `attributes: > user: > terms_agreed: "利用規約への同意"` を追加 |
+| Test | `test/fixtures/users.yml` 全ユーザーに `terms_agreed_at` を追加（既存テスト保護） |
+| Test | `test_helper.rb` の `log_in_as` に `terms_agreed_at` 自動設定を追加 |
+| Test | `test/controllers/terms_agreement_controller_test.rb` を新規作成（6件） |
+
+<br>
+
+#### 設計上の重要ポイント
+
+<br>
+
+**① `terms_agreed?` は public に置く**
+
+<br>
+
+`ApplicationController` の `redirect_to_terms_agreement_if_needed` から<br>
+`user.terms_agreed?` を呼ぶため、`private` に置くと `NoMethodError` が発生する。<br>
+`def terms_agreed?` は public ブロックに定義し、`set_terms_agreed_at` のみ private にする。
+
+<br>
+
+**② `attr_accessor :terms_agreed` は必須**
+
+<br>
+
+`validates :terms_agreed, acceptance: true` だけでは仮想属性が自動生成されない。<br>
+フォームから `terms_agreed: "1"` を受け取るために `attr_accessor` が必要。
+
+<br>
+
+**③ バリデーションは `if: :email_provider?` で条件付き**
+
+<br>
+
+Google/LINE ユーザーは登録フォームを経由しないため、<br>
+`allow_nil: true` より `if: :email_provider?` の方が安全。<br>
+OAuthユーザーのプロフィール更新時にバリデーションが誤って発火しない設計になる。
+
+<br>
+
+**④ `before_validation` で `set_terms_agreed_at` を実行**
+
+<br>
+
+`before_save` だと全保存で毎回走ってしまう。<br>
+`before_validation` + `if: :email_provider?` で「メールユーザーの登録時のみ」に限定する。
+
+<br>
+
+**⑤ fixture全ユーザーに `terms_agreed_at` 追加が必須**
+
+<br>
+
+`terms_agreed_at` が nil のユーザーでテストがログインすると<br>
+全画面ガードで `/terms_agreement` にリダイレクトされ、既存テストが全て失敗する。<br>
+`test/fixtures/users.yml` 全ユーザーに `terms_agreed_at: "2026-01-01 00:00:00"` を追加することで<br>
+既存テストへの影響をゼロにできる。
+
+<br>
+
+**⑥ `log_in_as` に自動設定を追加してテスト修正を最小化**
+
+<br>
+
+`test_helper.rb` の `log_in_as` で `terms_agreed_at` が nil のユーザーに<br>
+自動的に `update_column` で日時をセットすることで、<br>
+未同意テスト以外の全テストが修正なしで動作する。<br>
+未同意状態が必要なテストだけ `log_in_as` の後に `user.update_column(:terms_agreed_at, nil)` で戻す。
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `db/migrate/YYYYMMDDHHMMSS_add_terms_agreed_at_to_users.rb` | 新規作成（datetime・NULL許容・部分インデックス） |
+| `app/models/user.rb` | `attr_accessor :terms_agreed`・`validates :terms_agreed`・`before_validation :set_terms_agreed_at`・`terms_agreed?`（public）・`set_terms_agreed_at`（private）を追加 |
+| `app/controllers/application_controller.rb` | `redirect_to_terms_agreement_if_needed` 追加・`redirect_to_onboarding_if_needed` の除外リスト更新 |
+| `app/controllers/users_controller.rb` | `user_params` に `:terms_agreed` を追加 |
+| `app/controllers/omniauth_callbacks_controller.rb` | `determine_redirect_path_for_omniauth` に優先度1として `terms_agreed?` チェックを追加 |
+| `app/controllers/terms_agreement_controller.rb` | 新規作成（show / agree アクション・`require_login`・`ensure_needs_agreement`） |
+| `app/controllers/pages_controller.rb` | `terms` / `privacy` アクション追加 |
+| `config/routes.rb` | `/terms` / `/privacy` / `/terms_agreement`（GET/POST）を追加 |
+| `app/views/users/new.html.erb` | 同意チェックボックス追加（data-controller="terms-agreement form-submit"） |
+| `app/views/terms_agreement/show.html.erb` | 新規作成 |
+| `app/views/pages/terms.html.erb` | 新規作成 |
+| `app/views/pages/privacy.html.erb` | 新規作成 |
+| `app/views/shared/_footer.html.erb` | 新規作成（利用規約・プライバシーポリシーリンク） |
+| `app/javascript/controllers/terms_agreement_controller.js` | 新規作成（checkbox / button ターゲット・connect / toggle メソッド） |
+| `app/javascript/controllers/index.js` | `TermsAgreementController` を手動登録追加 |
+| `config/locales/ja.yml` | `terms_agreement.*` メッセージ・`user.terms_agreed` 属性名を追加 |
+| `test/fixtures/users.yml` | 全ユーザーに `terms_agreed_at: "2026-01-01 00:00:00"` を追加 |
+| `test/test_helper.rb` | `log_in_as` に `terms_agreed_at` 自動設定を追加 |
+| `test/controllers/terms_agreement_controller_test.rb` | 新規作成（6件：未同意表示・未ログインリダイレクト・同意済みリダイレクト・同意でダッシュボード遷移・初回ログインでオンボーディング遷移・チェックなし422） |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+全テスト: 607 runs, 1501 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -7131,6 +7277,34 @@ Docker Compose は `.env` ファイルを自動で読み込むが、<br>
 
 <br>
 
+### 104. `terms_agreed?` は public に置かないと ApplicationController から呼べない（#F-3）
+
+<br>
+
+`before_action` / `before_validation` の条件判定で使うメソッドは private に置きがちだが、<br>
+`ApplicationController` の全画面ガード（`redirect_to_terms_agreement_if_needed`）から<br>
+`user.terms_agreed?` を呼ぶ場合は public に定義する必要がある。<br>
+`private` に置くと `NoMethodError: private method 'terms_agreed?' called` が発生し、<br>
+全ページで 500 エラーになる致命的なバグになる。<br>
+`set_terms_agreed_at`（コールバックで呼ばれるだけ）は private でよいが、<br>
+`terms_agreed?`（外部から参照される述語メソッド）は public ブロックに置くこと。
+
+<br>
+
+### 105. fixture全ユーザーへの `terms_agreed_at` 追加は「テスト保護の定石」（#F-3）
+
+<br>
+
+全画面ガード（`redirect_to_terms_agreement_if_needed`）を追加すると、<br>
+`terms_agreed_at` が nil のユーザーでテストがログインするたびに<br>
+`/terms_agreement` にリダイレクトされ、既存テストが全て失敗する。<br>
+新機能がリダイレクトフックを追加する場合、fixture全ユーザーにデフォルト値を追加し、<br>
+`log_in_as` のような共通ヘルパーで自動的に条件を満たす設計にすることで<br>
+既存テストへの影響を最小化できる。<br>
+未同意状態が必要なテストだけ `user.update_column(:terms_agreed_at, nil)` で明示的に戻す方針が安全。
+
+<br>
+
 ---
 
 <br>
@@ -7619,7 +7793,9 @@ habitflow/
 │   │   ├── pages_controller.rb            # ランディングページ
 │   │   ├── user_purposes_controller.rb    # #D-1 新規: PMVV目標管理（show/new/create/edit/update・バージョン管理）
 │   │   ├── onboardings_controller.rb      # #D-7 新規: step5/complete/skip・first_login_at管理・危機介入対応
-│   │   └── omniauth_callbacks_controller.rb   # 変更（F-2）: line アクション追加・skip_before_action に :line 追加
+│   │   ├── omniauth_callbacks_controller.rb   # 変更（F-2）: line アクション追加・skip_before_action に :line 追加
+│   │   ├── terms_agreement_controller.rb  # F-3 新規: show / agree アクション（require_login・ensure_needs_agreement）
+│   │   └── pages_controller.rb            # 変更（F-3）: terms / privacy アクション追加（未ログイン閲覧可）
 │   ├── models/
 │   │   ├── user.rb                        # ユーザー認証・has_many 設定（変更: has_many :tasks追加 #C-1）（変更: after_create :create_user_setting 追加 #D-4）
 │   │   ├── habit.rb                       # 習慣・論理削除・週次進捗計算
@@ -7695,7 +7871,8 @@ habitflow/
 │       │   ├── _crisis_intervention_modal.html.erb  # #D-5 新規: 危機介入モーダルラッパー（Stimulusコントローラー・show-value で自動表示制御）
 │       │   ├── _crisis_modal_content.html.erb       # #D-5 新規: 危機介入モーダルコンテンツ（よりそいホットライン・いのちの電話・clamp()レスポンシブ対応）
 │       │   ├── _google_auth_button.html.erb        # F-1 新規: Google ログインボタン（form_tag + button 方式）
-│       │   └── _line_auth_button.html.erb          # F-2 新規: LINE ログインボタン（form_tag + button 方式・#06C755 緑・公式SVGアイコン）
+│       │   ├── _line_auth_button.html.erb          # F-2 新規: LINE ログインボタン（form_tag + button 方式・#06C755 緑・公式SVGアイコン）
+│       │   └── _footer.html.erb               # F-3 新規: 利用規約・プライバシーポリシーリンク
 │       ├── errors/                        # 404・422・500 エラーページ
 │       ├── task_mailer/                                # #C-5 新規: アラーム通知メールビュー
 │       │   ├── alarm_notification.html.erb             # HTMLメール本文
@@ -7720,8 +7897,13 @@ habitflow/
 │       │   └── application.html.erb  # 変更: yield :modals を</body>直前に追加（#B-5）・重複 id="flash-area" を1箇所に統一（#C-4バグ修正）
 │       ├── onboardings/
 │       │   └── step5.html.erb             # 変更（E-1）: バナー文言修正（「すべて任意入力です」→スキップ案内のみ）
-│       └── sessions/
+│       ├── sessions/
 │           └── new.html.erb                   # 変更（E-4）: hidden_field_tag :redirect_to を追加（ログイン失敗後も redirect_to が POST body に維持される）
+│       ├── terms_agreement/
+│       │   └── show.html.erb              # F-3 新規: OAuth初回ログイン用同意ページ
+│       └── pages/
+│           ├── terms.html.erb             # F-3 新規: 利用規約ページ（未ログイン閲覧可）
+│           └── privacy.html.erb           # F-3 新規: プライバシーポリシーページ（未ログイン閲覧可）
 ├── db/
 │   ├── cable_migrate/
 │   │   └── 20260426000001_create_solid_cable_messages.rb               # #D-3: solid_cable メッセージテーブル
@@ -7754,7 +7936,8 @@ habitflow/
 │   │   ├── YYYYMMDDHHMMSS_add_last_ai_requested_at_to_user_settings.rb  # #D-10: AI レート制限用 last_ai_requested_at カラム追加
 │   │   ├── YYYYMMDDHHMMSS_add_actual_value_and_unit_to_weekly_reflection_habit_summaries.rb  # #E-2: actual_value(decimal) / unit(string) カラムを weekly_reflection_habit_summaries に追加
 │   │   ├── YYYYMMDDHHMMSS_allow_null_password_digest_for_oauth_users.rb  # F-1: password_digest の NOT NULL 制約解除
-│   │   └── YYYYMMDDHHMMSS_remove_not_null_from_users_email.rb  # F-2: users.email の NOT NULL 制約を解除（LINE ユーザーはメールなし）
+│   │   ├── YYYYMMDDHHMMSS_remove_not_null_from_users_email.rb  # F-2: users.email の NOT NULL 制約を解除（LINE ユーザーはメールなし）
+│   │   └── YYYYMMDDHHMMSS_add_terms_agreed_at_to_users.rb   # F-3: terms_agreed_at カラム追加（NULL許容・部分インデックス）
 │   ├── explain_analyze_audit.sql          # #A-6: インデックス監査用SQLスクリプト（7クエリ）
 │   ├── schema.rb                          # 現在のDBスキーマ（自動生成）
 │   └── seeds.rb                           # デモ用サンプルデータ
@@ -7848,7 +8031,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-596 runs, 1473 assertions, 0 failures, 0 errors, 0 skips
+607 runs, 1501 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -7920,6 +8103,9 @@ docker compose exec web bin/rails test
 | `test/jobs/task_alarm_job_test.rb` | ジョブ | 変更（F-1）: `User.create!` に `password_confirmation` を追加 |
 | `test/mailers/task_mailer_test.rb` | メイラー | 変更（F-1）: `User.create!` に `password_confirmation` を追加 |
 | `test/models/user_test.rb` | モデル | 変更（F-2）: LINE 用テスト4件追加（email なし新規作成・2回目ログインで重複なし・フォールバック名 "LINE User"・パスワード不要バリデーション）・`"line_v21"` → `"line_v2_1"` に修正 |
+| `test/controllers/terms_agreement_controller_test.rb` | コントローラー | 変更（F-3）: 新規作成（6件：未同意ユーザーの同意ページ表示・未ログインはログインページへ・同意済みはダッシュボードへ・同意でダッシュボード遷移・初回ログインはオンボーディングへ・チェックなし422） |
+| `test/fixtures/users.yml` | フィクスチャ | 変更（F-3）: 全ユーザーに `terms_agreed_at` を追加（全画面ガードによる既存テスト崩壊を防止） |
+| `test/test_helper.rb` | ヘルパー | 変更（F-3）: `log_in_as` に `terms_agreed_at` 自動設定を追加（未同意テストだけ `update_column(:terms_agreed_at, nil)` で戻す設計） |
 
 <br>
 

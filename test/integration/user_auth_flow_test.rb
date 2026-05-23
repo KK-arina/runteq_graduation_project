@@ -55,9 +55,8 @@ class UserAuthFlowTest < ActionDispatch::IntegrationTest
           name:                  "フローテストユーザー",
           email:                 "flow_test@example.com",
           password:              "password123",
-          # password_confirmation は UsersController の user_params で permit されている
-          # モデルの has_secure_password が「password と一致するか」をバリデーションします
-          password_confirmation: "password123"
+          password_confirmation: "password123",
+          terms_agreed:          "1"   # F-3 追加: 利用規約同意チェックボックス
         }
       }
     end

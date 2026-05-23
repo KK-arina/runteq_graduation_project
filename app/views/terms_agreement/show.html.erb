@@ -1,0 +1,135 @@
+<%# app/views/terms_agreement/show.html.erb %>
+<%# F-3: OAuth 初回ログイン時の利用規約・プライバシーポリシー同意ページ %>
+<% content_for :title, "利用規約への同意 | HabitFlow" %>
+
+<div class="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <h2 class="text-2xl font-bold mb-4 text-gray-900 text-center">
+    利用規約への同意
+  </h2>
+
+  <p class="text-center text-gray-600 text-sm mb-6">
+    HabitFlow をご利用いただくために、<br>
+    以下の規約へのご同意をお願いします。
+  </p>
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+
+    <%#
+      form_with url: terms_agreement_agree_path について:
+        POST /terms_agreement へ送信する。TermsAgreementController#agree が処理する。
+        routes.rb の「post "/terms_agreement", as: :terms_agreement_agree」に対応。
+
+      data-controller="terms-agreement":
+        Stimulus の TermsAgreementController を紐付ける。
+        チェックボックスの ON/OFF でボタンの活性/非活性を制御する。
+    %>
+    <%= form_with url: terms_agreement_agree_path,
+                  method: :post,
+                  local: true,
+                  data: { controller: "terms-agreement" } do |f| %>
+
+      <div class="mb-6 space-y-3">
+        <%#
+          target: "_blank": 新しいタブで開く（同意フォームを閉じずに規約を読める）
+          rel: "noopener noreferrer":
+            noopener  → 新しいタブから元のタブを JS で操作できなくする（セキュリティ）
+            noreferrer → リファラー（どこから来たか）の情報を送らない（プライバシー）
+        %>
+        <a href="<%= terms_path %>"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="flex items-center justify-between p-4 border border-gray-200
+                  rounded-lg hover:bg-gray-50 transition-colors group">
+          <span class="text-sm font-medium text-gray-900 group-hover:text-blue-600">
+            📄 利用規約
+          </span>
+          <svg class="w-4 h-4 text-gray-400 group-hover:text-blue-600"
+               fill="none" stroke="currentColor" viewBox="0 0 24 24"
+               aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+          </svg>
+        </a>
+
+        <a href="<%= privacy_path %>"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="flex items-center justify-between p-4 border border-gray-200
+                  rounded-lg hover:bg-gray-50 transition-colors group">
+          <span class="text-sm font-medium text-gray-900 group-hover:text-blue-600">
+            🔒 プライバシーポリシー
+          </span>
+          <svg class="w-4 h-4 text-gray-400 group-hover:text-blue-600"
+               fill="none" stroke="currentColor" viewBox="0 0 24 24"
+               aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+          </svg>
+        </a>
+      </div>
+
+      <div class="mb-6 p-4 bg-gray-50 rounded-md border border-gray-200">
+        <label class="flex items-start gap-3 cursor-pointer">
+          <%#
+            check_box_tag :terms_agreed, "1", false について:
+              name="terms_agreed", value="1", 初期値=未チェック でチェックボックスを生成する。
+              f.check_box（モデルバインド）ではなく check_box_tag（独立した入力）を使う理由:
+              このフォームは @user モデルと紐付いていないため check_box_tag が適切。
+              チェックすると POST パラメータに terms_agreed=1 が含まれる。
+          %>
+          <%= check_box_tag :terms_agreed, "1", false,
+              class: "mt-0.5 w-4 h-4 text-blue-600 border-gray-300 rounded
+                      focus:ring-2 focus:ring-blue-500 flex-shrink-0",
+              data: {
+                "terms-agreement-target": "checkbox",
+                action: "change->terms-agreement#toggle"
+              } %>
+          <span class="text-sm text-gray-700 leading-relaxed">
+            <%= link_to "利用規約", terms_path,
+                target: "_blank",
+                rel: "noopener noreferrer",
+                class: "text-blue-600 hover:text-blue-700 hover:underline font-medium" %>
+            および
+            <%= link_to "プライバシーポリシー", privacy_path,
+                target: "_blank",
+                rel: "noopener noreferrer",
+                class: "text-blue-600 hover:text-blue-700 hover:underline font-medium" %>
+            を読み、同意します
+            <span class="text-red-500 ml-1" aria-label="必須">*</span>
+          </span>
+        </label>
+      </div>
+
+      <%#
+        送信ボタン（初期状態は非活性）
+        Stimulus の TermsAgreementController がチェック状態に応じてクラスと disabled を切り替える。
+        data-terms-agreement-target="button" がそのターゲット指定。
+      %>
+      <button type="submit"
+              disabled
+              class="w-full px-4 py-2 text-white rounded-md
+                     transition font-medium bg-gray-400 cursor-not-allowed"
+              data-terms-agreement-target="button">
+        同意してサービスを利用する
+      </button>
+    <% end %>
+
+  </div>
+
+  <div class="mt-4 text-center text-sm text-gray-600">
+    同意しない場合は
+    <%#
+      button_to でログアウトする。
+      method: :delete → DELETE /logout を送信する（Rails のログアウトは DELETE メソッド）。
+      data: { turbo_confirm: "..." } → クリック時に確認ダイアログを表示する。
+    %>
+    <%= button_to "ログアウト", logout_path,
+        method: :delete,
+        class: "text-red-500 hover:text-red-600 hover:underline
+                bg-transparent border-none cursor-pointer text-sm p-0",
+        data: { turbo_confirm: "ログアウトしますか？" } %>
+    してください。
+  </div>
+
+</div>

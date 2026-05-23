@@ -21,17 +21,14 @@ class WeeklyReflectionsAiLimitTest < ActionDispatch::IntegrationTest
       email:                 "ai_limit_#{rand(9999)}@example.com",
       password:              "password123",
       password_confirmation: "password123",
-      # D-7 追加: first_login_at が NULL だと /onboarding/step5 へリダイレクトされテストが失敗する
-      first_login_at:        1.month.ago
+      first_login_at:        1.month.ago,
+      terms_agreed_at:       1.month.ago   # F-3 追加
     )
     @user_setting = @user.user_setting
 
     post login_path, params: { session: { email: @user.email, password: "password123" } }
     assert_response :redirect
     follow_redirect!
-
-    # travel_to はリクエスト内スレッドに引き継がれないため setup では使わない
-    # 各テストで必要な場合のみ個別に設定する
   end
 
   def teardown

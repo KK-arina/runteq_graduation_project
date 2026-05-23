@@ -16,24 +16,16 @@ class UserRegistrationTest < ActionDispatch::IntegrationTest
           name:                  "テストユーザー",
           email:                 "new_user@example.com",
           password:              "password",
-          password_confirmation: "password"
+          password_confirmation: "password",
+          terms_agreed:          "1"   # F-3 追加: 利用規約同意チェックボックス
         }
       }
     end
-
-    # ------------------------------------------------------------------
-    # D-7 対応: 新規ユーザーは first_login_at = NULL のため
-    # UsersController#create は dashboard_path へリダイレクトするが、
-    # DashboardsController の require_login → redirect_to_onboarding_if_needed で
-    # /onboarding/step5 へ再リダイレクトされる。
-    # 1回目のリダイレクト先は dashboard_path のまま変わらない。
-    # ------------------------------------------------------------------
 
     # 1回目：登録後 dashboard_path へのリダイレクトを確認（変更なし）
     assert_redirected_to dashboard_path
 
     # 2回目：dashboard_path にアクセスすると /onboarding/step5 へリダイレクト
-    # D-7 対応: 新規ユーザーはオンボーディングへ誘導される
     follow_redirect!
     assert_redirected_to onboarding_step5_path
   end

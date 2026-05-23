@@ -1,0 +1,144 @@
+<%# app/views/pages/terms.html.erb %>
+<%# F-3: 利用規約ページ（未ログインでも閲覧可能） %>
+<% content_for :title, "利用規約 | HabitFlow" %>
+
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <h1 class="text-3xl font-bold text-gray-900 mb-2">利用規約</h1>
+  <p class="text-sm text-gray-500 mb-8">最終更新日: 2026年5月22日</p>
+
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-8">
+
+    <%# 第1条 %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">第1条（適用）</h2>
+      <p class="text-gray-700 leading-relaxed">
+        本利用規約（以下「本規約」）は、HabitFlow（以下「当サービス」）の利用条件を定めるものです。
+        登録ユーザー（以下「ユーザー」）は、本規約に従って当サービスをご利用ください。
+      </p>
+    </section>
+
+    <%# 第2条 %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">第2条（登録）</h2>
+      <p class="text-gray-700 leading-relaxed mb-3">
+        登録希望者は、本規約に同意の上、所定の方法によって利用登録を申請し、
+        運営者がこれを承認することによって利用登録が完了します。
+        未成年者は保護者の同意を得た上でご利用ください。
+      </p>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスは、登録希望者に以下の事由があると判断した場合、
+        利用登録の申請を承認しないことがあります。
+      </p>
+      <ul class="list-disc list-inside mt-2 text-gray-700 space-y-1">
+        <li>虚偽の事項を届け出た場合</li>
+        <li>本規約に違反したことがある者からの申請である場合</li>
+        <li>その他、当サービスが利用登録を相当でないと判断した場合</li>
+      </ul>
+    </section>
+
+    <%# 第3条 %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">第3条（禁止事項）</h2>
+      <p class="text-gray-700 leading-relaxed mb-3">
+        ユーザーは、当サービスの利用にあたり、以下の行為をしてはなりません。
+      </p>
+      <ul class="list-disc list-inside text-gray-700 space-y-1">
+        <li>法令または公序良俗に違反する行為</li>
+        <li>犯罪行為に関連する行為</li>
+        <li>サーバーまたはネットワークの機能を破壊・妨害する行為</li>
+        <li>当サービスの運営を妨害するおそれのある行為</li>
+        <li>他のユーザーに関する個人情報等を収集または蓄積する行為</li>
+        <li>他のユーザーに成りすます行為</li>
+        <li>当サービスに関連して、反社会的勢力に対して直接または間接に利益を供与する行為</li>
+        <li>その他、当サービスが不適切と判断する行為</li>
+      </ul>
+    </section>
+
+    <%# 第4条 %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">第4条（当サービスの提供の停止等）</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスは、以下のいずれかの事由があると判断した場合、ユーザーに事前に通知することなく
+        当サービスの全部または一部の提供を停止または中断することができます。
+        システムの保守点検または更新を行う場合、地震・落雷・火災・停電・天災などの
+        不可抗力により当サービスの提供が困難となった場合、その他当サービスの提供が困難と判断した場合が該当します。
+        当サービスの提供の停止または中断により、ユーザーまたは第三者が被ったいかなる不利益または損害についても、
+        一切の責任を負わないものとします。
+      </p>
+    </section>
+
+    <%# 第5条 %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">第5条（利用制限および登録抹消）</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスは、ユーザーが以下のいずれかに該当する場合には、事前の通知なく、
+        ユーザーに対して当サービスの全部もしくは一部の利用を制限し、またはユーザーとしての登録を抹消することができます。
+        本規約のいずれかの条項に違反した場合、登録事項に虚偽の事実があることが判明した場合、
+        その他当サービスが利用を適当でないと判断した場合が該当します。
+      </p>
+    </section>
+
+    <%# 第6条 %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">第6条（免責事項）</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスの提供する情報について、その完全性、正確性、確実性、有用性等に関して、
+        いかなる保証も行うものではありません。
+        当サービスに関してユーザーと他のユーザーまたは第三者との間において生じた取引、
+        連絡または紛争等について、当サービスは一切責任を負いません。
+      </p>
+    </section>
+
+    <%# 第7条 %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">第7条（サービス内容の変更等）</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスは、ユーザーへの事前の告知をもって、当サービスの内容を変更、
+        追加または廃止することがあり、ユーザーはこれを承諾するものとします。
+      </p>
+    </section>
+
+    <%# 第8条 %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">第8条（利用規約の変更）</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスは、必要と判断した場合には、ユーザーへの事前の告知をもって
+        いつでも本規約を変更することができるものとします。
+        変更後の利用規約は、当サービスウェブサイトに掲示したときから効力を生じるものとします。
+      </p>
+    </section>
+
+    <%# 第9条 %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">第9条（個人情報の取り扱い）</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスにおける個人情報の取り扱いについては、別途定める
+        <%= link_to "プライバシーポリシー", privacy_path,
+            class: "text-blue-600 hover:text-blue-700 hover:underline" %>
+        に従うものとします。
+      </p>
+    </section>
+
+    <%# 第10条 %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">第10条（準拠法・裁判管轄）</h2>
+      <p class="text-gray-700 leading-relaxed">
+        本規約の解釈にあたっては、日本法を準拠法とします。
+        当サービスに関して紛争が生じた場合には、当サービスの所在地を管轄する裁判所を
+        専属的合意管轄とします。
+      </p>
+    </section>
+
+  </div>
+
+  <%# フッターナビ %>
+  <div class="mt-6 text-center text-sm text-gray-600">
+    <%= link_to "← トップページへ戻る", root_path,
+        class: "text-blue-600 hover:text-blue-700 hover:underline" %>
+    <span class="mx-2">|</span>
+    <%= link_to "プライバシーポリシー", privacy_path,
+        class: "text-blue-600 hover:text-blue-700 hover:underline" %>
+  </div>
+
+</div>
