@@ -12,9 +12,10 @@
 #   無関係なテストが 429 を受け取ってしまう。
 #   テスト環境では無効化し、rack_attack_test.rb 内でのみ明示的に有効化する。
 #
-# 【class Rack::Attack で囲まずトップレベルで書く理由】
-#   class/module 本体では return が使えない（SyntaxError になる）ため、
-#   unless Rails.env.test? で全体を条件分岐して囲む形にしている。
+# 【unless Rails.env.test? で囲む理由】
+#   class/module 本体では return が使えない（SyntaxError になる）。
+#   トップレベルで書く場合、Rack::Attack のメソッドはすべて
+#   Rack::Attack.メソッド名 と明示的に呼び出す必要がある。
 # ==============================================================================
 
 unless Rails.env.test?
@@ -36,20 +37,26 @@ unless Rails.env.test?
   end
 
   # ============================================================================
-  # ① safelist: 開発環境の localhost を除外
+  # ① safelist: 開発環境の localhost・Docker IP を除外
   # ============================================================================
   #
   # 【development? に限定する理由】
   #   本番環境でこの safelist が有効だとプロキシ経由で
-  #   0.0.0.0/127.0.0.1 が渡った場合に攻撃を全スルーする穴になる。
+  #   これらの IP が渡った場合に攻撃を全スルーする穴になる。
   #   開発環境のみに限定し、本番に余計な穴を空けない。
+  #
+  # 【"172.18.0.1" を含める理由】
+  #   Docker Desktop（Linux/Windows/Mac）環境では、
+  #   ブラウザからのリクエストが docker0 ブリッジネットワーク経由で届くため
+  #   req.ip が "172.18.0.1" になる。
+  #   これを safelist に含めないと開発中に自分がブロックされる。
   #
   # 【"0.0.0.0" を含める理由】
   #   Docker 環境ではコンテナ内部からのリクエストが
   #   "0.0.0.0" として渡るケースがある。
   if Rails.env.development?
     Rack::Attack.safelist("allow-localhost") do |req|
-      ["127.0.0.1", "::1", "0.0.0.0"].include?(req.ip)
+      ["127.0.0.1", "::1", "0.0.0.0", "172.18.0.1"].include?(req.ip)
     end
   end
 
