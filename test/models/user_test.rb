@@ -161,4 +161,59 @@ class UserTest < ActiveSupport::TestCase
     assert line_user.valid?,
            "LINE ユーザーがパスワードなしで invalid になっています: #{line_user.errors.full_messages}"
   end
+
+  # ============================================================
+  # F-6 追加: 論理削除・再登録関連テスト
+  # ============================================================
+
+  test "scope :active は deleted_at が nil のユーザーのみ返すこと" do
+    active_user = User.create!(
+      name:                  "有効ユーザー",
+      email:                 "active_#{SecureRandom.hex(4)}@example.com",
+      password:              "password123",
+      password_confirmation: "password123"
+    )
+
+    deleted_user = User.create!(
+      name:                  "退会済み",
+      email:                 "deleted_tmp_#{SecureRandom.hex(4)}@example.com",
+      password:              "password123",
+      password_confirmation: "password123"
+    )
+    deleted_user.update_columns(
+      deleted_at: Time.current,
+      email:      "deleted_#{deleted_user.id}@deleted.invalid"
+    )
+
+    assert User.active.exists?(active_user.id),
+           "active スコープに有効ユーザーが含まれるべき"
+
+    assert_not User.active.exists?(deleted_user.id),
+               "active スコープに退会済みユーザーが含まれるべきでない"
+  end
+
+  test "退会済みユーザーと同じメールで新規登録できること" do
+    original_email = "reregister_#{SecureRandom.hex(4)}@example.com"
+
+    old_user = User.create!(
+      name:                  "旧ユーザー",
+      email:                 original_email,
+      password:              "password123",
+      password_confirmation: "password123"
+    )
+    old_user.update_columns(
+      deleted_at: Time.current,
+      email:      "deleted_#{old_user.id}@deleted.invalid"
+    )
+
+    new_user = User.new(
+      name:                  "新ユーザー",
+      email:                 original_email,
+      password:              "password123",
+      password_confirmation: "password123"
+    )
+
+    assert new_user.valid?,
+           "退会済みユーザーと同じメールで新規登録できるべき: #{new_user.errors.full_messages}"
+  end
 end

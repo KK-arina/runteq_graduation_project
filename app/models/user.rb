@@ -56,12 +56,38 @@ class User < ApplicationRecord
   # ============================================================
   # アソシエーション
   # ============================================================
-  has_many :habits,             dependent: :destroy
-  has_many :habit_records,      dependent: :destroy
-  has_many :weekly_reflections, dependent: :destroy
-  has_many :tasks,              dependent: :destroy
+  #
+  # 【F-6 B案: 統計データ保持設計】
+  #
+  # habits / tasks / weekly_reflections / user_purposes に
+  # dependent: :destroy を設定しない理由:
+  #   退会時は UserDestroyService による「論理削除 + 個人情報匿名化」を使用する。
+  #   User レコードは物理削除しないため、紐付く活動データは
+  #   「退会済みユーザー」に紐付いた匿名統計データとして保持される。
+  #   これにより将来の習慣継続率分析・AI精度向上に活用できる。
+  #
+  # ⚠️ 重要: user.destroy は直接呼ばないこと
+  #   dependent を外したため、User を物理削除すると外部キー制約違反
+  #   （PG::ForeignKeyViolation）が発生する。
+  #   退会処理は必ず UserDestroyService 経由で行うこと。
+  #   before_destroy で物理削除を明示的にガードしている。
+  has_many :habits
+  has_many :habit_records,      dependent: :destroy  # habit経由で削除されるが念のため
+  has_many :weekly_reflections
+  has_many :tasks
   has_one  :user_setting
-  has_many :user_purposes,      dependent: :destroy
+  has_many :user_purposes
+
+  # ============================================================
+  # F-6 追加: 論理削除スコープ
+  # ============================================================
+  #
+  # scope :active: 退会していない（deleted_at が NULL の）ユーザーのみを返す
+  #
+  # 【使用例】
+  #   User.active.find_by(email: "xxx") → 退会済みユーザーを誤取得しない
+  #   ログイン処理・OmniAuth コールバックで必ず使うこと
+  scope :active, -> { where(deleted_at: nil) }
 
   # ============================================================
   # バリデーション
@@ -70,13 +96,23 @@ class User < ApplicationRecord
 
   # email バリデーション
   #
-  # 【allow_nil: true について】
-  #   LINE ログインではメールアドレスが取得できない場合がある。
-  #   nil の場合は全バリデーションをスキップする。
+  # 【F-6 での変更: uniqueness の conditions を追加】
+  #   DB レベルの部分インデックス（deleted_at IS NULL のみ対象）と
+  #   Rails バリデーション側を完全に一致させるために
+  #   conditions: -> { where(deleted_at: nil) } を使用する。
+  #
+  # 【なぜ scope: :deleted_at ではなく conditions を使うのか】
+  #   scope: :deleted_at だと「deleted_at が同じ秒単位の値」のレコード間でしか
+  #   チェックしないため、複数ユーザーが同時退会した場合に衝突する危険がある。
+  #   conditions: で WHERE deleted_at IS NULL を指定する方が
+  #   DB の部分インデックスと意味が完全に一致し、安全かつ正確。
   validates :email,
             presence:   true,
             length:     { maximum: 255 },
-            uniqueness: { case_sensitive: false },
+            uniqueness: {
+              case_sensitive: false,
+              conditions:     -> { where(deleted_at: nil) }
+            },
             format:     { with: URI::MailTo::EMAIL_REGEXP },
             allow_nil:  true
 
@@ -129,10 +165,21 @@ class User < ApplicationRecord
   #   OAuth ユーザーは /terms_agreement ページで update_column で直接記録する。
   before_validation :set_terms_agreed_at, if: :email_provider?
 
-  # after_create :create_user_setting
+  # ============================================================
+  # F-6 追加: 物理削除ガード
+  # ============================================================
   #
-  # 【役割】
-  #   ユーザー新規作成時に UserSetting レコードを自動作成する。
+  # before_destroy :prevent_physical_destroy
+  #
+  # 【なぜこのガードが必要なのか】
+  #   dependent: :destroy を外したことで、もし誰かが誤って
+  #   user.destroy や User.destroy_all を呼ぶと、
+  #   外部キー制約違反（PG::ForeignKeyViolation）が発生するか、
+  #   関連する habits/tasks 等が孤児データになってしまう。
+  #   このコールバックで物理削除を完全に禁止し、
+  #   退会は必ず UserDestroyService 経由であることを強制する。
+  before_destroy :prevent_physical_destroy
+
   after_create :create_user_setting
 
   # ============================================================
@@ -244,6 +291,23 @@ class User < ApplicationRecord
 
   def downcase_email
     self.email = email.to_s.downcase if email.present?
+  end
+
+  # prevent_physical_destroy（F-6 追加）
+  #
+  # 【役割】
+  #   本番・開発環境で User レコードの物理削除を禁止する。
+  #
+  # 【なぜテスト環境を除外するのか】
+  #   既存テストの teardown メソッドで @user.destroy が呼ばれる場合があり、
+  #   テスト環境でガードをかけると既存テスト全てが壊れる。
+  #   テストデータの削除はフレームワークに委ねるため test 環境は除外する。
+  def prevent_physical_destroy
+    return if Rails.env.test?
+
+    raise ActiveRecord::ReadOnlyRecord,
+          "[User#prevent_physical_destroy] User の物理削除は禁止されています。" \
+          "退会処理は UserDestroyService 経由で行ってください。 user_id=#{id}"
   end
 
   # set_terms_agreed_at（F-3 追加）

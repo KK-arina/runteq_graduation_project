@@ -1,0 +1,177 @@
+<%# app/views/settings/show.html.erb %>
+<%#
+  ============================================================
+  【このファイルの役割】
+  アカウント設定ページ（M-4 退会確認モーダル付き）
+
+  【F-6 での実装内容】
+  - アカウント情報の表示
+  - 退会ボタンと退会確認モーダル（M-4）
+  - 「削除される個人情報」と「統計用に保持される匿名データ」を明示
+  ============================================================
+%>
+<% content_for :title, "アカウント設定 | HabitFlow" %>
+
+<div class="max-w-2xl mx-auto px-4 py-8">
+
+  <h1 class="text-2xl font-bold text-gray-900 mb-8">アカウント設定</h1>
+
+  <%# ── アカウント情報セクション ── %>
+  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">アカウント情報</h2>
+
+    <dl class="space-y-3">
+      <div class="flex items-center justify-between py-2 border-b border-gray-100">
+        <dt class="text-sm font-medium text-gray-600">ユーザー名</dt>
+        <dd class="text-sm text-gray-900"><%= @user.name %></dd>
+      </div>
+
+      <div class="flex items-center justify-between py-2 border-b border-gray-100">
+        <dt class="text-sm font-medium text-gray-600">メールアドレス</dt>
+        <dd class="text-sm text-gray-900">
+          <%= @user.email.presence || "未設定（LINEログイン）" %>
+        </dd>
+      </div>
+
+      <div class="flex items-center justify-between py-2">
+        <dt class="text-sm font-medium text-gray-600">ログイン方法</dt>
+        <dd class="text-sm text-gray-900">
+          <%= case @user.provider
+              when "google_oauth2" then "Google アカウント"
+              when "line_v2_1"     then "LINE アカウント"
+              else                      "メールアドレス"
+              end %>
+        </dd>
+      </div>
+    </dl>
+  </section>
+
+  <%# ── 危険ゾーン: 退会セクション ── %>
+  <section class="bg-white rounded-lg shadow-sm border-2 border-red-200 p-6">
+    <h2 class="text-lg font-semibold text-red-700 mb-2">退会（アカウント削除）</h2>
+    <p class="text-sm text-gray-600 mb-4">
+      退会すると、個人識別情報は即時に匿名化されます。この操作は取り消せません。
+    </p>
+
+    <%#
+      data-action="click->deactivate-modal#open" だけでは
+      ボタンとモーダルが別の DOM ツリーにあるため Stimulus がコントローラーを見つけられない。
+      document.getElementById で直接モーダルを操作する方式に変更する。
+    %>
+    <button type="button"
+            class="px-4 py-2 text-sm font-medium text-white bg-red-600
+                   rounded-md hover:bg-red-700 transition-colors
+                   focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+            onclick="document.getElementById('deactivate-modal').classList.remove('hidden'); document.body.classList.add('overflow-hidden');">
+      退会する
+    </button>
+  </section>
+
+</div>
+
+<%#
+  ── M-4: 退会確認モーダル ──
+  content_for :modals を使う理由:
+    application.html.erb の yield :modals で body の直前に出力される。
+    親要素の CSS transform の影響を受けずに fixed 配置が正しく動作する。
+%>
+<% content_for :modals do %>
+  <div id="deactivate-modal"
+       class="fixed inset-0 z-50 hidden"
+       role="dialog"
+       aria-modal="true"
+       aria-labelledby="deactivate-modal-title">
+
+    <%# オーバーレイ：クリックで閉じる %>
+    <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+         onclick="document.getElementById('deactivate-modal').classList.add('hidden'); document.body.classList.remove('overflow-hidden');"
+         aria-hidden="true"></div>
+
+    <%# モーダル本体：クリックが下に伝播しないよう stopPropagation %>
+    <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+      <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md
+                  max-h-screen overflow-y-auto pointer-events-auto"
+           onclick="event.stopPropagation();">
+
+        <div class="flex items-center justify-between p-6 border-b border-gray-200">
+          <h3 id="deactivate-modal-title"
+              class="text-lg font-bold text-red-700">
+            ⚠️ 退会の確認
+          </h3>
+          <button type="button"
+                  class="p-1 rounded text-gray-400 hover:text-gray-600
+                         focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  onclick="document.getElementById('deactivate-modal').classList.add('hidden'); document.body.classList.remove('overflow-hidden');"
+                  aria-label="モーダルを閉じる">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                 aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-6 space-y-5">
+          <p class="text-sm text-gray-700 font-medium">
+            退会すると以下のデータが処理されます。この操作は取り消しできません。
+          </p>
+
+          <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+            <h4 class="text-sm font-semibold text-red-800 mb-2">
+              🗑️ 即時に匿名化・削除されるデータ
+            </h4>
+            <ul class="text-sm text-red-700 space-y-1 list-disc list-inside">
+              <li>ユーザー名・メールアドレス・LINE ID</li>
+              <li>パスワード情報</li>
+              <li>パスワードリセットトークン</li>
+              <li>プッシュ通知の宛先情報</li>
+            </ul>
+          </div>
+
+          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <h4 class="text-sm font-semibold text-gray-700 mb-2">
+              📊 匿名化して保持されるデータ（統計・AI改善目的）
+            </h4>
+            <ul class="text-sm text-gray-600 space-y-1 list-disc list-inside">
+              <li>習慣の達成記録・習慣一覧</li>
+              <li>タスクの完了・未完了記録</li>
+              <li>週次振り返りデータ</li>
+              <li>AI分析結果</li>
+            </ul>
+            <p class="text-xs text-gray-500 mt-2">
+              ※ 保持されるデータは個人を特定できない匿名の状態で保管され、
+              サービス改善・AI精度向上のために活用されます。
+            </p>
+          </div>
+
+          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+            <p class="text-xs text-blue-700">
+              ℹ️ 退会後は同じメールアドレスで再登録いただけます。
+            </p>
+          </div>
+        </div>
+
+        <div class="flex gap-3 p-6 border-t border-gray-200">
+          <button type="button"
+                  class="flex-1 px-4 py-2 text-sm font-medium text-gray-700
+                         bg-white border border-gray-300 rounded-md
+                         hover:bg-gray-50 transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-gray-400"
+                  onclick="document.getElementById('deactivate-modal').classList.add('hidden'); document.body.classList.remove('overflow-hidden');">
+            キャンセル
+          </button>
+
+          <%= button_to t("settings.destroy.confirm_button"),
+              settings_path,
+              method: :delete,
+              class: "flex-1 px-4 py-2 text-sm font-medium text-white
+                      bg-red-600 rounded-md hover:bg-red-700 transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-red-500
+                      focus:ring-offset-2",
+              data: { disable_with: "退会処理中..." } %>
+        </div>
+
+      </div>
+    </div>
+  </div>
+<% end %>

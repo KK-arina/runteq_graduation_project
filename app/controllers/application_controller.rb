@@ -328,7 +328,12 @@ class ApplicationController < ActionController::Base
     #   first_login_at が nil のユーザーが /terms_agreement にアクセスしたとき、
     #   除外リストがないと onboarding_step5_path にリダイレクトされてしまう。
     #   「同意 → オンボーディング」の順番を守るため除外する。
-    return if controller_name.in?(%w[onboardings sessions users errors pages terms_agreement password_resets])
+    #
+    # 【なぜ settings を除外するのか】
+    #   first_login_at が nil のユーザーが /settings にアクセスした際に
+    #   onboarding_step5_path にリダイレクトされないようにするため。
+    #   設定ページ（退会処理含む）はオンボーディング前でもアクセスできるべき。
+    return if controller_name.in?(%w[onboardings sessions users errors pages terms_agreement password_resets settings])
     return unless current_user&.first_login_at.nil?
 
     redirect_to onboarding_step5_path, notice: t("onboarding.welcome")
@@ -365,7 +370,8 @@ class ApplicationController < ActionController::Base
       terms_agreement_path,
       terms_path,
       privacy_path,
-      logout_path
+      logout_path,
+      settings_path  # F-6 追加: 退会処理ページは未同意でもアクセス可能
     ]
     return if request.path.in?(allowed_paths)
 
