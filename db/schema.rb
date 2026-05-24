@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_05_22_234308) do
+ActiveRecord::Schema[7.2].define(version: 2026_05_24_015832) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pgcrypto"
   enable_extension "plpgsql"
@@ -328,8 +328,10 @@ ActiveRecord::Schema[7.2].define(version: 2026_05_22_234308) do
     t.string "line_user_id"
     t.datetime "first_login_at"
     t.datetime "terms_agreed_at"
-    t.index ["email"], name: "index_users_on_email", unique: true
-    t.index ["provider", "uid"], name: "index_users_on_provider_and_uid", unique: true
+    t.datetime "deleted_at"
+    t.index ["deleted_at"], name: "index_users_on_deleted_at", where: "(deleted_at IS NULL)"
+    t.index ["email"], name: "index_users_on_email_active", unique: true, where: "(deleted_at IS NULL)"
+    t.index ["provider", "uid"], name: "index_users_on_provider_and_uid_active", unique: true, where: "(deleted_at IS NULL)"
     t.index ["terms_agreed_at"], name: "index_users_on_terms_agreed_at", where: "(terms_agreed_at IS NOT NULL)"
   end
 

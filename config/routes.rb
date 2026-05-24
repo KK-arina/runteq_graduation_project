@@ -118,6 +118,23 @@ Rails.application.routes.draw do
     post "skip",     action: :skip,     as: :onboarding_skip
   end
 
+  # ============================================================
+  # F-6 追加: アカウント設定・退会処理のルーティング
+  # ============================================================
+  #
+  # resource :settings（複数形の単数リソース）を使う理由:
+  #   設定はユーザーごとに1つなので id パラメータが不要（単数リソース）。
+  #   ただし「settings」という複数形のパスを使いたいため、
+  #   resource :settings と書くことで:
+  #     settings_path → GET /settings    （show アクション）
+  #     settings_path → DELETE /settings （destroy アクション）
+  #   が使えるようになる。
+  #
+  # 【resource :setting（単数形）との違い】
+  #   resource :setting → setting_path が生成される（settings_path は使えない）
+  #   resource :settings → settings_path が生成される（こちらが意図通り）
+  resource :settings, only: %i[show destroy]
+
   get "dashboard", to: "dashboards#index", as: :dashboard
 
   resource :user_purpose, only: [:show, :new, :create, :edit, :update] do

@@ -135,3 +135,16 @@ application.register("ai-proposal-modal", AiProposalModalController)
 //   ここで明示的に登録することで確実に動作させる。
 import TermsAgreementController from "./terms_agreement_controller"
 application.register("terms-agreement", TermsAgreementController)
+
+// ── F-6 追加: deactivate-modal コントローラーを登録する ─────────────────────
+//
+// 【このコントローラーの役割】
+//   退会確認モーダル（M-4）の表示・非表示を制御する。
+//   「退会する」ボタンクリックでモーダルを開き、
+//   キャンセル・×ボタン・オーバーレイクリックで閉じる。
+//
+// 【登録名 "deactivate-modal" について】
+//   HTML の data-controller="deactivate-modal" と対応する。
+//   ファイル名 deactivate_modal_controller.js がケバブケースに変換される。
+import DeactivateModalController from "./deactivate_modal_controller"
+application.register("deactivate-modal", DeactivateModalController)
