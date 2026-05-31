@@ -1,27 +1,31 @@
 # app/controllers/omniauth_callbacks_controller.rb
 #
 # ==============================================================================
-# OmniauthCallbacksController（F-1 新規作成、F-2 LINE アクション追加、F-3 同意フロー追加）
+# OmniauthCallbacksController（G-1 更新）
 # ==============================================================================
 #
-# 【F-3 での変更内容】
-#   determine_redirect_path_for_omniauth に利用規約同意チェックを追加した。
-#   OAuth ユーザーが terms_agreed_at 未設定の場合は /terms_agreement へ誘導する。
+# 【G-1 での変更内容】
+#   line アクションに line_user_id の保存処理を追加した。
 #
-# 【OAuth 後の遷移優先度（F-3 更新版）】
-#   優先度1: terms_agreed_at が nil → /terms_agreement（同意ページ）
-#   優先度2: first_login_at が nil  → オンボーディング
-#   優先度3: デフォルト             → ダッシュボード
+# 【設計の核心: LINE Login の uid = LINE Messaging API の userId】
+#
+#   LINE は「同一プロバイダ（Provider）内なら、LINE Login の sub と
+#   Messaging API の userId は同じ値」という仕様になっている。
+#   （参考: https://developers.line.biz/en/docs/messaging-api/getting-user-ids/）
+#
+#   つまり OmniAuth コールバックで取得できる auth["uid"]（= LINE Login の sub）を
+#   そのまま users.line_user_id として保存すれば、
+#   後から LINE Messaging API でプッシュ通知を送るときに使える。
+#
+#   【前提条件】
+#     LINE Login チャネルと Messaging API チャネルが
+#     同一の LINE Provider 下に作成されていること。
+#     別 Provider だと userId が異なる値になり通知が届かない。
 #
 # ==============================================================================
 
 class OmniauthCallbacksController < ApplicationController
   # CSRF 検証スキップ（コールバックのみ）
-  #
-  # 【なぜスキップが必要なのか】
-  #   コールバックは外部ドメイン（Google/LINE）からリダイレクトされるため
-  #   Rails の authenticity_token が含まれていない。
-  #   OAuth2 の state パラメータで CSRF を防ぐため安全にスキップできる。
   skip_before_action :verify_authenticity_token, only: [:google, :line]
 
   # ============================================================
@@ -50,8 +54,13 @@ class OmniauthCallbacksController < ApplicationController
   end
 
   # ============================================================
-  # line アクション（GET /auth/line/callback）
+  # line アクション（GET /auth/line_v2_1/callback）- G-1 更新
   # ============================================================
+  #
+  # 【G-1 変更点】
+  #   save_line_user_id(@user, auth) の呼び出しを追加した。
+  #   LINE ログイン成功後に users.line_user_id を保存することで、
+  #   以降の LINE 通知送信（LineNotificationService）が使えるようになる。
   def line
     auth = request.env["omniauth.auth"]
     @user = User.from_omniauth(auth)
@@ -59,6 +68,12 @@ class OmniauthCallbacksController < ApplicationController
     if @user.persisted?
       reset_session
       session[:user_id] = @user.id
+
+      # ── G-1 追加: LINE userId を保存する ────────────────────────
+      # auth["uid"] には LINE Login の sub（= Messaging API の userId）が入っている。
+      # 同一プロバイダ内なら LINE Login sub = Messaging API userId のため、
+      # これを line_user_id として保存することで通知送信に使える。
+      save_line_user_id(@user, auth)
 
       redirect_to determine_redirect_path_for_omniauth(@user),
                   notice: t("omniauth.line.success")
@@ -86,16 +101,63 @@ class OmniauthCallbacksController < ApplicationController
   private
 
   # ============================================================
-  # determine_redirect_path_for_omniauth（F-1 追加、F-2 継続、F-3 更新）
+  # save_line_user_id（G-1 追加）
   # ============================================================
   #
   # 【役割】
-  #   OmniAuth ログイン後のリダイレクト先を優先度に従って決定する。
+  #   LINE ログイン後に users.line_user_id を保存する。
+  #   LINE Login の sub（auth["uid"]）をそのまま line_user_id に使う。
   #
-  # 【F-3 変更点】
-  #   優先度1 に「利用規約同意チェック」を追加した。
-  #   terms_agreed_at が nil のユーザーは必ず /terms_agreement を経由させる。
-  #   同意完了後に first_login_at チェック（オンボーディング）へ進む。
+  # 【なぜ auth["uid"] = line_user_id になるのか】
+  #   omniauth-line-v2_1 gem は LINE Login の ID トークンから sub（ユーザー識別子）を
+  #   取得して auth["uid"] にセットしている。
+  #   LINE の仕様として「同一プロバイダ内では LINE Login の sub と
+  #   Messaging API の userId は同じ値」が保証されている。
+  #   したがって auth["uid"] = Messaging API の userId として使用できる。
+  #
+  # 【update_columns を使う理由】
+  #   update! だとバリデーション・コールバックが全て走る（重い）。
+  #   line_user_id の保存だけが目的のため update_columns で直接更新する。
+  #   update_columns は SQL を1本だけ発行するため高速かつ安全。
+  #
+  # 【既に同じ値なら更新しない理由（早期リターン）】
+  #   同一ユーザーが毎回 LINE ログインするたびに UPDATE を発行するのは無駄。
+  #   既に正しい line_user_id が設定済みなら何もしない。
+  #
+  # 【rescue の理由】
+  #   line_user_id の保存失敗でもログイン自体を失敗させてはいけない。
+  #   保存失敗はログに記録して静かに処理する。
+  #   次回 LINE ログイン時に再度保存が試みられる。
+  def save_line_user_id(user, auth)
+    line_uid = auth["uid"]
+
+    # 既に同じ値が設定済みなら何もしない（不要な DB 更新を防ぐ）
+    return if user.line_user_id == line_uid
+
+    Rails.logger.debug "[OmniauthCallbacksController] line_user_id は変更なし: user_id=#{user.id}" if user.line_user_id == line_uid
+
+    # update_column を使う理由:
+    #   update_columns（複数形）は updated_at を自動更新しないため明示が必要で危険。
+    #   update_column（単数形）は指定の1カラムのみ更新し、
+    #   Rails がバリデーションをスキップしつつ updated_at も自動更新してくれる。
+    #   line_user_id という単一カラムの保存のみが目的のため単数形が適切。
+    user.update_column(:line_user_id, line_uid)
+
+    Rails.logger.info(
+      "[OmniauthCallbacksController] line_user_id を保存しました: " \
+      "user_id=#{user.id} line_user_id=#{line_uid}"
+    )
+
+  rescue => e
+    Rails.logger.error(
+      "[OmniauthCallbacksController] line_user_id 保存失敗: " \
+      "user_id=#{user.id} error=#{e.message}"
+    )
+  end
+
+  # ============================================================
+  # determine_redirect_path_for_omniauth（変更なし）
+  # ============================================================
   #
   # 【優先度】
   #   1. terms_agreed_at が nil → /terms_agreement（法規上必須・最優先）
@@ -103,24 +165,15 @@ class OmniauthCallbacksController < ApplicationController
   #   3. session[:return_to] が安全なパス → そのパスへ
   #   4. デフォルト             → ダッシュボード
   def determine_redirect_path_for_omniauth(user)
-    # 優先度1: 利用規約未同意ユーザーは同意ページへ（F-3 追加）
-    #
-    # 【なぜ最優先にするのか】
-    #   法規対応として、いかなる場合も同意なしでサービスを使わせてはいけない。
-    #   オンボーディングより先に同意を取得する必要がある。
     return terms_agreement_path unless user.terms_agreed?
-
-    # 優先度2: 初回ログインユーザーはオンボーディングへ
     return onboarding_step5_path if user.first_login_at.nil?
 
-    # 優先度3: session[:return_to] が安全なパスならそこへ（将来の拡張用）
     stored_path = session[:return_to]
     if stored_path.present? && safe_redirect_path?(stored_path)
       session.delete(:return_to)
       return stored_path
     end
 
-    # 優先度4: デフォルトはダッシュボード
     dashboard_path
   end
 end
