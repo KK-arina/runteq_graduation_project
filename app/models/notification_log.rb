@@ -110,67 +110,53 @@ class NotificationLog < ApplicationRecord
   # クラスメソッド
   # ============================================================
 
-  # self.record_success
-  # 【役割】
-  #   通知送信成功時に NotificationLog レコードを作成する便利メソッド。
-  #   引数をまとめて渡すことでコントローラー・ジョブ側のコードをシンプルにする。
+  # record_success（G-1 更新: retry_count を専用カラムに記録）
   #
-  # 【引数の説明】
-  #   user:              通知を送ったユーザーのインスタンス
-  #   notification_type: 通知の種類（:alarm など）
-  #   channel:           送信チャネル（:line / :email）
-  #   target:            通知対象のレコード（Taskインスタンスなど）
-  #   deep_link_url:     タップ時の遷移先パス（例: "/tasks/1"）
-  #   metadata:          APIレスポンスなどの補足情報（省略可）
-  def self.record_success(user:, notification_type:, channel:, target:, deep_link_url:, metadata: nil)
+  # 【retry_count の設計】
+  #   notification_logs テーブルには retry_count カラム（integer, default: 0）がある。
+  #   metadata の中に埋め込む設計から、専用カラムを使う設計に変更した。
+  #   理由: 検索・集計時に SQL で直接フィルタリングできる方が効率的。
+  def self.record_success(user:, notification_type:, channel:, target:, deep_link_url:, metadata: nil, retry_count: 0)
     create!(
       user:              user,
       notification_type: notification_type,
       channel:           channel,
-      # target_type / target_id は polymorphic 関連のため
-      # target オブジェクトのクラス名と id を個別にセットする
-      target_type:   target.class.name,
-      target_id:     target.id,
-      deep_link_url: deep_link_url,
-      status:        :success,
-      delivered_at:  Time.current,
-      metadata:      metadata
+      target_type:       target.class.name,
+      target_id:         target.id,
+      deep_link_url:     deep_link_url,
+      status:            :success,
+      delivered_at:      Time.current,
+      retry_count:       retry_count,
+      metadata:          metadata
     )
   end
 
-  # self.record_failure
-  # 【役割】
-  #   通知送信失敗時に NotificationLog レコードを作成する便利メソッド。
-  #   error_message に失敗理由を記録することでデバッグを容易にする。
-  def self.record_failure(user:, notification_type:, channel:, target:, deep_link_url:, error_message:)
+  # record_failure（G-1 更新: retry_count を専用カラムに記録）
+  def self.record_failure(user:, notification_type:, channel:, target:, deep_link_url:, error_message:, retry_count: 0)
     create!(
       user:              user,
       notification_type: notification_type,
       channel:           channel,
-      target_type:   target.class.name,
-      target_id:     target.id,
-      deep_link_url: deep_link_url,
-      status:        :failed,
-      error_message: error_message
+      target_type:       target.class.name,
+      target_id:         target.id,
+      deep_link_url:     deep_link_url,
+      status:            :failed,
+      error_message:     error_message,
+      retry_count:       retry_count
     )
   end
 
-  # self.record_skip
-  # 【役割】
-  #   上限超過・通知無効などの理由でスキップした場合に記録する便利メソッド。
-  #   「なぜ通知しなかったか」を追跡できるようにする。
+  # record_skip（変更なし）
   def self.record_skip(user:, notification_type:, channel:, target:, deep_link_url:, reason:)
     create!(
       user:              user,
       notification_type: notification_type,
       channel:           channel,
-      target_type:   target.class.name,
-      target_id:     target.id,
-      deep_link_url: deep_link_url,
-      status:        :skipped,
-      # スキップ理由を error_message カラムに記録する
-      # （専用カラムはないため error_message を流用する）
-      error_message: reason
+      target_type:       target.class.name,
+      target_id:         target.id,
+      deep_link_url:     deep_link_url,
+      status:            :skipped,
+      error_message:     reason
     )
   end
 end
