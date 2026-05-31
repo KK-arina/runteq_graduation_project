@@ -1,0 +1,145 @@
+<%# app/views/weekly_report_mailer/report.html.erb %>
+<%#
+  ==============================================================================
+  週次レポートメール HTML テンプレート
+  ==============================================================================
+
+  【インラインスタイルを使う理由】
+    メールクライアント（Gmail・Outlook・Apple Mail 等）は外部 CSS ファイルや
+    <style> タグを無視することが多い。
+    確実にスタイルを適用するには各要素に style="" を直接書く必要がある。
+    Tailwind CSS はメールでは使えないため、全てインラインスタイルで記述する。
+
+  【使用するインスタンス変数（WeeklyReportMailer#report で設定済み）】
+    @user         - User インスタンス（name, email）
+    @reflection   - WeeklyReflection インスタンス（nil の場合あり）
+    @habit_stats  - 習慣達成率の配列 [{ name:, rate:, completed:, target: }, ...]
+    @week_label   - 先週の期間ラベル文字列
+    @deep_link_url - 振り返り入力ページの絶対 URL
+==============================================================================
+%>
+
+<%# メール全体のラッパー（max-width: 600px はメールクライアントの標準表示幅）%>
+<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; color: #1f2937;">
+
+  <%# ヘッダー部分 %>
+  <div style="background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); padding: 32px 24px; text-align: center; border-radius: 8px 8px 0 0;">
+    <h1 style="color: #ffffff; font-size: 24px; font-weight: 700; margin: 0 0 8px 0;">📊 HabitFlow 週次レポート</h1>
+    <p style="color: #e0e7ff; font-size: 14px; margin: 0;"><%= @week_label %> の振り返りサマリー</p>
+  </div>
+
+  <%# 本文エリア %>
+  <div style="padding: 32px 24px;">
+
+    <%# 挨拶文 %>
+    <p style="font-size: 16px; color: #374151; margin: 0 0 24px 0;">
+      <%= @user.name %> さん、こんにちは！<br>
+      先週の HabitFlow の活動サマリーをお届けします。
+    </p>
+
+    <%# 振り返りセクション %>
+    <%# reflection.present? で分岐する理由: %>
+    <%# 振り返りを完了していないユーザーにもメールを送るため「未提出」表示が必要 %>
+    <% if @reflection.present? %>
+      <div style="background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 20px; margin-bottom: 24px;">
+        <h2 style="font-size: 16px; font-weight: 700; color: #0369a1; margin: 0 0 16px 0;">📝 先週の振り返り</h2>
+
+        <%# 気分スコア（任意入力のため nil の場合はスキップ）%>
+        <% if @reflection.mood.present? %>
+          <div style="margin-bottom: 12px;">
+            <span style="font-size: 13px; color: #6b7280; display: block; margin-bottom: 4px;">気分スコア</span>
+            <%# %w[] 配列の 0 始まりインデックスに合わせて mood - 1 で参照する %>
+            <span style="font-size: 24px;"><%= %w[😞 😕 😐 🙂 😄][@reflection.mood - 1] %></span>
+            <span style="font-size: 14px; color: #374151; margin-left: 4px;"><%= @reflection.mood %>/5</span>
+          </div>
+        <% end %>
+
+        <div style="margin-bottom: 12px;">
+          <span style="font-size: 13px; color: #6b7280; display: block; margin-bottom: 4px;">なぜ？（直接の原因）</span>
+          <%# white-space: pre-wrap でユーザーが入力した改行を保持して表示する %>
+          <p style="font-size: 14px; color: #374151; margin: 0; line-height: 1.6; white-space: pre-wrap;"><%= @reflection.direct_reason %></p>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <span style="font-size: 13px; color: #6b7280; display: block; margin-bottom: 4px;">どう？（改善策）</span>
+          <p style="font-size: 14px; color: #374151; margin: 0; line-height: 1.6; white-space: pre-wrap;"><%= @reflection.background_situation %></p>
+        </div>
+
+        <div style="margin-bottom: 12px;">
+          <span style="font-size: 13px; color: #6b7280; display: block; margin-bottom: 4px;">からの？（次への展開）</span>
+          <p style="font-size: 14px; color: #374151; margin: 0; line-height: 1.6; white-space: pre-wrap;"><%= @reflection.next_action %></p>
+        </div>
+
+        <%# 自由コメントは任意入力のため present? チェックを行う %>
+        <% if @reflection.reflection_comment.present? %>
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #bae6fd;">
+            <span style="font-size: 13px; color: #6b7280; display: block; margin-bottom: 4px;">自由コメント</span>
+            <p style="font-size: 14px; color: #374151; margin: 0; line-height: 1.6; white-space: pre-wrap;"><%= @reflection.reflection_comment %></p>
+          </div>
+        <% end %>
+      </div>
+
+    <% else %>
+      <%# 振り返りが未提出の場合のメッセージ %>
+      <div style="background-color: #fefce8; border: 1px solid #fde68a; border-radius: 8px; padding: 20px; margin-bottom: 24px; text-align: center;">
+        <p style="font-size: 14px; color: #92400e; margin: 0;">
+          ⚠️ 先週の振り返りはまだ提出されていません。<br>
+          今週こそ記録してみましょう！
+        </p>
+      </div>
+    <% end %>
+
+    <%# 習慣達成状況セクション %>
+    <% if @habit_stats.present? %>
+      <div style="margin-bottom: 24px;">
+        <h2 style="font-size: 16px; font-weight: 700; color: #374151; margin: 0 0 16px 0;">🎯 先週の習慣達成状況</h2>
+
+        <%# 各習慣の達成状況を繰り返し表示する %>
+        <% @habit_stats.each do |stat| %>
+          <%#
+            achievement_color(stat[:rate]) は ApplicationHelper に定義したメソッド。
+            helper :application の記述により Mailer のビューでも使用可能になっている。
+            80%以上=緑 / 50%以上=青 / 50%未満=赤 の3段階で色を返す。
+          %>
+          <div style="display: flex; align-items: center; padding: 12px; margin-bottom: 8px; background-color: #f9fafb; border-radius: 6px; border-left: 4px solid <%= achievement_color(stat[:rate]) %>;">
+            <div style="flex: 1;">
+              <span style="font-size: 14px; font-weight: 600; color: #374151;"><%= stat[:name] %></span>
+              <span style="font-size: 12px; color: #6b7280; display: block; margin-top: 2px;"><%= stat[:completed] %>/<%= stat[:target] %> 日完了</span>
+            </div>
+            <div style="text-align: right;">
+              <span style="font-size: 18px; font-weight: 700; color: <%= achievement_color(stat[:rate]) %>;"><%= stat[:rate] %>%</span>
+            </div>
+          </div>
+        <% end %>
+      </div>
+
+    <% else %>
+      <%# 習慣が 0 件の場合のメッセージ %>
+      <div style="background-color: #f3f4f6; border-radius: 8px; padding: 20px; margin-bottom: 24px; text-align: center;">
+        <p style="font-size: 14px; color: #6b7280; margin: 0;">
+          習慣がまだ登録されていません。<br>
+          HabitFlow で習慣を作成してみましょう！
+        </p>
+      </div>
+    <% end %>
+
+    <%# CTA ボタン %>
+    <%#
+      <button> タグはメールクライアントで正しくレンダリングされないため
+      <a> タグ + display: inline-block + padding でボタン風のリンクを作る。
+      これはメールデザインの標準的な手法。
+    %>
+    <div style="text-align: center; margin-bottom: 32px;">
+      <a href="<%= @deep_link_url %>" style="display: inline-block; background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 16px; font-weight: 700;">
+        📝 今週の振り返りを記録する
+      </a>
+    </div>
+
+    <%# フッター %>
+    <div style="border-top: 1px solid #e5e7eb; padding-top: 20px; text-align: center;">
+      <p style="font-size: 12px; color: #9ca3af; margin: 0 0 8px 0;">このメールは HabitFlow のメール通知設定から配信停止できます。</p>
+      <p style="font-size: 12px; color: #9ca3af; margin: 0;">© 2026 HabitFlow. All rights reserved.</p>
+    </div>
+
+  </div>
+</div>

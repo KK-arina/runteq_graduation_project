@@ -57,6 +57,21 @@ class UserSetting < ApplicationRecord
             }
 
   # ============================================================
+  # G-2 追加: 週次レポートメール設定のバリデーション
+  # ============================================================
+  #
+  # 【validates :weekly_report_enabled, inclusion を使う理由】
+  #   boolean カラムは DB レベルで null: false を設定しているが、
+  #   Rails バリデーションでも true/false のみを許可することで
+  #   アプリ層でも安全性を二重に保証する。
+  #
+  # 【in: [true, false] を使う理由】
+  #   presence: true を boolean に使うと false を invalid と判定してしまう。
+  #   （Rails の presence は blank? を使うため false.blank? → true になってしまう）
+  #   boolean の存在チェックは必ず inclusion: { in: [true, false] } を使う。
+  validates :weekly_report_enabled, inclusion: { in: [true, false] }
+
+  # ============================================================
   # インスタンスメソッド
   # ============================================================
 
