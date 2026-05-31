@@ -1,6 +1,14 @@
 # ==============================================================================
-# render.yaml - インフラ構成定義ファイル（G-1 更新: LINE_CHANNEL_ACCESS_TOKEN 追加）
+# render.yaml - インフラ構成定義ファイル（G-1 更新）
 # ==============================================================================
+#
+# 【構成】
+#   Web サービスのみ使用する。
+#   GoodJob は execution_mode: :async で Web プロセス内で実行するため
+#   Worker サービスは不要。
+#   Render の Free プランは Background Worker が使えないため（最低$7/月）
+#   この構成を採用している。
+#
 services:
   - type: web
     name: habitflow-web
@@ -37,6 +45,8 @@ services:
       - key: WEB_CONCURRENCY
         value: "2"
 
+      # Resend メール送信サービス API キー
+      # Render ダッシュボードから手動で設定する
       - key: RESEND_API_KEY
         sync: false
 
@@ -47,50 +57,10 @@ services:
       # 【LINE_CHANNEL_ACCESS_TOKEN とは何か】
       #   LINE Messaging API チャネルで発行する「チャネルアクセストークン」。
       #   LINE Developers Console → Messaging API チャネル →
-      #   「Messaging API」タブ → 「Channel access token」→「Issue」で取得する。
+      #   「Messaging API設定」タブ → 「チャネルアクセストークン（長期）」で取得する。
       #
       # 【sync: false の意味】
       #   実際のトークン値は Render ダッシュボードから手動で設定する。
       #   GitHub に秘密情報を上げないためこの形式を使う。
-      - key: LINE_CHANNEL_ACCESS_TOKEN
-        sync: false
-
-  - type: worker
-    name: habitflow-worker
-    runtime: docker
-    region: singapore
-    plan: free
-    branch: main
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
-
-    startCommand: bundle exec good_job start --max-threads=3
-
-    envVars:
-      - key: RAILS_ENV
-        value: production
-
-      - key: DATABASE_URL
-        sync: false
-
-      - key: RAILS_MASTER_KEY
-        sync: false
-
-      - key: RAILS_LOG_TO_STDOUT
-        value: "true"
-
-      - key: RESEND_API_KEY
-        sync: false
-
-      # ============================================================
-      # G-1 追加: Worker にも LINE_CHANNEL_ACCESS_TOKEN が必要
-      # ============================================================
-      #
-      # 【なぜ Worker にも追加するのか】
-      #   LINE 通知は TaskAlarmJob（GoodJob Worker プロセス）から送信される。
-      #   Worker は Web とは完全に別プロセスのため、
-      #   Web サービスの環境変数は Worker には引き継がれない。
-      #   Worker プロセス内で LineNotificationService が
-      #   ENV["LINE_CHANNEL_ACCESS_TOKEN"] を参照するために必須。
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false

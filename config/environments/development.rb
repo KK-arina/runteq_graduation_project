@@ -131,7 +131,8 @@ Rails.application.configure do
   #               ジョブを実行する。Docker 1台で Web と Worker が同居するイメージ。
   #
   # :external モード: 別プロセス（bundle exec good_job start）が必要。
-  #                  本番（Render Worker サービス）向けの設定。
+  #                  将来 Render 有料プランに移行して Worker を分離する場合向けの設定。
+  #                  現在の本番環境（Render Free プラン）でも :async を使用している。
   #
   # 開発環境で :external を使うと、Worker を別途起動しない限り
   # ジョブが「Queued」のまま実行されない（ダッシュボードで確認できた症状）。

@@ -545,7 +545,7 @@ UTC 変換による cron 式の複雑化を避けるための設計。
 | `config/environments/production.rb` | `execution_mode = :external` 追加 |
 | `config/environments/test.rb` | `queue_adapter = :test` 追加 |
 | `config/routes.rb` | GoodJob ダッシュボードを catch-all より前にマウント |
-| `render.yaml` | Worker サービスを有効化（`--max-threads=3` を明示） |
+| `render.yaml` | Worker サービスは Render Free プランで利用不可のため未使用。GoodJob は `execution_mode: :async` で Web プロセス内で実行 |
 | `app/jobs/application_job.rb` | `retry_on` / `discard_on` を追加 |
 | `app/jobs/streak_calculation_job.rb` | 新規作成（#B-3 で本実装予定） |
 | `app/jobs/daily_notification_count_reset_job.rb` | 新規作成 |
@@ -591,15 +591,21 @@ GOOD_JOB_PASSWORD=（強力なパスワード）
 #### Render Worker サービス設定
 
 <br>
+
+Render の Free プランは Background Worker が利用できないため（最低 $7/月）、Worker サービスは使用しない。<br>
+GoodJob は `execution_mode: :async` を設定することで Web プロセス内でジョブを処理する。
+
+<br>
+
+将来有料プランに移行する場合は以下を `render.yaml` に追加する:<br>
 ```yaml
 - type: worker
   name: habitflow-worker
   runtime: docker
   region: singapore
-  plan: free
+  plan: starter
   startCommand: bundle exec good_job start --max-threads=3
 ```
-
 <br>
 
 `--max-threads=3` を明示する理由:<br>
@@ -5236,7 +5242,7 @@ config.good_job.execution_mode = :external  # :async から変更
 
 <br>
 
-render.yaml の Worker 設定のコメントアウトを解除することで<br>
+render.yaml に以下の Worker 設定を追加することで<br>
 自動的に habitflow-worker が作成されます。
 
 <br>
