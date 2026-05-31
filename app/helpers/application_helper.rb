@@ -67,4 +67,34 @@ module ApplicationHelper
       "#{numeric_sum}/#{habit.weekly_target}#{unit}（#{stats[:rate]}%）"
     end
   end
+
+  # ============================================================
+  # G-2 追加: 週次レポートメール用 達成率カラー返却メソッド
+  # ============================================================
+  #
+  # 【ApplicationHelper に定義する理由】
+  #   ActionMailer は helper :application の記述があれば
+  #   ApplicationHelper のメソッドをビューで使用できる。
+  #   コントローラーのビューとメイラーのビューで共通して使えるよう
+  #   ApplicationHelper に1箇所で定義する（DRY 原則）。
+  #
+  # 【rate_hex_color との違い】
+  #   rate_hex_color は4段階（100%/70%/40%/未満）の画面表示用メソッド。
+  #   achievement_color はメール向けの3段階（80%/50%/未満）。
+  #   メールは簡潔に表現するのが読みやすいため別メソッドとして定義する。
+  #
+  # 【戻り値】
+  #   CSS 16進数色コードの文字列
+  #   80%以上 → "#22c55e"（green-500: 達成）
+  #   50%以上 → "#3b82f6"（blue-500:  まずまず）
+  #   50%未満 → "#f87171"（red-400:   要改善）
+  def achievement_color(rate)
+    if rate >= 80
+      "#22c55e"   # green: 達成
+    elsif rate >= 50
+      "#3b82f6"   # blue: まずまず
+    else
+      "#f87171"   # red: 要改善
+    end
+  end
 end

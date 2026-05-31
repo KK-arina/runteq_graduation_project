@@ -178,6 +178,12 @@ ja:
     #     モデル名（スネークケース）:
     #       属性名（カラム名）: "日本語名"
     attributes:
+      # 【追記する理由】
+      #   weekly_report_enabled のバリデーションエラーメッセージを日本語で表示するため。
+      #   未設定だと "Weekly report enabled is not included in the list" という
+      #   英語エラーメッセージが表示されてしまう。
+      user_setting:
+        weekly_report_enabled: "週次レポートメール通知"
 
       # ──────────────────────────────────────────────────────
       # User モデルの属性名

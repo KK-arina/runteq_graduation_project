@@ -1,0 +1,56 @@
+<%# app/views/weekly_report_mailer/report.text.erb %>
+<%#
+  HTML 非対応メールクライアント向けプレーンテキスト版。
+  ActionMailer は HTML 版と Text 版の両方があると multipart/alternative 形式で送信する。
+  受信者のメールクライアントが自動的に適切な方を表示する。
+%>
+HabitFlow 週次レポート - <%= @week_label %>
+========================================
+
+<%= @user.name %> さん、こんにちは！
+先週の HabitFlow の活動サマリーをお届けします。
+
+----------------------------------------
+📝 先週の振り返り
+----------------------------------------
+<% if @reflection.present? %>
+<% if @reflection.mood.present? %>
+気分スコア: <%= @reflection.mood %>/5
+<% end %>
+
+【なぜ？（直接の原因）】
+<%= @reflection.direct_reason %>
+
+【どう？（改善策）】
+<%= @reflection.background_situation %>
+
+【からの？（次への展開）】
+<%= @reflection.next_action %>
+<% if @reflection.reflection_comment.present? %>
+
+【自由コメント】
+<%= @reflection.reflection_comment %>
+<% end %>
+<% else %>
+先週の振り返りはまだ提出されていません。
+今週こそ記録してみましょう！
+<% end %>
+
+----------------------------------------
+🎯 先週の習慣達成状況
+----------------------------------------
+<% if @habit_stats.present? %>
+<% @habit_stats.each do |stat| %>
+・<%= stat[:name] %>: <%= stat[:rate] %>%（<%= stat[:completed] %>/<%= stat[:target] %>日完了）
+<% end %>
+<% else %>
+習慣がまだ登録されていません。
+<% end %>
+
+----------------------------------------
+今週の振り返りを記録する
+----------------------------------------
+<%= @deep_link_url %>
+
+このメールは HabitFlow のメール通知設定から配信停止できます。
+© 2026 HabitFlow. All rights reserved.
