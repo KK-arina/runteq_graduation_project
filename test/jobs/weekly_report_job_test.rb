@@ -1,18 +1,26 @@
 # test/jobs/weekly_report_job_test.rb
 require "test_helper"
 
-# ==============================================================================
-# WeeklyReportJob のテスト
-# ==============================================================================
-#
-# 【ActionMailer::TestHelper を include する理由】
-#   assert_emails(N) { ... } アサーションを使うために必要。
-#   ブロック内で配信されたメール数が N 件であることを検証する。
-# ==============================================================================
 class WeeklyReportJobTest < ActiveSupport::TestCase
   include ActionMailer::TestHelper
 
   def setup
+    # ----------------------------------------------------------
+    # 【重要】fixture ユーザーの weekly_report_enabled を全て false にリセットする
+    # ----------------------------------------------------------
+    #
+    # 【なぜリセットが必要か】
+    #   fixtures :all により test/fixtures/user_settings.yml の全データが
+    #   テスト DB に読み込まれる。
+    #   fixture の user_settings には weekly_report_enabled: true のレコードが
+    #   複数存在するため、このテストで作る @target_user 以外にも
+    #   メールが送られてしまい assert_emails の件数が合わなくなる。
+    #
+    # 【update_all を使う理由】
+    #   全レコードを1本の SQL で一括更新できるため高速。
+    #   バリデーション・コールバックをスキップするため副作用がない。
+    UserSetting.update_all(weekly_report_enabled: false)
+
     # 送信対象ユーザー（weekly_report_enabled: true・メールアドレスあり）
     @target_user = User.create!(
       name:                  "対象ユーザー",
@@ -35,7 +43,7 @@ class WeeklyReportJobTest < ActiveSupport::TestCase
     )
     @disabled_user.user_setting.update!(weekly_report_enabled: false)
 
-    # 非対象ユーザー 2: 退会済み（deleted_at が設定されている）
+    # 非対象ユーザー 2: 退会済み
     @deleted_user = User.create!(
       name:                  "退会ユーザー",
       email:                 "deleted@example.com",
@@ -50,23 +58,9 @@ class WeeklyReportJobTest < ActiveSupport::TestCase
   # テスト 1: 対象ユーザーにメールが 1 件送信される
   # ============================================================
   test "weekly_report_enabled が true のユーザーにメールが送信される" do
-    # 【travel_to/travel_back 展開形式を使う理由】
-    #   travel_to ブロック内のアサーションは Minitest の assertion カウントに
-    #   含まれないバグが報告されている（Rails の既知の挙動）。
-    #   展開形式（travel_to + travel_back）を使うとカウントが正しく記録される。
-    #
-    # 【月曜日 AM9:00 に固定する理由】
-    #   WeeklyReflection.current_week_start_date は「現在時刻 - 4時間」の
-    #   beginning_of_week を返すため、テスト実行タイミングによっては
-    #   境界値で「先週」の計算がズレる場合がある。
-    #   ジョブ実行想定時刻（月曜 AM9:00）に固定することでテストを安定させる。
-    travel_to Time.zone.local(2026, 6, 1, 9, 0, 0)
-
     assert_emails 1 do
       WeeklyReportJob.new.perform
     end
-
-    travel_back
   end
 
   # ============================================================
@@ -75,13 +69,9 @@ class WeeklyReportJobTest < ActiveSupport::TestCase
   test "weekly_report_enabled が false のユーザーにはメールが送信されない" do
     @target_user.user_setting.update!(weekly_report_enabled: false)
 
-    travel_to Time.zone.local(2026, 6, 1, 9, 0, 0)
-
     assert_emails 0 do
       WeeklyReportJob.new.perform
     end
-
-    travel_back
   end
 
   # ============================================================
@@ -90,27 +80,14 @@ class WeeklyReportJobTest < ActiveSupport::TestCase
   test "退会済みユーザーにはメールが送信されない" do
     @target_user.update_column(:deleted_at, Time.current)
 
-    travel_to Time.zone.local(2026, 6, 1, 9, 0, 0)
-
     assert_emails 0 do
       WeeklyReportJob.new.perform
     end
-
-    travel_back
   end
 
   # ============================================================
   # テスト 4: 1ユーザーの送信失敗が他ユーザーに影響しない（堅牢性テスト）
   # ============================================================
-  #
-  # 【このテストで何を検証するのか】
-  #   WeeklyReportJob のループ内 begin ~ rescue が正しく機能していること。
-  #   1人目で例外が発生しても 2人目への送信が継続されることを確認する。
-  #
-  # 【original_report を保存する理由】
-  #   stub ブロック内で「モック対象外のユーザー」には
-  #   本来の WeeklyReportMailer.report を呼びたいため
-  #   stub 前にメソッドオブジェクトとして保存しておく。
   test "1人のユーザーへの送信が失敗しても他ユーザーへの送信は継続される" do
     another_user = User.create!(
       name:                  "二人目ユーザー",
@@ -121,26 +98,19 @@ class WeeklyReportJobTest < ActiveSupport::TestCase
     )
     another_user.user_setting.update!(weekly_report_enabled: true)
 
-    travel_to Time.zone.local(2026, 6, 1, 9, 0, 0)
-
-    # stub 前に元のメソッドオブジェクトを保存する
     original_report = WeeklyReportMailer.method(:report)
 
     WeeklyReportMailer.stub(:report, ->(user, reflection, stats) {
       if user.id == @target_user.id
-        # 1人目: 強制的に例外を発生させる（SMTP エラー等を模倣）
         raise StandardError, "テスト用の強制エラー"
       else
-        # 2人目: 本来の report メソッドを呼ぶ
         original_report.call(user, reflection, stats)
       end
     }) do
-      # 1人目は失敗・2人目は成功 → 合計 1 件送信されるはず
+      # @target_user は失敗・another_user は成功 → 合計 1 件
       assert_emails 1 do
         WeeklyReportJob.new.perform
       end
     end
-
-    travel_back
   end
 end
