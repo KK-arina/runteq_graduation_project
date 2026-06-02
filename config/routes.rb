@@ -5,6 +5,7 @@
 # F-2 追加: OmniAuth LINE コールバックルートを追加
 # F-3 追加: 利用規約・プライバシーポリシー・OAuth同意ルートを追加
 # F-4 追加: パスワードリセット機能のルーティングを追加
+# G-3 追加: 通知設定ページのルーティングを追加
 # ============================================================
 
 Rails.application.routes.draw do
@@ -13,36 +14,18 @@ Rails.application.routes.draw do
   # ============================================================
   # 開発環境専用ルート
   # ============================================================
-  #
-  # 【なぜ1つのブロックにまとめるのか】
-  #   if Rails.env.development? を複数箇所に書くと、
-  #   同じ :as 名（error_404 など）が2回定義されて
-  #   「Invalid route name, already in use」エラーになる。
-  #   開発環境専用のルートは1つのブロックにまとめることで
-  #   この問題を防ぐ。
   if Rails.env.development?
-    # エラーページ確認用ルート（開発環境でのみ直接アクセス可能）
     scope "/errors" do
       get "/404", to: "pages#error_404", as: :error_404
       get "/422", to: "pages#error_422", as: :error_422
       get "/500", to: "pages#error_500", as: :error_500
     end
 
-    # F-4修正: letter_opener_web のメール確認 UI をマウントする
-    #
-    # 【役割】
-    #   http://localhost:3000/letter_opener にアクセスすることで
-    #   開発環境で送信されたメールの一覧・内容を確認できる。
-    #   Docker 環境では letter_opener（自動ブラウザ起動）が使えないため、
-    #   この Web UI を使って代替する。
     mount LetterOpenerWeb::Engine, at: "/letter_opener"
-
-    # GoodJob の管理画面（ジョブの実行状況を確認できる）
     mount GoodJob::Engine => "/good_job"
   end
 
   resources :users, only: [ :new, :create ]
-
   resource :session, only: [ :new, :create, :destroy ]
 
   get    "/login",  to: "sessions#new",     as: :login
@@ -52,43 +35,17 @@ Rails.application.routes.draw do
   # ============================================================
   # F-3 追加: 利用規約・プライバシーポリシー静的ページ
   # ============================================================
-  #
-  # GET /terms:
-  #   利用規約ページ。PagesController#terms が処理する。
-  #   未ログインでも閲覧できる（before_action :require_login を付けていない）。
   get "/terms",   to: "pages#terms",   as: :terms
-
-  # GET /privacy:
-  #   プライバシーポリシーページ。PagesController#privacy が処理する。
-  #   未ログインでも閲覧できる。
   get "/privacy", to: "pages#privacy", as: :privacy
 
   # ============================================================
   # F-4 追加: パスワードリセット機能のルーティング
   # ============================================================
-  #
-  # resources :password_resets で以下のルートが生成される:
-  #   GET  /password_resets/new        → new    （23番画面: メアドフォーム）
-  #   POST /password_resets            → create  （メール送信）
-  #   GET  /password_resets/:id/edit   → edit    （26番画面: 新パスワード入力）
-  #   PATCH/PUT /password_resets/:id  → update  （パスワード変更処理）
-  #
-  # only: で不要なアクション（show, index, destroy）を除外する。
-  # :id の部分には生のトークン文字列が入る（数値IDではない）。
   resources :password_resets, only: [:new, :create, :edit, :update]
 
   # ============================================================
   # F-3 追加: OAuth 初回ログイン時の利用規約同意ルート
   # ============================================================
-  #
-  # GET /terms_agreement:
-  #   OAuth 初回ログイン後に表示する同意確認ページ。
-  #   TermsAgreementController#show が処理する。
-  #
-  # POST /terms_agreement:
-  #   同意チェックボックスを送信して terms_agreed_at を記録する。
-  #   TermsAgreementController#agree が処理する。
-  #   as: を付けると terms_agreement_agree_path ヘルパーが生成される。
   get  "/terms_agreement", to: "terms_agreement#show",  as: :terms_agreement
   post "/terms_agreement", to: "terms_agreement#agree", as: :terms_agreement_agree
 
@@ -106,8 +63,6 @@ Rails.application.routes.draw do
       to:  "omniauth_callbacks#line",
       as:  :omniauth_line_callback
 
-  # GET /auth/failure:
-  #   OmniAuth がエラーと判定した場合のフォールバック。
   get "/auth/failure",
       to:  "omniauth_callbacks#failure",
       as:  :omniauth_failure
@@ -118,22 +73,41 @@ Rails.application.routes.draw do
     post "skip",     action: :skip,     as: :onboarding_skip
   end
 
-  # ============================================================
-  # F-6 追加: アカウント設定・退会処理のルーティング
-  # ============================================================
-  #
-  # resource :settings（複数形の単数リソース）を使う理由:
-  #   設定はユーザーごとに1つなので id パラメータが不要（単数リソース）。
-  #   ただし「settings」という複数形のパスを使いたいため、
-  #   resource :settings と書くことで:
-  #     settings_path → GET /settings    （show アクション）
-  #     settings_path → DELETE /settings （destroy アクション）
-  #   が使えるようになる。
-  #
-  # 【resource :setting（単数形）との違い】
-  #   resource :setting → setting_path が生成される（settings_path は使えない）
-  #   resource :settings → settings_path が生成される（こちらが意図通り）
-  resource :settings, only: %i[show destroy]
+# 変更前:
+#   member do
+#     get   :notification_settings,
+#           to: "user_settings#notification_settings"
+#     patch :update_notification_settings,
+#           to: "user_settings#update_notification_settings"
+#   end
+#
+# 変更後:
+#   member do + collection で分けるのではなく、
+#   scope を使って GET と PATCH を同じパス /settings/notification_settings に向ける。
+#
+# 【なぜ member の patch が /update_notification_settings になるのか】
+#   Rails の member は「アクション名がそのままパスになる」。
+#   patch :update_notification_settings → /settings/update_notification_settings
+#   これを /settings/notification_settings にするには
+#   path: を明示するか、GET と同じアクション名にする必要がある。
+#
+# 【解決策】
+#   PATCH も path: "notification_settings" を指定して
+#   GET と同じ URL /settings/notification_settings を使うようにする。
+
+  resource :settings, only: %i[show destroy] do
+    member do
+      get   :notification_settings,
+            to: "user_settings#notification_settings"
+      # patch の path を明示して GET と同じ URL にする
+      # path: "notification_settings" を指定することで
+      # /settings/update_notification_settings ではなく
+      # /settings/notification_settings (PATCH) になる
+      patch :update_notification_settings,
+            to:   "user_settings#update_notification_settings",
+            path: "notification_settings"
+    end
+  end
 
   get "dashboard", to: "dashboards#index", as: :dashboard
 
@@ -152,7 +126,6 @@ Rails.application.routes.draw do
       get   :ai_edit
       patch :ai_update
     end
-
     collection do
       patch :archive_all_done
     end
@@ -163,14 +136,12 @@ Rails.application.routes.draw do
       get   :archived
       patch :sort
     end
-
     member do
       post  :archive
       patch :unarchive
       get   :ai_edit
       patch :ai_update
     end
-
     resources :habit_records, only: [ :create, :update ]
   end
 

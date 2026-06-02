@@ -85,6 +85,7 @@
         WCAG 2.1 の達成基準 2.4.2（ページタイトル）で要求されている。
     %>
     <title><%= content_for(:title) || "HabitFlow" %></title>
+    <%= yield :head %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
