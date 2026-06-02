@@ -1,0 +1,328 @@
+<%# app/views/user_settings/notification_settings.html.erb %>
+<%#
+  ============================================================
+  【このファイルの役割】
+  通知設定ページ（21番）
+
+  【G-3 新規作成】
+  - LINE 通知・メール通知・週次レポートの ON/OFF トグル
+  - 1日の最大通知数スライダー
+  - LINE 未連携時は連携ボタンを表示
+  - 保存後トースト通知を表示
+
+  【コントローラー】
+  UserSettingsController#notification_settings（GET）
+  UserSettingsController#update_notification_settings（PATCH）
+
+  【使用するインスタンス変数】
+  @user_setting : 現在のユーザー設定（UserSetting モデル）
+  @line_connected: LINE 通知連携済みかどうか（boolean）
+
+  【トグルスイッチの実装について Tailwind v4 対応】
+    Tailwind v4 の peer-checked: セレクターは
+    .peer-checked:is(:where(.peer):checked~*) を使う。
+    これは peer クラスの要素の「直接の兄弟要素」にのみ適用される。
+    そのため peer-checked: クラスは label タグに直接付ける。
+    span の中に peer-checked: を書いても効かない。
+  ============================================================
+%>
+<% content_for :title, "通知設定 | HabitFlow" %>
+<% content_for :head do %>
+  <meta name="turbo-cache-control" content="no-cache">
+<% end %>
+
+<div class="max-w-2xl mx-auto px-4 py-8">
+
+  <%# ── ページヘッダー ── %>
+  <div class="flex items-center gap-3 mb-8">
+    <%= link_to settings_path,
+        class: "text-gray-500 hover:text-gray-700 transition-colors
+                focus:outline-none focus:ring-2 focus:ring-gray-400 rounded" do %>
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 19l-7-7 7-7"/>
+      </svg>
+    <% end %>
+    <h1 class="text-2xl font-bold text-gray-900">🔔 通知設定</h1>
+  </div>
+
+  <%#
+    ── 設定フォーム ──
+    data-turbo="false" でフォームを通常のHTMLフォーム送信にする。
+    Turboが有効だとリダイレクト後のフラッシュが表示されないため無効化する。
+  %>
+  <%= form_with model: @user_setting,
+      url: update_notification_settings_settings_path,
+      method: :patch,
+      data: {
+        controller: "form-submit",
+        action: "submit->form-submit#submit",
+        turbo: false
+      } do |f| %>
+
+    <%# ============================================================
+        セクション1: 通知全体のマスタスイッチ
+    ============================================================ %>
+    <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">通知全般</h2>
+
+      <div class="flex items-center justify-between py-3">
+        <div>
+          <label for="user_setting_notification_enabled"
+                 class="text-base font-medium text-gray-900 cursor-pointer">
+            通知を有効にする
+          </label>
+          <p class="text-sm text-gray-500 mt-0.5">
+            すべての通知のマスタースイッチです
+          </p>
+        </div>
+
+        <%#
+          【Tailwind v4 対応トグルスイッチ】
+          peer クラスをチェックボックスに付ける。
+          peer-checked: / peer-focus: / after: クラスは
+          チェックボックスの直接の兄弟要素である label に付ける。
+          span の中に書いても Tailwind v4 では効かない。
+        %>
+        <div class="flex items-center">
+          <%= f.check_box :notification_enabled,
+              class: "sr-only peer",
+              id: "user_setting_notification_enabled" %>
+          <label for="user_setting_notification_enabled"
+                 class="relative inline-flex items-center cursor-pointer
+                        w-11 h-6 rounded-full bg-gray-200
+                        peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300
+                        peer-checked:bg-blue-600
+                        after:content-[''] after:absolute after:top-0.5 after:left-[2px]
+                        after:bg-white after:border-gray-300 after:border
+                        after:rounded-full after:h-5 after:w-5 after:transition-all
+                        peer-checked:after:translate-x-5 peer-checked:after:border-white">
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <%# ============================================================
+        セクション2: 通知チャネル設定
+    ============================================================ %>
+    <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">通知チャネル</h2>
+
+      <%# ── LINE 通知 ── %>
+      <div class="py-4 border-b border-gray-100">
+
+        <% unless @line_connected %>
+          <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+            <p class="text-sm font-medium text-amber-800 mb-2">
+              📱 LINE 通知を使うには連携が必要です
+            </p>
+            <p class="text-xs text-amber-700 mb-3">
+              LINE ログインで連携すると、タスクのアラームや週次レポートを
+              LINE で受け取れます。
+            </p>
+            <%#
+              button_to は form を生成するためメインフォームにネストできない。
+              form 属性で外部の line-connect-form と紐付ける。
+            %>
+            <button type="submit"
+                    form="line-connect-form"
+                    class="inline-flex items-center gap-2 px-4 py-2
+                           text-sm font-semibold text-white rounded-lg
+                           transition-colors
+                           focus:outline-none focus:ring-2 focus:ring-offset-2
+                           focus:ring-green-500 cursor-pointer"
+                    style="background-color: #06C755;">
+              LINE でログイン・連携する（通知用）
+            </button>
+            <p class="text-xs text-amber-600 mt-2">
+              ※ LINE でログイン済みの場合は自動で連携されます
+            </p>
+          </div>
+        <% end %>
+
+        <div class="flex items-center justify-between">
+          <div>
+            <label for="user_setting_line_notification_enabled"
+                   class="text-base font-medium text-gray-900
+                          <%= 'cursor-not-allowed opacity-50' unless @line_connected %>">
+              LINE 通知
+            </label>
+            <p class="text-sm mt-0.5
+                      <%= @line_connected ? 'text-green-600' : 'text-gray-400' %>">
+              <% if @line_connected %>
+                ✅ 連携済み（LINE に通知が届きます）
+              <% else %>
+                未連携（上のボタンで連携してください）
+              <% end %>
+            </p>
+          </div>
+
+          <div class="flex items-center">
+            <%#
+              LINE 未連携の場合は disabled にする。
+              disabled な input はフォーム送信時に値を送らないため
+              line_notification_enabled の値が変更されない。
+            %>
+            <%= f.check_box :line_notification_enabled,
+                class: "sr-only peer",
+                id: "user_setting_line_notification_enabled",
+                disabled: !@line_connected %>
+            <label for="user_setting_line_notification_enabled"
+                   class="relative inline-flex items-center
+                          w-11 h-6 rounded-full bg-gray-200
+                          peer-checked:bg-green-500
+                          after:content-[''] after:absolute after:top-0.5 after:left-[2px]
+                          after:bg-white after:border-gray-300 after:border
+                          after:rounded-full after:h-5 after:w-5 after:transition-all
+                          peer-checked:after:translate-x-5 peer-checked:after:border-white
+                          <%= @line_connected ? 'cursor-pointer' : 'cursor-not-allowed opacity-50' %>">
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <%# ── メール通知 ── %>
+      <div class="flex items-center justify-between py-4 border-b border-gray-100">
+        <div>
+          <label for="user_setting_email_notification_enabled"
+                 class="text-base font-medium text-gray-900
+                        <%= current_user.email.blank? ? 'cursor-not-allowed opacity-50' : 'cursor-pointer' %>">
+            メール通知
+          </label>
+          <p class="text-sm text-gray-500 mt-0.5">
+            <% if current_user.email.present? %>
+              <%= current_user.email %>
+            <% else %>
+              メールアドレス未設定（LINE ログインユーザー）
+            <% end %>
+          </p>
+        </div>
+
+        <div class="flex items-center">
+          <%= f.check_box :email_notification_enabled,
+              class: "sr-only peer",
+              id: "user_setting_email_notification_enabled",
+              disabled: current_user.email.blank? %>
+          <label for="user_setting_email_notification_enabled"
+                 class="relative inline-flex items-center
+                        w-11 h-6 rounded-full bg-gray-200
+                        peer-checked:bg-blue-600
+                        after:content-[''] after:absolute after:top-0.5 after:left-[2px]
+                        after:bg-white after:border-gray-300 after:border
+                        after:rounded-full after:h-5 after:w-5 after:transition-all
+                        peer-checked:after:translate-x-5 peer-checked:after:border-white
+                        <%= current_user.email.present? ? 'cursor-pointer' : 'cursor-not-allowed opacity-50' %>">
+          </label>
+        </div>
+      </div>
+
+      <%# ── 週次レポートメール ── %>
+      <div class="flex items-center justify-between py-4">
+        <div>
+          <label for="user_setting_weekly_report_enabled"
+                 class="text-base font-medium text-gray-900
+                        <%= current_user.email.blank? ? 'cursor-not-allowed opacity-50' : 'cursor-pointer' %>">
+            週次レポートメール
+          </label>
+          <p class="text-sm text-gray-500 mt-0.5">
+            毎週月曜日に先週のサマリーをメールでお送りします
+          </p>
+        </div>
+
+        <div class="flex items-center">
+          <%= f.check_box :weekly_report_enabled,
+              class: "sr-only peer",
+              id: "user_setting_weekly_report_enabled",
+              disabled: current_user.email.blank? %>
+          <label for="user_setting_weekly_report_enabled"
+                 class="relative inline-flex items-center
+                        w-11 h-6 rounded-full bg-gray-200
+                        peer-checked:bg-blue-600
+                        after:content-[''] after:absolute after:top-0.5 after:left-[2px]
+                        after:bg-white after:border-gray-300 after:border
+                        after:rounded-full after:h-5 after:w-5 after:transition-all
+                        peer-checked:after:translate-x-5 peer-checked:after:border-white
+                        <%= current_user.email.present? ? 'cursor-pointer' : 'cursor-not-allowed opacity-50' %>">
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <%# ============================================================
+        セクション3: 1日の最大通知数スライダー
+    ============================================================ %>
+    <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
+             data-controller="notification-limit">
+
+      <h2 class="text-lg font-semibold text-gray-800 mb-2">通知制限</h2>
+      <p class="text-sm text-gray-500 mb-4">
+        1日に受け取る通知の上限数を設定します。
+        LINE API の無料枠（月200通）を考慮して設定してください。
+      </p>
+
+      <div class="flex items-center gap-4">
+        <%= f.range_field :daily_notification_limit,
+            min: 1,
+            max: 10,
+            step: 1,
+            class: "flex-1 h-2 bg-gray-200 rounded-lg appearance-none
+                    cursor-pointer accent-blue-600",
+            data: {
+              "notification-limit-target": "slider",
+              action: "input->notification-limit#update"
+            } %>
+
+        <span class="text-lg font-bold text-blue-600 min-w-[3rem] text-right"
+              data-notification-limit-target="display">
+          <%= @user_setting.daily_notification_limit %>件
+        </span>
+      </div>
+
+      <p class="text-xs text-gray-400 mt-2">
+        推奨: 5件以下（LINE API の無料枠を考慮）
+      </p>
+    </section>
+
+    <%# ── 保存ボタンエリア ── %>
+    <div class="flex justify-end gap-3">
+      <%= link_to "キャンセル", settings_path,
+          class: "px-6 py-2.5 text-sm font-medium text-gray-700
+                  bg-white border border-gray-300 rounded-lg
+                  hover:bg-gray-50 transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-gray-400" %>
+
+      <%= f.submit "設定を保存する",
+          class: "px-6 py-2.5 text-sm font-medium text-white
+                  bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-blue-500
+                  focus:ring-offset-2 cursor-pointer",
+          data: {
+            "form-submit-target": "button",
+            "loading-text": "保存中..."
+          } %>
+    </div>
+
+  <% end %>
+
+  <%# フォーム下部の戻るリンク %>
+  <div class="mt-6 text-center">
+    <%= link_to "← 設定ページに戻る", settings_path,
+        class: "text-sm text-gray-500 hover:text-gray-700 transition-colors
+                focus:outline-none focus:ring-2 focus:ring-gray-400 rounded" %>
+  </div>
+
+</div>
+
+<%#
+  LINE連携用フォーム（メインフォームのネスト禁止のため外に置く）
+  id="line-connect-form" で上のボタンと紐付ける。
+  data: { turbo: false } で Turbo を無効にして通常の POST で送信する。
+  class="hidden" でフォーム自体は非表示にする。
+%>
+<%= form_tag "/auth/line_v2_1",
+    method: :post,
+    id: "line-connect-form",
+    data: { turbo: false },
+    class: "hidden" do %>
+<% end %>

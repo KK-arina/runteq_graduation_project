@@ -57,4 +57,12 @@ class SettingsController < ApplicationController
       redirect_to settings_path, alert: result[:error] || t("settings.destroy.failure")
     end
   end
+
+  before_action :set_user
+
+  private
+
+  def set_user
+    @user = current_user
+  end
 end
