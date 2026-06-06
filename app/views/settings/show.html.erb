@@ -4,10 +4,8 @@
   【このファイルの役割】
   アカウント設定ページ（M-4 退会確認モーダル付き）
 
-  【F-6 での実装内容】
-  - アカウント情報の表示
-  - 退会ボタンと退会確認モーダル（M-4）
-  - 「削除される個人情報」と「統計用に保持される匿名データ」を明示
+  【G-4 での変更内容】
+  - お休みモード設定へのナビゲーションセクションを追加
   ============================================================
 %>
 <% content_for :title, "アカウント設定 | HabitFlow" %>
@@ -48,18 +46,10 @@
 
   <%# ============================================================
       G-3 追加: 通知設定へのナビゲーションセクション
-      アカウント情報セクションの直後・危険ゾーンの直前に追加する。
   ============================================================ %>
   <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-4">通知設定</h2>
 
-    <%#
-      【link_to でカード全体をリンクにする理由】
-        ボタン1つよりも広いタップ領域を確保でき
-        スマホ操作がしやすくなる。
-        group クラスで親要素にホバーした際に子要素のスタイルも変わる
-        Tailwind の「グループホバー」パターンを使っている。
-    %>
     <%= link_to notification_settings_settings_path,
         class: "flex items-center justify-between p-4 rounded-lg border
                 border-gray-200 hover:border-blue-300 hover:bg-blue-50
@@ -86,10 +76,6 @@
       </svg>
     <% end %>
 
-    <%#
-      LINE 連携状況の簡易表示。
-      current_user.line_user_id の存在で判定する（G-1 の設計と一致）。
-    %>
     <div class="mt-3 flex items-center gap-2">
       <% if current_user.line_user_id.present? %>
         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full
@@ -105,6 +91,63 @@
     </div>
   </section>
 
+  <%# ============================================================
+      G-4 追加: お休みモード設定へのナビゲーションセクション
+      通知設定セクションの直後・危険ゾーンの直前に配置する。
+  ============================================================ %>
+  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">お休みモード</h2>
+
+    <%#
+      link_to でカード全体をリンクにする。
+      hover 時に緑色のボーダーに変化して「お休みモード」らしさを演出する。
+    %>
+    <%= link_to rest_mode_settings_path,
+        class: "flex items-center justify-between p-4 rounded-lg border
+                border-gray-200 hover:border-green-300 hover:bg-green-50
+                transition-colors group
+                focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2",
+        aria: { label: "お休みモード設定ページへ移動" } do %>
+      <div class="flex items-center gap-3">
+        <span class="text-2xl" aria-hidden="true">😴</span>
+        <div>
+          <p class="text-sm font-semibold text-gray-900
+                    group-hover:text-green-700 transition-colors">
+            お休みモード設定
+          </p>
+          <p class="text-xs text-gray-500 mt-0.5">
+            旅行・病気・多忙な期間のストリーク維持
+          </p>
+        </div>
+      </div>
+      <svg class="w-5 h-5 text-gray-400 group-hover:text-green-500 transition-colors"
+           fill="none" stroke="currentColor" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 5l7 7-7 7"/>
+      </svg>
+    <% end %>
+
+    <%# G-4 修正: current_user.user_setting を @user_setting に変更 %>
+    <%# SettingsController で @user_setting を準備しておく必要がある %>
+    <div class="mt-3 flex items-center gap-2">
+      <% if @user_setting&.rest_mode_active? %>
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full
+                     text-xs font-medium bg-green-100 text-green-700">
+          😴 お休みモード中
+        </span>
+        <span class="text-xs text-gray-500">
+          〜<%= l(@user_setting.rest_mode_until.to_date, format: :long) %>
+        </span>
+      <% else %>
+        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full
+                     text-xs font-medium bg-gray-100 text-gray-600">
+          通常モード
+        </span>
+      <% end %>
+    </div>
+  </section>
+
   <%# ── 危険ゾーン: 退会セクション ── %>
   <section class="bg-white rounded-lg shadow-sm border-2 border-red-200 p-6">
     <h2 class="text-lg font-semibold text-red-700 mb-2">退会（アカウント削除）</h2>
@@ -112,11 +155,6 @@
       退会すると、個人識別情報は即時に匿名化されます。この操作は取り消せません。
     </p>
 
-    <%#
-      data-action="click->deactivate-modal#open" だけでは
-      ボタンとモーダルが別の DOM ツリーにあるため Stimulus がコントローラーを見つけられない。
-      document.getElementById で直接モーダルを操作する方式に変更する。
-    %>
     <button type="button"
             class="px-4 py-2 text-sm font-medium text-white bg-red-600
                    rounded-md hover:bg-red-700 transition-colors
@@ -128,12 +166,7 @@
 
 </div>
 
-<%#
-  ── M-4: 退会確認モーダル ──
-  content_for :modals を使う理由:
-    application.html.erb の yield :modals で body の直前に出力される。
-    親要素の CSS transform の影響を受けずに fixed 配置が正しく動作する。
-%>
+<%# ── M-4: 退会確認モーダル ── %>
 <% content_for :modals do %>
   <div id="deactivate-modal"
        class="fixed inset-0 z-50 hidden"
@@ -141,12 +174,10 @@
        aria-modal="true"
        aria-labelledby="deactivate-modal-title">
 
-    <%# オーバーレイ：クリックで閉じる %>
     <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
          onclick="document.getElementById('deactivate-modal').classList.add('hidden'); document.body.classList.remove('overflow-hidden');"
          aria-hidden="true"></div>
 
-    <%# モーダル本体：クリックが下に伝播しないよう stopPropagation %>
     <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
       <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md
                   max-h-screen overflow-y-auto pointer-events-auto"

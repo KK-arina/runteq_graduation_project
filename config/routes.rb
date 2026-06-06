@@ -6,6 +6,7 @@
 # F-3 追加: 利用規約・プライバシーポリシー・OAuth同意ルートを追加
 # F-4 追加: パスワードリセット機能のルーティングを追加
 # G-3 追加: 通知設定ページのルーティングを追加
+# G-4 追加: お休みモード設定ページのルーティングを追加
 # ============================================================
 
 Rails.application.routes.draw do
@@ -73,39 +74,36 @@ Rails.application.routes.draw do
     post "skip",     action: :skip,     as: :onboarding_skip
   end
 
-# 変更前:
-#   member do
-#     get   :notification_settings,
-#           to: "user_settings#notification_settings"
-#     patch :update_notification_settings,
-#           to: "user_settings#update_notification_settings"
-#   end
-#
-# 変更後:
-#   member do + collection で分けるのではなく、
-#   scope を使って GET と PATCH を同じパス /settings/notification_settings に向ける。
-#
-# 【なぜ member の patch が /update_notification_settings になるのか】
-#   Rails の member は「アクション名がそのままパスになる」。
-#   patch :update_notification_settings → /settings/update_notification_settings
-#   これを /settings/notification_settings にするには
-#   path: を明示するか、GET と同じアクション名にする必要がある。
-#
-# 【解決策】
-#   PATCH も path: "notification_settings" を指定して
-#   GET と同じ URL /settings/notification_settings を使うようにする。
-
   resource :settings, only: %i[show destroy] do
     member do
+      # ============================================================
+      # G-3 追加: 通知設定ページ
+      # ============================================================
       get   :notification_settings,
             to: "user_settings#notification_settings"
-      # patch の path を明示して GET と同じ URL にする
-      # path: "notification_settings" を指定することで
-      # /settings/update_notification_settings ではなく
-      # /settings/notification_settings (PATCH) になる
       patch :update_notification_settings,
             to:   "user_settings#update_notification_settings",
             path: "notification_settings"
+
+      # ============================================================
+      # G-4 追加: お休みモード設定ページ
+      # ============================================================
+      # GET  /settings/rest_mode → お休みモード設定ページ表示
+      # POST /settings/rest_mode → お休みモード開始（start アクション）
+      # DELETE /settings/rest_mode → お休みモード終了（stop アクション）
+      #
+      # 【なぜ POST と DELETE で同じパスを使うのか】
+      #   RESTful な設計として、リソースの「開始（作成）」は POST、
+      #   「終了（削除）」は DELETE を使う。
+      #   path: "rest_mode" で同じ URL を共有しつつ HTTP メソッドで分岐する。
+      get    :rest_mode,
+             to: "user_settings#rest_mode"
+      post   :start_rest_mode,
+             to:   "user_settings#start_rest_mode",
+             path: "rest_mode"
+      delete :stop_rest_mode,
+             to:   "user_settings#stop_rest_mode",
+             path: "rest_mode"
     end
   end
 

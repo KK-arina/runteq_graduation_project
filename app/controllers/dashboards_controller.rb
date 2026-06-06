@@ -92,6 +92,12 @@ class DashboardsController < ApplicationController
                      ).first
                    end
     # ─────────────────────────────────────────────────────────────────────
+    #
+    # G-4 追加: ダッシュボードで current_user.user_setting を複数回呼ぶ N+1 を防ぐ。
+    # ビュー内で current_user.user_setting&.rest_mode_active? を複数回呼んでいるため、
+    # コントローラで1回だけ取得してインスタンス変数に格納する。
+    # これにより SELECT クエリが1回で済む。
+    @user_setting = current_user.user_setting
   end
 
   private

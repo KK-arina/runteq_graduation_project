@@ -23,6 +23,11 @@ class SettingsController < ApplicationController
     # @user: 現在ログイン中のユーザーオブジェクト
     # current_user は ApplicationController で定義されたヘルパーメソッド
     @user = current_user
+    #
+    # G-4 追加: お休みモードの状態表示に使う。
+    # view で current_user.user_setting を直接呼ぶと N+1 になるため
+    # コントローラで1回だけ取得する。
+    @user_setting = current_user.user_setting
   end
 
   # ==============================================================================
