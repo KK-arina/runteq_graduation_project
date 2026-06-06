@@ -1,0 +1,468 @@
+<%# app/views/user_settings/rest_mode.html.erb %>
+<%#
+  ==============================================================================
+  お休みモード設定ページ（22番・G-4 新規作成）
+  ==============================================================================
+
+  【このページの役割】
+    ユーザーが「旅行・病気・多忙な期間」のお休み期間を設定できるページ。
+    お休み中は allow_rest_mode=true の習慣のストリークが維持される。
+
+  【表示の切り替え】
+    @rest_mode_active が true  → お休みモード中の表示（終了ボタン）
+    @rest_mode_active が false → 設定フォーム（開始ボタン + M-3 モーダル）
+
+  【M-3 モーダルについて】
+    「お休みモードを開始する」ボタンをクリックすると M-3 確認モーダルが表示される。
+    モーダル内の「開始する」ボタンが実際の POST リクエストを送信する。
+    スマホ（768px 未満）ではボトムシート形式で表示される。
+  ==============================================================================
+%>
+<% content_for :title, "お休みモード設定 | HabitFlow" %>
+
+<div class="max-w-2xl mx-auto px-4 py-8">
+
+  <%# ── ページヘッダー ── %>
+  <div class="flex items-center gap-3 mb-8">
+    <%#
+      link_to でアイコン付きの「← 設定に戻る」リンクを実装する。
+      設定ページ（settings_path）へ戻るナビゲーション。
+    %>
+    <%= link_to settings_path,
+          class: "text-gray-500 hover:text-gray-700 transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
+          aria: { label: "設定ページに戻る" } do %>
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 19l-7-7 7-7"/>
+      </svg>
+    <% end %>
+    <h1 class="text-2xl font-bold text-gray-900">😴 お休みモード設定</h1>
+  </div>
+
+  <%# ── お休みモードの説明 ── %>
+  <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+    <div class="flex gap-3">
+      <span class="text-blue-500 text-xl flex-shrink-0" aria-hidden="true">ℹ️</span>
+      <div>
+        <p class="text-sm font-semibold text-blue-800 mb-1">お休みモードとは？</p>
+        <p class="text-sm text-blue-700 leading-relaxed">
+          旅行・病気・繁忙期など、習慣を継続できない期間を設定すると
+          <strong>「お休みモード適用あり」の習慣のストリークが維持されます。</strong>
+          達成率の計算からも除外されます。
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <%# ==============================================================
+    お休みモード中の表示（@rest_mode_active = true）
+  ============================================================== %>
+  <% if @rest_mode_active %>
+    <div class="bg-green-50 border-2 border-green-300 rounded-xl p-6 mb-6"
+         data-testid="rest-mode-active-section">
+      <div class="flex items-start gap-4">
+        <span class="text-3xl" aria-hidden="true">😴</span>
+        <div class="flex-1">
+          <h2 class="text-lg font-bold text-green-800 mb-1">
+            お休みモード中
+          </h2>
+          <p class="text-sm text-green-700 mb-1">
+            終了日:
+            <strong><%= l(@user_setting.rest_mode_until.to_date, format: :long) %></strong>
+          </p>
+          <%# rest_mode_reason が設定されている場合のみ表示する %>
+          <% if @user_setting.rest_mode_reason.present? %>
+            <p class="text-sm text-green-700">
+              理由: <%= @user_setting.rest_mode_reason %>
+            </p>
+          <% end %>
+          <p class="text-xs text-green-600 mt-2">
+            ストリークは維持されています 🔥
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <%#
+      「お休みモードを終了する」ボタン。
+      DELETE /settings/rest_mode へリクエストを送信する。
+
+      button_to を使う理由:
+        link_to は GET リクエストしか送れないが、
+        button_to はフォームを生成して DELETE メソッドで送信できる。
+        Turbo が自動的に CSRF トークンを付与するため安全。
+    %>
+    <%= button_to t("user_settings.rest_mode.stop_button"),
+          stop_rest_mode_settings_path,
+          method: :delete,
+          class: "w-full py-3 px-6 text-sm font-semibold text-white
+                  bg-gray-600 hover:bg-gray-700 rounded-lg transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2",
+          data: { turbo_confirm: t("user_settings.rest_mode.stop_confirm") } %>
+
+  <%# ==============================================================
+    お休みモード設定フォーム（@rest_mode_active = false）
+  ============================================================== %>
+  <% else %>
+
+    <%#
+      お休みモード設定フォーム。
+      このフォーム自体は「M-3 確認モーダル」経由で送信される設計。
+      「お休みモードを開始する」ボタンをクリックすると
+      M-3 モーダルが表示され、モーダル内の「開始する」ボタンが
+      実際にこのフォームのデータを POST で送信する。
+
+      data-rest-mode-form: Stimulus コントローラーがフォームデータを
+      モーダルに渡すために使う識別子。
+    %>
+    <section class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6"
+             data-testid="rest-mode-form-section">
+      <h2 class="text-lg font-semibold text-gray-800 mb-4">お休み期間の設定</h2>
+
+      <%# form_with に scope: :user_setting を追加 %>
+      <%#
+        【修正理由】
+          scope なしの form_with url: では f.date_field :rest_mode_until が
+          "rest_mode_until=..." として送信される（user_setting[] なし）。
+          コントローラーは params[:user_setting][:rest_mode_until] で取得しているため
+          nil になりバリデーションエラーになっていた。
+          scope: :user_setting を追加することで
+          "user_setting[rest_mode_until]=..." として送信されるようになる。
+      %>
+      <%= form_with url: start_rest_mode_settings_path,
+            method: :post,
+            id: "rest-mode-form",
+            scope: :user_setting,
+            data: {
+              controller: "rest-mode-modal"
+            } do |f| %>
+
+        <%# ── お休み終了日 ── %>
+        <div class="mb-4">
+          <label for="rest_mode_until"
+                 class="block text-sm font-semibold text-gray-700 mb-2">
+            お休み終了日
+            <span class="text-red-500" aria-label="必須">*</span>
+          </label>
+          <%#
+            date_field を使う理由:
+              type="date" の input を生成し、ブラウザのネイティブ
+              日付ピッカーを利用できる。モバイルでも操作しやすい。
+
+            min: Date.current.to_s:
+              過去の日付を選択できないようにする（バリデーションと二重防御）。
+              Date.current は Rails の日付ヘルパーで今日の日付を返す。
+          %>
+          <%= f.date_field :rest_mode_until,
+                value: @user_setting.rest_mode_until&.to_date,
+                min: Date.current.to_s,
+                id: "rest_mode_until",
+                required: true,
+                class: "w-full px-3 py-2 border border-gray-300 rounded-lg
+                        text-sm focus:outline-none focus:ring-2 focus:ring-blue-500
+                        focus:border-blue-500",
+                data: {
+                  # Stimulus の target として登録する
+                  "rest-mode-modal-target": "untilDate"
+                } %>
+          <p class="mt-1 text-xs text-gray-500">
+            設定した日まで未チェックでもストリークが維持されます
+          </p>
+        </div>
+
+        <%# ── お休みの理由（任意）── %>
+        <div class="mb-6">
+          <label for="rest_mode_reason"
+                 class="block text-sm font-semibold text-gray-700 mb-2">
+            お休みの理由
+            <span class="text-gray-400 font-normal text-xs ml-1">（任意）</span>
+          </label>
+          <%#
+            音声入力🎤 アイコンを配置する。
+            voice_input_controller.js を接続する。
+            data-controller と data-action を使って Stimulus と紐付ける。
+          %>
+          <div class="relative"
+               data-controller="voice-input">
+            <%#
+              text_field を使う理由:
+                理由は短い文字列（例: 「海外旅行」「体調不良」）を想定。
+                textarea より text_field の方がスマホでも入力しやすい。
+            %>
+            <%= f.text_field :rest_mode_reason,
+                  value: @user_setting.rest_mode_reason,
+                  id: "rest_mode_reason",
+                  placeholder: "例: 海外旅行、体調不良、繁忙期",
+                  maxlength: 100,
+                  class: "w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg
+                          text-sm focus:outline-none focus:ring-2 focus:ring-blue-500
+                          focus:border-blue-500",
+                  data: {
+                    # voice_input_controller の field ターゲットとして登録する
+                    "voice-input-target": "field",
+                    # Stimulus の target として登録する
+                    "rest-mode-modal-target": "reason"
+                  } %>
+            <%# 音声入力🎤ボタン %>
+            <button type="button"
+                    class="absolute right-2 top-1/2 -translate-y-1/2
+                           p-1.5 rounded-md text-gray-500
+                           hover:text-gray-700 hover:bg-gray-100
+                           transition-colors
+                           focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    aria-label="音声入力を開始する"
+                    data-voice-input-target="button"
+                    data-action="click->voice-input#toggle">
+              <span aria-hidden="true" class="text-base">🎤</span>
+            </button>
+          </div>
+          <p class="mt-1 text-xs text-gray-500">100文字以内</p>
+        </div>
+
+        <%# ── お休みモードを適用する習慣の一覧 ── %>
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2">
+            ストリークが維持される習慣
+          </h3>
+          <p class="text-xs text-gray-500 mb-3">
+            ※「お休みモード適用」が ON の習慣のみ対象です
+          </p>
+          <% if @habits.empty? %>
+            <p class="text-sm text-gray-400">習慣がまだ登録されていません。</p>
+          <% else %>
+            <div class="space-y-2">
+              <% @habits.each do |habit| %>
+                <div class="flex items-center justify-between py-2 px-3
+                             rounded-lg border border-gray-100 bg-gray-50">
+                  <span class="text-sm text-gray-700 flex items-center gap-2">
+                    <span aria-hidden="true"><%= habit.icon.presence || "📋" %></span>
+                    <%= habit.name %>
+                  </span>
+                  <%# allow_rest_mode の状態をバッジで表示する %>
+                  <% if habit.allow_rest_mode %>
+                    <span class="text-xs font-semibold text-green-700
+                                 bg-green-100 px-2 py-0.5 rounded-full">
+                      適用: ON
+                    </span>
+                  <% else %>
+                    <span class="text-xs font-semibold text-gray-500
+                                 bg-gray-100 px-2 py-0.5 rounded-full">
+                      適用: OFF
+                    </span>
+                  <% end %>
+                </div>
+              <% end %>
+            </div>
+            <p class="mt-2 text-xs text-gray-400">
+              ※ 習慣の「お休みモード適用」設定は習慣編集ページから変更できます
+            </p>
+          <% end %>
+        </div>
+
+        <%#
+          「お休みモードを開始する」ボタン。
+          クリックすると M-3 確認モーダルを表示する。
+          実際の POST 送信はモーダル内の「開始する」ボタンが行う。
+
+          data-action="click->rest-mode-modal#openModal":
+            Stimulus の rest_mode_modal コントローラーの openModal メソッドを呼ぶ。
+          data-rest-mode-modal-target="openButton":
+            Stimulus がこのボタンを参照できるよう target として登録する。
+        %>
+        <button type="button"
+                class="w-full py-3 px-6 text-sm font-semibold text-gray-800
+                       bg-yellow-400 hover:bg-yellow-500 rounded-lg transition-colors
+                       focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2"
+                data-action="click->rest-mode-modal#openModal"
+                data-rest-mode-modal-target="openButton"
+                data-testid="open-rest-mode-modal-btn">
+          😴 お休みモードを開始する
+        </button>
+
+      <% end %>
+    </section>
+  <% end %>
+
+</div>
+
+<%#
+  ── M-3: お休みモード開始確認モーダル ──
+  content_for :modals に入れる理由:
+    application.html.erb の yield :modals で body の直前に出力される。
+    習慣カード等の CSS transform/transition の影響を受けず、
+    fixed 配置が正しく動作する（B-5 と同じ設計）。
+
+  このモーダルは @rest_mode_active = false のときのみ必要なため
+  if @rest_mode_active.! の条件で囲む。
+%>
+
+<%# content_for :modals ブロック（モーダル内ボタンに id を追加） %>
+
+<% unless @rest_mode_active %>
+  <% content_for :modals do %>
+    <div id="rest-mode-modal"
+         style="display: none;"
+         class="fixed inset-0 z-50"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="rest-mode-modal-title">
+
+      <%#
+        半透明の背景。
+        data-action は削除した。
+        代わりに _setupModalListeners() で addEventListener を登録する。
+        スコープ外なので data-action では動作しないため。
+      %>
+      <div class="fixed inset-0 bg-black bg-opacity-50"
+           aria-hidden="true"></div>
+
+      <%# ── デスクトップ用: 中央モーダル ── %>
+      <div class="hidden md:flex fixed inset-0 items-center justify-center p-4 pointer-events-none">
+        <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md
+                    max-h-screen overflow-y-auto pointer-events-auto
+                    border-t-4 border-yellow-400"
+             id="rest-mode-modal-panel">
+
+          <div class="flex items-center justify-between p-6 border-b border-gray-200">
+            <h3 id="rest-mode-modal-title"
+                class="text-lg font-bold text-gray-900">
+              😴 お休みモードを開始しますか？
+            </h3>
+            <%#
+              × ボタン。
+              id="rest-mode-close-btn" を付ける。
+              _setupModalListeners() でここに addEventListener を登録する。
+              data-action は削除（スコープ外のため動作しない）。
+            %>
+            <button type="button"
+                    id="rest-mode-close-btn"
+                    class="p-1 rounded text-gray-400 hover:text-gray-600
+                           focus:outline-none focus:ring-2 focus:ring-gray-400"
+                    aria-label="モーダルを閉じる">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                   aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <div class="p-6 space-y-4">
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+              <p class="text-sm font-semibold text-yellow-800 mb-2">設定内容の確認</p>
+              <div class="space-y-1 text-sm text-yellow-700">
+                <p>
+                  終了日:
+                  <strong id="confirm-until-date"></strong>
+                </p>
+                <p class="text-xs" id="confirm-reason"></p>
+              </div>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <p class="text-xs text-blue-700">
+                ℹ️ お休み終了日の翌朝（AM4:10頃）に自動解除されます。
+                手動で終了することもできます。
+              </p>
+            </div>
+          </div>
+
+          <div class="flex gap-3 p-6 border-t border-gray-200">
+            <%#
+              キャンセルボタン。
+              id="rest-mode-cancel-btn" を付ける。
+              _setupModalListeners() で addEventListener を登録する。
+            %>
+            <button type="button"
+                    id="rest-mode-cancel-btn"
+                    class="flex-1 px-4 py-2 text-sm font-medium text-gray-700
+                           bg-white border border-gray-300 rounded-md
+                           hover:bg-gray-50 transition-colors
+                           focus:outline-none focus:ring-2 focus:ring-gray-400">
+              キャンセル
+            </button>
+
+            <%#
+              「開始する」ボタン。
+              id="rest-mode-submit-btn" を付ける。
+              _setupModalListeners() で addEventListener を登録する。
+              type="button" を明示（form 内なので type 未指定だと submit になる可能性がある）。
+            %>
+            <button type="button"
+                    id="rest-mode-submit-btn"
+                    class="flex-1 px-4 py-2 text-sm font-semibold text-gray-800
+                           bg-yellow-400 hover:bg-yellow-500 rounded-md transition-colors
+                           focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-offset-2">
+              開始する
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+      <%# ── スマホ用: ボトムシート ── %>
+      <div class="md:hidden fixed inset-x-0 bottom-0 pointer-events-none">
+        <div class="bg-white rounded-t-2xl shadow-2xl border-t-4 border-yellow-400
+                    max-h-screen overflow-y-auto pointer-events-auto
+                    transform transition-transform duration-300 translate-y-full"
+             id="rest-mode-sheet-panel">
+
+          <div class="flex justify-center pt-3 pb-1">
+            <div class="w-10 h-1.5 bg-gray-300 rounded-full"></div>
+          </div>
+
+          <div class="px-5 pt-2 pb-4">
+            <h3 class="text-base font-bold text-gray-900 mb-4">
+              😴 お休みモードを開始しますか？
+            </h3>
+
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 mb-4">
+              <p class="text-xs font-semibold text-yellow-800 mb-1">設定内容の確認</p>
+              <p class="text-sm text-yellow-700">
+                終了日:
+                <strong id="confirm-until-date-mobile"></strong>
+              </p>
+              <p class="text-xs text-yellow-600 mt-0.5"
+                 id="confirm-reason-mobile"></p>
+            </div>
+
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4">
+              <p class="text-xs text-blue-700">
+                ℹ️ お休み終了日の翌朝（AM4:10頃）に自動解除されます。
+              </p>
+            </div>
+
+            <%#
+              スマホ用「開始する」ボタン。
+              id="rest-mode-submit-btn-mobile" を付ける。
+            %>
+            <button type="button"
+                    id="rest-mode-submit-btn-mobile"
+                    class="w-full py-3 text-sm font-semibold text-gray-800
+                           bg-yellow-400 hover:bg-yellow-500 rounded-xl transition-colors
+                           focus:outline-none focus:ring-2 focus:ring-yellow-400 mb-2">
+              開始する
+            </button>
+
+            <%#
+              スマホ用「キャンセル」ボタン。
+              id="rest-mode-cancel-btn-mobile" を付ける。
+            %>
+            <button type="button"
+                    id="rest-mode-cancel-btn-mobile"
+                    class="w-full py-3 text-sm font-medium text-gray-700
+                           bg-white border border-gray-300 rounded-xl
+                           hover:bg-gray-50 transition-colors
+                           focus:outline-none focus:ring-2 focus:ring-gray-400">
+              キャンセル
+            </button>
+          </div>
+
+        </div>
+      </div>
+
+    </div>
+  <% end %>
+<% end %>

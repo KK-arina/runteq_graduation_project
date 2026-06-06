@@ -447,10 +447,32 @@ ja:
   # 【インデントについて】
   #   ja: の直下（インデント2スペース）に user_settings: を配置する。
   #   helpers: と同じ階層に書くこと（インデントがずれると nil になる）。
+  #
+  # ==============================================================================
+  # 既存の user_settings: セクション全体（G-4 の rest_mode: を追記した完成版）
+  # ==============================================================================
+  # 【重要】YAML は同じキーを2回書くと後の定義が前を上書きする。
+  #         以下のブロックを既存の user_settings: セクションと完全に置き換える。
+  #         絶対に user_settings: を2つ書かないこと。
+
   user_settings:
     notification_settings:
       update_success: "通知設定を保存しました ✅"
       update_failure: "通知設定の保存に失敗しました。入力内容を確認してください。"
+    # ── G-4 追加: お休みモード関連メッセージ ──────────────────────────────
+    #
+    # 【使用箇所】
+    #   t("user_settings.rest_mode.started", until_date: ...)
+    #   t("user_settings.rest_mode.stopped")
+    #   t("user_settings.rest_mode.invalid_date")
+    #   t("user_settings.rest_mode.stop_button")
+    #   t("user_settings.rest_mode.stop_confirm")
+    rest_mode:
+      started: "お休みモードを開始しました（〜%{until_date}）😴"
+      stopped: "お休みモードを終了しました。お帰りなさい！"
+      invalid_date: "終了日を正しく入力してください（今日以降の日付）"
+      stop_button: "お休みモードを終了する"
+      stop_confirm: "お休みモードを終了しますか？ストリークの維持が解除されます。"
 
   # ============================================================
   # F-4 追加: フォームボタンのデフォルトテキスト日本語化

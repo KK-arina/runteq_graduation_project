@@ -1,4 +1,3 @@
-<%# app/views/dashboards/index.html.erb %>
 <%# Tailwind の purge 対策: bg-green-500 bg-blue-500 bg-red-400 bg-red-500 text-green-600 text-blue-600 text-red-500 %>
 <%#
   ダッシュボード画面。
@@ -6,60 +5,17 @@
 
   【D-7 変更点】
     PMVV AI分析バナーを追加。
-    @current_purpose が存在する場合、turbo_stream_from でチャンネルを購読し、
-    PurposeAnalysisJob が完了したとき Turbo Stream でバナーをリアルタイム更新する。
+
+  【G-4 変更点】
+    お休みモード中のバナーと「😴 休息中」バッジを追加。
 %>
 <% content_for :title, "ダッシュボード | HabitFlow" %>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-  <%#
-    ──────────────────────────────────────────────────────────────────────────
-    D-7: PMVV AI分析完了バナー（Turbo Stream リアルタイム更新対応）
-    ──────────────────────────────────────────────────────────────────────────
-    【なぜここに置くのか】
-      オンボーディング完了後、PurposeAnalysisJob が非同期で分析を実行する。
-      分析完了時に Turbo Stream でバナーをリアルタイム更新して
-      「完了しました」をユーザーに通知するため。
-
-    【turbo_stream_from の仕組み】
-      turbo_stream_from "user_purpose_#{current_user.id}" と書くことで
-      このページは "user_purpose_#{ユーザーID}" チャンネルを購読（subscribe）する。
-      PurposeAnalysisJob の broadcast_state_update が
-      同じチャンネル名に向けて broadcast_replace_to を送信したとき、
-      id="analysis_status_banner" の DOM が自動で置き換えられる。
-
-    【@current_purpose が nil の場合】
-      PMVV 未入力またはスキップしたユーザーはバナーを表示しない。
-      if @current_purpose のガードで制御する。
-
-    【id="analysis_status_banner" が重要な理由】
-      PurposeAnalysisJob の broadcast_replace_to の target 名と
-      完全に一致させる必要がある。
-      一致しないと DOM が更新されない。
-    ──────────────────────────────────────────────────────────────────────────
-  %>
+  <%# D-7: PMVV AI分析完了バナー %>
   <% if @current_purpose %>
-    <%#
-      【重要】チャンネル名は PurposeAnalysisJob の broadcast_replace_to と
-      完全に一致させる必要がある。
-      ジョブ側: "user_purpose_#{user_purpose.id}" → UserPurpose レコードの ID
-      ビュー側も UserPurpose の ID を使う必要がある。
-      current_user.id（User の ID）ではなく、
-      @current_purpose.id（UserPurpose の ID）を使う。
-    %>
     <%= turbo_stream_from "user_purpose_#{@current_purpose.id}" %>
-
-    <%#
-      id="analysis_status_banner":
-        PurposeAnalysisJob の broadcast_replace_to のターゲット名と一致させる（必須）。
-        ジョブが完了したとき、この div の中身が自動的に置き換えられる。
-
-      render partial:
-        _analysis_status_banner.html.erb（user_purposes ディレクトリにある既存パーシャル）を
-        ダッシュボードでも再利用する。
-        locals で @current_purpose と @ai_analysis を渡す。
-    %>
     <div id="analysis_status_banner" class="mb-6">
       <%= render "user_purposes/analysis_status_banner",
             user_purpose: @current_purpose,
@@ -118,12 +74,6 @@
 
       <% @habits.each do |habit| %>
         <% stats = @habit_stats[habit.id] || { rate: 0, completed_count: 0, numeric_sum: nil } %>
-        <%#
-          id="dashboard_habit_stat_#{habit.id}":
-            habit_records_controller の Turbo Stream 応答で
-            ダッシュボードの習慣達成率バーを個別に置き換えるために使う。
-            _dashboard_habit_stat パーシャルに切り出してリアルタイム更新に対応する。
-        %>
         <%= render "dashboards/habit_stat_row",
               habit:  habit,
               stats:  stats %>
@@ -195,21 +145,56 @@
         <span class="text-xs text-green-600 bg-green-50 px-2 py-1 rounded">✓ 記録は可能です</span>
       <% end %>
     </div>
-    <% if @habits.empty? %>
-      <p class="text-sm text-gray-400">
-        習慣がまだ登録されていません。
-        <% if @locked %>
-          <span class="text-gray-400">（振り返り完了後に習慣を追加できます）</span>
-        <% else %>
-          <%= link_to "習慣を登録する", new_habit_path, class: "text-blue-600 hover:underline" %>
+
+    <%# G-4 追加: お休みモード中のバナー %>
+    <% if @user_setting&.rest_mode_active? %>
+      <div class="mb-4 bg-green-50 border border-green-200 rounded-lg p-3
+                  flex items-center gap-2"
+           data-testid="rest-mode-dashboard-banner">
+        <span class="text-base flex-shrink-0" aria-hidden="true">😴</span>
+        <div>
+          <p class="text-xs font-semibold text-green-800">
+            <%# rest_mode_until の nil 安全性: until_date 変数に受けてから使う %>
+            <% until_date = @user_setting.rest_mode_until %>
+            お休みモード中
+            <% if until_date %>
+              （〜<%= l(until_date.to_date, format: :long) %>）
+            <% end %>
+          </p>
+          <p class="text-xs text-green-600">
+            適用 ON の習慣のストリークが維持されています 🔥
+          </p>
+        </div>
+        <%= link_to rest_mode_settings_path,
+              class: "ml-auto text-xs text-green-700 hover:underline flex-shrink-0" do %>
+          設定 →
         <% end %>
-      </p>
-    <% else %>
-      <% @habits.each do |habit| %>
-        <%= render "habit_records/habit_record",
-              habit: habit,
-              habit_record: @today_records_hash[habit.id] %>
+      </div>
+    <% end %>
+
+    <%# 習慣ループ内の修正: current_user.user_setting → @user_setting %>
+    <% @habits.each do |habit| %>
+      <% if @user_setting&.rest_mode_active? && habit.allow_rest_mode %>
+        <div class="flex items-center gap-2 py-1 px-2 mb-1
+                    bg-green-50 border border-green-100 rounded-lg"
+             data-testid="rest-mode-habit-badge-<%= habit.id %>">
+          <span class="text-sm" aria-hidden="true">
+            <%= habit.icon.presence || "📋" %>
+          </span>
+          <span class="text-xs font-medium text-green-800 flex-1 truncate">
+            <%= habit.name %>
+          </span>
+          <span class="flex-shrink-0 inline-flex items-center gap-1
+                       px-2 py-0.5 rounded-full text-xs font-semibold
+                       bg-green-100 text-green-700">
+            😴 休息中
+          </span>
+        </div>
       <% end %>
+
+      <%= render "habit_records/habit_record",
+            habit: habit,
+            habit_record: @today_records_hash[habit.id] %>
     <% end %>
   </div>
 
