@@ -1,20 +1,7 @@
 # config/routes.rb
-#
-# ============================================================
-# F-1 追加: OmniAuth Google コールバックルートを追加
-# F-2 追加: OmniAuth LINE コールバックルートを追加
-# F-3 追加: 利用規約・プライバシーポリシー・OAuth同意ルートを追加
-# F-4 追加: パスワードリセット機能のルーティングを追加
-# G-3 追加: 通知設定ページのルーティングを追加
-# G-4 追加: お休みモード設定ページのルーティングを追加
-# ============================================================
-
 Rails.application.routes.draw do
   root "pages#index"
 
-  # ============================================================
-  # 開発環境専用ルート
-  # ============================================================
   if Rails.env.development?
     scope "/errors" do
       get "/404", to: "pages#error_404", as: :error_404
@@ -33,33 +20,18 @@ Rails.application.routes.draw do
   post   "/login",  to: "sessions#create"
   delete "/logout", to: "sessions#destroy", as: :logout
 
-  # ============================================================
-  # F-3 追加: 利用規約・プライバシーポリシー静的ページ
-  # ============================================================
   get "/terms",   to: "pages#terms",   as: :terms
   get "/privacy", to: "pages#privacy", as: :privacy
 
-  # ============================================================
-  # F-4 追加: パスワードリセット機能のルーティング
-  # ============================================================
   resources :password_resets, only: [:new, :create, :edit, :update]
 
-  # ============================================================
-  # F-3 追加: OAuth 初回ログイン時の利用規約同意ルート
-  # ============================================================
   get  "/terms_agreement", to: "terms_agreement#show",  as: :terms_agreement
   post "/terms_agreement", to: "terms_agreement#agree", as: :terms_agreement_agree
 
-  # ============================================================
-  # F-1 追加: OmniAuth Google コールバック & 失敗ルート
-  # ============================================================
   get "/auth/google_oauth2/callback",
       to:  "omniauth_callbacks#google",
       as:  :omniauth_google_callback
 
-  # ============================================================
-  # F-2 追加: OmniAuth LINE コールバックルート
-  # ============================================================
   get "/auth/line_v2_1/callback",
       to:  "omniauth_callbacks#line",
       as:  :omniauth_line_callback
@@ -76,26 +48,12 @@ Rails.application.routes.draw do
 
   resource :settings, only: %i[show destroy] do
     member do
-      # ============================================================
-      # G-3 追加: 通知設定ページ
-      # ============================================================
       get   :notification_settings,
             to: "user_settings#notification_settings"
       patch :update_notification_settings,
             to:   "user_settings#update_notification_settings",
             path: "notification_settings"
 
-      # ============================================================
-      # G-4 追加: お休みモード設定ページ
-      # ============================================================
-      # GET  /settings/rest_mode → お休みモード設定ページ表示
-      # POST /settings/rest_mode → お休みモード開始（start アクション）
-      # DELETE /settings/rest_mode → お休みモード終了（stop アクション）
-      #
-      # 【なぜ POST と DELETE で同じパスを使うのか】
-      #   RESTful な設計として、リソースの「開始（作成）」は POST、
-      #   「終了（削除）」は DELETE を使う。
-      #   path: "rest_mode" で同じ URL を共有しつつ HTTP メソッドで分岐する。
       get    :rest_mode,
              to: "user_settings#rest_mode"
       post   :start_rest_mode,
@@ -104,6 +62,52 @@ Rails.application.routes.draw do
       delete :stop_rest_mode,
              to:   "user_settings#stop_rest_mode",
              path: "rest_mode"
+
+      # ============================================================
+      # G-5 追加: CSVエクスポートルーティング
+      # ============================================================
+      #
+      # 【なぜ member ルートに追加するのか】
+      #   設定ページ（/settings）に属する機能のため、
+      #   settings リソースの member アクションとして定義する。
+      #   これにより /settings/export_csv_habit_records のような
+      #   設定ページ配下の URL になる。
+      #
+      # 【3種類のCSVエクスポートを別アクションにする理由】
+      #   習慣記録・タスク・振り返りは対象データ・カラム・件数が異なる。
+      #   1つのアクションに種別パラメータで分岐させるより、
+      #   アクションを分けた方がコードが明確でテストもしやすい。
+      #
+      # 【GETではなくPOSTを使う理由】
+      #   CSVエクスポートは「データを生成する」副作用がある。
+      #   1000件超の場合はGoodJobにジョブを登録するため副作用がある。
+      #   副作用のあるリクエストにはGETではなくPOSTを使うのがRESTの原則。
+      #   また、GETだとブラウザの戻るボタンで再実行される危険がある。
+      post :export_csv_habit_records,
+           to:   "csv_exports#habit_records",
+           path: "export_csv/habit_records"
+      post :export_csv_tasks,
+           to:   "csv_exports#tasks",
+           path: "export_csv/tasks"
+      post :export_csv_weekly_reflections,
+           to:   "csv_exports#weekly_reflections",
+           path: "export_csv/weekly_reflections"
+
+      # ============================================================
+      # G-5 追加: CSVダウンロードURL（署名付きトークン経由）
+      # ============================================================
+      #
+      # 【なぜGETを使うのか】
+      #   メールに埋め込むURLはGETリンクでなければならない。
+      #   メールクライアントのリンクをクリックすると GET リクエストになるため。
+      #
+      # 【なぜ settings 配下にするのか】
+      #   認証が必要なダウンロードエンドポイントを
+      #   /settings 配下にまとめることで、
+      #   require_login before_action が確実に効く。
+      get :download_csv,
+          to:   "csv_exports#download",
+          path: "download_csv"
     end
   end
 
@@ -150,9 +154,6 @@ Rails.application.routes.draw do
     end
   end
 
-  # ============================================================
-  # 本番環境の GoodJob 管理画面（Basic認証付き）
-  # ============================================================
   if Rails.env.production?
     if ENV["GOOD_JOB_LOGIN"].present? && ENV["GOOD_JOB_PASSWORD"].present?
       authenticated_good_job = Rack::Auth::Basic.new(GoodJob::Engine) do |username, password|

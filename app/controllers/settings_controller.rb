@@ -7,63 +7,57 @@
 # 【アクション一覧】
 #   GET    /settings → show:    設定ページを表示
 #   DELETE /settings → destroy: 退会処理を実行
+#
+# 【G-5 での変更内容】
+#   show アクションに CSV エクスポート用の件数取得を追加。
+#   View 側でボタンの data-turbo を動的に切り替えるために使用する。
 # ==============================================================================
-
 class SettingsController < ApplicationController
-  # before_action :require_login
-  #   ログインしていないユーザーをログインページへリダイレクトする。
-  #   ApplicationController で定義された共通メソッド。
+
   before_action :require_login
+  before_action :set_user
 
   # ==============================================================================
   # show: 設定ページを表示する
   # GET /settings
   # ==============================================================================
   def show
-    # @user: 現在ログイン中のユーザーオブジェクト
-    # current_user は ApplicationController で定義されたヘルパーメソッド
-    @user = current_user
-    #
-    # G-4 追加: お休みモードの状態表示に使う。
-    # view で current_user.user_setting を直接呼ぶと N+1 になるため
-    # コントローラで1回だけ取得する。
+    # G-4 追加: お休みモードの状態表示に使う
     @user_setting = current_user.user_setting
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # G-5 追加: CSV エクスポートボタンの data-turbo を動的に切り替えるために
+    # 各データの件数を取得してインスタンス変数に渡す。
+    #
+    # 【なぜ View ではなくコントローラで件数を取得するのか】
+    #   View（ERBテンプレート）の中でDBクエリを発行するのは
+    #   責任分離の観点から良くない（FatView アンチパターン）。
+    #   コントローラで取得してインスタンス変数で渡すのが Rails の正しい作法。
+    #
+    # 【なぜ CsvExportService を使わないのか】
+    #   サービスクラスのインスタンス化は1回のアクションで1回にすべき。
+    #   件数取得だけなら直接クエリを書く方がシンプルで N+1 も起きない。
+    #   deleted_at: nil の条件は schema.rb のカラム定義に基づいている。
+    # ──────────────────────────────────────────────────────────────────────────
+    @habit_record_count        = current_user.habit_records.where(deleted_at: nil).count
+    @task_count                = current_user.tasks.where(deleted_at: nil).count
+    @weekly_reflection_count   = current_user.weekly_reflections.count
   end
 
   # ==============================================================================
   # destroy: 退会処理を実行する
   # DELETE /settings
   # ==============================================================================
-  #
-  # 【処理フロー】
-  #   1. UserDestroyService で個人情報の匿名化・セキュリティデータ削除を実行
-  #   2. 成功時: セッション・Cookie を全削除してトップページへリダイレクト
-  #   3. 失敗時: 設定ページへリダイレクトしてエラーを表示
   def destroy
     result = UserDestroyService.new(user: current_user).call
-
     if result[:success]
-      # ─── 退会成功時の処理 ────────────────────────────────────────────────────
-
-      # reset_session でセッションを全削除する
       reset_session
-
-      # Cookie削除: each_key は CookieJar では使えないため
-      # 既知のCookieキーを個別に削除する
-      #
-      # 【なぜ each_key が使えないのか】
-      #   ActionDispatch::Cookies::CookieJar は each_key を実装していない。
-      #   セッションは reset_session で削除済みなので
-      #   追加のCookie削除は不要だが、念のため _habitflow_session を明示削除する。
       cookies.delete(:_habitflow_session)
-
       redirect_to root_path, notice: t("settings.destroy.success")
     else
       redirect_to settings_path, alert: result[:error] || t("settings.destroy.failure")
     end
   end
-
-  before_action :set_user
 
   private
 
