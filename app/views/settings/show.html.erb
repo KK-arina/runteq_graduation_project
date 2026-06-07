@@ -2,53 +2,365 @@
 <%#
   ============================================================
   【このファイルの役割】
-  アカウント設定ページ（M-4 退会確認モーダル付き）
+  アカウント設定ページ（20番）
 
-  【G-4 での変更内容】
-  - お休みモード設定へのナビゲーションセクションを追加
-
-  【G-5 での変更内容】
-  - CSVエクスポートセクションを追加（退会セクション直前）
+  【G-6 での変更内容】
+  - プロフィール編集インライン（ユーザー名・音声入力🎤付き）追加
+  - ソーシャルアカウント連携セクション（Google・LINE）追加
+  - タイムゾーン設定セクション追加
+  - AIコスト使用状況セクション追加
+  - 20-2番: プロフィール編集中の状態（他セクション非活性化）追加
   ============================================================
 %>
 <% content_for :title, "アカウント設定 | HabitFlow" %>
 
-<div class="max-w-2xl mx-auto px-4 py-8">
+<%#
+  data-controller="settings-profile":
+    SettingsProfileController を接続する。
+    このdivの中にある data-settings-profile-target="..." 要素を
+    コントローラーが参照・操作する。
+    プロフィール編集フォームの開閉と他セクションの非活性化を制御する。
+%>
+<div class="max-w-2xl mx-auto px-4 py-8"
+     data-controller="settings-profile">
 
   <h1 class="text-2xl font-bold text-gray-900 mb-8">アカウント設定</h1>
 
-  <%# ── アカウント情報セクション ── %>
+  <%#
+    ============================================================
+    セクション1: プロフィール設定
+    ============================================================
+    data-settings-profile-target="section":
+      このセクション自体はターゲットだが、編集中も非活性化されない
+      （プロフィールセクション自体は編集対象なので otherSection ではない）。
+  %>
   <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-    <h2 class="text-lg font-semibold text-gray-800 mb-4">アカウント情報</h2>
 
-    <dl class="space-y-3">
-      <div class="flex items-center justify-between py-2 border-b border-gray-100">
-        <dt class="text-sm font-medium text-gray-600">ユーザー名</dt>
-        <dd class="text-sm text-gray-900"><%= @user.name %></dd>
-      </div>
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-gray-800">プロフィール設定</h2>
+      <%#
+        「編集」ボタン
+        data-action="click->settings-profile#openEdit":
+          クリックで SettingsProfileController の openEdit() を呼び出す。
+        data-settings-profile-target="editButton":
+          編集フォームが開いているときに hidden にして二重展開を防ぐ。
+      %>
+      <button type="button"
+              data-action="click->settings-profile#openEdit"
+              data-settings-profile-target="editButton"
+              class="px-3 py-1.5 text-sm font-medium text-gray-600
+                     bg-white border border-gray-300 rounded-md
+                     hover:bg-gray-50 transition-colors
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+        編集
+      </button>
+    </div>
 
-      <div class="flex items-center justify-between py-2 border-b border-gray-100">
-        <dt class="text-sm font-medium text-gray-600">メールアドレス</dt>
-        <dd class="text-sm text-gray-900">
-          <%= @user.email.presence || "未設定（LINEログイン）" %>
-        </dd>
-      </div>
+    <%#
+      通常表示モード（編集フォームが非表示のとき）
+      data-settings-profile-target="display":
+        openEdit() で hidden になり、closeEdit() で表示に戻る。
+    %>
+    <div data-settings-profile-target="display">
+      <dl class="space-y-3">
+        <div class="flex items-center justify-between py-2 border-b border-gray-100">
+          <dt class="text-sm font-medium text-gray-600">ユーザー名</dt>
+          <dd class="text-sm text-gray-900"><%= @user.name %></dd>
+        </div>
 
-      <div class="flex items-center justify-between py-2">
-        <dt class="text-sm font-medium text-gray-600">ログイン方法</dt>
-        <dd class="text-sm text-gray-900">
-          <%= case @user.provider
-              when "google_oauth2" then "Google アカウント"
-              when "line_v2_1"     then "LINE アカウント"
-              else                      "メールアドレス"
-              end %>
-        </dd>
-      </div>
-    </dl>
+        <div class="flex items-center justify-between py-2 border-b border-gray-100">
+          <dt class="text-sm font-medium text-gray-600">メールアドレス</dt>
+          <dd class="text-sm text-gray-900">
+            <%= @user.email.presence || "未設定（LINEログイン）" %>
+          </dd>
+        </div>
+
+        <div class="flex items-center justify-between py-2">
+          <dt class="text-sm font-medium text-gray-600">ログイン方法</dt>
+          <dd class="text-sm text-gray-900">
+            <%#
+              provider カラムの値でログイン方法を日本語表示する。
+              schema.rb より: provider のデフォルト値は "email"。
+            %>
+            <%= case @user.provider
+                when "google_oauth2" then "Google アカウント"
+                when "line_v2_1"     then "LINE アカウント"
+                else                      "メールアドレス"
+                end %>
+          </dd>
+        </div>
+      </dl>
+    </div>
+
+    <%#
+      編集フォームモード（初期状態は hidden）
+      data-settings-profile-target="form":
+        openEdit() で hidden が外れて表示される。
+        closeEdit() で hidden が付いて非表示になる。
+    %>
+    <div data-settings-profile-target="form" hidden>
+
+      <%#
+        プロフィール編集フォーム
+
+        url: update_profile_settings_path:
+          routes.rb で定義した PATCH /settings/profile へのパス。
+          member ルートのため、prefix が update_profile_settings_ になる。
+
+        scope: :user:
+          フォームのパラメータを params[:user][:name] の形でネストさせる。
+          コントローラーの profile_params で params.require(:user).permit(:name)
+          として受け取るためにこの指定が必要。
+          scope を付けない場合は params[:name] になり、require(:user) でエラーになる。
+
+        data: { turbo: false }:
+          Turbo を無効にして通常のフォーム送信を使う。
+          理由: redirect_to settings_path のレスポンスを
+          Turbo が処理すると設定ページ全体のリロードが正しく動かない場合があるため。
+          data-turbo="false" で通常のページ遷移になり確実に動作する。
+      %>
+      <%= form_with url: update_profile_settings_path,
+                    scope: :user,
+                    method: :patch,
+                    data: { turbo: false },
+                    class: "space-y-4 pt-2" do |f| %>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            ユーザー名
+          </label>
+
+          <%#
+            音声入力🎤対応のユーザー名フィールド
+            data-controller="voice-input": 既存の VoiceInputController を接続する。
+              このdivの中の要素を voice-input コントローラーが操作する。
+            data-voice-input-target="field": 音声認識結果のテキストを書き込む対象。
+            data-voice-input-target="button": 🎤ボタン（録音中に赤くなる）の対象。
+          %>
+          <div class="relative" data-controller="voice-input">
+            <%= f.text_field :name,
+                value: @user.name,
+                placeholder: "ユーザー名を入力（50文字以内）",
+                required: true,
+                maxlength: 50,
+                data: { "voice_input_target": "field" },
+                class: "block w-full pr-10 px-3 py-2 border border-gray-300
+                        rounded-md shadow-sm text-sm
+                        focus:outline-none focus:ring-2 focus:ring-blue-500
+                        focus:border-blue-500" %>
+            <%#
+              音声入力ボタン（🎤）
+              data-action="click->voice-input#toggle":
+                クリックで VoiceInputController の toggle() を呼び出す。
+                音声認識の開始/停止を切り替える。
+              data-voice-input-target="button":
+                録音中にスタイルが変わる（赤くなる）ターゲット。
+              type="button":
+                フォーム内のボタンはデフォルトで type="submit" になるため、
+                type="button" を明示してフォーム送信を防ぐ。
+            %>
+            <button type="button"
+                    data-action="click->voice-input#toggle"
+                    data-voice-input-target="button"
+                    class="absolute inset-y-0 right-0 flex items-center pr-3
+                           text-gray-400 hover:text-gray-600 transition-colors"
+                    aria-label="音声入力を開始する"
+                    title="音声入力">
+              🎤
+            </button>
+          </div>
+          <p class="mt-1 text-xs text-gray-500">50文字以内</p>
+        </div>
+
+        <div class="flex gap-3">
+          <%#
+            「キャンセル」ボタン
+            data-action="click->settings-profile#closeEdit":
+              クリックで SettingsProfileController の closeEdit() を呼び出す。
+              フォームを閉じて表示モードに戻す（フォーム送信はしない）。
+            type="button":
+              フォーム内に type 未指定のボタンを置くと
+              デフォルトで type="submit" になりフォームが送信されてしまう。
+              type="button" を明示することでフォーム送信を防ぐ。
+          %>
+          <button type="button"
+                  data-action="click->settings-profile#closeEdit"
+                  class="flex-1 px-4 py-2 text-sm font-medium text-gray-700
+                         bg-white border border-gray-300 rounded-md
+                         hover:bg-gray-50 transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-gray-400">
+            キャンセル
+          </button>
+          <%#
+            「保存」ボタン
+            f.submit を使う理由:
+              form_with のブロック変数 f を使った submit ボタン。
+              自動的に type="submit" と CSRF トークンが含まれる。
+            data: { disable_with: "保存中..." }:
+              クリック後に「保存中...」に変わりボタンが無効化される。
+              二重送信（連打）を防ぐための Rails 標準の仕組み。
+          %>
+          <%= f.submit "保存",
+              class: "flex-1 px-4 py-2 text-sm font-medium text-white
+                      bg-blue-600 rounded-md hover:bg-blue-700 transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-blue-500
+                      focus:ring-offset-2 cursor-pointer",
+              data: { disable_with: "保存中..." } %>
+        </div>
+      <% end %>
+    </div>
+
   </section>
 
-  <%# G-3 追加: 通知設定へのナビゲーションセクション %>
-  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+  <%#
+    ============================================================
+    セクション2: ソーシャルアカウント連携（G-6 新規追加）
+    ============================================================
+    data-settings-profile-target="otherSection":
+      プロフィール編集中に opacity-50 + pointer-events-none で
+      非活性化される対象として登録する。
+
+    【LINE ログイン用 と LINE 通知用の違い】
+      LINE ログイン用: users.provider="line_v2_1" / users.uid
+        → OmniAuth で管理。LINEアカウントでログインする仕組み。
+        → このセクションで確認・管理する。
+      LINE 通知用: users.line_user_id
+        → LINE Messaging API の userId。LINE通知の送信先。
+        → 通知設定ページ（21番）で管理する。
+      同一プロバイダ内では uid == line_user_id が保証されるため、
+      LINEログイン連携すれば通知も使える。
+  %>
+  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
+           data-settings-profile-target="otherSection">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">ソーシャルアカウント連携</h2>
+
+    <%# Google 連携状態 %>
+    <div class="flex items-center justify-between py-3 border-b border-gray-100">
+      <div class="flex items-center gap-3">
+        <%# Google のブランドカラー（#4285F4）で G アイコンを表示する %>
+        <span class="text-xl font-bold"
+              style="color: #4285F4; font-family: serif;"
+              aria-hidden="true">G</span>
+        <div>
+          <p class="text-sm font-semibold text-gray-900">Google</p>
+          <% if @user.provider == "google_oauth2" %>
+            <p class="text-xs text-green-600">✅ 連携済み（ログイン方法として使用中）</p>
+          <% else %>
+            <p class="text-xs text-gray-500">未連携</p>
+          <% end %>
+        </div>
+      </div>
+
+      <% if @user.provider == "google_oauth2" %>
+        <%#
+          Google 連携済みのときは解除ボタンを表示しない。
+          理由: Googleがログイン手段のユーザーが解除すると
+          ログインできなくなるロックアウトリスクがあるため。
+        %>
+        <span class="text-xs text-gray-400">ログイン方法として使用中</span>
+      <% else %>
+        <%#
+          Google 未連携のときは連携ボタンを表示する。
+          /auth/google_oauth2 は OmniAuth の Google 認証フローを開始する URL。
+          data-turbo="false":
+            OmniAuth は外部サービスへのリダイレクトを伴うため、
+            Turbo を無効にして通常のページ遷移として処理する。
+        %>
+        <%= link_to "Google で連携する",
+            "/auth/google_oauth2",
+            data: { turbo: false },
+            class: "px-3 py-1.5 text-xs font-medium text-gray-700
+                    bg-white border border-gray-300 rounded-md
+                    hover:bg-gray-50 transition-colors" %>
+      <% end %>
+    </div>
+
+    <%# LINE 連携状態（ログイン用） %>
+    <div class="flex items-center justify-between py-3">
+      <div class="flex items-center gap-3">
+        <%# LINE のブランドカラー（#06C755）で LINE テキストを表示する %>
+        <span class="text-sm font-black"
+              style="color: #06C755;"
+              aria-hidden="true">LINE</span>
+        <div>
+          <p class="text-sm font-semibold text-gray-900">
+            LINE
+            <span class="text-xs font-normal text-gray-500">（ログイン・通知用）</span>
+          </p>
+          <% if @user.provider == "line_v2_1" %>
+            <p class="text-xs text-green-600">✅ 連携済み（ログイン方法として使用中）</p>
+          <% elsif @line_connected %>
+            <%#
+              line_connected? は User#line_connected? で判定する。
+              provider != "line_v2_1" だが line_user_id がある場合 = 通知のみ連携。
+            %>
+            <p class="text-xs text-green-600">✅ 連携済み（通知連携）</p>
+          <% else %>
+            <p class="text-xs text-gray-500">未連携</p>
+          <% end %>
+        </div>
+      </div>
+
+      <% if @user.provider == "line_v2_1" %>
+        <%#
+          LINE がログイン手段の場合は解除ボタンを表示しない。
+          理由: disconnect_line アクションでもガードしているが、
+          UI レベルでも表示しないことで誤操作を完全に防ぐ。
+        %>
+        <span class="text-xs text-gray-400">ログイン方法として使用中</span>
+
+      <% elsif @line_connected %>
+        <%#
+          LINE 連携済み（通知のみ）かつ LINE がログイン手段でない場合は
+          「解除」ボタンを表示する。
+
+          button_to を使う理由:
+            DELETE メソッドは HTML の <a> タグでは直接送れない。
+            button_to はフォームを生成して _method=DELETE で送信するため
+            Rails のルーティングが正しく処理できる。
+
+          data-turbo-confirm:
+            Turbo が提供する確認ダイアログ。
+            ボタンクリック後に確認メッセージを表示し、
+            「OK」のときのみリクエストを送信する。
+        %>
+        <%= button_to "通知連携を解除する",
+            disconnect_line_settings_path,
+            method: :delete,
+            data: {
+              turbo_confirm: "LINE通知連携を解除しますか？\nLINE通知が届かなくなります。",
+              disable_with: "解除中..."
+            },
+            class: "px-3 py-1.5 text-xs font-medium text-red-600
+                    bg-white border border-red-200 rounded-md
+                    hover:bg-red-50 transition-colors" %>
+
+      <% else %>
+        <%#
+          LINE 未連携の場合は連携ボタンを表示する。
+          /auth/line_v2_1 は OmniAuth の LINE 認証フローを開始する URL。
+          data-turbo="false": OmniAuth は外部リダイレクトを伴うため Turbo を無効にする。
+        %>
+        <%= link_to "LINE で連携する",
+            "/auth/line_v2_1",
+            data: { turbo: false },
+            class: "px-3 py-1.5 text-xs font-medium text-white
+                    rounded-md transition-colors",
+            style: "background-color: #06C755;" %>
+      <% end %>
+    </div>
+
+    <div class="mt-3 p-3 bg-green-50 rounded-md border border-green-200">
+      <p class="text-xs text-green-700 leading-relaxed">
+        💡 LINE アカウントと連携すると、LINEログインが使えるようになり、
+        通知設定ページで LINE 通知も受け取れるようになります。
+      </p>
+    </div>
+  </section>
+
+  <%# G-3 由来: 通知設定へのナビゲーション %>
+  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
+           data-settings-profile-target="otherSection">
     <h2 class="text-lg font-semibold text-gray-800 mb-4">通知設定</h2>
 
     <%= link_to notification_settings_settings_path,
@@ -92,8 +404,9 @@
     </div>
   </section>
 
-  <%# G-4 追加: お休みモード設定へのナビゲーションセクション %>
-  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+  <%# G-4 由来: お休みモード設定へのナビゲーション %>
+  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
+           data-settings-profile-target="otherSection">
     <h2 class="text-lg font-semibold text-gray-800 mb-4">お休みモード</h2>
 
     <%= link_to rest_mode_settings_path,
@@ -140,44 +453,186 @@
     </div>
   </section>
 
-  <%# ============================================================
-      G-5 追加: データエクスポートセクション
-      お休みモードセクションの直後・退会セクションの直前に配置する。
+  <%#
+    ============================================================
+    G-6 新規追加: タイムゾーン設定セクション
+    ============================================================
+    【なぜタイムゾーン設定が必要か】
+      アラーム通知（GoodJob ジョブ）の実行時刻計算に
+      user_settings.time_zone を使用するため。
+      デフォルトは "Asia/Tokyo"。
+      海外在住・旅行中のユーザーが自分のタイムゾーンに合わせられる。
+  %>
+  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
+           data-settings-profile-target="otherSection">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">タイムゾーン設定</h2>
 
-      【Turbo Streamとの連携について】
-        各ボタンは button_to（POSTリクエスト）でエクスポートを実行する。
-        1000件以下: send_data で直接ファイルをダウンロード
-        1000件超:   Turbo Streamでボタンを「生成中」状態に更新
-        エラー時:   Turbo Streamでボタンを「エラー（再試行）」状態に更新
-  ============================================================ %>
-  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <p class="text-sm text-gray-500 mb-4">
+      アラーム通知の時刻計算に使用します。
+      現在: <strong class="text-gray-900"><%= @current_timezone %></strong>
+    </p>
+
+    <%#
+      タイムゾーン更新フォーム
+      data: { turbo: false }:
+        更新後に設定ページ全体をリロードして「現在: 〇〇」を更新するため
+        Turbo を無効にして通常のフォーム送信を使う。
+    %>
+    <%= form_with url: update_timezone_settings_path,
+                  method: :patch,
+                  data: { turbo: false },
+                  class: "flex items-end gap-3" do |f| %>
+
+      <div class="flex-1">
+        <label class="block text-sm font-medium text-gray-700 mb-1"
+               for="time_zone">
+          タイムゾーン
+        </label>
+        <%#
+          time_zone_select: Rails 標準ヘルパー（ActionView::Helpers::FormOptionsHelper）
+          引数の説明:
+            第1引数 :user_setting: モデル名（ダミー。name属性に影響する）
+            第2引数 :time_zone:    カラム名（input の name 属性のベース）
+            第3引数（zones配列）:  表示するタイムゾーンの絞り込み
+            第4引数（options）:    selected で現在値を選択状態にする
+            第5引数（html_options）: class等のHTML属性
+
+          name: "time_zone" を明示する理由:
+            Rails の time_zone_select は通常
+            name="user_setting[time_zone]" を生成する。
+            コントローラーで params[:time_zone] として受け取るために
+            name: "time_zone" で上書きする。
+
+          タイムゾーンを絞り込む理由:
+            ActiveSupport::TimeZone.all は600件以上あり
+            セレクトボックスが使いにくくなるため、よく使うタイムゾーンを先頭に表示する。
+            priority_zones は「先頭に表示する」だけで全件は表示しない仕様なため、
+            ここでは主要なタイムゾーンを手動で指定する方式を採用する。
+        %>
+        <%= time_zone_select :user_setting,
+            :time_zone,
+            [
+              ActiveSupport::TimeZone["Tokyo"],
+              ActiveSupport::TimeZone["Osaka"],
+              ActiveSupport::TimeZone["Seoul"],
+              ActiveSupport::TimeZone["Singapore"],
+              ActiveSupport::TimeZone["Hong Kong"],
+              ActiveSupport::TimeZone["Beijing"],
+              ActiveSupport::TimeZone["Hawaii"],
+              ActiveSupport::TimeZone["Pacific Time (US & Canada)"],
+              ActiveSupport::TimeZone["Mountain Time (US & Canada)"],
+              ActiveSupport::TimeZone["Central Time (US & Canada)"],
+              ActiveSupport::TimeZone["Eastern Time (US & Canada)"],
+              ActiveSupport::TimeZone["London"],
+              ActiveSupport::TimeZone["Paris"],
+              ActiveSupport::TimeZone["UTC"]
+            ].compact,
+            { selected: @current_timezone,
+              include_blank: false },
+            { name: "time_zone",
+              id: "time_zone",
+              class: "block w-full px-3 py-2 border border-gray-300 rounded-md
+                      shadow-sm text-sm bg-white
+                      focus:outline-none focus:ring-2 focus:ring-blue-500
+                      focus:border-blue-500" } %>
+      </div>
+
+      <%= f.submit "更新",
+          class: "px-4 py-2 text-sm font-medium text-white
+                  bg-blue-600 rounded-md hover:bg-blue-700 transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-blue-500
+                  focus:ring-offset-2 cursor-pointer whitespace-nowrap",
+          data: { disable_with: "更新中..." } %>
+    <% end %>
+  </section>
+
+  <%#
+    ============================================================
+    G-6 新規追加: AI使用状況セクション
+    ============================================================
+    【表示内容】
+      当月のAI分析使用回数 / 月間上限回数 のプログレスバーと数値。
+    【プログレスバーの色分け】
+      0〜59%  : 青（通常）
+      60〜79% : 黄（注意）
+      80〜100%: 赤（危険・残り少ない）
+  %>
+  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
+           data-settings-profile-target="otherSection">
+    <h2 class="text-lg font-semibold text-gray-800 mb-4">AI使用状況（当月）</h2>
+
+    <div class="space-y-3">
+      <div class="flex items-center justify-between text-sm">
+        <span class="text-gray-600">AI分析使用回数</span>
+        <span class="font-semibold
+          <%= @ai_usage_rate >= 80 ? 'text-red-600' :
+              @ai_usage_rate >= 60 ? 'text-yellow-600' : 'text-blue-600' %>">
+          <%= @ai_analysis_count %> / <%= @ai_analysis_monthly_limit %> 回
+        </span>
+      </div>
+
+      <%#
+        プログレスバー
+        【なぜ style="width: N%" を使うのか】
+          Tailwind CSS はビルド時にクラスをスキャンするため、
+          動的なクラス名（例: w-[30%]）はビルド後に存在しない可能性がある。
+          style 属性で直接 width を設定する方が確実。
+        role="progressbar" と aria-* 属性:
+          スクリーンリーダーに進捗バーであることと現在値を伝えるためのアクセシビリティ対応。
+      %>
+      <div class="h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div class="h-full rounded-full transition-all duration-300
+          <%= @ai_usage_rate >= 80 ? 'bg-red-500' :
+              @ai_usage_rate >= 60 ? 'bg-yellow-500' : 'bg-blue-500' %>"
+             style="width: <%= @ai_usage_rate %>%"
+             role="progressbar"
+             aria-valuenow="<%= @ai_analysis_count %>"
+             aria-valuemin="0"
+             aria-valuemax="<%= @ai_analysis_monthly_limit %>"
+             aria-label="AI分析使用状況: <%= @ai_analysis_count %>回/<%= @ai_analysis_monthly_limit %>回">
+        </div>
+      </div>
+
+      <% remaining = @ai_analysis_monthly_limit - @ai_analysis_count %>
+      <% if @ai_usage_rate >= 100 %>
+        <p class="text-xs text-red-600 font-medium">
+          ⚠️ 今月のAI分析上限に達しました。翌月1日にリセットされます。
+        </p>
+      <% elsif @ai_usage_rate >= 80 %>
+        <p class="text-xs text-yellow-600">
+          残り <%= remaining %> 回です。使い切ると今月はAI分析なしで振り返りを完了することになります。
+        </p>
+      <% else %>
+        <p class="text-xs text-gray-500">
+          毎月1日にリセットされます。残り <%= remaining %> 回使用できます。
+        </p>
+      <% end %>
+    </div>
+  </section>
+
+  <%# G-5 由来: データエクスポートセクション %>
+  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
+           data-settings-profile-target="otherSection">
     <h2 class="text-lg font-semibold text-gray-800 mb-2">データエクスポート</h2>
     <p class="text-sm text-gray-500 mb-5">
       習慣記録・タスク・振り返りをCSV形式でダウンロードできます。
-      ExcelでそのままB開ける形式（UTF-8 BOM付き）で出力します。<br>
+      Excelでそのまま開ける形式（UTF-8 BOM付き）で出力します。<br>
       1,000件を超えるデータは、バックグラウンドで生成後にメールでご案内します。
     </p>
 
     <div class="space-y-3">
-      <%# 習慣記録CSVエクスポートボタン %>
-      <%# render partial を使う理由:
-          Turbo Streamで差し替える対象になるため、パーシャルとして定義する。
-          コントローラーの turbo_stream.replace のターゲットIDと
-          パーシャル内の id 属性が対応している。 %>
       <%= render "settings/csv_export_button",
                  export_type: :habit_records,
                  state:       :idle,
                  label:       t("csv_exports.button.habit_records"),
                  count:       @habit_record_count %>
 
-      <%# タスクCSVエクスポートボタン %>
       <%= render "settings/csv_export_button",
                  export_type: :tasks,
                  state:       :idle,
                  label:       t("csv_exports.button.tasks"),
                  count:       @task_count %>
 
-      <%# 週次振り返りCSVエクスポートボタン %>
       <%= render "settings/csv_export_button",
                  export_type: :weekly_reflections,
                  state:       :idle,
@@ -186,120 +641,124 @@
     </div>
   </section>
 
-  <%# ── 危険ゾーン: 退会セクション ── %>
-  <section class="bg-white rounded-lg shadow-sm border-2 border-red-200 p-6">
+  <%# 危険ゾーン: 退会セクション %>
+  <section class="bg-white rounded-lg shadow-sm border-2 border-red-200 p-6"
+           data-settings-profile-target="otherSection">
     <h2 class="text-lg font-semibold text-red-700 mb-2">退会（アカウント削除）</h2>
     <p class="text-sm text-gray-600 mb-4">
       退会すると、個人識別情報は即時に匿名化されます。この操作は取り消せません。
     </p>
 
-    <button type="button"
-            class="px-4 py-2 text-sm font-medium text-white bg-red-600
-                   rounded-md hover:bg-red-700 transition-colors
-                   focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-            onclick="document.getElementById('deactivate-modal').classList.remove('hidden'); document.body.classList.add('overflow-hidden');">
-      退会する
-    </button>
+    <%#
+      退会ボタン
+      data-controller="deactivate-modal": 既存の DeactivateModalController を接続する。
+      data-action="click->deactivate-modal#open": クリックでモーダルを開く。
+      既存の実装（G-4以前）を再利用するため、新しいモーダルは作らない。
+    %>
+    <div data-controller="deactivate-modal">
+      <button type="button"
+              data-action="click->deactivate-modal#open"
+              class="px-4 py-2 text-sm font-medium text-white bg-red-600
+                     rounded-md hover:bg-red-700 transition-colors
+                     focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">
+        退会する
+      </button>
+
+      <%# M-4: 退会確認モーダル %>
+      <div hidden
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="deactivate-modal-title">
+
+        <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+             data-action="click->deactivate-modal#close"
+             aria-hidden="true"></div>
+
+        <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+          <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md
+                      max-h-screen overflow-y-auto pointer-events-auto"
+               onclick="event.stopPropagation();">
+
+            <div class="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 id="deactivate-modal-title"
+                  class="text-lg font-bold text-red-700">
+                ⚠️ 退会の確認
+              </h3>
+              <button type="button"
+                      data-action="click->deactivate-modal#close"
+                      class="p-1 rounded text-gray-400 hover:text-gray-600
+                             focus:outline-none focus:ring-2 focus:ring-gray-400"
+                      aria-label="モーダルを閉じる">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                     aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            <div class="p-6 space-y-5">
+              <p class="text-sm text-gray-700 font-medium">
+                退会すると以下のデータが処理されます。この操作は取り消しできません。
+              </p>
+
+              <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <h4 class="text-sm font-semibold text-red-800 mb-2">
+                  🗑️ 即時に匿名化・削除されるデータ
+                </h4>
+                <ul class="text-sm text-red-700 space-y-1 list-disc list-inside">
+                  <li>ユーザー名・メールアドレス・LINE ID</li>
+                  <li>パスワード情報</li>
+                  <li>パスワードリセットトークン</li>
+                </ul>
+              </div>
+
+              <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">
+                  📊 匿名化して保持されるデータ（統計・AI改善目的）
+                </h4>
+                <ul class="text-sm text-gray-600 space-y-1 list-disc list-inside">
+                  <li>習慣の達成記録・習慣一覧</li>
+                  <li>タスクの完了・未完了記録</li>
+                  <li>週次振り返りデータ</li>
+                  <li>AI分析結果</li>
+                </ul>
+                <p class="text-xs text-gray-500 mt-2">
+                  ※ 保持されるデータは個人を特定できない匿名の状態で保管されます。
+                </p>
+              </div>
+
+              <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p class="text-xs text-blue-700">
+                  ℹ️ 退会後は同じメールアドレスで再登録いただけます。
+                </p>
+              </div>
+            </div>
+
+            <div class="flex gap-3 p-6 border-t border-gray-200">
+              <button type="button"
+                      data-action="click->deactivate-modal#close"
+                      class="flex-1 px-4 py-2 text-sm font-medium text-gray-700
+                             bg-white border border-gray-300 rounded-md
+                             hover:bg-gray-50 transition-colors
+                             focus:outline-none focus:ring-2 focus:ring-gray-400">
+                キャンセル
+              </button>
+
+              <%= button_to t("settings.destroy.confirm_button"),
+                  settings_path,
+                  method: :delete,
+                  class: "flex-1 px-4 py-2 text-sm font-medium text-white
+                          bg-red-600 rounded-md hover:bg-red-700 transition-colors
+                          focus:outline-none focus:ring-2 focus:ring-red-500
+                          focus:ring-offset-2",
+                  data: { disable_with: "退会処理中..." } %>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
   </section>
 
 </div>
-
-<%# ── M-4: 退会確認モーダル ── %>
-<% content_for :modals do %>
-  <div id="deactivate-modal"
-       class="fixed inset-0 z-50 hidden"
-       role="dialog"
-       aria-modal="true"
-       aria-labelledby="deactivate-modal-title">
-
-    <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
-         onclick="document.getElementById('deactivate-modal').classList.add('hidden'); document.body.classList.remove('overflow-hidden');"
-         aria-hidden="true"></div>
-
-    <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
-      <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md
-                  max-h-screen overflow-y-auto pointer-events-auto"
-           onclick="event.stopPropagation();">
-
-        <div class="flex items-center justify-between p-6 border-b border-gray-200">
-          <h3 id="deactivate-modal-title"
-              class="text-lg font-bold text-red-700">
-            ⚠️ 退会の確認
-          </h3>
-          <button type="button"
-                  class="p-1 rounded text-gray-400 hover:text-gray-600
-                         focus:outline-none focus:ring-2 focus:ring-gray-400"
-                  onclick="document.getElementById('deactivate-modal').classList.add('hidden'); document.body.classList.remove('overflow-hidden');"
-                  aria-label="モーダルを閉じる">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                 aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                    d="M6 18L18 6M6 6l12 12"/>
-            </svg>
-          </button>
-        </div>
-
-        <div class="p-6 space-y-5">
-          <p class="text-sm text-gray-700 font-medium">
-            退会すると以下のデータが処理されます。この操作は取り消しできません。
-          </p>
-
-          <div class="bg-red-50 border border-red-200 rounded-lg p-4">
-            <h4 class="text-sm font-semibold text-red-800 mb-2">
-              🗑️ 即時に匿名化・削除されるデータ
-            </h4>
-            <ul class="text-sm text-red-700 space-y-1 list-disc list-inside">
-              <li>ユーザー名・メールアドレス・LINE ID</li>
-              <li>パスワード情報</li>
-              <li>パスワードリセットトークン</li>
-              <li>プッシュ通知の宛先情報</li>
-            </ul>
-          </div>
-
-          <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <h4 class="text-sm font-semibold text-gray-700 mb-2">
-              📊 匿名化して保持されるデータ（統計・AI改善目的）
-            </h4>
-            <ul class="text-sm text-gray-600 space-y-1 list-disc list-inside">
-              <li>習慣の達成記録・習慣一覧</li>
-              <li>タスクの完了・未完了記録</li>
-              <li>週次振り返りデータ</li>
-              <li>AI分析結果</li>
-            </ul>
-            <p class="text-xs text-gray-500 mt-2">
-              ※ 保持されるデータは個人を特定できない匿名の状態で保管され、
-              サービス改善・AI精度向上のために活用されます。
-            </p>
-          </div>
-
-          <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
-            <p class="text-xs text-blue-700">
-              ℹ️ 退会後は同じメールアドレスで再登録いただけます。
-            </p>
-          </div>
-        </div>
-
-        <div class="flex gap-3 p-6 border-t border-gray-200">
-          <button type="button"
-                  class="flex-1 px-4 py-2 text-sm font-medium text-gray-700
-                         bg-white border border-gray-300 rounded-md
-                         hover:bg-gray-50 transition-colors
-                         focus:outline-none focus:ring-2 focus:ring-gray-400"
-                  onclick="document.getElementById('deactivate-modal').classList.add('hidden'); document.body.classList.remove('overflow-hidden');">
-            キャンセル
-          </button>
-
-          <%= button_to t("settings.destroy.confirm_button"),
-              settings_path,
-              method: :delete,
-              class: "flex-1 px-4 py-2 text-sm font-medium text-white
-                      bg-red-600 rounded-md hover:bg-red-700 transition-colors
-                      focus:outline-none focus:ring-2 focus:ring-red-500
-                      focus:ring-offset-2",
-              data: { disable_with: "退会処理中..." } %>
-        </div>
-
-      </div>
-    </div>
-  </div>
-<% end %>
