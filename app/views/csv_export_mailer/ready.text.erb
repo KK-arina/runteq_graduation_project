@@ -1,0 +1,21 @@
+<%# app/views/csv_export_mailer/ready.text.erb %>
+<%# テキスト版メール（HTMLが表示できないメールクライアント向け） %>
+
+HabitFlow CSVエクスポート完了のお知らせ
+
+<%= @user.name %> さん、こんにちは！
+
+リクエストいただいた「<%= @export_label %>」のCSVファイルが生成されました。
+
+■ ファイル名
+<%= @filename %>
+
+■ ダウンロードURL
+<%= @download_url %>
+
+※ このリンクの有効期限は24時間です。
+  期限が切れた場合は、設定ページから再度エクスポートしてください。
+
+---
+HabitFlow
+このメールは自動送信されています。

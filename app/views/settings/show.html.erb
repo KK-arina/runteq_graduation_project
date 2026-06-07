@@ -6,6 +6,9 @@
 
   【G-4 での変更内容】
   - お休みモード設定へのナビゲーションセクションを追加
+
+  【G-5 での変更内容】
+  - CSVエクスポートセクションを追加（退会セクション直前）
   ============================================================
 %>
 <% content_for :title, "アカウント設定 | HabitFlow" %>
@@ -44,9 +47,7 @@
     </dl>
   </section>
 
-  <%# ============================================================
-      G-3 追加: 通知設定へのナビゲーションセクション
-  ============================================================ %>
+  <%# G-3 追加: 通知設定へのナビゲーションセクション %>
   <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-4">通知設定</h2>
 
@@ -91,17 +92,10 @@
     </div>
   </section>
 
-  <%# ============================================================
-      G-4 追加: お休みモード設定へのナビゲーションセクション
-      通知設定セクションの直後・危険ゾーンの直前に配置する。
-  ============================================================ %>
+  <%# G-4 追加: お休みモード設定へのナビゲーションセクション %>
   <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-4">お休みモード</h2>
 
-    <%#
-      link_to でカード全体をリンクにする。
-      hover 時に緑色のボーダーに変化して「お休みモード」らしさを演出する。
-    %>
     <%= link_to rest_mode_settings_path,
         class: "flex items-center justify-between p-4 rounded-lg border
                 border-gray-200 hover:border-green-300 hover:bg-green-50
@@ -128,8 +122,6 @@
       </svg>
     <% end %>
 
-    <%# G-4 修正: current_user.user_setting を @user_setting に変更 %>
-    <%# SettingsController で @user_setting を準備しておく必要がある %>
     <div class="mt-3 flex items-center gap-2">
       <% if @user_setting&.rest_mode_active? %>
         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full
@@ -145,6 +137,52 @@
           通常モード
         </span>
       <% end %>
+    </div>
+  </section>
+
+  <%# ============================================================
+      G-5 追加: データエクスポートセクション
+      お休みモードセクションの直後・退会セクションの直前に配置する。
+
+      【Turbo Streamとの連携について】
+        各ボタンは button_to（POSTリクエスト）でエクスポートを実行する。
+        1000件以下: send_data で直接ファイルをダウンロード
+        1000件超:   Turbo Streamでボタンを「生成中」状態に更新
+        エラー時:   Turbo Streamでボタンを「エラー（再試行）」状態に更新
+  ============================================================ %>
+  <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+    <h2 class="text-lg font-semibold text-gray-800 mb-2">データエクスポート</h2>
+    <p class="text-sm text-gray-500 mb-5">
+      習慣記録・タスク・振り返りをCSV形式でダウンロードできます。
+      ExcelでそのままB開ける形式（UTF-8 BOM付き）で出力します。<br>
+      1,000件を超えるデータは、バックグラウンドで生成後にメールでご案内します。
+    </p>
+
+    <div class="space-y-3">
+      <%# 習慣記録CSVエクスポートボタン %>
+      <%# render partial を使う理由:
+          Turbo Streamで差し替える対象になるため、パーシャルとして定義する。
+          コントローラーの turbo_stream.replace のターゲットIDと
+          パーシャル内の id 属性が対応している。 %>
+      <%= render "settings/csv_export_button",
+                 export_type: :habit_records,
+                 state:       :idle,
+                 label:       t("csv_exports.button.habit_records"),
+                 count:       @habit_record_count %>
+
+      <%# タスクCSVエクスポートボタン %>
+      <%= render "settings/csv_export_button",
+                 export_type: :tasks,
+                 state:       :idle,
+                 label:       t("csv_exports.button.tasks"),
+                 count:       @task_count %>
+
+      <%# 週次振り返りCSVエクスポートボタン %>
+      <%= render "settings/csv_export_button",
+                 export_type: :weekly_reflections,
+                 state:       :idle,
+                 label:       t("csv_exports.button.weekly_reflections"),
+                 count:       @weekly_reflection_count %>
     </div>
   </section>
 

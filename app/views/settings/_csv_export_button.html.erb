@@ -1,0 +1,131 @@
+<%# app/views/settings/_csv_export_button.html.erb %>
+<%#
+  ==============================================================================
+  CSVエクスポートボタンのパーシャル（Turbo Stream で差し替える対象）
+  ==============================================================================
+
+  【設計の核心: data-turbo="false" でTurboインターセプトを回避する】
+    Turbo環境では send_data のバイナリレスポンスを Turbo がインターセプトして
+    ファイルがブラウザに届かない問題がある。
+
+    解決策: 1000件以下のボタンに data-turbo="false" を付ける。
+    これにより Turbo を経由しない通常の HTML リクエストになり、
+    コントローラーの 303 リダイレクト → download アクションの
+    send_data がブラウザに正しく届く。
+
+    1000件超: 通常 Turbo ボタン → Turbo Stream でボタンを生成中に更新
+              → GoodJob → メール通知
+
+  【ローカル変数】
+    export_type: :habit_records / :tasks / :weekly_reflections
+    state:       :idle / :generating / :error
+    label:       ボタンに表示するテキスト
+    count:       対象データ件数（SettingsController から渡される）
+                 この値で即時DL(data-turbo=false) か 非同期(Turbo) かを決める
+==============================================================================
+%>
+
+<% state ||= :idle %>
+<% label ||= t("csv_exports.button.#{export_type}") %>
+<% count ||= 0 %>
+
+<%#
+  LARGE_DATA_THRESHOLD との比較で即時 or 非同期を判定する。
+  1000件以下なら data-turbo="false" を付けて Turbo を無効化する。
+  【なぜここで判定するのか】
+    Turbo Stream でこのパーシャルが差し替えられた後も
+    count の値から正しい種別のボタンを表示し直す必要があるため。
+%>
+<% immediate = count <= CsvExportService::LARGE_DATA_THRESHOLD %>
+
+<div id="csv_export_button_<%= export_type %>">
+  <% if state == :generating %>
+    <%# 生成中状態: クリック不可のボタン + スピナー %>
+    <button type="button"
+            disabled
+            class="w-full flex items-center justify-center gap-2
+                   px-4 py-2.5 text-sm font-medium
+                   text-gray-500 bg-gray-100 border border-gray-200
+                   rounded-md cursor-not-allowed"
+            aria-busy="true"
+            aria-label="CSVを生成中">
+      <svg class="animate-spin h-4 w-4 text-gray-400"
+           xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <circle class="opacity-25" cx="12" cy="12" r="10"
+                stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+      </svg>
+      <%= label %>
+    </button>
+
+  <% elsif state == :error %>
+    <%# エラー状態: 再試行可能なボタン（件数に応じて data-turbo を切替） %>
+    <% if immediate %>
+      <%= button_to export_path_for(export_type),
+          method: :post,
+          data:   { turbo: false },
+          class:  "w-full flex items-center justify-center gap-2
+                   px-4 py-2.5 text-sm font-medium
+                   text-red-700 bg-red-50 border border-red-200
+                   rounded-md hover:bg-red-100 transition-colors" do %>
+        <span aria-hidden="true">⚠️</span>
+        <%= label %>
+      <% end %>
+    <% else %>
+      <%= button_to export_path_for(export_type),
+          method: :post,
+          class:  "w-full flex items-center justify-center gap-2
+                   px-4 py-2.5 text-sm font-medium
+                   text-red-700 bg-red-50 border border-red-200
+                   rounded-md hover:bg-red-100 transition-colors" do %>
+        <span aria-hidden="true">⚠️</span>
+        <%= label %>
+      <% end %>
+    <% end %>
+
+  <% else %>
+    <%# 初期状態（idle）: 件数によって data-turbo を切り替える %>
+    <% if immediate %>
+      <%#
+        1000件以下: data-turbo="false" を付ける
+        【なぜ data-turbo="false" が必要なのか】
+          button_to はデフォルトで Turbo 経由の fetch リクエストを送る。
+          Turbo 経由だとコントローラーの redirect_to（303）の後、
+          download アクションの GET も Turbo が追従してしまい、
+          send_data のバイナリを Turbo がインターセプトしてしまう。
+          data-turbo="false" でこのボタンだけ Turbo を無効化することで
+          ブラウザ標準の form submit（通常 HTTP）になり
+          send_data が正しくブラウザに届く。
+      %>
+      <%= button_to export_path_for(export_type),
+          method: :post,
+          data:   { turbo: false },
+          class:  "w-full flex items-center justify-center gap-2
+                   px-4 py-2.5 text-sm font-medium
+                   text-blue-700 bg-blue-50 border border-blue-200
+                   rounded-md hover:bg-blue-100 transition-colors
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" do %>
+        <span aria-hidden="true">📥</span>
+        <%= label %>
+      <% end %>
+
+    <% else %>
+      <%#
+        1000件超: 通常 Turbo ボタン
+        GoodJob へのエンキューと Turbo Stream でのボタン更新を行う。
+      %>
+      <%= button_to export_path_for(export_type),
+          method: :post,
+          class:  "w-full flex items-center justify-center gap-2
+                   px-4 py-2.5 text-sm font-medium
+                   text-blue-700 bg-blue-50 border border-blue-200
+                   rounded-md hover:bg-blue-100 transition-colors
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" do %>
+        <span aria-hidden="true">📥</span>
+        <%= label %>
+      <% end %>
+    <% end %>
+  <% end %>
+</div>
