@@ -320,7 +320,7 @@
   data: { turbo: false } で Turbo を無効にして通常の POST で送信する。
   class="hidden" でフォーム自体は非表示にする。
 %>
-<%= form_tag "/auth/line_v2_1",
+<%= form_tag "/auth/line_v2_1?origin=notification",
     method: :post,
     id: "line-connect-form",
     data: { turbo: false },

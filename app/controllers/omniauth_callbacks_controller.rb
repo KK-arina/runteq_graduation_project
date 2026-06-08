@@ -54,27 +54,65 @@ class OmniauthCallbacksController < ApplicationController
   end
 
   # ============================================================
-  # line アクション（GET /auth/line_v2_1/callback）- G-1 更新
+  # line アクション（GET /auth/line_v2_1/callback）- G-1更新 / G-6更新
   # ============================================================
   #
   # 【G-1 変更点】
   #   save_line_user_id(@user, auth) の呼び出しを追加した。
-  #   LINE ログイン成功後に users.line_user_id を保存することで、
-  #   以降の LINE 通知送信（LineNotificationService）が使えるようになる。
+  #
+  # 【G-6 変更点】
+  #   origin パラメータで呼び出し元を判定する分岐を追加。
+  #
+  #   origin="notification" かつログイン済み:
+  #     通知設定ページからの連携 → provider を変更せず line_user_id のみ保存。
+  #   それ以外:
+  #     設定ページまたはログインページからの連携 → 通常の LINE ログイン処理。
+  #
+  # 【なぜ URLクエリパラメータで origin を渡すのか】
+  #   hidden_field_tag で POST ボディに origin を含めても、
+  #   OmniAuth ミドルウェアがボディを読む前に処理するため
+  #   request.env["omniauth.origin"] に届かないことがある。
+  #   URLの ?origin=notification ならミドルウェアが確実に認識する。
   def line
-    auth = request.env["omniauth.auth"]
-    @user = User.from_omniauth(auth)
+    auth   = request.env["omniauth.auth"]
+    origin = request.env["omniauth.origin"]
 
+    # ── G-6 追加: 通知設定ページからの LINE 通知連携 ──────────────────
+    #
+    # 通知設定ページのフォームは /auth/line_v2_1?origin=notification を使う。
+    # OmniAuth はクエリパラメータを omniauth.origin として引き渡す。
+    # logged_in? も確認することで、未ログイン状態での誤動作を防ぐ。
+    #
+    # 【provider を変更しない理由】
+    #   provider を "line_v2_1" に書き換えると
+    #   メールアドレス+パスワードでのログインができなくなる危険がある。
+    #   通知のみ連携では provider は元の値（"email" 等）のまま維持する。
+    if origin == "notification" && logged_in?
+      save_line_user_id(current_user, auth)
+
+      # LINE 通知連携と同時に line_notification_enabled を true にする
+      #
+      # line_notification_enabled のデフォルトは false のため、
+      # 連携した瞬間から通知が受け取れる状態にする。
+      # 通知を止めたい場合は通知設定ページから OFF にできる。
+      user_setting = current_user.user_setting ||
+                     UserSetting.find_or_create_by!(user: current_user)
+      user_setting.update(line_notification_enabled: true)
+
+      redirect_to notification_settings_settings_path,
+                  notice: "LINE通知連携が完了しました ✅"
+      return
+    end
+
+    # ── 通常の LINE ログイン処理（G-1 由来）─────────────────────────
+    @user = User.from_omniauth(auth)
     if @user.persisted?
       reset_session
       session[:user_id] = @user.id
-
-      # ── G-1 追加: LINE userId を保存する ────────────────────────
       # auth["uid"] には LINE Login の sub（= Messaging API の userId）が入っている。
       # 同一プロバイダ内なら LINE Login sub = Messaging API userId のため、
       # これを line_user_id として保存することで通知送信に使える。
       save_line_user_id(@user, auth)
-
       redirect_to determine_redirect_path_for_omniauth(@user),
                   notice: t("omniauth.line.success")
     else
@@ -83,7 +121,6 @@ class OmniauthCallbacksController < ApplicationController
                          "provider=#{auth['provider']}, uid=#{auth['uid']}"
       redirect_to login_path, alert: t("omniauth.line.failure")
     end
-
   rescue ActiveRecord::RecordInvalid => e
     Rails.logger.error "[OmniauthCallbacksController#line] ユーザー作成失敗: #{e.message}"
     redirect_to login_path, alert: t("omniauth.line.failure")

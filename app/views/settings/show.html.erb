@@ -266,8 +266,9 @@
             OmniAuth は外部サービスへのリダイレクトを伴うため、
             Turbo を無効にして通常のページ遷移として処理する。
         %>
-        <%= link_to "Google で連携する",
+        <%= button_to "Google で連携する",
             "/auth/google_oauth2",
+            form: { class: "inline" },
             data: { turbo: false },
             class: "px-3 py-1.5 text-xs font-medium text-gray-700
                     bg-white border border-gray-300 rounded-md
@@ -278,23 +279,13 @@
     <%# LINE 連携状態（ログイン用） %>
     <div class="flex items-center justify-between py-3">
       <div class="flex items-center gap-3">
-        <%# LINE のブランドカラー（#06C755）で LINE テキストを表示する %>
         <span class="text-sm font-black"
               style="color: #06C755;"
               aria-hidden="true">LINE</span>
         <div>
-          <p class="text-sm font-semibold text-gray-900">
-            LINE
-            <span class="text-xs font-normal text-gray-500">（ログイン・通知用）</span>
-          </p>
+          <p class="text-sm font-semibold text-gray-900">LINE</p>
           <% if @user.provider == "line_v2_1" %>
             <p class="text-xs text-green-600">✅ 連携済み（ログイン方法として使用中）</p>
-          <% elsif @line_connected %>
-            <%#
-              line_connected? は User#line_connected? で判定する。
-              provider != "line_v2_1" だが line_user_id がある場合 = 通知のみ連携。
-            %>
-            <p class="text-xs text-green-600">✅ 連携済み（通知連携）</p>
           <% else %>
             <p class="text-xs text-gray-500">未連携</p>
           <% end %>
@@ -304,45 +295,18 @@
       <% if @user.provider == "line_v2_1" %>
         <%#
           LINE がログイン手段の場合は解除ボタンを表示しない。
-          理由: disconnect_line アクションでもガードしているが、
-          UI レベルでも表示しないことで誤操作を完全に防ぐ。
+          解除するとログインできなくなるロックアウトリスクがあるため。
         %>
         <span class="text-xs text-gray-400">ログイン方法として使用中</span>
-
-      <% elsif @line_connected %>
-        <%#
-          LINE 連携済み（通知のみ）かつ LINE がログイン手段でない場合は
-          「解除」ボタンを表示する。
-
-          button_to を使う理由:
-            DELETE メソッドは HTML の <a> タグでは直接送れない。
-            button_to はフォームを生成して _method=DELETE で送信するため
-            Rails のルーティングが正しく処理できる。
-
-          data-turbo-confirm:
-            Turbo が提供する確認ダイアログ。
-            ボタンクリック後に確認メッセージを表示し、
-            「OK」のときのみリクエストを送信する。
-        %>
-        <%= button_to "通知連携を解除する",
-            disconnect_line_settings_path,
-            method: :delete,
-            data: {
-              turbo_confirm: "LINE通知連携を解除しますか？\nLINE通知が届かなくなります。",
-              disable_with: "解除中..."
-            },
-            class: "px-3 py-1.5 text-xs font-medium text-red-600
-                    bg-white border border-red-200 rounded-md
-                    hover:bg-red-50 transition-colors" %>
-
       <% else %>
         <%#
           LINE 未連携の場合は連携ボタンを表示する。
           /auth/line_v2_1 は OmniAuth の LINE 認証フローを開始する URL。
           data-turbo="false": OmniAuth は外部リダイレクトを伴うため Turbo を無効にする。
         %>
-        <%= link_to "LINE で連携する",
+        <%= button_to "LINE でログインする",
             "/auth/line_v2_1",
+            form: { class: "inline" },
             data: { turbo: false },
             class: "px-3 py-1.5 text-xs font-medium text-white
                     rounded-md transition-colors",
@@ -352,8 +316,8 @@
 
     <div class="mt-3 p-3 bg-green-50 rounded-md border border-green-200">
       <p class="text-xs text-green-700 leading-relaxed">
-        💡 LINE アカウントと連携すると、LINEログインが使えるようになり、
-        通知設定ページで LINE 通知も受け取れるようになります。
+        💡 LINE または Google アカウントと連携すると、次回からソーシャルログインが使えるようになります。<br>
+        LINE 通知を受け取りたい場合は<%= link_to "通知設定ページ", notification_settings_settings_path, class: "underline" %>から連携してください。
       </p>
     </div>
   </section>
