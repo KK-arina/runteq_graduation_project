@@ -77,7 +77,10 @@ class WeeklyReportJob < ApplicationJob
     #   参照する可能性があるため includes で事前読み込みして N+1 を防ぐ
     target_users = User.active
                        .joins(:user_setting)
-                       .where(user_settings: { weekly_report_enabled: true })
+                       .where(user_settings: {
+                         weekly_report_enabled:  true,
+                         notification_enabled:   true   # G-3 修正: マスタースイッチがONのユーザーのみ
+                       })
                        .where.not(email: nil)
                        .includes(:user_setting)
 

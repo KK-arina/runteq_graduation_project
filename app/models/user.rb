@@ -116,18 +116,38 @@ class User < ApplicationRecord
             format:     { with: URI::MailTo::EMAIL_REGEXP },
             allow_nil:  true
 
-  # password バリデーション
+  # ============================================================
+  # password バリデーション（G-6 修正: on: :create を追加）
+  # ============================================================
   #
-  # 【if: lambda の意味】
-  #   provider が "email" または nil（メール登録ユーザー）の場合のみ実行する。
+  # 【なぜ on: :create を追加するのか】
+  #   on: :create がない場合、update(:name) や update(line_user_id: nil) など
+  #   password と無関係なカラムを更新する際にも presence バリデーションが走る。
+  #   provider="email" のユーザーは password 仮想属性が空なため
+  #   update が常に失敗してしまう問題が発生する。
+  #
+  #   on: :create にすることで:
+  #     新規登録時: presence + length を検証する（従来通り）
+  #     更新時:     password が入力された場合のみ length を検証する
+  #
+  # 【allow_nil: true + on: :update の意味】
+  #   パスワード変更フォームを送信したとき（password が present? の場合）のみ
+  #   8文字以上かどうかをチェックする。
+  #   password が nil（未入力）の場合はスキップする（名前変更等の際に影響しない）。
   validates :password,
-            presence:  true,
+            presence: true,
+            length:   { minimum: 8 },
+            if:       ->(u) { u.provider.blank? || u.provider == "email" },
+            on:       :create
+  validates :password,
             length:    { minimum: 8 },
-            if:        ->(u) { u.provider.blank? || u.provider == "email" }
+            allow_nil: true,
+            if:        ->(u) { u.provider.blank? || u.provider == "email" },
+            on:        :update
   validates :password, confirmation: true, if: ->(u) { u.provider.blank? || u.provider == "email" }
   validates :password_confirmation,
-            presence:  true,
-            if:        ->(u) { (u.provider.blank? || u.provider == "email") && u.password.present? }
+            presence: true,
+            if:       ->(u) { (u.provider.blank? || u.provider == "email") && u.password.present? }
 
   # ============================================================
   # F-3 追加: 利用規約同意バリデーション
@@ -235,6 +255,25 @@ class User < ApplicationRecord
   # ============================================================
   # インスタンスメソッド
   # ============================================================
+
+  # line_connected?（G-6 追加）
+  #
+  # 【役割】
+  #   ユーザーがLINEと連携しているかどうかを返す。
+  #
+  # 【なぜ2つの条件を OR で組み合わせるのか】
+  #   LINEとの連携には2つのパターンがある:
+  #     1. LINEログイン: provider="line_v2_1" かつ uid=LINE_UID で認証している場合。
+  #        → OmniauthCallbacksController#line で自動的に line_user_id も保存される設計だが、
+  #          将来の変更やエッジケースに備えて provider 側も確認する。
+  #     2. LINE通知のみ連携: provider は別（email/google等）だが
+  #        line_user_id だけが保存されている場合。
+  #        → 将来的に「メールログインユーザーがLINE通知だけ連携する」機能を追加したときに対応できる。
+  #   どちらの場合も「LINE連携済み」と判定して正しい表示にするため OR で組み合わせる。
+  def line_connected?
+    provider == "line_v2_1" || line_user_id.present?
+  end
+
   def locked?
     adjusted_time = Time.current - 4.hours
     return false unless adjusted_time.monday?

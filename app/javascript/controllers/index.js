@@ -59,14 +59,24 @@ application.register("mood-rating", MoodRatingController)
 import NotificationLimitController from "./notification_limit_controller"
 application.register("notification-limit", NotificationLimitController)
 
+// G-3 修正: 通知全般マスタースイッチの連動コントローラー
+import NotificationMasterController from "./notification_master_controller"
+application.register("notification-master", NotificationMasterController)
+
 import PriorityCardController from "./priority_card_controller"
 application.register("priority-card", PriorityCardController)
 
 // G-4 追加: お休みモード確認モーダルコントローラー
-// rest_mode_modal_controller.js が存在するにもかかわらず
-// stimulus:manifest:update で自動登録されなかった場合は手動で追記する
 import RestModeModalController from "./rest_mode_modal_controller"
 application.register("rest-mode-modal", RestModeModalController)
+
+// G-6 追加: 設定ページのプロフィール編集インライン制御コントローラー
+// 【なぜ手動登録するのか】
+//   stimulus:manifest:update は自動生成だが、
+//   ファイル追加後に実行し忘れることがある。
+//   明示的に登録することで確実に動作する。
+import SettingsProfileController from "./settings_profile_controller"
+application.register("settings-profile", SettingsProfileController)
 
 import TaskMenuController from "./task_menu_controller"
 application.register("task-menu", TaskMenuController)

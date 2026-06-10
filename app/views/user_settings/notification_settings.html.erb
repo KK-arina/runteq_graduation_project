@@ -56,7 +56,7 @@
       url: update_notification_settings_settings_path,
       method: :patch,
       data: {
-        controller: "form-submit",
+        controller: "form-submit notification-master",
         action: "submit->form-submit#submit",
         turbo: false
       } do |f| %>
@@ -88,7 +88,11 @@
         <div class="flex items-center">
           <%= f.check_box :notification_enabled,
               class: "sr-only peer",
-              id: "user_setting_notification_enabled" %>
+              id: "user_setting_notification_enabled",
+              data: {
+                "notification-master-target": "master",
+                action: "change->notification-master#toggle"
+              } %>
           <label for="user_setting_notification_enabled"
                  class="relative inline-flex items-center cursor-pointer
                         w-11 h-6 rounded-full bg-gray-200
@@ -101,7 +105,8 @@
           </label>
         </div>
       </div>
-    </section>
+    <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
+             data-notification-master-target="channel">
 
     <%# ============================================================
         セクション2: 通知チャネル設定
@@ -112,7 +117,36 @@
       <%# ── LINE 通知 ── %>
       <div class="py-4 border-b border-gray-100">
 
-        <% unless @line_connected %>
+        <%# ── LINE 連携状態に応じて表示を切り替える ── %>
+        <% if @line_connected %>
+          <%#
+            LINE 連携済みの場合は「通知連携を解除する」ボタンを表示する。
+            【なぜ type="submit" + form 属性を使うのか】
+              button_to はフォームを生成するため、メインフォーム（form_with）の
+              内部に置くと HTML のフォームネストが発生して動作が不安定になる。
+              通常の <button> タグに form="line-disconnect-form" を付けることで、
+              ファイル下部にある隠しフォームと紐付ける方式を採用する。
+          %>
+          <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <p class="text-sm font-medium text-green-800 mb-2">
+              ✅ LINE 通知連携済み
+            </p>
+            <p class="text-xs text-green-700 mb-3">
+              LINE にタスクのアラームや週次レポートを送信できます。
+            </p>
+            <button type="submit"
+                    form="line-disconnect-form"
+                    data-turbo-confirm="LINE通知連携を解除しますか？&#10;LINE通知が届かなくなります。"
+                    class="inline-flex items-center gap-2 px-4 py-2
+                          text-sm font-semibold text-red-600
+                          bg-white border border-red-200 rounded-lg
+                          hover:bg-red-50 transition-colors
+                          focus:outline-none focus:ring-2 focus:ring-offset-2
+                          focus:ring-red-400 cursor-pointer">
+              LINE 通知連携を解除する
+            </button>
+          </div>
+        <% else %>
           <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
             <p class="text-sm font-medium text-amber-800 mb-2">
               📱 LINE 通知を使うには連携が必要です
@@ -121,19 +155,15 @@
               LINE ログインで連携すると、タスクのアラームや週次レポートを
               LINE で受け取れます。
             </p>
-            <%#
-              button_to は form を生成するためメインフォームにネストできない。
-              form 属性で外部の line-connect-form と紐付ける。
-            %>
             <button type="submit"
                     form="line-connect-form"
                     class="inline-flex items-center gap-2 px-4 py-2
-                           text-sm font-semibold text-white rounded-lg
-                           transition-colors
-                           focus:outline-none focus:ring-2 focus:ring-offset-2
-                           focus:ring-green-500 cursor-pointer"
+                          text-sm font-semibold text-white rounded-lg
+                          transition-colors
+                          focus:outline-none focus:ring-2 focus:ring-offset-2
+                          focus:ring-green-500 cursor-pointer"
                     style="background-color: #06C755;">
-              LINE でログイン・連携する（通知用）
+              LINE でログイン・連携する(通知用)
             </button>
             <p class="text-xs text-amber-600 mt-2">
               ※ LINE でログイン済みの場合は自動で連携されます
@@ -320,9 +350,22 @@
   data: { turbo: false } で Turbo を無効にして通常の POST で送信する。
   class="hidden" でフォーム自体は非表示にする。
 %>
-<%= form_tag "/auth/line_v2_1",
+<%= form_tag "/auth/line_v2_1?origin=notification",
     method: :post,
     id: "line-connect-form",
     data: { turbo: false },
     class: "hidden" do %>
+<% end %>
+
+<%#
+  LINE 通知連携解除用の隠しフォーム（メインフォームの外側に配置）
+  id="line-disconnect-form" で上の「LINE 通知連携を解除する」ボタンと紐付ける。
+  class="hidden" でフォーム自体は非表示にする。
+  method: :delete で disconnect_line アクションへ DELETE リクエストを送る。
+%>
+<%= form_tag disconnect_line_settings_path,
+    method: :delete,
+    id: "line-disconnect-form",
+    class: "hidden",
+    data: { turbo: false } do %>
 <% end %>

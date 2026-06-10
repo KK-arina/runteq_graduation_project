@@ -1,4 +1,8 @@
 # config/routes.rb
+#
+# ==============================================================================
+# ルーティング設定（G-6 更新: プロフィール編集・タイムゾーン・LINE連携解除を追加）
+# ==============================================================================
 Rails.application.routes.draw do
   root "pages#index"
 
@@ -48,12 +52,14 @@ Rails.application.routes.draw do
 
   resource :settings, only: %i[show destroy] do
     member do
+      # G-3 由来: 通知設定
       get   :notification_settings,
             to: "user_settings#notification_settings"
       patch :update_notification_settings,
             to:   "user_settings#update_notification_settings",
             path: "notification_settings"
 
+      # G-4 由来: お休みモード
       get    :rest_mode,
              to: "user_settings#rest_mode"
       post   :start_rest_mode,
@@ -63,26 +69,10 @@ Rails.application.routes.draw do
              to:   "user_settings#stop_rest_mode",
              path: "rest_mode"
 
-      # ============================================================
-      # G-5 追加: CSVエクスポートルーティング
-      # ============================================================
-      #
-      # 【なぜ member ルートに追加するのか】
-      #   設定ページ（/settings）に属する機能のため、
-      #   settings リソースの member アクションとして定義する。
-      #   これにより /settings/export_csv_habit_records のような
-      #   設定ページ配下の URL になる。
-      #
-      # 【3種類のCSVエクスポートを別アクションにする理由】
-      #   習慣記録・タスク・振り返りは対象データ・カラム・件数が異なる。
-      #   1つのアクションに種別パラメータで分岐させるより、
-      #   アクションを分けた方がコードが明確でテストもしやすい。
-      #
+      # G-5 由来: CSVエクスポート
       # 【GETではなくPOSTを使う理由】
-      #   CSVエクスポートは「データを生成する」副作用がある。
-      #   1000件超の場合はGoodJobにジョブを登録するため副作用がある。
-      #   副作用のあるリクエストにはGETではなくPOSTを使うのがRESTの原則。
-      #   また、GETだとブラウザの戻るボタンで再実行される危険がある。
+      #   CSVエクスポートはGoodJobへのジョブ登録という副作用があるため、
+      #   副作用のあるリクエストにはPOSTを使うのがRESTの原則。
       post :export_csv_habit_records,
            to:   "csv_exports#habit_records",
            path: "export_csv/habit_records"
@@ -93,21 +83,35 @@ Rails.application.routes.draw do
            to:   "csv_exports#weekly_reflections",
            path: "export_csv/weekly_reflections"
 
-      # ============================================================
-      # G-5 追加: CSVダウンロードURL（署名付きトークン経由）
-      # ============================================================
-      #
-      # 【なぜGETを使うのか】
-      #   メールに埋め込むURLはGETリンクでなければならない。
-      #   メールクライアントのリンクをクリックすると GET リクエストになるため。
-      #
-      # 【なぜ settings 配下にするのか】
-      #   認証が必要なダウンロードエンドポイントを
-      #   /settings 配下にまとめることで、
-      #   require_login before_action が確実に効く。
+      # G-5 由来: CSVダウンロード（メールリンクはGETのみ有効なためGET）
       get :download_csv,
           to:   "csv_exports#download",
           path: "download_csv"
+
+      # ============================================================
+      # G-6 追加: プロフィール編集・タイムゾーン・LINE連携解除
+      # ============================================================
+      #
+      # 【patch :update_profile を使う理由】
+      #   PATCHは「既存リソースの一部を更新する」HTTP動詞。
+      #   ユーザー名（nameカラム）だけを変更するため、PUT（全体更新）より
+      #   PATCHが意味論的に正確。
+      #
+      # 【patch :update_timezone を使う理由】
+      #   user_settingsテーブルのtime_zoneカラムだけを変更するため同様にPATCH。
+      #
+      # 【delete :disconnect_line を使う理由】
+      #   「LINE連携情報（line_user_id）を削除する」操作なのでDELETE。
+      #   RESTful設計として削除操作にはDELETEメソッドを使う。
+      patch  :update_profile,
+             to:   "settings#update_profile",
+             path: "profile"
+      patch  :update_timezone,
+             to:   "settings#update_timezone",
+             path: "timezone"
+      delete :disconnect_line,
+             to:   "settings#disconnect_line",
+             path: "line"
     end
   end
 
