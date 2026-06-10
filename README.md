@@ -97,7 +97,8 @@ flowchart LR
 [![G-3 通知設定ページ](https://img.shields.io/badge/G--3_通知設定ページ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/g3-notification-settings)
 [![G-4 お休みモード設定](https://img.shields.io/badge/G--4_お休みモード設定-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/g4-rest-mode)
 [![G-5 CSVエクスポート](https://img.shields.io/badge/G--5_CSVエクスポート-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/G-5-csv-export)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-51%2F68_ISSUE-f59e0b?style=flat-square)]()
+[![G-6 設定ページ拡張](https://img.shields.io/badge/G--6_設定ページ拡張-完了-10b981?style=flat-square)](https://github.com/KK-arina/runteq_graduation_project/tree/feature/g6-settings-page-expansion)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-52%2F68_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -212,6 +213,7 @@ flowchart LR
 | #G-3 | 通知設定ページ（UserSettingsController・トグルスイッチ・スライダー） | 2026-06-02 | feature/g3-notification-settings |
 | #G-4 | お休みモード設定ページ（22番）・ストリーク維持 | 2026-06-06 | feature/g4-rest-mode |
 | #G-5 | CSVエクスポート機能（習慣記録・タスク・振り返り） | 2026-06-07 | feature/G-5-csv-export |
+| #G-6 | 設定ページ拡張（プロフィール編集・LINE/Google連携・タイムゾーン・AI使用状況）+ G-3通知設定修正 | 2026-06-10 | feature/g6-settings-page-expansion |
 
 <br>
 
@@ -5650,6 +5652,75 @@ G-5テスト: 10 runs, 39 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
+### #G-6: 設定ページ拡張 + #G-3通知設定修正
+
+<br>
+
+**ブランチ:** `feature/g6-settings-page-expansion`<br>
+**完了日:** 2026-06-10<br>
+**概要:** 設定ページ（23番）にインラインプロフィール編集・ソーシャルアカウント連携管理・タイムゾーン設定・AI使用状況表示を追加。<br>
+あわせてG-3で発見された通知設定の不具合（マスタースイッチ連動・独立制御・フォールバック廃止・週次レポート制御）を修正した。
+
+<br>
+
+#### G-6: 設定ページ拡張
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Route | `update_profile`（PATCH path: "profile"）/ `update_timezone`（PATCH path: "timezone"）/ `disconnect_line`（DELETE path: "line"）を member に追加 |
+| Controller | `SettingsController#show`: `@line_connected` / `@current_timezone` / `@ai_analysis_count` / `@ai_analysis_monthly_limit` / `@ai_usage_rate` をアサイン |
+| Controller | `update_profile`: `params.require(:user).permit(:name)` で名前を保存・失敗時は alert + redirect |
+| Controller | `update_timezone`: `ActiveSupport::TimeZone[]` ホワイトリストチェック |
+| Controller | `disconnect_line`: `provider == "line_v2_1"` ガード・`line_user_id` を nil に更新 |
+| Model | `User#line_connected?`: `provider == "line_v2_1" \|\| line_user_id.present?` |
+| Model | `validates :password` に `on: :create` を追加（更新時のバリデーション誤発動防止） |
+| JS | `settings_profile_controller.js` 新規作成（インライン編集のopen/close・他セクションのopacity制御・voice input連携） |
+| View | `settings/show.html.erb` をプロフィール編集・LINE連携・タイムゾーン・AI使用状況・CSVエクスポート・退会セクションで再構成 |
+| View | LINEセクション: ログイン連携専用（Googleセクションは削除・Google通知APIは技術的に不可のため） |
+| View | LINE/Google連携ボタンを `link_to(GET)` → `button_to(POST)` + `form: { class: "inline" }` に変更（OmniAuth 2.x GET拒否対応） |
+| Test | `test/controllers/settings_controller_g6_test.rb` 新規作成（update_profile・update_timezone・disconnect_line 各正常/異常系） |
+
+<br>
+
+#### G-3 修正（G-6テスト中に発見した通知設定の不具合）
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| JS | `notification_master_controller.js` 新規作成（マスタースイッチOFF時に通知チャネルをグレーアウト・`pointer-events-none`・`disabled` 非使用でフォーム値を保持） |
+| JS | `index.js` に `notification-master` コントローラーを登録 |
+| View | `notification_settings.html.erb` にマスタースイッチ連動の `data` 属性を追加（`notification-master-target="master/channel"`・`change->notification-master#toggle`） |
+| Service | `NotificationService#use_line?` / `use_email?` に `notification_enabled?` チェックを追加（防御的実装） |
+| Service | `NotificationService` を独立制御に変更（`if-elsif` → `if-if`）<br>LINE通知とメール通知が独立したON/OFFスイッチのため両方ONなら両方送信 |
+| Service | LINE送信失敗時のメールフォールバックを廃止<br>LINE失敗はLINE失敗として記録・メールはメール設定に従って独立判断 |
+| Job | `WeeklyReportJob` の対象ユーザー絞り込みに `notification_enabled: true` を追加（マスタースイッチOFF時は週次レポートも送信しない） |
+| View | `notification_settings.html.erb` に LINE通知連携解除ボタンを追加<br>LINE連携済み時は解除ボタン・未連携時は連携ボタンを表示 |
+| View | `line-disconnect-form` 隠しフォームを追加（メインフォームのフォームネスト回避） |
+| Test | `test/services/notification_service_test.rb` を独立制御設計に合わせて更新（LINE失敗→メールフォールバックしないことを確認） |
+
+<br>
+
+#### 動作確認済み項目
+
+<br>
+
+| 項目 | 確認内容 |
+|:---|:---|
+| プロフィール編集 | インライン編集で名前を変更・保存・他セクションがグレーアウト |
+| LINE連携管理 | ログイン連携状況の表示・disconnect_line で line_user_id をクリア |
+| タイムゾーン設定 | セレクトボックスで変更・保存後に反映 |
+| AI使用状況 | 今月の使用回数・上限・プログレスバーを表示 |
+| 通知全般マスタースイッチ | OFFで通知チャネルがグレーアウト・操作不可（値は保持） |
+| アラーム通知 6パターン | 通知全般OFF・LINE通知ON/OFF・LINE連携有無・メール通知ON/OFF の全組み合わせ |
+| 週次レポート 3パターン | 通知全般ON/OFF × weekly_report_enabled ON/OFF |
+| 通知制限 3パターン | 上限未達→送信・上限到達→スキップ・上限1件→1件後スキップ |
+| LINE通知連携解除 | 通知設定ページからLINE通知連携を解除できる |
+
+<br>
+
 ---
 
 <br>
@@ -8776,6 +8847,107 @@ Turbo が有効な状態で `button_to` からフォームをPOSTすると、Tur
 
 <br>
 
+### 127. OmniAuth 2.x は GET リクエストを拒否する（#G-6）
+
+<br>
+
+OmniAuth 2.x のセキュリティ強化により、`/auth/:provider` への GET リクエストが<br>
+`OmniAuth::Strategies::OAuth2::DisallowedError` として拒否されるようになった。<br>
+`link_to + data-method: :post`（Turbo 疑似 POST）では不十分で、<br>
+`button_to` による実際の `<form method="post">` が必要になる。<br>
+設定ページの「LINEでログイン」ボタンを `link_to(GET)` から `button_to(POST)` に変更することで解消した。<br>
+
+```ruby
+<%# ❌ GET リクエスト → OmniAuth 2.x で DisallowedError %>
+<%= link_to "LINE でログイン", user_line_v2_1_omniauth_authorize_path %>
+
+<%# ✅ form POST → OmniAuth 2.x で正常動作 %>
+<%= button_to "LINE でログイン",
+    user_line_v2_1_omniauth_authorize_path,
+    method: :post,
+    form: { class: "inline" } %>
+```
+
+<br>
+
+### 128. disabled を使わずに opacity + pointer-events-none で操作無効化する（#G-6 G-3）
+
+<br>
+
+フォーム内のチェックボックスやスライダーを `disabled` にすると、<br>
+フォーム送信時にその値が送信されなくなり、設定が `false` に上書きされてしまう。<br>
+`opacity-50 pointer-events-none` の CSS クラスを付与することで<br>
+「見た目は操作不可・値は保持したまま送信される」状態を実現できる。<br>
+マスタースイッチOFF時に各チャネルの設定値を保持したまま操作を禁止する G-3 の設計で採用した。
+
+<br>
+
+### 129. Stimulus の data-action は content_for :modals のスコープ外では効かない（#G-6 再確認）
+
+<br>
+
+G-6 でも B-5/C-3/G-4 と同じ問題が発生した。`content_for :modals` でモーダルを `</body>` 直前に出力すると、<br>
+モーダル内ボタンは `data-controller` のスコープ外に出るため `data-action` が効かない。<br>
+モーダルボタンへのイベント登録は `addEventListener` 方式で行い、`_listenersAttached` フラグで二重登録を防ぐこと。<br>
+これは HabitFlow の「モーダル設計の標準パターン」として B-5 から一貫して採用している。
+
+<br>
+
+### 130. NotificationService の通知設計は「フォールバック」か「独立制御」かを最初に決める（#G-3修正）
+
+<br>
+
+LINE通知とメール通知を「LINEが使えなければメールで代替（フォールバック）」と設計するか、<br>
+「それぞれ独立したON/OFFスイッチ（独立制御）」と設計するかによってコードが大きく変わる。<br>
+UIが独立したトグルスイッチになっている場合は独立制御が自然。<br>
+フォールバック設計では「LINE通知OFFなのにメールが来る」という意図しない動作になるため、<br>
+UIの設計とバックエンドの設計を必ず一致させること。<br>
+
+```ruby
+# ❌ フォールバック設計 → LINE通知OFFでもメールが送られる
+if use_line?
+  send_line_notification(...)
+elsif use_email?          # ← LINE通知OFFのとき自動的にメールへ
+  send_email_notification(...)
+end
+
+# ✅ 独立制御 → 各スイッチが独立して動作する
+if use_line?
+  send_line_notification(...)
+end
+if use_email?             # ← LINE通知のON/OFFとは無関係
+  send_email_notification(...)
+end
+```
+
+<br>
+
+また通知ロジックの確認は `rails runner` で実際に `NotificationService` を呼び出して<br>
+ログ出力で確認するのが確実。UIのグレーアウトはあくまで見た目の制御であり、<br>
+バックエンドの動作とは別に検証が必要。
+
+<br>
+
+### 131. `validates :password` に `on: :create` がないと更新時にバリデーションエラーになる（#G-6）
+
+<br>
+
+`validates :password, length: { minimum: 6 }` を `on:` 指定なしで書くと、<br>
+`update` 時にも `password` の存在・長さが検証される。<br>
+プロフィール編集（名前の変更のみ）で `user.update(name: "...")` を呼ぶと<br>
+`password` が nil のため `ActiveRecord::RecordInvalid` が発生するバグになる。<br>
+パスワードのバリデーションには必ず `on: :create` を付けること。<br>
+
+```ruby
+# ❌ on: なし → update 時にも password バリデーションが走る
+validates :password, length: { minimum: 6 }
+
+# ✅ on: :create → 新規作成時のみ検証
+validates :password, length: { minimum: 6 }, on: :create
+```
+
+<br>
+
 ---
 
 <br>
@@ -9268,7 +9440,7 @@ habitflow/
 │   │   ├── omniauth_callbacks_controller.rb   # 変更（F-2）: line アクション追加・skip_before_action に :line 追加
 │   │   ├── terms_agreement_controller.rb  # F-3 新規: show / agree アクション（require_login・ensure_needs_agreement）
 │   │   ├── pages_controller.rb            # 変更（F-3）: terms / privacy アクション追加（未ログイン閲覧可）
-│   │   ├── settings_controller.rb         # F-6 新規: show（設定ページ）/ destroy（退会処理・UserDestroyService委譲・reset_session・Cookie削除）
+│   │   ├── settings_controller.rb         # 変更（G-6）: show に @line_connected/@current_timezone/@ai_usage_rate 追加・update_profile/update_timezone/disconnect_line アクション追加
 │   │   ├── user_settings_controller.rb    # 変更（G-4）: rest_mode / start_rest_mode / stop_rest_mode アクションを追加（scope: :user_setting でパラメータ統一）
 │   │   └── csv_exports_controller.rb      # G-5 新規: habit_records / tasks / weekly_reflections / download アクション（data-turbo切替設計）
 │   ├── models/
@@ -9293,7 +9465,7 @@ habitflow/
 │   │   ├── user_destroy_service.rb                 # #A-7: 退会処理フロー（個人情報匿名化）
 │   │   ├── ai_proposal_confirm_service.rb          # #A-7: AI提案確定フロー骨格（#D-3〜#D-4で本実装）
 │   │   ├── ai_client.rb                   # 変更（D-11）: AuthError/RateLimitError カスタムエラークラス追加・handle_http_error で HTTP エラー処理を共通化・notify_sentry ヘルパー追加・analyze は常に nil か Hash を返す設計を維持
-│   │   ├── notification_service.rb        # 変更（G-1）: LINE 実装を有効化・フォールバック設計を実装
+│   │   ├── notification_service.rb        # 変更（G-3修正）: 独立制御に変更（if-elsif→if-if）・LINE失敗時メールフォールバック廃止・use_line?/use_email?にnotification_enabledチェック追加
 │   │   ├── line_notification_service.rb   # G-1 新規: Net::HTTP で LINE Push Message API を呼び出し
 │   │   ├── csv_export_service.rb              # G-5 新規: CSV生成（UTF-8 BOM付き・CRLF・LARGE_DATA_THRESHOLD=1000）
 │   │   └── csv_download_token_service.rb      # G-5 新規: MessageVerifier署名付きトークン（即時5分/非同期24時間）
@@ -9316,6 +9488,8 @@ habitflow/
 │   │       ├── ai_proposal_modal_controller.js    # #E-3 新規: AI提案プレビューモーダル制御（open/close・除外ボタン・ESCキー・disconnect() でリスナー解放）
 │   │       ├── ai_analysis_polling_controller.js  # E-5 新規: AI分析ポーリング（10秒間隔fetch・outerHTML差し替えでスクロール位置維持・完了検知でclearInterval・分析完了=待機UI消滅を検知）
 │   │       ├── notification_limit_controller.js  # G-3 新規: スライダー値のリアルタイム表示更新（slider/display ターゲット・connect() で初期値反映）
+│   │       ├── notification_master_controller.js  # G-3修正 新規: 通知全般マスタースイッチOFF時に通知チャネルをグレーアウト・pointer-events-none（disabled非使用でフォーム値保持）
+│   │       ├── settings_profile_controller.js     # G-6 新規: 設定ページインライン編集（openEdit/closeEdit・他セクションopacity制御・voice input連携）
 │   │       ├── rest_mode_modal_controller.js  # G-4 新規: お休みモード確認モーダル（_setupModalListeners + addEventListener 方式・バブリング対策済み closeFromOverlay）
 │   │       └── voice_input_controller.js      # #B-7 新規→#D-1 で voice_field パーシャルと連携強化: 音声入力（Web Speech API）
 │   ├── helpers/
@@ -9329,7 +9503,7 @@ habitflow/
 │   │   ├── task_alarm_job.rb                           # #C-5 新規: アラーム通知ジョブ（スキップ条件5種・メール送信・ログ記録・atomic更新）
 │   │   ├── purpose_analysis_job.rb        # 変更（D-11）: 全プロバイダ失敗時に wait:60s で最大3回再エンキュー（reenqueue_count 引数）・JSONパース失敗時に raw_response を metadata(jsonb) に保存・discard_on AiClient::AuthError 追加
 │   │   ├── weekly_reflection_analysis_job.rb # 変更（E-3）: broadcast_completion private メソッド追加（AI分析完了時に weekly_reflections/index のバナーをリアルタイム更新）
-│   │   ├── weekly_report_job.rb           # G-2 新規: 週次レポートメール送信ジョブ（GoodJob cron 毎週月曜 JST AM9:00・ユーザー絞り込み・習慣達成率計算・ループ内 begin~rescue）
+│   │   ├── weekly_report_job.rb           # 変更（G-3修正）: target_users に notification_enabled: true 条件を追加（マスタースイッチOFF時は週次レポートも送信しない）
 │   │   ├── rest_mode_expiry_job.rb        # G-4 新規: お休みモード期限切れ自動解除（毎日 JST AM4:10・update_all 一括処理）
 │   │   └── csv_export_job.rb                  # G-5 新規: 非同期CSV生成・email nilチェック・URL生成
 │   ├── mailers/
@@ -9394,7 +9568,7 @@ habitflow/
 │       │   ├── show.html.erb                  # G-5 変更: CSVエクスポートセクション追加
 │       │   └── _csv_export_button.html.erb    # G-5 新規: 件数判定・data-turbo切替ボタンパーシャル
 │       ├── user_settings/
-│       │   ├── notification_settings.html.erb  # G-3 新規: 21番画面（Tailwind v4対応トグル4種・スライダー・LINE連携ボタン・turbo-cache-control・data-turbo=false）
+│       │   ├── notification_settings.html.erb  # 変更（G-3修正）: マスタースイッチ連動 data 属性追加・LINE通知連携解除ボタン追加・line-disconnect-form 隠しフォーム追加（フォームネスト回避）
 │       │   └── rest_mode.html.erb         # G-4 新規: 22番画面（フォーム・🎤ボタン・習慣一覧・M-3 確認モーダル・content_for :modals）
 │       ├── password_resets/
 │       │   ├── new.html.erb               # F-4 新規: 23番 メールアドレス入力フォーム
@@ -9551,7 +9725,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-717 runs, 1785 assertions, 0 failures, 0 errors, 0 skips
+732 runs, 1824 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -9634,6 +9808,8 @@ docker compose exec web bin/rails test
 | `test/controllers/user_settings_controller_test.rb` | コントローラー | G-3: `notification_settings`（GET表示・@user_setting取得・@line_connected設定）・`update_notification_settings`（保存後303リダイレクト・flash表示・リロード後設定保持・未ログインリダイレクト・LINE未連携バナー表示）（8 runs, 24 assertions） |
 | `test/controllers/user_settings_rest_mode_test.rb` | コントローラー | G-4: `rest_mode`（GET表示・認証要求）・`start_rest_mode`（POST成功・空日付422・過去日付422）・`stop_rest_mode`（DELETE成功・未ログインリダイレクト）・ダッシュボードバナー表示・バッジ表示（13 runs, 30 assertions） |
 | `test/jobs/rest_mode_expiry_job_test.rb` | ジョブ | G-4: 期限切れユーザーの自動解除・期限前ユーザーは非解除（Job テストを分離） |
+| `test/controllers/settings_controller_g6_test.rb` | コントローラー | G-6: `update_profile`（成功/空/50文字超）・`update_timezone`（有効/無効タイムゾーン）・`disconnect_line`（通知のみ連携/LINEログイン/未連携）（各正常/異常系） |
+| `test/services/notification_service_test.rb` | サービス | 変更（G-3修正）: LINE失敗時はフォールバックせずLINE失敗を記録しメールは独立して送信されることを確認（独立制御設計に合わせて更新） |
 
 <br>
 
