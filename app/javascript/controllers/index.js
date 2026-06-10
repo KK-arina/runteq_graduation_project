@@ -59,6 +59,10 @@ application.register("mood-rating", MoodRatingController)
 import NotificationLimitController from "./notification_limit_controller"
 application.register("notification-limit", NotificationLimitController)
 
+// G-3 修正: 通知全般マスタースイッチの連動コントローラー
+import NotificationMasterController from "./notification_master_controller"
+application.register("notification-master", NotificationMasterController)
+
 import PriorityCardController from "./priority_card_controller"
 application.register("priority-card", PriorityCardController)
 

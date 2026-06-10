@@ -41,7 +41,14 @@ class NotificationService
     raise ArgumentError, "task は Task インスタンスである必要があります（受け取った型: #{task.class}）" unless task.is_a?(Task)
 
     deep_link_url = "/tasks/#{task.id}"
+    sent = false
 
+    # LINE通知とメール通知を完全に独立して処理する
+    # 【なぜ elsif から if に変更したのか】
+    #   通知設定ページのUIでは LINE通知とメール通知が独立したON/OFFスイッチになっている。
+    #   elsif だと LINE通知OFFのとき自動でメールにフォールバックしてしまい、
+    #   ユーザーが設定した意図と異なる動作になる。
+    #   両方独立して判定することで、UIの設定通りに動作する。
     if use_line?
       send_line_notification(
         target:            task,
@@ -49,20 +56,26 @@ class NotificationService
         deep_link_url:     deep_link_url,
         notification_type: :alarm
       )
-    elsif use_email?
+      sent = true
+    end
+
+    if use_email?
       send_email_notification(
         target:            task,
         deep_link_url:     deep_link_url,
         notification_type: :alarm
       )
-    else
+      sent = true
+    end
+
+    unless sent
       Rails.logger.info "[NotificationService] 有効な通知チャネルがありません: user_id=#{user.id}"
     end
   end
 
-  # send_weekly_report（週次レポート通知）
   def send_weekly_report(weekly_reflection:)
     deep_link_url = "/weekly_reflections/new"
+    sent = false
 
     if use_line?
       send_line_notification(
@@ -71,18 +84,26 @@ class NotificationService
         deep_link_url:     deep_link_url,
         notification_type: :weekly_report
       )
-    elsif use_email?
+      sent = true
+    end
+
+    if use_email?
       send_email_notification(
         target:            weekly_reflection,
         deep_link_url:     deep_link_url,
         notification_type: :weekly_report
       )
+      sent = true
+    end
+
+    unless sent
+      Rails.logger.info "[NotificationService] 有効な通知チャネルがありません: user_id=#{user.id}"
     end
   end
 
-  # send_ai_result（AI分析完了通知）
   def send_ai_result(user_purpose:)
     deep_link_url = "/user_purposes/#{user_purpose.id}"
+    sent = false
 
     if use_line?
       send_line_notification(
@@ -91,12 +112,20 @@ class NotificationService
         deep_link_url:     deep_link_url,
         notification_type: :ai_result
       )
-    elsif use_email?
+      sent = true
+    end
+
+    if use_email?
       send_email_notification(
         target:            user_purpose,
         deep_link_url:     deep_link_url,
         notification_type: :ai_result
       )
+      sent = true
+    end
+
+    unless sent
+      Rails.logger.info "[NotificationService] 有効な通知チャネルがありません: user_id=#{user.id}"
     end
   end
 
@@ -119,16 +148,30 @@ class NotificationService
   # use_line?: LINE通知を使うか判定する
   #
   # 【条件】以下すべてが true の場合のみ LINE 通知を使う
-  #   1. user_setting が存在する
+  #   1. notification_enabled? が true（通知全体がON）
   #   2. line_notification_enabled? が true（LINE通知が ON）
-  #   3. user.line_user_id が存在する（LINE連携済み・友達追加済み）
+  #   3. user.line_user_id が存在する（LINE連携済み）
+  #
+  # 【G-3 修正: notification_enabled を追加した理由】
+  #   マスタースイッチ（notification_enabled）がOFFの場合、
+  #   すべての通知チャネルを無効にする必要がある。
+  #   TaskAlarmJob では notification_enabled をチェックしているが、
+  #   weekly_report や ai_result の送信パスでは NotificationService が
+  #   直接呼ばれるため、ここでもチェックが必要。
   def use_line?
-    user.user_setting&.line_notification_enabled? && user.line_user_id.present?
+    user.user_setting&.notification_enabled? &&
+      user.user_setting&.line_notification_enabled? &&
+      user.line_user_id.present?
   end
 
   # use_email?: メール通知を使うか判定する
+  #
+  # 【G-3 修正: notification_enabled を追加した理由】
+  #   use_line? と同様、マスタースイッチのチェックを追加する。
   def use_email?
-    user.user_setting&.email_notification_enabled? && user.email.present?
+    user.user_setting&.notification_enabled? &&
+      user.user_setting&.email_notification_enabled? &&
+      user.email.present?
   end
 
   # send_line_notification: LINE通知の送信（G-1 で実装）
@@ -156,11 +199,6 @@ class NotificationService
     ).call
 
     if result[:success]
-      # LINE 送信成功: notification_logs に記録する
-      #
-      # retry_count: 0 は「今回のジョブ実行が初回」を意味する。
-      # GoodJob がリトライしてこのメソッドが再実行された場合も
-      # 現設計では 0 が入る（改善余地はあるが実運用上は許容範囲）。
       NotificationLog.record_success(
         user:              user,
         notification_type: notification_type,
@@ -169,39 +207,31 @@ class NotificationService
         deep_link_url:     deep_link_url,
         metadata:          result[:response_body].to_h.merge("retry_count" => 0)
       )
-
       Rails.logger.info(
         "[NotificationService] LINE通知送信成功: " \
         "user_id=#{user.id} notification_type=#{notification_type}"
       )
-
     else
-      # LINE 送信失敗 → メールにフォールバック
+      # LINE送信失敗時はメールにフォールバックせず失敗として記録する
+      # 【フォールバック廃止の理由】
+      #   通知設定ページでLINEとメールは独立したスイッチ。
+      #   LINEが失敗したからといって自動でメールに切り替えると
+      #   ユーザーの設定意図と異なる動作になる。
+      #   LINE失敗はLINE失敗として記録し、
+      #   メール送信はメール設定に従って独立して判断する。
+      NotificationLog.record_failure(
+        user:              user,
+        notification_type: notification_type,
+        channel:           :line,
+        target:            target,
+        deep_link_url:     deep_link_url,
+        error_message:     result[:error].to_s
+      )
       Rails.logger.warn(
-        "[NotificationService] LINE通知送信失敗。メール通知へ自動切替します。 " \
+        "[NotificationService] LINE通知送信失敗: " \
         "user_id=#{user.id} notification_type=#{notification_type} " \
         "error=#{result[:error]}"
       )
-
-      if use_email?
-        # メール通知が有効な場合はメールで通知する
-        # メール送信自体の成功/失敗ログは send_email_notification 内で記録される
-        send_email_notification(
-          target:            target,
-          deep_link_url:     deep_link_url,
-          notification_type: notification_type
-        )
-      else
-        # メールも使えない場合は失敗として記録する
-        NotificationLog.record_failure(
-          user:              user,
-          notification_type: notification_type,
-          channel:           :line,
-          target:            target,
-          deep_link_url:     deep_link_url,
-          error_message:     result[:error].to_s
-        )
-      end
     end
   end
 

@@ -78,49 +78,60 @@ class NotificationServiceTest < ActiveSupport::TestCase
   # ============================================================
   # テスト1: LINE連携済みユーザーへの通知
   # ============================================================
+  #
+  # 【G-3 修正: 独立制御に合わせてテストを更新】
+  #   LINE通知とメール通知が独立して動作するため、
+  #   両方ONの場合は NotificationLog が2件増える。
   test "LINE連携済みユーザーに send_alarm を呼ぶと LINE 通知が送られ記録される" do
     mock_result = { success: true, response_body: { "sentMessages" => [] } }
-
-    LineNotificationService.stub(
-      :new,
-      ->(**_kwargs) { OpenStruct.new(call: mock_result) }
-    ) do
-      # 【assert_difference の対象について】
-      #   NotificationLog.count で総数を見ることで、
-      #   channel/status の条件によるテストの不安定さを避ける。
-      assert_difference "NotificationLog.count", 1 do
-        NotificationService.new(user: @user_with_line).send_alarm(task: @task)
-      end
-
-      # 記録内容の詳細確認
-      log = NotificationLog.last
-      assert_equal "line",    log.channel
-      assert_equal "success", log.status
-      assert_equal @task.id,  log.target_id
-      assert_equal "Task",    log.target_type
-    end
-  end
-
-  # ============================================================
-  # テスト2: LINE送信失敗 → メールフォールバック
-  # ============================================================
-  test "LINE送信失敗時にメール通知にフォールバックする" do
-    mock_result = { success: false, error: "HTTP 429: Too Many Requests" }
-
     LineNotificationService.stub(
       :new,
       ->(**_kwargs) { OpenStruct.new(call: mock_result) }
     ) do
       mail_stub = OpenStruct.new(deliver_now: true)
       TaskMailer.stub(:alarm_notification, ->(_task) { mail_stub }) do
-        assert_difference "NotificationLog.count", 1 do
+        # LINE通知ON + メール通知ON → 両方送信されて2件増える
+        assert_difference "NotificationLog.count", 2 do
           NotificationService.new(user: @user_with_line).send_alarm(task: @task)
         end
+        # LINE通知のログが存在することを確認する
+        line_log = NotificationLog.where(channel: "line", status: "success").last
+        assert_not_nil line_log
+        assert_equal @task.id, line_log.target_id
+        assert_equal "Task",   line_log.target_type
+        # メール通知のログも存在することを確認する
+        email_log = NotificationLog.where(channel: "email", status: "success").last
+        assert_not_nil email_log
+      end
+    end
+  end
 
-        log = NotificationLog.last
-        # フォールバック先はメールになること
-        assert_equal "email",   log.channel
-        assert_equal "success", log.status
+  # ============================================================
+  # テスト2: LINE送信失敗時はフォールバックしない
+  # ============================================================
+  #
+  # 【G-3 修正: フォールバック廃止に合わせてテストを更新】
+  #   LINE送信失敗時はメールにフォールバックしなくなった。
+  #   LINE失敗はLINE失敗として記録し、
+  #   メールはメール設定（email_notification_enabled）に従って独立して送信する。
+  test "LINE送信失敗時はフォールバックせずLINE失敗を記録しメールは独立して送信される" do
+    mock_result = { success: false, error: "HTTP 429: Too Many Requests" }
+    LineNotificationService.stub(
+      :new,
+      ->(**_kwargs) { OpenStruct.new(call: mock_result) }
+    ) do
+      mail_stub = OpenStruct.new(deliver_now: true)
+      TaskMailer.stub(:alarm_notification, ->(_task) { mail_stub }) do
+        # LINE失敗ログ + メール成功ログ = 2件増える
+        assert_difference "NotificationLog.count", 2 do
+          NotificationService.new(user: @user_with_line).send_alarm(task: @task)
+        end
+        # LINE失敗が記録されていることを確認する
+        line_log = NotificationLog.where(channel: "line", status: "failed").last
+        assert_not_nil line_log
+        # メールは独立して送信成功していることを確認する
+        email_log = NotificationLog.where(channel: "email", status: "success").last
+        assert_not_nil email_log
       end
     end
   end
