@@ -8,20 +8,75 @@
 
   【G-4 変更点】
     お休みモード中のバナーと「😴 休息中」バッジを追加。
+
+  【G-7 変更点】
+    ダッシュボード専用 PMVV 完了通知バナーを追加。
+    turbo_stream_from "dashboard_notifications_#{current_user.id}" を追加。
+    id="dashboard_pmvv_completion_banner" の空 div を追加。
 %>
 <% content_for :title, "ダッシュボード | HabitFlow" %>
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
-  <%# D-7: PMVV AI分析完了バナー %>
+  <%#
+    D-7: PMVV AI分析状態バナー（16番ページとの共有ストリーム）
+    G-7: ダッシュボード専用 PMVV 完了通知バナーの追加
+  %>
   <% if @current_purpose %>
+    <%#
+      既存のストリーム購読: PMVV 管理ページ（16番）と共有。
+      analysis_state の変化（pending/analyzing/completed/failed）を
+      analysis_status_banner に反映する。
+      【変更なし】
+    %>
     <%= turbo_stream_from "user_purpose_#{@current_purpose.id}" %>
+
+    <%#
+      G-7 追加: ダッシュボード専用の完了通知ストリームを購読する。
+
+      【なぜ別ストリームが必要なのか】
+        "user_purpose_#{@current_purpose.id}" は PMVV 管理ページ向けのストリーム。
+        ダッシュボード専用バナー（id="dashboard_pmvv_completion_banner"）は
+        別ストリームで管理することで、16番ページの更新とダッシュボードの更新を
+        独立させる（関心の分離）。
+
+      【ストリーム名に current_user.id を使う理由】
+        @current_purpose.id ではなく current_user.id にする理由:
+        PMVV を更新（再分析）しても user_id は変わらないため、
+        ページをリロードせずに購読し続けられる。
+        user_purpose.id が変わっても購読が途切れない。
+    %>
+    <%= turbo_stream_from "dashboard_notifications_#{current_user.id}" %>
+
+    <%#
+      既存バナー: PMVV 管理ページと共通の分析状態表示。
+      pending/analyzing/completed/failed を全て表示する。
+      【変更なし】
+    %>
     <div id="analysis_status_banner" class="mb-6">
       <%= render "user_purposes/analysis_status_banner",
             user_purpose: @current_purpose,
             ai_analysis:  @ai_analysis %>
     </div>
   <% end %>
+
+  <%#
+    G-7 追加: ダッシュボード専用 PMVV 完了通知バナーの配置（空のプレースホルダー）
+
+    【なぜ @current_purpose の if ブロックの外に置くのか】
+      Turbo Stream の broadcast_replace_to は target の id が
+      DOM に存在しない場合は何もしない（エラーにはならないが通知も届かない）。
+      @current_purpose が nil のユーザーが後から PMVV を登録して
+      AI 分析が完了した場合でも通知を受け取れるよう、
+      空の div を常に DOM に置いておく。
+
+    【この div が hidden にならない保証】
+      パーシャル側で data-controller="dismissible" は内側のバナー本体 div にのみ付く。
+      hide() は内側の div だけを hidden にするため、
+      この外側の id 付き div は常に hidden にならない。
+      次回 AI 分析完了時の broadcast_replace_to が確実にターゲットを発見できる。
+  %>
+  <div id="dashboard_pmvv_completion_banner"></div>
 
   <%# ── PDCA強制ロック警告バナー ──────────────────────────────────────── %>
   <% if @locked %>
@@ -154,7 +209,6 @@
         <span class="text-base flex-shrink-0" aria-hidden="true">😴</span>
         <div>
           <p class="text-xs font-semibold text-green-800">
-            <%# rest_mode_until の nil 安全性: until_date 変数に受けてから使う %>
             <% until_date = @user_setting.rest_mode_until %>
             お休みモード中
             <% if until_date %>
@@ -172,7 +226,6 @@
       </div>
     <% end %>
 
-    <%# 習慣ループ内の修正: current_user.user_setting → @user_setting %>
     <% @habits.each do |habit| %>
       <% if @user_setting&.rest_mode_active? && habit.allow_rest_mode %>
         <div class="flex items-center gap-2 py-1 px-2 mb-1

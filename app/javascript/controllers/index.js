@@ -89,3 +89,14 @@ application.register("terms-agreement", TermsAgreementController)
 
 import VoiceInputController from "./voice_input_controller"
 application.register("voice-input", VoiceInputController)
+
+// app/javascript/controllers/index.js への追記
+// （末尾の VoiceInputController の登録行の直後に追加する）
+
+// G-7 追加: バナーを×ボタンで非表示にする汎用コントローラー
+// 【なぜ手動登録するのか】
+//   stimulus:manifest:update は自動生成だが、
+//   ファイル追加後に実行し忘れることがある。
+//   明示的に登録することで確実に動作する。
+import DismissibleController from "./dismissible_controller"
+application.register("dismissible", DismissibleController)

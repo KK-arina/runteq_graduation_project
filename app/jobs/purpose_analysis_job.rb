@@ -18,6 +18,13 @@
 #   ④ 401エラー（AiClient::AuthError）を rescue して即座に failed 確定 + Sentry通知
 #   ⑤ 再エンキュー回数を last_error_message で管理
 #
+# 【G-7 での変更内容】
+#   ⑥ AI分析完了時にダッシュボード向け完了バナーをブロードキャストする
+#      broadcast_dashboard_completion メソッドを追加し、
+#      perform の Step 5 完了後（broadcast_state_update の直後）に呼び出す。
+#      ストリーム名: "dashboard_notifications_#{user_purpose.user_id}"
+#      ターゲット:    "dashboard_pmvv_completion_banner"
+#
 # ==============================================================================
 
 class PurposeAnalysisJob < ApplicationJob
@@ -210,7 +217,23 @@ class PurposeAnalysisJob < ApplicationJob
       )
     end
 
+    # ── 16番ページ（PMVV管理）の Turbo Stream 更新（既存）──────────────────
+    #
+    # 【役割】
+    #   UserPurpose の show ページを開いているユーザーのバナーを
+    #   「分析完了」表示にリアルタイム更新する。
+    #   ストリーム名: "user_purpose_#{user_purpose.id}"
     broadcast_state_update(user_purpose.reload)
+
+    # ── G-7 追加: ダッシュボード向け完了通知バナーのブロードキャスト ───────
+    #
+    # 【なぜ broadcast_state_update とは別にブロードキャストするのか】
+    #   broadcast_state_update は PMVV 管理ページ（16番）向け。
+    #   ストリーム名が "user_purpose_#{user_purpose.id}" のため、
+    #   16番ページを開いているときのみ受信できる。
+    #   ダッシュボードは別ストリームで購読しているため、別途ブロードキャストが必要。
+    broadcast_dashboard_completion(user_purpose.reload)
+
     Rails.logger.info "[PurposeAnalysisJob] 完了: user_purpose_id=#{user_purpose_id}"
 
   rescue AiClient::AuthError => e
@@ -428,6 +451,60 @@ class PurposeAnalysisJob < ApplicationJob
   end
   # ────────────────────────────────────────────────────────────────────────
 
+  # ── G-7 追加: ダッシュボード向け完了バナーのブロードキャスト ─────────────
+  #
+  # 【役割】
+  #   AI分析が completed になったとき、ダッシュボードを開いているユーザーに
+  #   「✨ 目標分析が完了しました」バナーをリアルタイムで表示する。
+  #
+  # 【ストリーム名の設計: user_id ベース】
+  #   user_purpose.id ではなく user_id を使う理由:
+  #     PMVV を更新して再分析しても user_id は変わらないため、
+  #     ダッシュボード側の turbo_stream_from を変更せずに購読し続けられる。
+  #
+  # 【broadcast_state_update との違い】
+  #   broadcast_state_update: PMVV 管理ページ（16番）向け
+  #     ストリーム: "user_purpose_#{user_purpose.id}"
+  #     表示内容: pending/analyzing/completed/failed の全状態
+  #   broadcast_dashboard_completion: ダッシュボード（5-1番）向け
+  #     ストリーム: "dashboard_notifications_#{user_purpose.user_id}"
+  #     表示内容: 完了時のみ（ダッシュボードをノイズで汚さない）
+  #
+  # 【replace を使う理由】
+  #   append だと複数回分析するたびにバナーが積み重なってしまう。
+  #   replace で id="dashboard_pmvv_completion_banner" の要素を
+  #   丸ごと差し替えることで常に最新の1件だけが表示される。
+  def broadcast_dashboard_completion(user_purpose)
+    # completed 以外は何も送信しない。
+    # ダッシュボードはユーザーの「作業場」なので、
+    # pending/analyzing/failed は表示してノイズにしない。
+    return unless user_purpose.completed?
+
+    # find_by を使う理由:
+    #   .where(...).first より意図が明確で SQL もシンプル。
+    #   「1件だけ取得したい」という意図が find_by で正確に表現できる。
+    ai_analysis = AiAnalysis.find_by(
+      user_purpose_id: user_purpose.id,
+      is_latest:       true,
+      analysis_type:   :purpose_breakdown
+    )
+
+    Turbo::StreamsChannel.broadcast_replace_to(
+      # ストリーム名: ダッシュボード専用
+      # user_id ベースにすることで「自分の通知だけ」を受信でき、
+      # 他のユーザーの完了通知が混入しない。
+      "dashboard_notifications_#{user_purpose.user_id}",
+      target:  "dashboard_pmvv_completion_banner",
+      partial: "dashboards/pmvv_completion_banner",
+      locals:  { user_purpose: user_purpose, ai_analysis: ai_analysis }
+    )
+  rescue => e
+    # WebSocket 通信エラー等が起きても AI 分析の完了（DB 保存）は成功している。
+    # 例外を安全にログへ逃がして処理全体のクラッシュを防ぐ。
+    Rails.logger.warn "[PurposeAnalysisJob] ダッシュボードバナー更新失敗（無視）: #{e.message}"
+  end
+  # ────────────────────────────────────────────────────────────────────────
+
   def handle_failure(user_purpose, error_message)
     user_purpose.update!(
       analysis_state:     :failed,
@@ -453,4 +530,59 @@ class PurposeAnalysisJob < ApplicationJob
   rescue => e
     Rails.logger.warn "[PurposeAnalysisJob] Turbo Stream 更新失敗（無視）: #{e.message}"
   end
+
+  # ── G-7 追加: ダッシュボード向け完了バナーのブロードキャスト ─────────────
+  #
+  # 【役割】
+  #   AI分析が completed になったとき、ダッシュボードを開いているユーザーに
+  #   「✨ 目標分析が完了しました」バナーをリアルタイムで表示する。
+  #
+  # 【ストリーム名の設計】
+  #   "dashboard_notifications_#{user_purpose.user_id}"
+  #   → user_id を含めることで「自分の分析完了だけ」を受信できる。
+  #   → user_purpose.id ではなく user_id にすることで、
+  #     PMVV を更新して再分析した場合も同じストリームを購読し続けられる。
+  #
+  # 【broadcast_state_update との違い】
+  #   broadcast_state_update: PMVV 管理ページ（16番）向け
+  #     ストリーム: "user_purpose_#{user_purpose.id}"
+  #     表示内容: pending/analyzing/completed/failed の全状態
+  #   broadcast_dashboard_completion: ダッシュボード（5-1番）向け
+  #     ストリーム: "dashboard_notifications_#{user_purpose.user_id}"
+  #     表示内容: 完了時のみ（ダッシュボードをノイズで汚さない）
+  #
+  # 【replace を使う理由】
+  #   append だと複数回分析するたびにバナーが積み重なってしまう。
+  #   replace で id="dashboard_pmvv_completion_banner" の要素を
+  #   丸ごと差し替えることで常に最新の1件だけが表示される。
+  #
+  # 【completed のときのみブロードキャストする理由】
+  #   ダッシュボードはユーザーが日常的に使う「作業場」。
+  #   pending/analyzing/failed を毎回ポップアップで表示すると邪魔になる。
+  #   完了時だけ「嬉しいお知らせ」として表示する設計にする。
+  def broadcast_dashboard_completion(user_purpose)
+    # completed 以外は何も送信しない
+    return unless user_purpose.completed?
+
+    # find_by を使う理由: .where(...).first より意図が明確で SQL もシンプル。
+    # 「1件だけ取得したい」という意図が find_by で正確に表現できる。
+    ai_analysis = AiAnalysis.find_by(
+      user_purpose_id: user_purpose.id,
+      is_latest:       true,
+      analysis_type:   :purpose_breakdown
+    )
+
+    Turbo::StreamsChannel.broadcast_replace_to(
+      # ストリーム名: ダッシュボード専用（user_id ベース）
+      "dashboard_notifications_#{user_purpose.user_id}",
+      target:  "dashboard_pmvv_completion_banner",
+      partial: "dashboards/pmvv_completion_banner",
+      locals:  { user_purpose: user_purpose, ai_analysis: ai_analysis }
+    )
+  rescue => e
+    # WebSocket 通信エラー等が起きても AI 分析の完了（DB 保存）は成功しているため、
+    # 例外を安全にログへ逃がして処理全体のクラッシュを防ぐ。
+    Rails.logger.warn "[PurposeAnalysisJob] ダッシュボードバナー更新失敗（無視）: #{e.message}"
+  end
+  # ────────────────────────────────────────────────────────────────────────
 end
