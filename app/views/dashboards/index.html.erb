@@ -23,60 +23,45 @@
     G-7: ダッシュボード専用 PMVV 完了通知バナーの追加
   %>
   <% if @current_purpose %>
-    <%#
-      既存のストリーム購読: PMVV 管理ページ（16番）と共有。
-      analysis_state の変化（pending/analyzing/completed/failed）を
-      analysis_status_banner に反映する。
-      【変更なし】
-    %>
     <%= turbo_stream_from "user_purpose_#{@current_purpose.id}" %>
-
     <%#
-      G-7 追加: ダッシュボード専用の完了通知ストリームを購読する。
-
-      【なぜ別ストリームが必要なのか】
-        "user_purpose_#{@current_purpose.id}" は PMVV 管理ページ向けのストリーム。
-        ダッシュボード専用バナー（id="dashboard_pmvv_completion_banner"）は
-        別ストリームで管理することで、16番ページの更新とダッシュボードの更新を
-        独立させる（関心の分離）。
-
-      【ストリーム名に current_user.id を使う理由】
-        @current_purpose.id ではなく current_user.id にする理由:
-        PMVV を更新（再分析）しても user_id は変わらないため、
-        ページをリロードせずに購読し続けられる。
-        user_purpose.id が変わっても購読が途切れない。
-    %>
-    <%= turbo_stream_from "dashboard_notifications_#{current_user.id}" %>
-
-    <%#
-      既存バナー: PMVV 管理ページと共通の分析状態表示。
-      pending/analyzing/completed/failed を全て表示する。
-      【変更なし】
+      analysis_status_banner:
+      completed 時は空の div のみ残す（Turbo Stream のターゲット保持のため）。
+      pending/analyzing/failed のみバナーを表示する。
+      completed 時は G-7 の dashboard_pmvv_completion_banner が表示される。
     %>
     <div id="analysis_status_banner" class="mb-6">
-      <%= render "user_purposes/analysis_status_banner",
-            user_purpose: @current_purpose,
-            ai_analysis:  @ai_analysis %>
+      <% unless @current_purpose.completed? %>
+        <%= render "user_purposes/analysis_status_banner",
+              user_purpose: @current_purpose,
+              ai_analysis:  @ai_analysis %>
+      <% end %>
     </div>
   <% end %>
 
   <%#
-    G-7 追加: ダッシュボード専用 PMVV 完了通知バナーの配置（空のプレースホルダー）
+    G-7 追加: ダッシュボード専用の完了通知ストリームを購読する。
 
-    【なぜ @current_purpose の if ブロックの外に置くのか】
-      Turbo Stream の broadcast_replace_to は target の id が
-      DOM に存在しない場合は何もしない（エラーにはならないが通知も届かない）。
-      @current_purpose が nil のユーザーが後から PMVV を登録して
-      AI 分析が完了した場合でも通知を受け取れるよう、
-      空の div を常に DOM に置いておく。
+    【なぜ @current_purpose の if ブロックの外に移動したのか】
+      @current_purpose が nil のユーザー（PMVV未入力・目標設定をしたばかり）でも
+      このストリームを購読できるようにするため。
+      if ブロックの内側にあると、@current_purpose が nil のときに
+      turbo_stream_from タグが出力されず、ブロードキャストを受信できなかった。
 
-    【この div が hidden にならない保証】
-      パーシャル側で data-controller="dismissible" は内側のバナー本体 div にのみ付く。
-      hide() は内側の div だけを hidden にするため、
-      この外側の id 付き div は常に hidden にならない。
-      次回 AI 分析完了時の broadcast_replace_to が確実にターゲットを発見できる。
+    【ストリーム名に current_user.id を使う理由】
+      @current_purpose.id ではなく current_user.id にする理由:
+      PMVV を更新（再分析）しても user_id は変わらないため、
+      ページをリロードせずに購読し続けられる。
+      user_purpose.id が変わっても購読が途切れない。
+
+    【turbo_stream_from を id 付き div の直前に置く理由】
+      購読タグとプレースホルダーを近い位置に置くことで、
+      「この購読はこのバナー用」という対応関係がコードを読んで分かりやすくなる。
   %>
+  <%= turbo_stream_from "dashboard_notifications_#{current_user.id}" %>
   <div id="dashboard_pmvv_completion_banner"></div>
+  <%# G-7 追加: 振り返りAI分析完了バナーのプレースホルダー %>
+  <div id="dashboard_reflection_completion_banner"></div>
 
   <%# ── PDCA強制ロック警告バナー ──────────────────────────────────────── %>
   <% if @locked %>

@@ -12,7 +12,6 @@
 
 ActiveRecord::Schema[7.2].define(version: 2026_05_24_015832) do
   # These are extensions that must be enabled in order to support this database
-  enable_extension "pgcrypto"
   enable_extension "plpgsql"
 
   create_table "ai_analyses", force: :cascade do |t|

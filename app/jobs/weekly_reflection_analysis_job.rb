@@ -119,6 +119,8 @@ class WeeklyReflectionAnalysisJob < ApplicationJob
 
     # ── E-3 追加: AI分析完了を weekly_reflections/index にリアルタイム通知 ──
     broadcast_completion(reflection)
+    # G-7 追加: ダッシュボード向け振り返り分析完了バナーのブロードキャスト
+    broadcast_dashboard_completion(reflection)
 
   rescue AiClient::AuthError => e
     Rails.logger.error "[WeeklyReflectionAnalysisJob] 認証エラー（401）: #{e.message}"
@@ -356,23 +358,9 @@ class WeeklyReflectionAnalysisJob < ApplicationJob
   # 【役割】
   #   AI分析が完了したとき、weekly_reflections/index.html.erb の
   #   id="weekly_reflection_ai_banner" を Turbo Stream でリアルタイム更新する。
-  #
-  # 【仕組み】
-  #   index.html.erb に turbo_stream_from "weekly_reflection_#{reflection.id}" を追加し、
-  #   同じ stream 名に broadcast_replace_to することでバナーが自動切り替わる。
-  #
-  # 【solid_cable との相性】
-  #   cable.yml が solid_cable（PostgreSQL ブローカー）になっているため、
-  #   GoodJob の Worker スレッドから broadcast しても確実にブラウザに届く。
-  #   Redis 不要で既存の DB をそのまま使える。
-  #
-  # 【rescue している理由】
-  #   Turbo Stream の broadcast に失敗しても AI 分析自体は成功しているため、
-  #   例外を伝播させずにログだけ残して続行する。
   def broadcast_completion(reflection)
     ai_analysis  = reflection.ai_analyses.latest.where.not(actions_json: nil).first
     user_purpose = UserPurpose.current_for(reflection.user)
-
     Turbo::StreamsChannel.broadcast_replace_to(
       "weekly_reflection_#{reflection.id}",
       target:  "weekly_reflection_ai_banner",
@@ -386,5 +374,32 @@ class WeeklyReflectionAnalysisJob < ApplicationJob
     Rails.logger.info "[WeeklyReflectionAnalysisJob] Turbo Stream 通知完了: reflection_id=#{reflection.id}"
   rescue => e
     Rails.logger.warn "[WeeklyReflectionAnalysisJob] Turbo Stream 通知失敗（無視）: #{e.message}"
+  end
+
+  # ── G-7 追加: ダッシュボード向け振り返り分析完了バナーのブロードキャスト ──
+  #
+  # 【役割】
+  #   振り返り AI 分析が完了したとき、ダッシュボードを開いているユーザーに
+  #   「🔄 振り返りAI分析が完了しました」バナーをリアルタイムで表示する。
+  #
+  # 【ストリーム名】
+  #   G-7 の PMVV 完了バナーと同じ "dashboard_notifications_#{user_id}" を使う。
+  #   ターゲットは別（"dashboard_reflection_completion_banner"）のため混在しない。
+  #
+  # 【broadcast_completion との違い】
+  #   broadcast_completion: 振り返りページ向け（weekly_reflection_#{reflection.id}）
+  #   broadcast_dashboard_completion: ダッシュボード向け（dashboard_notifications_#{user_id}）
+  def broadcast_dashboard_completion(reflection)
+    ai_analysis = reflection.ai_analyses.latest.where.not(actions_json: nil).first
+
+    Turbo::StreamsChannel.broadcast_replace_to(
+      "dashboard_notifications_#{reflection.user_id}",
+      target:  "dashboard_reflection_completion_banner",
+      partial: "dashboards/reflection_completion_banner",
+      locals:  { reflection: reflection, ai_analysis: ai_analysis }
+    )
+    Rails.logger.info "[WeeklyReflectionAnalysisJob] ダッシュボード通知完了: reflection_id=#{reflection.id}"
+  rescue => e
+    Rails.logger.warn "[WeeklyReflectionAnalysisJob] ダッシュボード通知失敗（無視）: #{e.message}"
   end
 end

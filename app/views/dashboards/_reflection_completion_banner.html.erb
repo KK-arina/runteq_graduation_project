@@ -1,0 +1,86 @@
+<%# app/views/dashboards/_reflection_completion_banner.html.erb %>
+<%#
+  ==============================================================================
+  G-7: ダッシュボード用振り返りAI分析完了バナー パーシャル
+  ==============================================================================
+
+  【このファイルの役割】
+    WeeklyReflectionAnalysisJob の AI 分析完了時に
+    Turbo Stream の broadcast_replace_to によって呼び出されるパーシャル。
+
+  【デザイン】
+    青系（bg-blue-50 border-blue-300）: 振り返り = 青
+    PMVV 目標分析バナー（緑系）・既存バナーと色で区別する。
+
+  【最外殻 div に id を付けない理由】
+    ダッシュボード側の id="dashboard_reflection_completion_banner" と重複するため。
+
+  【data-controller="dismissible" を内側 div に付ける理由】
+    外側の id 付き div を hidden にしないことで、
+    次回の Turbo Stream が差し替えターゲットを正しく発見できる。
+  ==============================================================================
+%>
+
+<div>
+  <% if reflection.present? %>
+    <div class="mb-6 flex items-center justify-between gap-3 px-4 py-3
+                bg-blue-50 border border-blue-300 rounded-xl"
+         data-controller="dismissible"
+         role="status"
+         aria-live="polite">
+
+      <div class="flex items-center gap-3 min-w-0">
+        <span class="text-xl flex-shrink-0" aria-hidden="true">🔄</span>
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-blue-800">
+            振り返りAI分析が完了しました
+          </p>
+          <p class="text-xs text-blue-600 truncate">
+            今週の振り返りに基づいた改善提案が準備できました
+          </p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 flex-shrink-0">
+
+        <%#
+          遷移先: 該当の振り返り詳細ページ
+          weekly_reflection_path(reflection) で該当週の振り返り結果へ遷移する。
+          PMVV バナーの ai_result_user_purpose_path とは異なるページ。
+        %>
+        <% if ai_analysis.present? %>
+          <%= link_to "結果を見る →",
+                      weekly_reflection_path(reflection),
+                      class: "px-3 py-1.5 text-xs font-bold text-white bg-blue-600
+                              rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap
+                              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" %>
+        <% else %>
+          <%= link_to "振り返りを確認する →",
+                      weekly_reflections_path,
+                      class: "px-3 py-1.5 text-xs font-bold text-white bg-blue-600
+                              rounded-lg hover:bg-blue-700 transition-colors whitespace-nowrap
+                              focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" %>
+        <% end %>
+
+        <button type="button"
+                data-action="click->dismissible#hide"
+                class="p-1 rounded opacity-60 hover:opacity-100 transition-opacity
+                       focus:outline-none focus:ring-2 focus:ring-offset-1
+                       focus:ring-blue-500 text-blue-700"
+                aria-label="通知を閉じる">
+          <svg class="w-4 h-4"
+               fill="none"
+               stroke="currentColor"
+               viewBox="0 0 24 24"
+               aria-hidden="true">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+
+      </div>
+    </div>
+  <% end %>
+</div>
