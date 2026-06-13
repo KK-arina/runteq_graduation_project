@@ -194,4 +194,55 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
 
     { text: json_body, model: "gemini-2.5-flash" }
   end
+
+  # ============================================================
+  # G-7 テスト: 振り返り分析完了時にダッシュボードブロードキャストが呼ばれること
+  # ============================================================
+  test "G-7: 振り返り分析完了時に broadcast_dashboard_completion が呼ばれること" do
+    fake_client = Object.new
+    fake_client.define_singleton_method(:analyze) { |_prompt| {
+      text: '{"analysis_comment":"テスト","improvement_suggestions":"改善","root_cause":"原因","coaching_message":"コーチング","actions":[],"crisis_detected":false}',
+      model: "gemini-2.5-flash"
+    }}
+
+    AiClient.stub(:new, fake_client) do
+      job = WeeklyReflectionAnalysisJob.new
+
+      called = false
+      job.define_singleton_method(:broadcast_dashboard_completion) do |_r|
+        called = true
+      end
+
+      job.perform(@reflection.id)
+
+      assert called, "broadcast_dashboard_completion が呼ばれませんでした"
+    end
+  end
+
+  test "G-7: broadcast_replace_to がダッシュボード用ストリームと正しいターゲットで呼ばれること" do
+    fake_client = Object.new
+    fake_client.define_singleton_method(:analyze) { |_prompt| {
+      text: '{"analysis_comment":"テスト","improvement_suggestions":"改善","root_cause":"原因","coaching_message":"コーチング","actions":[],"crisis_detected":false}',
+      model: "gemini-2.5-flash"
+    }}
+
+    broadcast_calls = []
+    Turbo::StreamsChannel.stub(:broadcast_replace_to,
+      ->(stream, **opts) { broadcast_calls << { stream: stream, target: opts[:target] } }
+    ) do
+      AiClient.stub(:new, fake_client) do
+        WeeklyReflectionAnalysisJob.perform_now(@reflection.id)
+      end
+    end
+
+    dashboard_stream = "dashboard_notifications_#{@user.id}"
+    dashboard_call   = broadcast_calls.find { |c| c[:stream] == dashboard_stream }
+
+    assert_not_nil dashboard_call,
+      "ダッシュボード用ストリーム '#{dashboard_stream}' へのブロードキャストが見つかりませんでした。\n" \
+      "実際に呼ばれたストリーム: #{broadcast_calls.map { |c| c[:stream] }.inspect}"
+
+    assert_equal "dashboard_reflection_completion_banner", dashboard_call[:target],
+      "target が 'dashboard_reflection_completion_banner' ではありませんでした"
+  end
 end

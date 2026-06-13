@@ -1,0 +1,170 @@
+<%# app/views/dashboards/_pmvv_completion_banner.html.erb %>
+<%#
+  ==============================================================================
+  G-7: ダッシュボード用 PMVV AI分析完了バナー パーシャル
+  ==============================================================================
+
+  【このファイルの役割】
+    AI分析が completed になったとき、PurposeAnalysisJob から
+    Turbo Stream の broadcast_replace_to によって呼び出されるパーシャル。
+    ダッシュボードを開いているユーザーにリアルタイムで完了を通知する。
+
+  【⚠️ 重要: 最外殻の div に id を付けてはいけない理由】
+    ダッシュボード側に <div id="dashboard_pmvv_completion_banner"></div> がある。
+    broadcast_replace_to の動作は「ターゲット id の要素を、
+    パーシャルの内容（このファイル全体）で丸ごと置き換える」。
+    もしパーシャルの最外殻 div にも同じ id を付けると、置き換え後に
+    DOM 上に id="dashboard_pmvv_completion_banner" が2つ存在してしまい、
+    HTML の仕様（id は1ページに1つだけ）に違反する。
+    Turbo Stream が次回も正しく動作するために、パーシャル内に id を付けない。
+
+  【⚠️ 重要: data-controller="dismissible" を内側 div に付ける理由】
+    Stimulus の hide() メソッドは this.element（= data-controller が付いた要素）に
+    hidden クラスを追加する設計になっている。
+    もし最外殻 div に data-controller を付けると、×で閉じたとき
+    id="dashboard_pmvv_completion_banner" ごと hidden になってしまう。
+    そうなると、次回 AI 分析が完了して broadcast_replace_to が
+    同じ id を target として置き換えようとしても、hidden クラスが引き継がれ、
+    バナーが二度と表示されなくなる（= 次回通知が届かないバグ）。
+    data-controller は内側のバナー本体 div のみに付け、
+    外側の id 付き div は常に hidden にならないよう保護する。
+
+  【ローカル変数】
+    user_purpose : UserPurpose インスタンス（必須）
+    ai_analysis  : AiAnalysis インスタンスまたは nil
+  ==============================================================================
+%>
+
+<%#
+  最外殻 div: id なし・data-controller なし
+  【役割】
+    この div がパーシャル全体の「入れ物」になる。
+    Turbo Stream が id="dashboard_pmvv_completion_banner" の位置に
+    この div の中身ごと差し込む（replace）。
+    id を付けないことで重複 id バグを防ぐ。
+%>
+<div>
+
+  <%#
+    user_purpose.completed? の条件チェック:
+    broadcast_dashboard_completion は completed のときのみ呼ばれるが、
+    万が一 nil や別状態が渡された場合の安全策として条件チェックを入れる。
+  %>
+  <% if user_purpose&.completed? %>
+
+    <%#
+      バナー本体: data-controller="dismissible" をここに付ける
+      【なぜ内側 div に付けるのか】
+        hide() は this.element（= data-controller の要素）に hidden クラスを付ける。
+        この div だけを hidden にすることで、外側の id 付き div は DOM に残り続ける。
+        次回 broadcast_replace_to が来たとき、外側の id 付き div を正しく発見できる。
+        ページをリロードすると hidden が消えるため、
+        ページを開き直した時に重複してバナーが出ることもない。
+
+      role="status":
+        スクリーンリーダーに「ここは状態通知エリア」と伝える ARIA ロール。
+      aria-live="polite":
+        Turbo Stream で動的に挿入されたこの要素を
+        スクリーンリーダーが現在の読み上げ終了後に自動で読み上げる。
+    %>
+    <div class="mb-6 flex items-center justify-between gap-3 px-4 py-3
+                bg-green-50 border border-green-300 rounded-xl"
+         data-controller="dismissible"
+         role="status"
+         aria-live="polite">
+
+      <%# 左側: アイコン + テキスト %>
+      <div class="flex items-center gap-3 min-w-0">
+        <%#
+          ✨ アイコン:
+          aria-hidden="true" → スクリーンリーダーに絵文字を読み上げさせない。
+          flex-shrink-0: テキストが長くてもアイコンが縮まないよう固定する。
+        %>
+        <span class="text-xl flex-shrink-0" aria-hidden="true">✨</span>
+        <div class="min-w-0">
+          <%#
+            メインメッセージ: ISSUE リストの要件「目標分析が完了しました」に準拠。
+            font-semibold text-green-800: 読みやすい濃い緑色のテキスト。
+          %>
+          <p class="text-sm font-semibold text-green-800">
+            目標分析が完了しました
+          </p>
+          <%#
+            サブテキスト: 補足情報を小さく表示する。
+            truncate: テキストが長い場合に「...」で省略してレイアウト崩れを防ぐ。
+          %>
+          <p class="text-xs text-green-600 truncate">
+            PMVVに基づいた習慣・タスクの提案が準備できました
+          </p>
+        </div>
+      </div>
+
+      <%# 右側: ボタンエリア %>
+      <div class="flex items-center gap-2 flex-shrink-0">
+
+        <%#
+          「結果を見る →」ボタン:
+          ai_result_user_purpose_path は routes.rb の
+            resource :user_purpose do member do get :ai_result end end
+          で定義されたパス（18番ページ）。
+          引数が不要な理由: user_purpose は singleton resource なので
+          current_user から自動的に特定される（コントローラー側で処理）。
+
+          【ai_analysis.present? の条件分岐】
+            AiAnalysis レコードが存在する場合のみ「結果を見る →」を表示する。
+            万が一 ai_analysis が nil の場合は PMVV 管理ページへ誘導する。
+        %>
+        <% if ai_analysis.present? %>
+          <%= link_to "結果を見る →",
+                      ai_result_user_purpose_path,
+                      class: "px-3 py-1.5 text-xs font-bold text-white bg-green-600
+                              rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap
+                              focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2" %>
+        <% else %>
+          <%= link_to "目標を確認する →",
+                      user_purpose_path,
+                      class: "px-3 py-1.5 text-xs font-bold text-white bg-green-600
+                              rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap
+                              focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2" %>
+        <% end %>
+
+        <%#
+          ×（閉じる）ボタン:
+          data-action="click->dismissible#hide":
+            「click イベントが発生したとき dismissible コントローラーの hide() を呼ぶ」
+            という Stimulus の標準的な記法。
+            イベント種類を明示することで意図が明確になり、
+            予期しないタイミングでの発火を防ぐ。
+
+          aria-label="通知を閉じる":
+            SVG アイコンは aria-hidden で読み上げ対象外にするため、
+            ボタン自体に説明テキストを付ける（アクセシビリティ要件）。
+        %>
+        <button type="button"
+                data-action="click->dismissible#hide"
+                class="p-1 rounded opacity-60 hover:opacity-100 transition-opacity
+                       focus:outline-none focus:ring-2 focus:ring-offset-1
+                       focus:ring-green-500 text-green-700"
+                aria-label="通知を閉じる">
+          <%#
+            ×アイコン（SVG）:
+            aria-hidden="true": スクリーンリーダーに読み上げさせない（装飾用）。
+            w-4 h-4: 16×16px。stroke-width="2": 適切な線の太さ。
+          %>
+          <svg class="w-4 h-4"
+               fill="none"
+               stroke="currentColor"
+               viewBox="0 0 24 24"
+               aria-hidden="true">
+            <path stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+
+      </div>
+    </div>
+  <% end %>
+
+</div>

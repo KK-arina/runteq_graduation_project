@@ -98,7 +98,8 @@ flowchart LR
 [![G-4 お休みモード設定](https://img.shields.io/badge/G--4_お休みモード設定-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/g4-rest-mode)
 [![G-5 CSVエクスポート](https://img.shields.io/badge/G--5_CSVエクスポート-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/G-5-csv-export)
 [![G-6 設定ページ拡張](https://img.shields.io/badge/G--6_設定ページ拡張-完了-10b981?style=flat-square)](https://github.com/KK-arina/runteq_graduation_project/tree/feature/g6-settings-page-expansion)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-52%2F68_ISSUE-f59e0b?style=flat-square)]()
+[![G-7 ダッシュボードバナー通知](https://img.shields.io/badge/G--7_ダッシュボードバナー通知-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/g7-dashboard-completion-banner)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-53%2F69_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -214,6 +215,7 @@ flowchart LR
 | #G-4 | お休みモード設定ページ（22番）・ストリーク維持 | 2026-06-06 | feature/g4-rest-mode |
 | #G-5 | CSVエクスポート機能（習慣記録・タスク・振り返り） | 2026-06-07 | feature/G-5-csv-export |
 | #G-6 | 設定ページ拡張（プロフィール編集・LINE/Google連携・タイムゾーン・AI使用状況）+ G-3通知設定修正 | 2026-06-10 | feature/g6-settings-page-expansion |
+| #G-7 | AI分析完了時のダッシュボードリアルタイム通知バナー（PMVV目標分析・振り返りAI分析） | 2026-06-13 | feature/g7-dashboard-completion-banner |
 
 <br>
 
@@ -5721,6 +5723,93 @@ G-5テスト: 10 runs, 39 assertions, 0 failures, 0 errors, 0 skips
 
 <br>
 
+### #G-7: AI分析完了時のダッシュボードリアルタイム通知バナー
+
+<br>
+
+**ブランチ:** `feature/g7-dashboard-completion-banner`<br>
+**完了日:** 2026-06-13<br>
+**概要:** PMVV目標分析・振り返りAI分析の完了時に、ダッシュボードを開いているユーザーへ<br>
+Turbo Stream でリアルタイム通知バナーを表示する機能を実装。<br>
+GoodJobのバックグラウンドジョブから `broadcast_replace_to` で配信し、<br>
+`dismissible_controller.js` による × 閉じ機能を提供する。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Job | `PurposeAnalysisJob` に `broadcast_dashboard_completion` メソッドを追加<br>completed 時のみ `dashboard_notifications_#{user_id}` ストリームにブロードキャスト |
+| Job | `WeeklyReflectionAnalysisJob` に `broadcast_dashboard_completion` を追加<br>ターゲット `dashboard_reflection_completion_banner` へ配信 |
+| View | `dashboards/_pmvv_completion_banner.html.erb` を新規作成（緑系・✨・`ai_result_user_purpose_path` リンク） |
+| View | `dashboards/_reflection_completion_banner.html.erb` を新規作成（青系・🔄・`weekly_reflection_path` リンク） |
+| View | `dashboards/index.html.erb` を修正<br>- `turbo_stream_from` を `@current_purpose` の if ブロック外に移動<br>- 空の `dashboard_pmvv_completion_banner` / `dashboard_reflection_completion_banner` div を追加<br>- completed 時は `analysis_status_banner` の中身を非表示（バナー重複解消） |
+| JS | `dismissible_controller.js` を新規作成（× ボタンでバナーを閉じる・`connect()` で hidden リセット対応） |
+| JS | `index.js` に `dismissible` コントローラーを手動登録 |
+| Test | `purpose_analysis_job_test.rb` に G-7 テスト3件を追加 |
+| Test | `weekly_reflection_analysis_job_test.rb` に G-7 テスト2件を追加 |
+
+<br>
+
+#### バナー仕様
+
+<br>
+
+| バナー | ターゲット ID | 色 | アイコン | 遷移先 |
+|:---|:---|:---|:---|:---|
+| PMVV目標分析完了 | `dashboard_pmvv_completion_banner` | 緑系 | ✨ | `ai_result_user_purpose_path` |
+| 振り返りAI分析完了 | `dashboard_reflection_completion_banner` | 青系 | 🔄 | `weekly_reflection_path(reflection)` |
+
+<br>
+
+#### 設計上の重要ポイント
+
+<br>
+
+**① `turbo_stream_from` は `@current_purpose` の if ブロック外に置く**
+
+<br>
+
+`@current_purpose` が nil（未入力ユーザー）の場合でも振り返りAI分析バナーを受信するため、<br>
+`turbo_stream_from "dashboard_notifications_#{current_user.id}"` を<br>
+`@current_purpose` の if ブロック外に配置する。<br>
+ブロック内に置くと PMVV 未設定ユーザーはチャンネルを購読できずバナーが届かない。
+
+<br>
+
+**② completed 時の analysis_status_banner は中身を非表示にする**
+
+<br>
+
+`analysis_status_banner`（PMVV完了バナー）と `dashboard_pmvv_completion_banner` が<br>
+同時に表示されるバナー重複を防ぐため、completed 状態では<br>
+`analysis_status_banner` の中身を ERB の条件分岐で非表示にする。
+
+<br>
+
+**③ パーシャルの最外殻 div には id を付けない**
+
+<br>
+
+`broadcast_replace_to` のターゲット id（`dashboard_pmvv_completion_banner`）は<br>
+ダッシュボードの空 div が持つ。パーシャルの最外殻 div に同名 id を付けると<br>
+Turbo Stream 差し替え後に id が二重になりバグの原因になる。
+
+<br>
+
+**④ dismissible_controller.js の connect() で hidden をリセット**
+
+<br>
+
+Turbo によってパーシャルが差し替えられた際、コントローラーの `connect()` が再度呼ばれる。<br>
+`connect()` で `element.removeAttribute("hidden")` を実行することで<br>
+以前 × で閉じていたバナーでも再配信時に正しく表示される。
+
+<br>
+
 ---
 
 <br>
@@ -8948,6 +9037,41 @@ validates :password, length: { minimum: 6 }, on: :create
 
 <br>
 
+### 132. `turbo_stream_from` はif条件ブロックの外に置く（#G-7）
+
+<br>
+
+ダッシュボードで `if @current_purpose` ブロックの内側に `turbo_stream_from` を配置すると、<br>
+PMVV未入力ユーザーはチャンネルを購読できず振り返りAI分析バナーも届かなくなる。<br>
+特定の変数が nil の場合でも購読が必要なチャンネルは、条件ブロックの外に置くこと。<br>
+```ruby
+<%# ❌ @current_purpose が nil のユーザーはチャンネルを購読できない %>
+<% if @current_purpose %>
+  <%= turbo_stream_from "dashboard_notifications_#{current_user.id}" %>
+<% end %>
+
+<%# ✅ 条件ブロックの外に移動 → 全ユーザーが購読できる %>
+<%= turbo_stream_from "dashboard_notifications_#{current_user.id}" %>
+<% if @current_purpose %>
+  ...
+<% end %>
+```
+
+<br>
+
+### 133. Turbo Stream 差し替え後のバナー重複は ERB 側で non-active コンテンツを非表示にする（#G-7）
+
+<br>
+
+PMVV分析完了バナーが `broadcast_replace_to` で届く前から、<br>
+`analysis_status_banner`（completed 状態の通常バナー）が表示されている場合、<br>
+両方が同時に表示されるバナー重複が発生する。<br>
+ERB の条件分岐で `analysis_state == :completed` のとき `analysis_status_banner` の<br>
+中身を `if !user_purpose.completed?` のように出力しない設計にすることで解消できる。<br>
+JavaScript で後から非表示にする方式より、サーバー側で制御する方が確実。
+
+<br>
+
 ---
 
 <br>
@@ -9501,8 +9625,8 @@ habitflow/
 │   │   ├── monthly_ai_count_reset_job.rb               # #A-3: 月次AI使用回数リセット
 │   │   ├── hello_good_job.rb                           # #A-3: 動作確認用（確認後削除可）
 │   │   ├── task_alarm_job.rb                           # #C-5 新規: アラーム通知ジョブ（スキップ条件5種・メール送信・ログ記録・atomic更新）
-│   │   ├── purpose_analysis_job.rb        # 変更（D-11）: 全プロバイダ失敗時に wait:60s で最大3回再エンキュー（reenqueue_count 引数）・JSONパース失敗時に raw_response を metadata(jsonb) に保存・discard_on AiClient::AuthError 追加
-│   │   ├── weekly_reflection_analysis_job.rb # 変更（E-3）: broadcast_completion private メソッド追加（AI分析完了時に weekly_reflections/index のバナーをリアルタイム更新）
+│   │   ├── weekly_reflection_analysis_job.rb # 変更（G-7）: broadcast_dashboard_completion メソッド追加（dashboard_notifications_#{user_id} ストリームへ配信）・broadcast_completion を復元
+│   │   ├── purpose_analysis_job.rb        # 変更（G-7）: broadcast_dashboard_completion メソッド追加（completed 時のみ実行）
 │   │   ├── weekly_report_job.rb           # 変更（G-3修正）: target_users に notification_enabled: true 条件を追加（マスタースイッチOFF時は週次レポートも送信しない）
 │   │   ├── rest_mode_expiry_job.rb        # G-4 新規: お休みモード期限切れ自動解除（毎日 JST AM4:10・update_all 一括処理）
 │   │   └── csv_export_job.rb                  # G-5 新規: 非同期CSV生成・email nilチェック・URL生成
@@ -9515,7 +9639,9 @@ habitflow/
 │   │   └── csv_export_mailer.rb               # G-5 新規: CSV生成完了メール（HTML+テキスト）
 │   └── views/
 │       ├── dashboards/                    # ダッシュボード画面（変更: 今週のタスクセクション追加 #C-1・タスク達成率セクション追加 #C-6）
-│       │   └── _habit_stat_row.html.erb           # #E-3 新規: ダッシュボード習慣達成率バーパーシャル（id="dashboard_habit_stat_#{habit.id}"・Turbo Stream置き換え対象）
+│       │   ├── _habit_stat_row.html.erb           # #E-3 新規: ダッシュボード習慣達成率バーパーシャル（id="dashboard_habit_stat_#{habit.id}"・Turbo Stream置き換え対象）
+        │   ├── _pmvv_completion_banner.html.erb    # G-7 新規: PMVV目標分析完了バナー（緑系・✨・ai_result_user_purpose_path）
+        │   └── _reflection_completion_banner.html.erb  # G-7 新規: 振り返りAI分析完了バナー（青系・🔄・weekly_reflection_path）
 │       ├── habits/                        # 習慣一覧・新規作成・編集・アーカイブ一覧画面（変更: チェック型週次目標非表示 #C-6）
 │       │   ├── ai_edit.html.erb           # #D-8 新規: 8番 AI経由限定習慣編集ページ（バナー付き・記録タイプ読み取り専用・除外日バリデーションエラー後保持・data: { turbo: false }）
 │       │   └── _habit_card.html.erb               # #E-3 新規: 習慣カード全体パーシャル（id="habit_record_#{habit.id}"・プログレスバー含む・Turbo Stream置き換え対象）
@@ -9725,7 +9851,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-732 runs, 1824 assertions, 0 failures, 0 errors, 0 skips
+728 runs, 1809 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
