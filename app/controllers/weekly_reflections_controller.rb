@@ -223,6 +223,26 @@ class WeeklyReflectionsController < ApplicationController
     end
   end
 
+# 【G-9 での変更内容】
+#   confirm_proposals に以下の4種類の新 type の処理を追加:
+#     - "habit_modify"  : 習慣の weekly_target 等を更新
+#     - "habit_delete"  : 習慣を論理削除（archived_at を設定）
+#     - "task_modify"   : タスクの priority 等を更新
+#     - "goal_review"   : DBへの変更なし（ユーザーをPMVVページへ誘導するのみ）
+#
+#   【既存の "habit" / "task" type の処理は変更しない（後方互換性）】
+#     G-9 完了条件「既存の "habit" / "task" type の動作が変わらない」を満たすため。
+#
+#   【マッチング戦略：名前の完全一致】
+#     habit_name / task_title で既存レコードを検索する。
+#     マッチしない場合はスキップ（エラーにしない）。
+#     理由: AIが若干異なる名前を返す可能性があり、その場合もアプリをクラッシュさせない。
+#
+#   【トランザクション境界】
+#     既存の transaction ブロック内に全処理を含める（A-7 トランザクション原則）。
+#     habit_modify / habit_delete / task_modify を transaction で包むことで、
+#     途中でエラーが起きても中途半端な状態にならない。
+
   def confirm_proposals
     reflection = current_user.weekly_reflections.find(params[:reflection_id])
 
@@ -231,20 +251,7 @@ class WeeklyReflectionsController < ApplicationController
       return
     end
 
-    # ── 二重送信防止チェック（修正版）────────────────────────────────────
-    #
-    # 【変更前の問題】
-    #   「週の範囲に ai_generated タスクが存在するか」で判定していたため、
-    #   目標管理（user_purposes#apply_proposals）から登録した ai_generated タスクも
-    #   「確定済み」と誤判定してしまい、振り返りからの確定ができなくなっていた。
-    #
-    # 【変更後の設計】
-    #   この振り返りに紐付く AiAnalysis の actions_json から生成されたタスクが
-    #   既に存在するかを判定する。
-    #   具体的には「この AiAnalysis が作成された時刻以降に作成された
-    #   ai_generated タスクが存在するか」で判定する。
-    #   AiAnalysis の created_at を基準にすることで、目標管理からの登録と
-    #   振り返りからの登録を区別できる。
+    # 二重送信防止チェック（変更なし）
     ai_analysis = reflection.ai_analyses.latest.where.not(actions_json: nil).first
 
     unless ai_analysis&.actions_json.present?
@@ -253,9 +260,6 @@ class WeeklyReflectionsController < ApplicationController
       return
     end
 
-    # ai_analysis が作成されてから確定ボタンを押すまでの間に
-    # 同じユーザーが ai_generated タスクを作成していれば「確定済み」とみなす。
-    # ai_analysis.created_at を基準にすることで目標管理からの登録と区別する。
     already_confirmed = current_user.tasks
                                     .where(ai_generated: true, task_type: :improve)
                                     .where('created_at > ?', ai_analysis.created_at)
@@ -267,16 +271,44 @@ class WeeklyReflectionsController < ApplicationController
       return
     end
 
-    # ── インデックスから提案を特定する ────────────────────────────────────
-    habit_indices = Array(params[:habit_indices]).map(&:to_i)
-    task_indices  = Array(params[:task_indices]).map(&:to_i)
+    # インデックスから提案を特定する
+    habit_indices        = Array(params[:habit_indices]).map(&:to_i)
+    task_indices         = Array(params[:task_indices]).map(&:to_i)
+    # ── G-9 追加: 新 type 用のインデックスを受け取る ────────────────────
+    habit_modify_indices = Array(params[:habit_modify_indices]).map(&:to_i)
+    habit_delete_indices = Array(params[:habit_delete_indices]).map(&:to_i)
+    task_modify_indices  = Array(params[:task_modify_indices]).map(&:to_i)
+    # goal_review は DB変更なし・インデックス不要（リンクで遷移するだけ）
+    # ──────────────────────────────────────────────────────────────────────
 
     all_actions   = ai_analysis.actions_json.map { |a| a.with_indifferent_access }
+
+    # 既存 type（後方互換性のため変更なし）
     habit_actions = all_actions.select { |a| a[:type] == "habit" }
     task_actions  = all_actions.select { |a| a[:type] == "task" }
 
-    saved_habit_count = 0
-    saved_task_count  = 0
+    # ── G-9 追加: 新 type 別に配列を分ける ───────────────────────────────
+    #
+    # 【なぜ type ごとに別配列にするのか】
+    #   各 type はそれぞれ異なる DB 操作を行うため、
+    #   個別の配列で管理することでコードが明確になる。
+    #   also_actions.select { |a| a[:type] == "habit_modify" } で
+    #   habit_modify のものだけを取り出す。
+    habit_modify_actions = all_actions.select { |a| a[:type] == "habit_modify" }
+    habit_delete_actions = all_actions.select { |a| a[:type] == "habit_delete" }
+    task_modify_actions  = all_actions.select { |a| a[:type] == "task_modify" }
+    # goal_review は表示だけ（DBへの変更なし）なので確定時の処理は不要
+    # ──────────────────────────────────────────────────────────────────────
+
+    saved_habit_count        = 0
+    saved_task_count         = 0
+    # ── G-9 追加: 変更件数カウンター ────────────────────────────────────
+    modified_habit_count     = 0
+    deleted_habit_count      = 0
+    modified_task_count      = 0
+    # ──────────────────────────────────────────────────────────────────────
+
+    goal_review_requested = params[:goal_review_requested] == "1"
 
     ApplicationRecord.transaction do
       if reflection.is_locked?
@@ -284,6 +316,7 @@ class WeeklyReflectionsController < ApplicationController
         Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] is_locked を false に更新: reflection_id=#{reflection.id}"
       end
 
+      # ── 既存: 新規習慣の追加（変更なし）──────────────────────────────
       habit_indices.each do |idx|
         proposal = habit_actions[idx]
         next unless proposal
@@ -297,6 +330,7 @@ class WeeklyReflectionsController < ApplicationController
         saved_habit_count += 1
       end
 
+      # ── 既存: 新規タスクの追加（変更なし）──────────────────────────────
       task_indices.each do |idx|
         proposal = task_actions[idx]
         next unless proposal
@@ -312,14 +346,158 @@ class WeeklyReflectionsController < ApplicationController
         task.save!
         saved_task_count += 1
       end
+
+      # ── G-9 追加: 既存習慣の修正（habit_modify）──────────────────────
+      #
+      # 【処理の流れ】
+      #   1. habit_modify_indices からチェックされた提案を取得する
+      #   2. proposal[:habit_name] で現在のユーザーの習慣を名前検索する
+      #   3. マッチした場合: proposal[:changes] の内容で update する
+      #   4. マッチしない場合: スキップ（エラーにしない）
+      #
+      # 【なぜ find_by を使うのか】
+      #   find だとマッチしない場合に RecordNotFound 例外が発生してロールバックする。
+      #   スキップしたい場合は find_by（マッチしない場合は nil を返す）が適切。
+      habit_modify_indices.each do |idx|
+        proposal = habit_modify_actions[idx]
+        next unless proposal
+
+        habit_name = proposal[:habit_name].to_s.strip
+        next if habit_name.blank?
+
+        # 【完全一致で検索する理由】
+        #   AIがプロンプトで「完全一致させてください」と指示しているため。
+        #   部分一致（LIKE検索）だと意図しない習慣を修正してしまうリスクがある。
+        habit = current_user.habits.active.find_by(name: habit_name)
+        if habit.nil?
+          Rails.logger.warn "[WeeklyReflectionsController#confirm_proposals] habit_modify: 習慣が見つかりません: #{habit_name}"
+          next
+        end
+
+        changes = proposal[:changes].to_h.with_indifferent_access
+
+        # 【更新可能なフィールドをホワイトリスト管理する理由】
+        #   AIが返す changes は自由なキーを含む可能性があるため、
+        #   意図しないカラムを更新しないようホワイトリストで制限する。
+        update_attrs = {}
+        if changes[:weekly_target].present?
+          wt = changes[:weekly_target].to_i
+          # 1〜7 の範囲に clamp して不正な値を防ぐ
+          update_attrs[:weekly_target] = wt.clamp(1, 7)
+        end
+
+        next if update_attrs.empty?
+
+        habit.update!(update_attrs)
+        modified_habit_count += 1
+        Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] habit_modify 適用: #{habit_name} → #{update_attrs.inspect}"
+      end
+
+      # ── G-9 追加: 既存習慣の削除（habit_delete）──────────────────────
+      #
+      # 【論理削除（soft_delete）を使う理由】
+      #   物理削除すると「過去の記録」も消えてしまう。
+      #   deleted_at を設定する論理削除なら過去データが残り、
+      #   振り返り詳細ページでも正確な記録が表示できる。
+      #
+      # 【アーカイブ（archive!）ではなく soft_delete を使う理由】
+      #   ISSUEリスト G-9 に「習慣の削除提案」と記載されており、
+      #   「卒業した習慣→アーカイブ」ではなく「不要な習慣→削除」の操作として実装する。
+      #   AIが判断した「削除すべき習慣」はユーザーが確認してチェックしてから実行するため
+      #   誤操作リスクは低いが、soft_delete（deleted_at設定）にすることで
+      #   万が一の場合にもDBからデータが残る。
+      habit_delete_indices.each do |idx|
+        proposal = habit_delete_actions[idx]
+        next unless proposal
+
+        habit_name = proposal[:habit_name].to_s.strip
+        next if habit_name.blank?
+
+        habit = current_user.habits.active.find_by(name: habit_name)
+        if habit.nil?
+          Rails.logger.warn "[WeeklyReflectionsController#confirm_proposals] habit_delete: 習慣が見つかりません: #{habit_name}"
+          next
+        end
+
+        habit.soft_delete
+        deleted_habit_count += 1
+        Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] habit_delete 適用: #{habit_name}"
+      end
+
+      # ── G-9 追加: 既存タスクの修正（task_modify）────────────────────
+      #
+      # 【処理の流れ】
+      #   1. task_modify_indices からチェックされた提案を取得する
+      #   2. proposal[:task_title] で現在のユーザーのタスクを名前検索する
+      #   3. マッチした場合: proposal[:changes] の内容で update する
+      #   4. マッチしない場合: スキップ
+      task_modify_indices.each do |idx|
+        proposal = task_modify_actions[idx]
+        next unless proposal
+
+        task_title = proposal[:task_title].to_s.strip
+        next if task_title.blank?
+
+        task = current_user.tasks.active.not_archived.find_by(title: task_title)
+        if task.nil?
+          Rails.logger.warn "[WeeklyReflectionsController#confirm_proposals] task_modify: タスクが見つかりません: #{task_title}"
+          next
+        end
+
+        changes = proposal[:changes].to_h.with_indifferent_access
+
+        # priority の変更のみ許可（ホワイトリスト）
+        # 【なぜ priority だけなのか】
+        #   ISSUEリスト G-9 の要件に「優先度等の変更」と記載されており、
+        #   最初のリリースでは priority の変更のみをサポートする。
+        #   due_date・estimated_hours 等の変更は将来の拡張で対応。
+        update_attrs = {}
+        if changes[:priority].present?
+          new_priority = changes[:priority].to_s.downcase
+          if %w[must should could].include?(new_priority)
+            update_attrs[:priority] = new_priority
+          end
+        end
+
+        next if update_attrs.empty?
+
+        task.update!(update_attrs)
+        modified_task_count += 1
+        Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] task_modify 適用: #{task_title} → #{update_attrs.inspect}"
+      end
+
+      # goal_review は DB 変更なし: ここでは何もしない
+      # ユーザーは「目標管理ページへ」リンクから自分で遷移する
     end
 
-    total = saved_habit_count + saved_task_count
-    flash[:notice] = total > 0 ?
-      "来週の計画を確定しました！習慣#{saved_habit_count}件・タスク#{saved_task_count}件を追加しました🎉" :
-      "来週の計画を確定しました！（提案の選択なし）"
+    # ── フラッシュメッセージの組み立て ─────────────────────────────────
+    #
+    # 各操作の件数をまとめてユーザーにフィードバックする。
+    # 何も操作しなかった場合でもロック解除は完了しているため
+    # 「確定しました」メッセージを表示する。
+    message_parts = []
+    message_parts << "習慣#{saved_habit_count}件を追加"    if saved_habit_count > 0
+    message_parts << "タスク#{saved_task_count}件を追加"   if saved_task_count > 0
+    message_parts << "習慣#{modified_habit_count}件を修正" if modified_habit_count > 0
+    message_parts << "習慣#{deleted_habit_count}件を削除"  if deleted_habit_count > 0
+    message_parts << "タスク#{modified_task_count}件を修正" if modified_task_count > 0
 
-    redirect_to dashboard_path
+    if message_parts.any?
+      flash[:notice] = "来週の計画を確定しました！#{message_parts.join('・')}しました🎉"
+    else
+      flash[:notice] = "来週の計画を確定しました！（変更なし）"
+    end
+
+    # goal_review がリクエストされていた場合は目標管理ページへ誘導する
+    # 【なぜ goal_review_requested フラグを使うのか】
+    #   DB変更はないが「ユーザーがPMVV見直しを希望した」という意思を
+    #   フォームの hidden_field で受け取る設計にする。
+    #   goal_review チェック + 確定 → 確定後に user_purpose_path へリダイレクト
+    if goal_review_requested
+      redirect_to user_purpose_path, notice: flash[:notice] + " 目標の見直しをしましょう。"
+    else
+      redirect_to dashboard_path
+    end
 
   rescue ActiveRecord::RecordNotFound
     redirect_to weekly_reflections_path, alert: "振り返りが見つかりませんでした。"
@@ -387,6 +565,11 @@ class WeeklyReflectionsController < ApplicationController
                      .latest
                      .order(created_at: :desc)
                      .first
+
+    # G-9 追加: AI提案モーダルに user_purpose を渡すために取得する
+    # show ページに _ai_proposal_modal パーシャルを render するため必要。
+    # nil でも問題ない（user_purpose が nil の場合は goal_review セクションが非表示になる）
+    @current_purpose = UserPurpose.current_for(current_user)
   end
 
   private

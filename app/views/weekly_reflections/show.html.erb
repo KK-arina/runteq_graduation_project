@@ -434,7 +434,7 @@
             <span class="text-sm font-bold text-gray-700">💬 総合コメント</span>
           </div>
           <div class="text-gray-700 text-sm leading-relaxed bg-indigo-50 rounded-xl p-4">
-            <%= simple_format(@ai_analysis.analysis_comment) %>
+            <%= simple_format(@ai_analysis.analysis_comment.to_s.strip) %>
           </div>
         </div>
 
@@ -447,7 +447,7 @@
               <span class="text-sm font-bold text-gray-700">🔍 根本原因</span>
             </div>
             <div class="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-xl p-4">
-              <%= simple_format(@ai_analysis.root_cause) %>
+              <%= simple_format(@ai_analysis.root_cause.to_s.strip) %>
             </div>
           </div>
         <% end %>
@@ -471,7 +471,7 @@
               <span class="text-sm font-bold text-gray-700">🎯 コーチングメッセージ</span>
             </div>
             <div class="text-gray-700 text-sm leading-relaxed bg-green-50 rounded-xl p-4">
-              <%= simple_format(@ai_analysis.coaching_message) %>
+              <%= simple_format(@ai_analysis.coaching_message.to_s.strip) %>
             </div>
           </div>
         <% end %>
@@ -519,9 +519,40 @@
     <div class="mb-8">
       <%= render "shared/ai_disclaimer" %>
     </div>
+
+    <%#
+      G-9 追加: AI提案確認ボタン（show ページから直接モーダルを開く）
+      【なぜ weekly_reflections_path に遷移しないのか】
+        一覧ページへ移動するだけではモーダルが自動で開かない。
+        show ページ内に _ai_proposal_modal パーシャルを render し、
+        window.dispatchEvent で 'open-ai-proposal-modal' を発火させることで
+        一覧ページと同じモーダルをページ遷移なしで直接開ける。
+      【@weekly_reflection を渡す理由】
+        confirm_proposals POST に必要な reflection_id を
+        _ai_proposal_modal_content が hidden_field_tag で送信するため。
+    %>
+    <% if @ai_analysis&.actions_json.present? %>
+      <%= render "weekly_reflections/ai_proposal_modal",
+            ai_analysis:  @ai_analysis,
+            user_purpose: @current_purpose,
+            reflection:   @weekly_reflection %>
+
+      <div class="mb-6 bg-indigo-50 border border-indigo-200 rounded-xl p-4 text-center">
+        <p class="text-sm text-indigo-800 font-medium mb-3">
+          🤖 来週に向けたAI提案が準備できています
+        </p>
+        <button type="button"
+                onclick="window.dispatchEvent(new CustomEvent('open-ai-proposal-modal'))"
+                class="inline-flex items-center justify-center gap-2 px-6 py-3
+                       bg-indigo-600 text-white rounded-xl text-sm font-bold
+                       hover:bg-indigo-700 transition-colors
+                       focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+          ✨ 来週のAI提案を確認する →
+        </button>
+      </div>
+    <% end %>
   <% end %>
   <%# セクション⑤ ここまで %>
-
   <%# フッターボタン %>
   <div class="flex flex-col sm:flex-row gap-3 justify-between">
     <%= link_to "← 振り返り一覧", weekly_reflections_path,

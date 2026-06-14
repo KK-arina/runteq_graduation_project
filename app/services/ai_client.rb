@@ -204,7 +204,7 @@ class AiClient
         ],
         generationConfig: {
           temperature:     0.7,
-          maxOutputTokens: 4096
+          maxOutputTokens: 8192
         }
       }
     end
@@ -251,7 +251,7 @@ class AiClient
           }
         ],
         temperature: 0.7,
-        max_tokens:  4096
+        max_tokens:  8192
       }
     end
 
