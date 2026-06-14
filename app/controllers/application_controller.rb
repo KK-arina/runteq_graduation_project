@@ -434,4 +434,115 @@ class ApplicationController < ActionController::Base
     # URI.parse が例外を発生させた場合（不正な URI）は安全でない
     false
   end
+
+  # ============================================================
+  # H-1 追加: Bottom Navigation バッジ用データ取得ヘルパーメソッド
+  # ============================================================
+  #
+  # 【設計方針】
+  #   before_action にすると全ページで無条件にDBクエリが走る。
+  #   helper_method として登録し、ビューで Bottom Navigation が
+  #   レンダリングされるときだけ呼び出す設計にする。
+  #   ||= でメモ化しているため、同一リクエスト内で複数回呼ばれても
+  #   DBアクセスは1回だけ（パフォーマンス保護）。
+  # ============================================================
+
+  # bn_must_incomplete_count
+  # ----------------------------------------------------------
+  # 今週の未完了 Must タスクの件数を返す。
+  # タスクタブに赤い数字バッジとして表示する。
+  #
+  # 【スコープ解説】
+  #   .active       → deleted_at が nil（論理削除されていない）
+  #   .not_archived → status が archived(3) 以外
+  #   .must         → priority が must(0)
+  #   .where.not    → done(2) と archived(3) を除外 = 純粋な未完了のみ
+  #
+  # 【未ログイン時のガード節】
+  #   logged_in? が false の場合（LP・ログイン画面）は
+  #   current_user が nil のため、即座に 0 を返してエラーを防ぐ。
+  # ----------------------------------------------------------
+  def bn_must_incomplete_count
+    return 0 unless logged_in?
+
+    # ||= でメモ化: 同一リクエスト内で何度呼ばれても SQL は1回だけ実行される
+    @bn_must_incomplete_count ||= current_user.tasks
+                                              .active
+                                              .not_archived
+                                              .must
+                                              .where.not(
+                                                status: [
+                                                  Task.statuses[:done],
+                                                  Task.statuses[:archived]
+                                                ]
+                                              )
+                                              .count
+  end
+  helper_method :bn_must_incomplete_count
+
+  # bn_ai_analysis_count
+  # ----------------------------------------------------------
+  # 【H-1 修正】PMVV分析と週次振り返り分析の両方を集計して
+  # グラフタブのバッジに表示する合計件数（Integer）を返す。
+  #
+  # 【変更前: bn_ai_analysis_completed?（bool返却）の問題点】
+  #   Rubyでは false と nil 以外はすべて truthy（真）のため、
+  #   数値の 0 を返す bool メソッドを作ると
+  #   <% if bn_ai_analysis_completed? %> が 0 件でも真になってしまう。
+  #   メソッド名末尾の ? を外し、Integer を返すメソッドに変更する。
+  #
+  # 【戻り値の仕様】
+  #   PMVV分析完了:              +1
+  #   直近7日以内の振り返りAI完了: +件数
+  #   いずれも未完了:            0（バッジ非表示）
+  #
+  # 【週次振り返りを7日以内に限定する理由】
+  #   古い振り返りの分析完了でバッジが出続けるのを防ぐ。
+  #   「最近完了した分析」のみをユーザーに通知する設計。
+  #
+  # 【joins(:weekly_reflection) を使う理由】
+  #   ai_analyses テーブルだけでは「どのユーザーの振り返りか」が
+  #   わからないため、weekly_reflections テーブルを JOIN して
+  #   user_id で絞り込む。
+  #   belongs_to :weekly_reflection が ai_analysis.rb で定義済みのため
+  #   joins が使える（確認済み）。
+  #
+  # 【analysis_type: AiAnalysis.analysis_types[:weekly_reflection] の確認】
+  #   ai_analysis.rb の enum に weekly_reflection: 0 が定義済み（確認済み）。
+  #
+  # 【.where.not(actions_json: nil) を使う理由】
+  #   actions_json が nil = AI分析がスキップ or パース失敗したレコード。
+  #   正常に完了した分析のみをカウントするため nil を除外する。
+  #   actions_json カラムは db/schema.rb に存在することを確認済み。
+  # ----------------------------------------------------------
+  def bn_ai_analysis_count
+    return 0 unless logged_in?
+
+    @bn_ai_analysis_count ||= begin
+      count = 0
+
+      # ── PMVV分析の完了チェック ──
+      # UserPurpose.current_for: user_purpose.rb 定義済みのクラスメソッド
+      # completed?: analysis_state == 'completed' の場合に true（enum定義済み）
+      # &. でpurposeがnilの場合のNoMethodErrorを防ぐ
+      purpose = UserPurpose.current_for(current_user)
+      count += 1 if purpose&.completed?
+
+      # ── 週次振り返りAI分析の完了チェック ──
+      # 直近7日以内に作成された振り返りAI分析レコードを集計する
+      recent_count = AiAnalysis
+        .joins(:weekly_reflection)
+        .where(
+          weekly_reflections: { user_id: current_user.id },
+          analysis_type: AiAnalysis.analysis_types[:weekly_reflection]
+        )
+        .where("ai_analyses.created_at >= ?", 7.days.ago)
+        .where.not(actions_json: nil)
+        .count
+
+      count += recent_count
+      count
+    end
+  end
+  helper_method :bn_ai_analysis_count
 end
