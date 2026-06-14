@@ -1,0 +1,293 @@
+<%#
+  app/views/shared/_bottom_navigation.html.erb
+  ==============================================================================
+  【H-1 追加】スマートフォン専用 Bottom Navigation コンポーネント
+  ==============================================================================
+  【役割】
+    モバイル（768px 未満）でのみ表示する画面下部のナビゲーションバー。
+    PC・タブレット（768px 以上）では Tailwind の md:hidden により完全非表示。
+
+  【表示条件】
+    logged_in? が true のユーザーのみ表示する。
+    LP・ログイン・登録・エラーページでは非表示。
+
+  【ルーティング確認済み（routes.rb・rails routes コマンドで確認）】
+    root_path        → pages#index
+    habits_path      → habits#index
+    tasks_path       → tasks#index
+    user_purpose_path → user_purposes#show（単数形 resource :user_purpose）
+    settings_path    → settings#show
+    ※ user_purposes_path は存在しない（単数形のため）→ 絶対に使わないこと
+
+  【バッジ仕様】
+    ホーム:   locked? が true → 赤い「!」ドット（PDCAロック中・animate-pulse で点滅）
+    タスク:   bn_must_incomplete_count > 0 → 赤い数字バッジ（99件超は「99+」）
+    グラフ:   bn_ai_analysis_count > 0 → 青い数字バッジ（PMVV+振り返りAI分析の合計件数）
+
+  【アクティブタブ判定】
+    controller_name で現在のコントローラーを判定する。
+    設定タブのみ settings / user_settings 両方でアクティブにする
+    （通知設定・お休みモードページは user_settings コントローラー）。
+
+  【H-4（グラフページ）実装後の差し替え箇所】
+    タブ4（グラフ）のリンク先を user_purpose_path → analytics_path に変更する。
+    controller_name の判定 'analytics' はそのまま使える。
+
+  【アクセシビリティ対応】
+    aria-label: t() で ja.yml の shared.bottom_navigation 以下から取得
+    aria-current="page": アクティブタブに付与（スクリーンリーダーに現在位置を伝える）
+    aria-hidden="true": SVG アイコンはスクリーンリーダーに読ませない
+
+  【iOS SafeArea 対応】
+    style="padding-bottom: env(safe-area-inset-bottom);" により
+    iPhone のホームインジケーター（画面下の黒いバー）との重複を防ぐ。
+    Tailwind に組み込みユーティリティがないため style 属性で直接指定する。
+%>
+
+<%# ログイン済みユーザーのみ Bottom Navigation を表示する %>
+<% if logged_in? %>
+
+  <%#
+    ナビゲーションバー本体の Tailwind クラス解説:
+      fixed bottom-0 left-0 right-0:
+        画面の最下部に固定配置。スクロールしても常に画面下部に追従する。
+      md:hidden:
+        Tailwind の responsive prefix。768px 以上の画面で完全非表示。
+      h-16:
+        高さ 64px（= 16 × 4px）。WCAG 2.1 基準の最小タップ領域 44px をクリア。
+      bg-white border-t border-gray-200:
+        白背景に薄いグレーの上ボーダー。コンテンツとの境界線。
+      shadow-lg:
+        ナビゲーションに影をつけてコンテンツの上に浮かせて見せる。
+      z-50:
+        z-index: 50。yield :modals より前に描画されるため、モーダルの裏側に回り込まない。
+      flex items-stretch:
+        5タブを横並びにし、各タブの高さをナビゲーション全体の高さに合わせる。
+  %>
+  <nav class="fixed bottom-0 left-0 right-0 md:hidden h-16
+              bg-white border-t border-gray-200 shadow-lg z-50
+              flex items-stretch"
+       style="padding-bottom: env(safe-area-inset-bottom);"
+       aria-label="<%= t('shared.bottom_navigation.aria_label') %>"
+       role="navigation">
+
+    <%#
+      各タブボタンの共通クラス解説:
+        flex-1:         5タブが親の横幅を均等に分割する
+        flex flex-col items-center justify-center: アイコン＋テキストを縦中央揃え
+        relative:       バッジを絶対配置するための基準点
+        gap-0.5:        アイコンとラベルの間の余白（2px）
+        min-w-0:        flex アイテムが正しく縮小できるようにする
+        transition-colors: タップ時の色変化をアニメーションで滑らかにする
+    %>
+
+    <%# ── タブ 1: ホーム ────────────────────────────────────── %>
+    <%#
+      アクティブ判定: controller_name == 'dashboards'
+      routes.rb で root → pages#index だが、ログイン後は DashboardsController
+      にリダイレクトされる。ダッシュボード画面では dashboards が controller_name になる。
+    %>
+    <% is_home_active = (controller_name == 'dashboards') %>
+
+    <%= link_to root_path,
+          class: "flex-1 flex flex-col items-center justify-center
+                  relative gap-0.5 min-w-0 transition-colors
+                  #{is_home_active ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}",
+          aria: {
+            current: is_home_active ? 'page' : nil,
+            label:   t('shared.bottom_navigation.tabs.home.aria_label')
+          } do %>
+
+      <%#
+        ロック中バッジ（赤い「!」ドット）
+          absolute top-1 right-3: タブ右上に絶対配置
+          w-4 h-4: 16px × 16px（rounded-full で円形になる）
+          bg-red-500 text-white: 赤背景に白文字
+          text-[9px]: Tailwind 任意値指定で極小フォント
+          animate-pulse: ロック中の緊急度を伝えるため点滅アニメーション
+      %>
+      <% if locked? %>
+        <span class="absolute top-1 right-3
+                     w-4 h-4 bg-red-500 text-white rounded-full
+                     text-[9px] font-bold
+                     flex items-center justify-center
+                     animate-pulse"
+              aria-label="<%= t('shared.bottom_navigation.tabs.home.badge_aria_label') %>">
+          !
+        </span>
+      <% end %>
+
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+      </svg>
+
+      <span class="text-[10px] font-medium leading-none">
+        <%= t('shared.bottom_navigation.tabs.home.label') %>
+      </span>
+
+    <% end %>
+
+    <%# ── タブ 2: 習慣 ────────────────────────────────────── %>
+    <%# アクティブ判定: controller_name == 'habits'（一覧・新規・編集・アーカイブ一覧すべて含む） %>
+    <% is_habits_active = (controller_name == 'habits') %>
+
+    <%= link_to habits_path,
+          class: "flex-1 flex flex-col items-center justify-center
+                  relative gap-0.5 min-w-0 transition-colors
+                  #{is_habits_active ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}",
+          aria: {
+            current: is_habits_active ? 'page' : nil,
+            label:   t('shared.bottom_navigation.tabs.habits.aria_label')
+          } do %>
+
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+      </svg>
+
+      <span class="text-[10px] font-medium leading-none">
+        <%= t('shared.bottom_navigation.tabs.habits.label') %>
+      </span>
+
+    <% end %>
+
+    <%# ── タブ 3: タスク ────────────────────────────────────── %>
+    <%#
+      アクティブ判定: controller_name == 'tasks'
+      バッジ: bn_must_incomplete_count > 0 の場合のみ赤数字バッジを表示。
+              0件の場合は表示しない（ゼロバッジはノイズになる）。
+    %>
+    <% is_tasks_active = (controller_name == 'tasks') %>
+    <% must_count = bn_must_incomplete_count %>
+
+    <%= link_to tasks_path,
+          class: "flex-1 flex flex-col items-center justify-center
+                  relative gap-0.5 min-w-0 transition-colors
+                  #{is_tasks_active ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}",
+          aria: {
+            current: is_tasks_active ? 'page' : nil,
+            label:   t('shared.bottom_navigation.tabs.tasks.aria_label')
+          } do %>
+
+      <%#
+        Mustタスク未完了バッジ（赤い数字バッジ）
+          min-w-[16px]: 2桁でも楕円形に広がるよう最小幅を指定
+          px-1:         横余白で1桁・2桁ともバランスよく見せる
+          99件超は '99+' 表示（数字がUI幅を超えるのを防ぐ）
+      %>
+      <% if must_count > 0 %>
+        <span class="absolute top-1 right-2
+                     min-w-[16px] h-4 bg-red-500 text-white rounded-full
+                     text-[9px] font-bold px-1
+                     flex items-center justify-center"
+              aria-label="<%= t('shared.bottom_navigation.tabs.tasks.badge_aria_label', count: must_count) %>">
+          <%= must_count > 99 ? '99+' : must_count %>
+        </span>
+      <% end %>
+
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+
+      <span class="text-[10px] font-medium leading-none">
+        <%= t('shared.bottom_navigation.tabs.tasks.label') %>
+      </span>
+
+    <% end %>
+
+    <%# ── タブ 4: グラフ ────────────────────────────────────── %>
+    <%#
+      アクティブ判定: controller_name == 'analytics'
+      【H-4 実装前の暫定対応】
+        analytics_path は H-4 実装後に存在する。
+        現時点では user_purpose_path（routes.rb 確認済み・単数形）を暫定リンク先にする。
+        H-4 実装（AnalyticsController 作成）後に以下を差し替える:
+          リンク先: user_purpose_path → analytics_path
+          controller_name の判定: 'analytics' のままでよい
+
+      バッジ: bn_ai_analysis_count > 0 の場合に青い数字バッジを表示。
+              PMVV分析完了(+1) + 直近7日以内の振り返りAI分析完了件数の合計。
+    %>
+    <% is_analytics_active = (controller_name == 'analytics') %>
+    <%#
+      bn_ai_analysis_count は Integer を返す（0以上）。
+      Rubyでは 0 も truthy のため、明示的に > 0 で判定する。
+    %>
+    <% ai_count = bn_ai_analysis_count %>
+
+    <%= link_to user_purpose_path,
+          class: "flex-1 flex flex-col items-center justify-center
+                  relative gap-0.5 min-w-0 transition-colors
+                  #{is_analytics_active ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}",
+          aria: {
+            current: is_analytics_active ? 'page' : nil,
+            label:   t('shared.bottom_navigation.tabs.analytics.aria_label')
+          } do %>
+
+      <%#
+        ai_count > 0 のときのみバッジを表示する。
+        0 はRubyでtruthyのため if ai_count ではなく if ai_count > 0 と明示する。
+        9件超は '9+' 表示でUI崩れを防ぐ。
+      %>
+      <% if ai_count > 0 %>
+        <span class="absolute top-1 right-2
+                     min-w-[16px] h-4 bg-blue-500 text-white rounded-full
+                     text-[9px] font-bold px-1
+                     flex items-center justify-center"
+              aria-label="<%= t('shared.bottom_navigation.tabs.analytics.badge_aria_label') %>">
+          <%= ai_count > 9 ? '9+' : ai_count %>
+        </span>
+      <% end %>
+
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+      </svg>
+
+      <span class="text-[10px] font-medium leading-none">
+        <%= t('shared.bottom_navigation.tabs.analytics.label') %>
+      </span>
+
+    <% end %>
+
+    <%# ── タブ 5: 設定 ────────────────────────────────────── %>
+    <%#
+      アクティブ判定: settings または user_settings コントローラー
+        routes.rb で通知設定・お休みモードは user_settings コントローラーに
+        マッピングされているため、両方でアクティブにする必要がある。
+        controller_name.in?([...]) で複数コントローラーをまとめて判定する。
+    %>
+    <% is_settings_active = controller_name.in?(%w[settings user_settings]) %>
+
+    <%= link_to settings_path,
+          class: "flex-1 flex flex-col items-center justify-center
+                  relative gap-0.5 min-w-0 transition-colors
+                  #{is_settings_active ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}",
+          aria: {
+            current: is_settings_active ? 'page' : nil,
+            label:   t('shared.bottom_navigation.tabs.settings.aria_label')
+          } do %>
+
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+           aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+      </svg>
+
+      <span class="text-[10px] font-medium leading-none">
+        <%= t('shared.bottom_navigation.tabs.settings.label') %>
+      </span>
+
+    <% end %>
+
+  </nav>
+
+<% end %>

@@ -317,7 +317,13 @@
           フォーカスは元の位置に留まり、次に Tab を押すと
           スキップしたはずのナビゲーションに戻ってしまう。
     %>
-    <main id="main-content" class="flex-1" tabindex="-1">
+    <%#
+      pb-16 md:pb-0:
+        pb-16 → モバイル表示時に下余白 64px を確保して Bottom Navigation に
+                コンテンツが隠れないようにする（BN の高さ h-16=64px と一致）
+        md:pb-0 → PC・タブレット（768px以上）は BN が非表示のため余白不要
+    %>
+    <main id="main-content" class="flex-1 pb-16 md:pb-0" tabindex="-1">
       <%= yield %>
       <%# ── C-3 追加: Turbo Stream フラッシュ通知の挿入先 ──────────────────── %>
       <%#
@@ -353,6 +359,19 @@
         ここに展開する。
         習慣が5件あれば5つ分のモーダルHTMLがここにまとめて出力される。
     %>
+
+    <%#
+      H-1 追加: Bottom Navigation（モバイル専用）のレンダリング
+      ============================================================
+      【なぜ yield :modals の直前に置くのか】
+        position: fixed 要素は HTML 構造の最下層（body 直前）に置くことで、
+        親要素の transform / transition CSS プロパティの影響を受けずに
+        正しく画面固定表示が機能する。
+        z-50 の BN より高い z-index を持つモーダルが BN の前面に表示されるよう
+        yield :modals より前に描画する順序にする。
+    %>
+    <%= render "shared/bottom_navigation" %>
+
     <%= yield :modals %>
 
   </body>
