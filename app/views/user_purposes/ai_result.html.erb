@@ -119,13 +119,11 @@
       <h2 class="text-base font-bold text-violet-800 mb-3">
         🎯 AI分析コメント
       </h2>
-      <%#
-        whitespace-pre-wrap: AI が改行を含むテキストを返した場合に
-        そのまま表示する。
-      %>
-      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-        <%= @ai_analysis.analysis_comment %>
-      </p>
+      <%# 【なぜ同じ行にするのか】
+          whitespace-pre-wrap は空白・改行をそのまま表示する。
+          <p> タグの後に改行+インデントがあると、その空白がテキスト先頭に表示される。
+          開始タグと内容を同じ行にすることでERBインデントによる先頭空白が発生しない。%>
+      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"><%= @ai_analysis.analysis_comment.to_s.strip %></p>
     </div>
   <% end %>
 
@@ -140,9 +138,7 @@
       <h2 class="text-base font-bold text-orange-800 mb-3">
         🔍 真の原因（Why×3）
       </h2>
-      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-        <%= @ai_analysis.root_cause %>
-      </p>
+      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"><%= @ai_analysis.root_cause.to_s.strip %></p>
     </div>
   <% end %>
 
@@ -157,9 +153,7 @@
       <h2 class="text-base font-bold text-green-800 mb-3">
         💪 コーチングメッセージ
       </h2>
-      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-        <%= @ai_analysis.coaching_message %>
-      </p>
+      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"><%= @ai_analysis.coaching_message.to_s.strip %></p>
     </div>
   <% end %>
 

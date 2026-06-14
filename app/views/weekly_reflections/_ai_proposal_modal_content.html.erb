@@ -1,23 +1,19 @@
 <%# app/views/weekly_reflections/_ai_proposal_modal_content.html.erb %>
 <%#
   ==============================================================================
-  14-A モーダルのコンテンツ部分（E-3 修正版）
+  14-A モーダルのコンテンツ部分（G-9 更新版）
   ==============================================================================
 
-  【E-3修正での変更内容】
-    ① habit_indices[] / task_indices[] のインデックスズレバグを修正
-       変更前: all_actions.each_with_index で全体index → 型別配列でズレる
-       変更後: habit/task 別に独立したカウンタ変数で index を管理する
+  【G-9 での変更内容】
+    ① habit_modify / habit_delete / task_modify / goal_review の4種類の
+       新セクションを追加する。
+    ② 各セクションは対応する actions が0件の場合は非表示にする（余白が出ない）。
+    ③ habit_modify_indices[] / habit_delete_indices[] / task_modify_indices[] /
+       goal_review_requested の hidden/checkbox フィールドを追加する。
+    ④ 変更サマリーに新 type の件数を追記する。
+    ⑤ 既存の "habit" / "task" type の表示・送信処理は変更しない（後方互換性）。
 
-    ② reflection_id を hidden_field で送信する設計に変更
-       変更前: controller 側で find_latest_completed_reflection() を使い不安定
-       変更後: ビュー側でDBの reflection.id を hidden_field_tag で確実に送信
-
-    ③ data-task-card 属性で提案カードを識別
-       変更前: CSS クラス名（.border.border-gray-200...）で closest() → 脆い
-       変更後: data-task-card 属性で DOM を識別 → Tailwind クラス変更に強い
-
-  【受け取るローカル変数】
+  【受け取るローカル変数（変更なし）】
     ai_analysis  : AiAnalysis インスタンス
     user_purpose : UserPurpose インスタンス or nil
     reflection   : WeeklyReflection インスタンス（reflection_id 送信用・必須）
@@ -26,27 +22,29 @@
 %>
 
 <%#
-  ── actions_json を変換する ─────────────────────────────────────────────────
+  ── actions_json を type 別に分類する ───────────────────────────────────────
   with_indifferent_access: 文字列キーとシンボルキーの両方でアクセスできるようにする。
-  DB から読み出した JSON は文字列キー（"type", "title"...）になるため、
-  この変換でシンボルキー（:type, :title）でもアクセス可能になる。
+  DB から読み出した JSON は文字列キーになるため、この変換が必要。
 %>
-<% all_actions   = (ai_analysis.actions_json || []).map { |a| a.with_indifferent_access } %>
+<% all_actions = (ai_analysis.actions_json || []).map { |a| a.with_indifferent_access } %>
+
+<%# 既存 type（後方互換性のため変更なし）%>
 <% habit_actions = all_actions.select { |a| a[:type] == "habit" } %>
 <% task_actions  = all_actions.select { |a| a[:type] == "task" } %>
 
-<%#
-  ── タイトルIDをモバイル/デスクトップで切り替える ─────────────────────────
-  aria-labelledby で参照する ID と実際の h2 要素の ID を一致させる。
-  デスクトップ: "ai-proposal-modal-title"
-  スマホ:       "ai-proposal-modal-title-mobile"
-%>
+<%# G-9 追加: 新 type 別に配列を分ける %>
+<% habit_modify_actions = all_actions.select { |a| a[:type] == "habit_modify" } %>
+<% habit_delete_actions = all_actions.select { |a| a[:type] == "habit_delete" } %>
+<% task_modify_actions  = all_actions.select { |a| a[:type] == "task_modify" } %>
+<% goal_review_actions  = all_actions.select { |a| a[:type] == "goal_review" } %>
+
+<%# タイトルIDをモバイル/デスクトップで切り替える %>
 <% title_id = local_assigns[:mobile] ? "ai-proposal-modal-title-mobile" : "ai-proposal-modal-title" %>
 
 <div class="p-5 sm:p-6">
 
   <%# ══════════════════════════════════════════════════════════════════
-      セクション 1: ヘッダー
+      セクション 1: ヘッダー（変更なし）
   ══════════════════════════════════════════════════════════════════ %>
   <div class="flex items-start justify-between mb-4 gap-3">
     <div class="flex items-center gap-2 flex-1 min-w-0">
@@ -56,13 +54,6 @@
         来週のAI提案
       </h2>
     </div>
-
-    <%#
-      閉じる（×）ボタン:
-        data-action="click->ai-proposal-modal#close":
-          Stimulus の close(event) アクションを呼ぶ。
-          モーダルを hidden にして body.overflow-hidden クラスを解除する。
-    %>
     <button type="button"
             data-action="click->ai-proposal-modal#close"
             class="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600 transition-colors
@@ -76,55 +67,40 @@
   </div>
 
   <%# ══════════════════════════════════════════════════════════════════
-      セクション 2: AI免責バナー（完了条件: 毎回表示）
-      render "shared/ai_disclaimer": _ai_disclaimer.html.erb を呼ぶ。
-      E-3 完了条件「AI免責バナーが必ず表示される」を満たすために必須。
+      セクション 2: AI免責バナー（変更なし）
   ══════════════════════════════════════════════════════════════════ %>
   <%= render "shared/ai_disclaimer" %>
 
   <%# ══════════════════════════════════════════════════════════════════
-      セクション 3: AI分析コメント + PMVVとの整合性
+      セクション 3: AI分析コメント + PMVVとの整合性（変更なし）
   ══════════════════════════════════════════════════════════════════ %>
   <% if ai_analysis.analysis_comment.present? %>
     <div class="mt-4 bg-indigo-50 border border-indigo-200 rounded-xl p-4">
       <h3 class="text-sm font-bold text-indigo-800 mb-2">🎯 AI分析コメント</h3>
-      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-        <%= ai_analysis.analysis_comment %>
-      </p>
-
-      <%#
-        PMVVとの整合性セクション:
-          user_purpose が存在する場合のみ表示する（E-3 完了条件）。
-          improvement_suggestions は「現状と PMVV のギャップを埋める提案」を
-          含んでいるため、目標との整合性を示すフィールドとして使用する。
-      %>
+      <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"><%= ai_analysis.analysis_comment.to_s.strip %></p>
       <% if user_purpose.present? && ai_analysis.improvement_suggestions.present? %>
         <div class="mt-3 pt-3 border-t border-indigo-200">
           <p class="text-xs font-bold text-indigo-700 mb-1">🎯 目標（PMVV）との整合性</p>
-          <p class="text-xs text-gray-600 leading-relaxed">
-            <%= ai_analysis.improvement_suggestions %>
-          </p>
+          <p class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap"><%= ai_analysis.improvement_suggestions.to_s.strip %></p>
         </div>
       <% end %>
-
       <% if ai_analysis.coaching_message.present? %>
         <div class="mt-3 pt-3 border-t border-indigo-200">
           <p class="text-xs font-bold text-indigo-700 mb-1">💪 コーチングメッセージ</p>
-          <p class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap">
-            <%= ai_analysis.coaching_message %>
-          </p>
+          <p class="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap"><%= ai_analysis.coaching_message.to_s.strip %></p>
         </div>
       <% end %>
     </div>
   <% end %>
 
   <%# ══════════════════════════════════════════════════════════════════
-      セクション 4: 変更サマリー（追加/変更/削除の差分一覧）
+      セクション 4: 変更サマリー（G-9: 新 type の件数を追記）
   ══════════════════════════════════════════════════════════════════ %>
   <% if all_actions.any? %>
     <div class="mt-4 bg-gray-50 border border-gray-200 rounded-xl p-4">
       <h3 class="text-sm font-bold text-gray-700 mb-3">📋 変更サマリー</h3>
       <div class="space-y-2">
+        <%# 新規追加提案 %>
         <% if habit_actions.any? %>
           <div class="flex items-start gap-2">
             <span class="inline-flex items-center justify-center w-5 h-5 rounded-full
@@ -141,7 +117,6 @@
             </div>
           </div>
         <% end %>
-
         <% if task_actions.any? %>
           <div class="flex items-start gap-2">
             <span class="inline-flex items-center justify-center w-5 h-5 rounded-full
@@ -158,6 +133,62 @@
             </div>
           </div>
         <% end %>
+        <%# G-9 追加: 見直し提案のサマリー %>
+        <% if habit_modify_actions.any? %>
+          <div class="flex items-start gap-2">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full
+                         bg-yellow-100 text-yellow-700 text-xs font-bold flex-shrink-0 mt-0.5"
+                  aria-hidden="true">✏</span>
+            <div class="flex-1 min-w-0">
+              <span class="text-xs font-semibold text-gray-700">
+                習慣 <%= habit_modify_actions.size %>件の修正を提案:
+              </span>
+              <span class="text-xs text-gray-500 ml-1">
+                <%= habit_modify_actions.first(3).map { |a| a[:habit_name].presence || "（名前なし）" }.join("、") %>
+              </span>
+            </div>
+          </div>
+        <% end %>
+        <% if habit_delete_actions.any? %>
+          <div class="flex items-start gap-2">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full
+                         bg-red-100 text-red-700 text-xs font-bold flex-shrink-0 mt-0.5"
+                  aria-hidden="true">−</span>
+            <div class="flex-1 min-w-0">
+              <span class="text-xs font-semibold text-gray-700">
+                習慣 <%= habit_delete_actions.size %>件の削除を提案:
+              </span>
+              <span class="text-xs text-gray-500 ml-1">
+                <%= habit_delete_actions.first(3).map { |a| a[:habit_name].presence || "（名前なし）" }.join("、") %>
+              </span>
+            </div>
+          </div>
+        <% end %>
+        <% if task_modify_actions.any? %>
+          <div class="flex items-start gap-2">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full
+                         bg-purple-100 text-purple-700 text-xs font-bold flex-shrink-0 mt-0.5"
+                  aria-hidden="true">✏</span>
+            <div class="flex-1 min-w-0">
+              <span class="text-xs font-semibold text-gray-700">
+                タスク <%= task_modify_actions.size %>件の修正を提案:
+              </span>
+              <span class="text-xs text-gray-500 ml-1">
+                <%= task_modify_actions.first(3).map { |a| a[:task_title].presence || "（名前なし）" }.join("、") %>
+              </span>
+            </div>
+          </div>
+        <% end %>
+        <% if goal_review_actions.any? %>
+          <div class="flex items-start gap-2">
+            <span class="inline-flex items-center justify-center w-5 h-5 rounded-full
+                         bg-indigo-100 text-indigo-700 text-xs font-bold flex-shrink-0 mt-0.5"
+                  aria-hidden="true">🎯</span>
+            <span class="text-xs font-semibold text-gray-700">
+              目標（PMVV）の見直しを提案
+            </span>
+          </div>
+        <% end %>
       </div>
     </div>
   <% end %>
@@ -167,72 +198,27 @@
   ══════════════════════════════════════════════════════════════════ %>
   <% if all_actions.any? %>
     <%#
-      form_with:
-        url: confirm_proposals_weekly_reflections_path → POST 先
-        local: true → Turbo を経由しない通常のフォーム送信
-                     モーダル確定後に redirect_to でシンプルにダッシュボードへ遷移する
-        data-ai-proposal-modal-target="form":
-          Stimulus から参照するための target 名（全選択等の将来拡張用）
+      form_with: confirm_proposals_weekly_reflections_path に POST する（変更なし）
     %>
     <%= form_with url: confirm_proposals_weekly_reflections_path,
                   method: :post,
                   local: true,
                   data: { "ai-proposal-modal-target": "form" } do |f| %>
 
-      <%#
-        ── reflection_id を hidden field で送信する（修正①）───────────────────
-        【変更前の問題】
-          Controller 側で find_latest_completed_reflection() を呼んで
-          「直近の完了済み振り返り」を推測していたため、
-          複数の完了済み振り返りがある場合や非同期処理のタイミングによって
-          意図しない振り返りに提案が紐付く可能性があった。
-
-        【変更後の設計】
-          ビュー側で @latest_ai_analysis.weekly_reflection_id を
-          hidden_field_tag で確実に送信する。
-          Controller は params[:reflection_id] で直接 find するだけなので
-          「どの振り返りか」が100%確定する。
-
-        value: ai_analysis.weekly_reflection_id
-          AiAnalysis が紐付く WeeklyReflection の ID を送る。
-          Controller で current_user.weekly_reflections.find(params[:reflection_id]) とすることで
-          他ユーザーの振り返り ID を送られても 404 で弾ける（認可チェックを兼ねる）。
-      %>
+      <%# reflection_id を hidden field で送信する（変更なし）%>
       <%= hidden_field_tag :reflection_id, ai_analysis.weekly_reflection_id %>
 
-      <%# ── 習慣の提案 ───────────────────────────────────────────────── %>
+      <%# ── 習慣の新規追加提案（変更なし）─────────────────────────────── %>
       <% if habit_actions.any? %>
         <div class="mt-4">
           <h3 class="text-sm font-bold text-gray-800 mb-3">
-            📋 習慣の提案
+            📋 新しく追加する習慣の提案
             <span class="ml-1 text-xs font-normal text-gray-400">追加したい習慣を選んでください</span>
           </h3>
           <div class="space-y-2">
-            <%#
-              ── インデックスズレ修正（修正②）───────────────────────────────
-              【変更前の問題】
-                all_actions.each_with_index で全体の index を使っていた。
-                例: actions_json = [habit0, task1, habit2] のとき
-                    habit_actions = [habit0, habit2]
-                    habit0 の index は 0（全体）だが habit_actions 内では 0（一致）
-                    habit2 の index は 2（全体）だが habit_actions 内では 1（ズレ！）
-                → Controller で habit_actions[2] を探すと nil になり保存漏れが起きる
-
-              【変更後の設計】
-                habit_actions.each_with_index で習慣だけの配列に対して index を振る。
-                送信される habit_indices[] の値が habit_actions の index と一致する。
-                Controller 側も habit_actions[idx] で確実に取得できる。
-            %>
             <% habit_actions.each_with_index do |proposal, idx| %>
               <div class="border border-gray-200 rounded-xl overflow-hidden">
                 <label class="flex items-start gap-3 p-3 hover:bg-gray-50 cursor-pointer transition-colors">
-                  <%#
-                    check_box_tag:
-                      name="habit_indices[]": [] 付きで配列として送信される
-                      value: idx → habit_actions 内での index 番号（全体 index ではない）
-                      false: デフォルト未チェック
-                      id: "modal_habit_#{idx}": label の for 属性との対応
-                  %>
                   <%= check_box_tag "habit_indices[]",
                                     idx,
                                     false,
@@ -270,35 +256,18 @@
         </div>
       <% end %>
 
-      <%# ── タスクの提案 ───────────────────────────────────────────────── %>
+      <%# ── タスクの新規追加提案（変更なし）────────────────────────────── %>
       <% if task_actions.any? %>
         <div class="mt-4">
           <h3 class="text-sm font-bold text-gray-800 mb-3">
-            ✅ タスクの提案
+            ✅ 新しく追加するタスクの提案
             <span class="ml-1 text-xs font-normal text-gray-400">追加したいタスクを選んでください</span>
           </h3>
           <div class="space-y-2">
-            <%#
-              task_actions.each_with_index でタスクだけの配列に対して index を振る。
-              習慣と同様に、task_actions 内での index が task_indices[] の値になる。
-            %>
             <% task_actions.each_with_index do |proposal, idx| %>
-              <%#
-                data-task-card 属性（修正③）:
-                  変更前: button.closest('.border.border-gray-200.rounded-xl.overflow-hidden')
-                          → Tailwind クラス名変更で壊れる脆い実装
-                  変更後: data-task-card 属性で識別
-                          → クラス変更に影響されない保守性の高い実装
-              %>
               <div class="border border-gray-200 rounded-xl overflow-hidden"
                    data-task-card>
                 <label class="flex items-start gap-3 p-3 hover:bg-gray-50 cursor-pointer transition-colors">
-                  <%#
-                    task_indices[]:
-                      task_actions 内での index 番号を value にする。
-                      全体 index ではないため、Controller の task_actions[idx] と必ず一致する。
-                      id: "modal_task_#{idx}" で習慣の "modal_habit_#{idx}" と区別する。
-                  %>
                   <%= check_box_tag "task_indices[]",
                                     idx,
                                     false,
@@ -324,16 +293,7 @@
                     <% end %>
                   </div>
                 </label>
-
                 <div class="px-3 pb-3 -mt-1 flex items-center gap-3">
-                  <%#
-                    「この提案を除外する」ボタン:
-                      data-action="click->ai-proposal-modal#dismissTask":
-                        Stimulus の dismissTask(event) を呼ぶ。
-                      data-task-idx="= idx":
-                        JS 側でチェックボックスを特定するために使う。
-                        全体 index ではなく task_actions 内の index を渡す。
-                  %>
                   <button type="button"
                           data-action="click->ai-proposal-modal#dismissTask"
                           data-task-idx="<%= idx %>"
@@ -350,18 +310,271 @@
       <% end %>
 
       <%# ══════════════════════════════════════════════════════════════════
-          セクション 6: アクションボタン
+          G-9 追加: 既存習慣の修正提案（habit_modify）
+          ══════════════════════════════════════════════════════════════════
+          【表示ロジック】
+            habit_modify_actions が存在する場合のみ表示する。
+            0件の場合はセクション全体を非表示にして余白を出さない。
+
+          【habit_modify_indices[] の送信設計】
+            habit_actions と同様に配列インデックスで送信する。
+            Controller 側で habit_modify_actions[idx] からデータを取得する。
+
+          【habit_name を表示する理由】
+            ユーザーが「どの習慣を修正するか」を確認できるように表示する。
+            proposal[:habit_name] は AIがプロンプトで指定された習慣名と一致させている。
+      %>
+      <% if habit_modify_actions.any? %>
+        <div class="mt-4">
+          <h3 class="text-sm font-bold text-gray-800 mb-1">
+            ✏️ 既存習慣の修正提案
+          </h3>
+          <p class="text-xs text-gray-500 mb-3">
+            チェックした習慣の設定が変更されます。確認してから選んでください。
+          </p>
+          <div class="space-y-2">
+            <% habit_modify_actions.each_with_index do |proposal, idx| %>
+              <%#
+                changes を人間が読める形式に変換する。
+                例: { "weekly_target": 4 } → "週次目標: 4回/週 に変更"
+                今後変更可能フィールドが増えたらここを拡張する。
+              %>
+              <% changes_text = [] %>
+              <% if proposal[:changes].is_a?(Hash) %>
+                <% changes = proposal[:changes].with_indifferent_access %>
+                <% changes_text << "週次目標: #{changes[:weekly_target]}回/週 に変更" if changes[:weekly_target].present? %>
+              <% end %>
+              <div class="border border-yellow-200 bg-yellow-50 rounded-xl overflow-hidden">
+                <label class="flex items-start gap-3 p-3 hover:bg-yellow-100 cursor-pointer transition-colors">
+                  <%= check_box_tag "habit_modify_indices[]",
+                                    idx,
+                                    false,
+                                    id:    "modal_habit_modify_#{idx}",
+                                    class: "mt-0.5 h-4 w-4 rounded border-yellow-400
+                                            text-yellow-600 focus:ring-yellow-500 flex-shrink-0" %>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap mb-1">
+                      <span class="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-yellow-200 text-yellow-800">
+                        習慣を修正
+                      </span>
+                      <span class="text-sm font-semibold text-gray-800">
+                        <%= proposal[:habit_name].presence || "（習慣名不明）" %>
+                      </span>
+                    </div>
+                    <% if changes_text.any? %>
+                      <p class="text-xs text-yellow-700 font-medium mb-1">
+                        変更内容: <%= changes_text.join(" / ") %>
+                      </p>
+                    <% end %>
+                    <% if proposal[:reason].present? %>
+                      <p class="text-xs text-gray-500 leading-relaxed"><%= proposal[:reason] %></p>
+                    <% end %>
+                  </div>
+                </label>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <%# ══════════════════════════════════════════════════════════════════
+          G-9 追加: 既存習慣の削除提案（habit_delete）
+          ══════════════════════════════════════════════════════════════════
+          【赤枠で警告デザインにする理由】
+            削除は取り消しが難しい（論理削除だがUIからは消える）操作のため、
+            ユーザーが「意識的に確認してからチェックする」よう促す。
+
+          【デフォルト未チェックにする理由】
+            削除提案は「選択した場合のみ実行」という慎重な設計にする。
+            誤操作防止のためデフォルトは未チェック。
+      %>
+      <% if habit_delete_actions.any? %>
+        <div class="mt-4">
+          <h3 class="text-sm font-bold text-gray-800 mb-1">
+            🗑️ 既存習慣の削除提案
+          </h3>
+          <p class="text-xs text-red-600 mb-3 font-medium">
+            ⚠️ チェックした習慣は削除されます（過去の記録は残ります）。慎重に選んでください。
+          </p>
+          <div class="space-y-2">
+            <% habit_delete_actions.each_with_index do |proposal, idx| %>
+              <div class="border border-red-200 bg-red-50 rounded-xl overflow-hidden">
+                <label class="flex items-start gap-3 p-3 hover:bg-red-100 cursor-pointer transition-colors">
+                  <%= check_box_tag "habit_delete_indices[]",
+                                    idx,
+                                    false,
+                                    id:    "modal_habit_delete_#{idx}",
+                                    class: "mt-0.5 h-4 w-4 rounded border-red-400
+                                            text-red-600 focus:ring-red-500 flex-shrink-0" %>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap mb-1">
+                      <span class="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-red-200 text-red-800">
+                        習慣を削除
+                      </span>
+                      <span class="text-sm font-semibold text-gray-800">
+                        <%= proposal[:habit_name].presence || "（習慣名不明）" %>
+                      </span>
+                    </div>
+                    <% if proposal[:reason].present? %>
+                      <p class="text-xs text-gray-600 leading-relaxed"><%= proposal[:reason] %></p>
+                    <% end %>
+                  </div>
+                </label>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <%# ══════════════════════════════════════════════════════════════════
+          G-9 追加: 既存タスクの修正提案（task_modify）
+          ══════════════════════════════════════════════════════════════════
+          【変更内容の表示設計】
+            priority の変更のみ現時点でサポート。
+            "priority": "must" → 「優先度: Must に変更」と表示する。
+
+          【task_title を表示する理由】
+            ユーザーが「どのタスクを修正するか」を確認できるようにするため。
+      %>
+      <% if task_modify_actions.any? %>
+        <div class="mt-4">
+          <h3 class="text-sm font-bold text-gray-800 mb-1">
+            📝 既存タスクの修正提案
+          </h3>
+          <p class="text-xs text-gray-500 mb-3">
+            チェックしたタスクの設定が変更されます。
+          </p>
+          <div class="space-y-2">
+            <% task_modify_actions.each_with_index do |proposal, idx| %>
+              <% changes_text = [] %>
+              <% if proposal[:changes].is_a?(Hash) %>
+                <% changes = proposal[:changes].with_indifferent_access %>
+                <% if changes[:priority].present? %>
+                  <% priority_label = { "must" => "Must（必須）", "should" => "Should（推奨）", "could" => "Could（余力）" }[changes[:priority].to_s] %>
+                  <% changes_text << "優先度: #{priority_label || changes[:priority]} に変更" %>
+                <% end %>
+              <% end %>
+              <div class="border border-purple-200 bg-purple-50 rounded-xl overflow-hidden">
+                <label class="flex items-start gap-3 p-3 hover:bg-purple-100 cursor-pointer transition-colors">
+                  <%= check_box_tag "task_modify_indices[]",
+                                    idx,
+                                    false,
+                                    id:    "modal_task_modify_#{idx}",
+                                    class: "mt-0.5 h-4 w-4 rounded border-purple-400
+                                            text-purple-600 focus:ring-purple-500 flex-shrink-0" %>
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap mb-1">
+                      <span class="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 bg-purple-200 text-purple-800">
+                        タスクを修正
+                      </span>
+                      <span class="text-sm font-semibold text-gray-800">
+                        <%= proposal[:task_title].presence || "（タスク名不明）" %>
+                      </span>
+                    </div>
+                    <% if changes_text.any? %>
+                      <p class="text-xs text-purple-700 font-medium mb-1">
+                        変更内容: <%= changes_text.join(" / ") %>
+                      </p>
+                    <% end %>
+                    <% if proposal[:reason].present? %>
+                      <p class="text-xs text-gray-500 leading-relaxed"><%= proposal[:reason] %></p>
+                    <% end %>
+                  </div>
+                </label>
+              </div>
+            <% end %>
+          </div>
+        </div>
+      <% end %>
+
+      <%# ══════════════════════════════════════════════════════════════════
+          G-9 追加: 目標（PMVV）見直し提案（goal_review）
+          ══════════════════════════════════════════════════════════════════
+          【DB変更なしの設計】
+            goal_review は「AIが見直しを勧めている」という情報提示のみ。
+            ユーザーが「目標管理ページへ」リンクをクリックして
+            自分で見直すかどうかを決める設計にする。
+
+          【goal_review_requested の hidden_field_tag の仕組み】
+            チェックボックスの代わりに hidden_field_tag を使う。
+            チェックした場合は value="1" の hidden を送信する。
+            JS（goal_review_controller.js）でチェック状態を管理するより
+            シンプルな実装として、まずチェックボックスで実装する。
+
+          【goal_review セクションは PMVV が設定されている場合のみ表示】
+            user_purpose が nil の場合は PMVV を設定していないため
+            goal_review の提案は意味がない。
+      %>
+      <% if goal_review_actions.any? && user_purpose.present? %>
+        <div class="mt-4">
+          <h3 class="text-sm font-bold text-gray-800 mb-1">
+            🎯 目標（PMVV）の見直し提案
+          </h3>
+          <p class="text-xs text-gray-500 mb-3">
+            チェックを入れて確定すると、目標管理ページへ移動します。AIの提案を参考にPMVVを見直してください。
+          </p>
+          <%#
+            goal_review_actions.each_with_index のブロック外で idx を参照していたのが
+            構文エラーの原因。チェックボックスを each ブロックの内側に移動する。
+          %>
+          <% goal_review_actions.each_with_index do |proposal, idx| %>
+            <div class="border border-indigo-200 bg-indigo-50 rounded-xl p-4 mb-2">
+              <% if proposal[:review_point].present? %>
+                <p class="text-sm text-indigo-800 font-medium mb-2">
+                  見直しポイント: <%= proposal[:review_point] %>
+                </p>
+              <% end %>
+              <% suggestion_fields = {
+                   "purpose_suggestion"  => "Purpose（人生で大切にしていること）",
+                   "mission_suggestion"  => "Mission（今最も必要なこと）",
+                   "vision_suggestion"   => "Vision（1年後の理想の自分）",
+                   "value_suggestion"    => "Value（絶対に譲れないこと）",
+                   "current_suggestion"  => "Current（今の自分の現状）"
+                 } %>
+              <% has_suggestions = suggestion_fields.keys.any? { |k| proposal[k].present? } %>
+              <% if has_suggestions %>
+                <div class="bg-white rounded-lg p-3 mb-2 border border-indigo-100">
+                  <p class="text-xs font-bold text-indigo-700 mb-1.5">💡 AIが提案する改善案</p>
+                  <ul class="space-y-1.5">
+                    <% suggestion_fields.each do |key, label| %>
+                      <% next unless proposal[key].present? %>
+                      <li class="text-xs text-gray-700 leading-relaxed pl-3 border-l-2 border-indigo-300">
+                        <span class="font-medium text-indigo-600"><%= label %>:</span>
+                        <%= proposal[key] %>
+                      </li>
+                    <% end %>
+                  </ul>
+                </div>
+              <% end %>
+              <% if proposal[:reason].present? %>
+                <p class="text-xs text-gray-600 leading-relaxed mb-3">
+                  <%= proposal[:reason] %>
+                </p>
+              <% end %>
+              <%# チェックボックスを each ブロックの内側に置くことで idx が正しく参照できる %>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <%= check_box_tag :goal_review_requested,
+                                  "1",
+                                  false,
+                                  id:    "modal_goal_review_#{idx}",
+                                  class: "h-4 w-4 rounded border-indigo-400
+                                          text-indigo-600 focus:ring-indigo-500" %>
+                <span class="text-sm text-indigo-700 font-medium">
+                  確定後に目標管理ページで見直す
+                </span>
+              </label>
+              <p class="text-xs text-gray-400 mt-1 ml-6">
+                ※ チェックすると確定後に目標管理ページに移動します
+              </p>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+
+      <%# ══════════════════════════════════════════════════════════════════
+          セクション 6: アクションボタン（変更なし）
       ══════════════════════════════════════════════════════════════════ %>
       <div class="mt-6 space-y-3">
-        <%#
-          「来週の計画を確定」ボタン（E-3 完了条件）:
-            フォームを送信する。
-            confirm_proposals_weekly_reflections_path に POST して
-            チェックされた提案を DB に保存 + ai_generated: true をタスクにセット。
-
-          data-disable-with: クリック後に disabled にして二重送信を防ぐ。
-            Turbo の data-turbo-submits-with と同じ効果を local: true フォームで実現する。
-        %>
         <%= f.submit "✅ 来週の計画を確定する",
                      class: "w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700
                              text-white font-bold text-sm rounded-xl transition-colors
@@ -370,13 +583,6 @@
                              disabled:opacity-50 disabled:cursor-not-allowed",
                      data: { disable_with: "保存中..." } %>
 
-        <%#
-          「編集して再解析」ボタン:
-            確認ダイアログ（reanalyzeConfirm）を開く。
-            振り返り入力ページへ戻るかをユーザーに確認してから遷移する。
-            data-action="click->ai-proposal-modal#openReanalyzeConfirm":
-              Stimulus の openReanalyzeConfirm(event) を呼ぶ。
-        %>
         <button type="button"
                 data-action="click->ai-proposal-modal#openReanalyzeConfirm"
                 class="w-full py-3 px-4 bg-white border border-gray-300 text-gray-700

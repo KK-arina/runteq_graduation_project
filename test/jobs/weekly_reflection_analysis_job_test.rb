@@ -245,4 +245,126 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
     assert_equal "dashboard_reflection_completion_banner", dashboard_call[:target],
       "target が 'dashboard_reflection_completion_banner' ではありませんでした"
   end
+
+  # ============================================================
+  # G-9 テスト①: PROMPT_VERSION が v2.0 に更新されていることを確認
+  # ============================================================
+  #
+  # 【なぜこのテストが必要か】
+  #   G-9 でスキーマを拡張したため、プロンプトのバージョンを
+  #   v1.0 → v2.0 に上げた。古いバージョンのまま本番稼働すると
+  #   「どのバージョンのプロンプトで生成されたか」のログ追跡が困難になる。
+  #   定数が正しく更新されたことをテストで担保する。
+  test "G-9: PROMPT_VERSION が v2.0 であること" do
+    assert_equal "v2.0", WeeklyReflectionAnalysisJob::PROMPT_VERSION
+  end
+
+  # ============================================================
+  # G-9 テスト②: build_prompt に習慣一覧が含まれることを確認
+  # ============================================================
+  #
+  # 【なぜ send を使うのか】
+  #   build_prompt は private メソッドのため、外部から直接呼び出せない。
+  #   Ruby の send メソッドを使うと private メソッドにもアクセスできる。
+  #   ユニットテストでは「内部ロジックが正しいか」を確認するために使う。
+  test "G-9: build_prompt に現在の習慣一覧が含まれること" do
+    habit = Habit.create!(
+      user:             @user,
+      name:             "テスト習慣G9",
+      measurement_type: :check_type,
+      weekly_target:    5
+    )
+
+    job    = WeeklyReflectionAnalysisJob.new
+    prompt = job.send(:build_prompt, @reflection, nil, [habit], [])
+
+    # 習慣名がプロンプトに含まれることを確認する
+    assert_includes prompt, "テスト習慣G9"
+    # 習慣一覧セクションのヘッダーが含まれることを確認する
+    assert_includes prompt, "現在登録されている習慣一覧"
+    # AIへの指示に habit_modify type の例が含まれることを確認する
+    assert_includes prompt, "habit_modify"
+    # AIへの指示に habit_delete type の例が含まれることを確認する
+    assert_includes prompt, "habit_delete"
+  end
+
+  # ============================================================
+  # G-9 テスト③: build_prompt にタスク一覧が含まれることを確認
+  # ============================================================
+  test "G-9: build_prompt に Must/Should タスク一覧が含まれること" do
+    task = Task.create!(
+      user:      @user,
+      title:     "テストタスクG9",
+      priority:  :must,
+      status:    :todo,
+      task_type: :normal
+    )
+
+    job    = WeeklyReflectionAnalysisJob.new
+    prompt = job.send(:build_prompt, @reflection, nil, [], [task])
+
+    # タスク名がプロンプトに含まれることを確認する
+    assert_includes prompt, "テストタスクG9"
+    # タスク一覧セクションのヘッダーが含まれることを確認する
+    assert_includes prompt, "現在登録されているタスク一覧"
+    # AIへの指示に task_modify type の例が含まれることを確認する
+    assert_includes prompt, "task_modify"
+  end
+
+  # ============================================================
+  # G-9 テスト④: 習慣・タスクが空配列の場合でも正常動作することを確認
+  # ============================================================
+  #
+  # 【なぜこのテストが必要か】
+  #   新規ユーザーや習慣・タスクを全削除したユーザーの場合、
+  #   空配列が渡される。その際にエラーにならないことを担保する。
+  test "G-9: 習慣・タスクが空配列でも build_prompt が正常動作すること" do
+    job    = WeeklyReflectionAnalysisJob.new
+    prompt = job.send(:build_prompt, @reflection, nil, [], [])
+
+    # 空の場合のフォールバックメッセージが含まれることを確認する
+    assert_includes prompt, "アクティブな習慣がありません"
+    assert_includes prompt, "アクティブなタスクがありません"
+    # 空配列でも JSON フォーマット指示が含まれることを確認する
+    assert_includes prompt, "habit_modify"
+  end
+
+  # ============================================================
+  # G-9 テスト⑤: build_input_snapshot に習慣・タスクが含まれることを確認
+  # ============================================================
+  #
+  # 【なぜスナップショットに習慣・タスクを含めるのか】
+  #   habit_modify/habit_delete の提案が「この分析時点でどの習慣を
+  #   指していたか」を後から確認・デバッグできるようにするため。
+  #   ユーザーが後から習慣名を変更しても、元の名前がスナップショットに残る。
+  test "G-9: build_input_snapshot に習慣・タスクのスナップショットが含まれること" do
+    habit = Habit.create!(
+      user:             @user,
+      name:             "スナップショット習慣G9",
+      measurement_type: :check_type,
+      weekly_target:    3
+    )
+    task = Task.create!(
+      user:      @user,
+      title:     "スナップショットタスクG9",
+      priority:  :should,
+      status:    :todo,
+      task_type: :normal
+    )
+
+    job      = WeeklyReflectionAnalysisJob.new
+    snapshot = job.send(:build_input_snapshot, @reflection, nil, [habit], [task])
+
+    # 習慣のスナップショットが配列として含まれることを確認する
+    assert snapshot[:habits].is_a?(Array), "habits が配列であること"
+    assert_equal 1, snapshot[:habits].size
+    assert_equal "スナップショット習慣G9", snapshot[:habits][0][:name]
+    assert_equal 3, snapshot[:habits][0][:weekly_target]
+
+    # タスクのスナップショットが配列として含まれることを確認する
+    assert snapshot[:tasks].is_a?(Array), "tasks が配列であること"
+    assert_equal 1, snapshot[:tasks].size
+    assert_equal "スナップショットタスクG9", snapshot[:tasks][0][:title]
+    assert_equal "should", snapshot[:tasks][0][:priority]
+  end
 end

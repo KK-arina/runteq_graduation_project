@@ -143,4 +143,133 @@ class WeeklyReflectionsControllerTest < ActionDispatch::IntegrationTest
       assert_redirected_to dashboard_path
     end
   end
+
+  # ============================================================
+  # G-9 テスト: task_modify の処理確認
+  # ============================================================
+  #
+  # 【なぜ fixtures を使わず AiAnalysis.create! するのか】
+  #   ai_analyses.yml フィクスチャが存在しないため、
+  #   テスト内でレコードを直接作成する。
+  #
+  # 【なぜ completed_reflection フィクスチャを使うのか】
+  #   weekly_reflections.yml に 'one' は存在しない。
+  #   completed_at が設定済みの completed_reflection が
+  #   confirm_proposals の「completed? チェック」を通過できる。
+  test "confirm_proposals: task_modify でチェックしたタスクの優先度が更新されること" do
+    reflection = weekly_reflections(:completed_reflection)
+
+    # AiAnalysis フィクスチャが存在しないためテスト内で直接作成する
+    ai_analysis = AiAnalysis.create!(
+      weekly_reflection_id: reflection.id,
+      analysis_type:        :weekly_reflection,
+      is_latest:            true,
+      crisis_detected:      false,
+      prompt_version:       "v2.0",
+      input_snapshot:       { week_start_date: reflection.week_start_date.to_s },
+      actions_json: [
+        {
+          "type"       => "task_modify",
+          "task_title" => "G9修正テストタスク",
+          "changes"    => { "priority" => "should" },
+          "reason"     => "優先度の見直し",
+          "priority"   => "should"
+        }
+      ]
+    )
+
+    # 対象タスクを must で作成する
+    task = Task.create!(
+      user:      users(:one),
+      title:     "G9修正テストタスク",
+      priority:  :must,
+      status:    :todo,
+      task_type: :normal
+    )
+
+    log_in_as users(:one)
+
+    post confirm_proposals_weekly_reflections_path,
+         params: {
+           reflection_id:       reflection.id,
+           task_modify_indices: ["0"]
+         }
+
+    assert_redirected_to dashboard_path
+    task.reload
+    assert_equal "should", task.priority, "優先度が should に更新されていること"
+  end
+
+  # ============================================================
+  # G-9 テスト: 存在しないタスク名は安全にスキップされること
+  # ============================================================
+  test "confirm_proposals: 存在しないタスク名は修正をスキップしてエラーにならないこと" do
+    reflection = weekly_reflections(:completed_reflection)
+
+    AiAnalysis.create!(
+      weekly_reflection_id: reflection.id,
+      analysis_type:        :weekly_reflection,
+      is_latest:            true,
+      crisis_detected:      false,
+      prompt_version:       "v2.0",
+      input_snapshot:       { week_start_date: reflection.week_start_date.to_s },
+      actions_json: [
+        {
+          "type"       => "task_modify",
+          "task_title" => "存在しないタスク名G9",
+          "changes"    => { "priority" => "must" },
+          "reason"     => "テスト",
+          "priority"   => "must"
+        }
+      ]
+    )
+
+    log_in_as users(:one)
+
+    # 存在しない名前のタスクでもエラーにならず正常にリダイレクトされること
+    assert_nothing_raised do
+      post confirm_proposals_weekly_reflections_path,
+           params: {
+             reflection_id:       reflection.id,
+             task_modify_indices: ["0"]
+           }
+    end
+
+    assert_redirected_to dashboard_path
+  end
+
+  # ============================================================
+  # G-9 テスト: goal_review チェックで PMVV ページへリダイレクト
+  # ============================================================
+  test "confirm_proposals: goal_review_requested=1 のとき user_purpose_path へリダイレクト" do
+    reflection = weekly_reflections(:completed_reflection)
+
+    AiAnalysis.create!(
+      weekly_reflection_id: reflection.id,
+      analysis_type:        :weekly_reflection,
+      is_latest:            true,
+      crisis_detected:      false,
+      prompt_version:       "v2.0",
+      input_snapshot:       { week_start_date: reflection.week_start_date.to_s },
+      actions_json: [
+        {
+          "type"         => "goal_review",
+          "review_point" => "Vision の見直しが必要です",
+          "reason"       => "PMVVとのギャップが大きい",
+          "priority"     => "could"
+        }
+      ]
+    )
+
+    log_in_as users(:one)
+
+    post confirm_proposals_weekly_reflections_path,
+         params: {
+           reflection_id:         reflection.id,
+           goal_review_requested: "1"
+         }
+
+    # goal_review_requested == "1" の場合は user_purpose_path へリダイレクト
+    assert_redirected_to user_purpose_path
+  end
 end

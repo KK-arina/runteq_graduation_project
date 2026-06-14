@@ -93,7 +93,14 @@
             サブテキスト: 補足情報を小さく表示する。
             truncate: テキストが長い場合に「...」で省略してレイアウト崩れを防ぐ。
           %>
+          <%#
+            completed_at: AiAnalysis.create! の created_at を使う。
+            AiAnalysis は create! で毎回新規作成される設計（find_or_initialize_by ではない）
+            のため、created_at が「AI分析が完了した正確な時刻」を表す。
+          %>
           <p class="text-xs text-green-600 truncate">
+            <% completed_at = ai_analysis&.created_at || user_purpose.updated_at %>
+            <%= l completed_at, format: :long %> 完了 ·
             PMVVに基づいた習慣・タスクの提案が準備できました
           </p>
         </div>

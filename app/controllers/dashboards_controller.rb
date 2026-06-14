@@ -98,6 +98,46 @@ class DashboardsController < ApplicationController
     # コントローラで1回だけ取得してインスタンス変数に格納する。
     # これにより SELECT クエリが1回で済む。
     @user_setting = current_user.user_setting
+
+    # ── G-9 追加: 振り返りAI分析中・完了バナー用データ ──────────────────────
+    #
+    # 【なぜ追加が必要か】
+    #   dashboards_controller.rb に WeeklyReflection 関連の処理が存在しないため、
+    #   ダッシュボード初期表示時に「AI分析中」を判定できずバナーが表示されなかった。
+    #   Turbo Stream は「完了時のみ」ブロードキャストするため、
+    #   ページを開いた瞬間にジョブが実行中でも何も表示されない問題が発生していた。
+    #
+    # 【@pending_reflection_analysis の取得条件】
+    #   直近の完了済み振り返りに紐づく AiAnalysis が存在しない
+    #   = AI分析がまだ完了していない（分析中 or 分析待ち）
+    #   この場合「AI分析中」バナーを表示する。
+    @latest_completed_reflection = current_user.weekly_reflections
+                                               .completed
+                                               .order(completed_at: :desc)
+                                               .first
+
+    @reflection_ai_analysis = if @latest_completed_reflection
+                                 @latest_completed_reflection
+                                   .ai_analyses
+                                   .latest
+                                   .where.not(actions_json: nil)
+                                   .first
+                               end
+
+    # 分析中フラグ: 直近の振り返りが完了しているが AI 分析がまだ終わっていない場合 true
+    #
+    # 【変更前の問題】
+    #   exists? は「AiAnalysisレコードが作成済みだが完了前」を想定していたが、
+    #   振り返り送信直後はジョブ実行前でレコード自体が存在しないため exists? が false になる。
+    #
+    # 【変更後の設計】
+    #   1週間以内に完了した振り返りに限定することで
+    #   「過去の古い振り返り」で分析中バナーが出るリスクを防ぐ。
+    #   exists? を削除して「AI分析なし = 分析待ち or 分析中」として扱う。
+    @reflection_analysis_pending = @latest_completed_reflection.present? &&
+                                   @reflection_ai_analysis.nil? &&
+                                   @latest_completed_reflection.completed_at >= 1.week.ago
+    # ─────────────────────────────────────────────────────────────────────
   end
 
   private

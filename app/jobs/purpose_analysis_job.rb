@@ -474,34 +474,50 @@ class PurposeAnalysisJob < ApplicationJob
   #   append だと複数回分析するたびにバナーが積み重なってしまう。
   #   replace で id="dashboard_pmvv_completion_banner" の要素を
   #   丸ごと差し替えることで常に最新の1件だけが表示される。
-  def broadcast_dashboard_completion(user_purpose)
-    # completed 以外は何も送信しない。
-    # ダッシュボードはユーザーの「作業場」なので、
-    # pending/analyzing/failed は表示してノイズにしない。
-    return unless user_purpose.completed?
-
-    # find_by を使う理由:
-    #   .where(...).first より意図が明確で SQL もシンプル。
-    #   「1件だけ取得したい」という意図が find_by で正確に表現できる。
-    ai_analysis = AiAnalysis.find_by(
+  def broadcast_state_update(user_purpose)
+    ai_analysis = AiAnalysis.where(
       user_purpose_id: user_purpose.id,
       is_latest:       true,
-      analysis_type:   :purpose_breakdown
-    )
+      analysis_type:   AiAnalysis.analysis_types[:purpose_breakdown]
+    ).first
 
+    # ── ① PMVVページ（user_purpose_#{id}）向け: 全状態を完全なパーシャルで送信 ──
+    #
+    # PMVVページは pending/analyzing/completed/failed の全状態をリアルタイム表示する。
+    # completed 時は「結果を見る →」ボタン付きバナーが表示される。
     Turbo::StreamsChannel.broadcast_replace_to(
-      # ストリーム名: ダッシュボード専用
-      # user_id ベースにすることで「自分の通知だけ」を受信でき、
-      # 他のユーザーの完了通知が混入しない。
-      "dashboard_notifications_#{user_purpose.user_id}",
-      target:  "dashboard_pmvv_completion_banner",
-      partial: "dashboards/pmvv_completion_banner",
+      "user_purpose_#{user_purpose.id}",
+      target:  "analysis_status_banner",
+      partial: "user_purposes/analysis_status_banner",
       locals:  { user_purpose: user_purpose, ai_analysis: ai_analysis }
     )
+
+    # ── ② ダッシュボード（dashboard_user_purpose_#{id}）向け: completed 時は空で消去 ──
+    #
+    # 【なぜ completed 時に空にするのか】
+    #   ダッシュボードでは dashboard_pmvv_completion_banner が「目標分析が完了しました」を
+    #   表示するため、analysis_status_banner の completed バナーは不要。
+    #   空にすることで二重表示を防ぐ。
+    #
+    # 【なぜ pending/analyzing 時はパーシャルを送るのか】
+    #   ダッシュボードの初期表示で「分析中...」バナーを表示した後、
+    #   Turbo Stream で状態更新を受け取れるようにするため。
+    if user_purpose.completed?
+      Turbo::StreamsChannel.broadcast_replace_to(
+        "dashboard_user_purpose_#{user_purpose.id}",
+        target: "analysis_status_banner",
+        html:   ""
+      )
+    else
+      Turbo::StreamsChannel.broadcast_replace_to(
+        "dashboard_user_purpose_#{user_purpose.id}",
+        target:  "analysis_status_banner",
+        partial: "user_purposes/analysis_status_banner",
+        locals:  { user_purpose: user_purpose, ai_analysis: ai_analysis }
+      )
+    end
   rescue => e
-    # WebSocket 通信エラー等が起きても AI 分析の完了（DB 保存）は成功している。
-    # 例外を安全にログへ逃がして処理全体のクラッシュを防ぐ。
-    Rails.logger.warn "[PurposeAnalysisJob] ダッシュボードバナー更新失敗（無視）: #{e.message}"
+    Rails.logger.warn "[PurposeAnalysisJob] Turbo Stream 更新失敗（無視）: #{e.message}"
   end
   # ────────────────────────────────────────────────────────────────────────
 
@@ -512,23 +528,6 @@ class PurposeAnalysisJob < ApplicationJob
     )
     Rails.logger.error "[PurposeAnalysisJob] 失敗: user_purpose_id=#{user_purpose.id}, error=#{error_message}"
     broadcast_state_update(user_purpose)
-  end
-
-  def broadcast_state_update(user_purpose)
-    ai_analysis = AiAnalysis.where(
-      user_purpose_id: user_purpose.id,
-      is_latest:       true,
-      analysis_type:   AiAnalysis.analysis_types[:purpose_breakdown]
-    ).first
-
-    Turbo::StreamsChannel.broadcast_replace_to(
-      "user_purpose_#{user_purpose.id}",
-      target:  "analysis_status_banner",
-      partial: "user_purposes/analysis_status_banner",
-      locals:  { user_purpose: user_purpose, ai_analysis: ai_analysis }
-    )
-  rescue => e
-    Rails.logger.warn "[PurposeAnalysisJob] Turbo Stream 更新失敗（無視）: #{e.message}"
   end
 
   # ── G-7 追加: ダッシュボード向け完了バナーのブロードキャスト ─────────────
