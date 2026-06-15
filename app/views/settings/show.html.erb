@@ -606,6 +606,34 @@
   </section>
 
   <%# 危険ゾーン: 退会セクション %>
+  <%#
+    ==============================================================================
+    M-4: 退会確認モーダル（H-2 スマホ対応版）
+    ==============================================================================
+    【H-2 での変更点】
+      旧実装の問題点:
+        ① <div hidden> (HTML属性) + classList.remove("hidden") (クラス操作) の
+           不一致により、モーダルが一切開かない致命的バグがあった。
+        ② スマホでも中央モーダルのままで、ボトムシートが未実装だった。
+
+      変更内容:
+        ① <div hidden> を <div class="hidden"> に統一した。
+           Tailwind の hidden クラスは JS の classList で安全に操作できる。
+        ② スマホ用ボトムシート（data-deactivate-modal-target="mobileSheet"）を追加した。
+        ③ sheetPanel に touchstart/touchmove/touchend を data-action で登録し、
+           スワイプダウンで閉じるジェスチャーを実装した。
+        ④ DeactivateModalController を target ベースの制御に変更した。
+
+    【構造の説明】
+      data-controller="deactivate-modal"
+        ├─ <button> 退会するボタン（open() を呼ぶ）
+        └─ <div class="hidden" data-deactivate-modal-target="overlay">
+               ├─ backdrop（背景暗幕）← closeFromOverlay() を登録
+               ├─ desktopPanel（768px 以上: 中央モーダル）
+               └─ mobileSheet（768px 未満: ボトムシート）
+                     └─ sheetPanel（スライドアニメーション + スワイプジェスチャー対象）
+    ==============================================================================
+  %>
   <section class="bg-white rounded-lg shadow-sm border-2 border-red-200 p-6"
            data-settings-profile-target="otherSection">
     <h2 class="text-lg font-semibold text-red-700 mb-2">退会（アカウント削除）</h2>
@@ -614,12 +642,13 @@
     </p>
 
     <%#
-      退会ボタン
-      data-controller="deactivate-modal": 既存の DeactivateModalController を接続する。
-      data-action="click->deactivate-modal#open": クリックでモーダルを開く。
-      既存の実装（G-4以前）を再利用するため、新しいモーダルは作らない。
+      data-controller="deactivate-modal":
+        このdiv の中にある data-deactivate-modal-target="..." が
+        DeactivateModalController から参照できるようになる。
     %>
     <div data-controller="deactivate-modal">
+
+      <%# 退会ボタン: クリックで DeactivateModalController の open() を呼ぶ %>
       <button type="button"
               data-action="click->deactivate-modal#open"
               class="px-4 py-2 text-sm font-medium text-white bg-red-600
@@ -628,26 +657,80 @@
         退会する
       </button>
 
-      <%# M-4: 退会確認モーダル %>
-      <div hidden
+      <%#
+        ================================================================
+        モーダルの全体ラッパー（overlay）
+        ================================================================
+        【なぜ class="hidden" を使うのか】
+          HTML 属性の hidden（<div hidden>）は JS の classList では操作できない。
+          Tailwind の class="hidden"（display: none !important）は
+          classList.remove("hidden") / classList.add("hidden") で安全に操作できる。
+
+          旧実装の <div hidden> をここで class="hidden" に変更することが
+          H-2 の根本的バグ修正。
+
+        data-deactivate-modal-target="overlay":
+          DeactivateModalController の open()/close() から
+          this.overlayTarget として参照する。
+
+        fixed inset-0 z-50:
+          画面全体を固定レイヤーで覆う。
+          z-50 で他の要素より前面に表示する。
+      %>
+      <div class="hidden fixed inset-0 z-[60]"
+           data-deactivate-modal-target="overlay"
            role="dialog"
            aria-modal="true"
            aria-labelledby="deactivate-modal-title">
 
-        <div class="fixed inset-0 bg-black bg-opacity-50 transition-opacity"
+        <%#
+          背景の暗幕（バックドロップ）
+          data-action="click->deactivate-modal#close":
+            暗幕をクリックしたときにモーダルを閉じる。
+            closeFromOverlay() は event.target チェックで
+            「暗幕自体をクリックした場合のみ」閉じる（誤閉じ防止）。
+          aria-hidden="true":
+            スクリーンリーダーには読み上げない（装飾要素のため）。
+        %>
+        <div class="fixed inset-0 bg-black bg-opacity-50"
              data-action="click->deactivate-modal#close"
-             aria-hidden="true"></div>
+             style="pointer-events: auto;"></div>
 
-        <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+        <%#
+          ================================================================
+          デスクトップ用: 画面中央モーダル（768px 以上で表示）
+          ================================================================
+          data-deactivate-modal-target="desktopPanel":
+            _openDesktop() で style.display = "flex" にする対象。
+            初期状態は style が未設定だが、open() で画面幅を判定してから
+            flex または none を設定するため問題ない。
+
+          hidden:
+            初期状態で非表示（JS の _openDesktop() で style.display = "flex" に変更）。
+            hidden クラスは display:none !important のため JS から
+            style.display を設定した後は hidden クラスを外す必要がある。
+            → _openDesktop() で style.display = "flex" を設定することで
+               !important を上書きするのではなく、
+               hidden クラスを使わずに display 制御する設計にしている。
+
+          pointer-events-none / pointer-events-auto:
+            fixed inset-0 でモーダル全体を覆うと、ポインターイベントを奪ってしまう。
+            pointer-events-none で外側は無効にして、
+            白いカード部分（pointer-events-auto）だけクリックを受け付ける。
+        %>
+        <div data-deactivate-modal-target="desktopPanel"
+             class="hidden fixed inset-0 items-center justify-center p-4 pointer-events-none">
           <div class="relative bg-white rounded-xl shadow-2xl w-full max-w-md
                       max-h-screen overflow-y-auto pointer-events-auto"
                onclick="event.stopPropagation();">
 
+            <%# ── デスクトップ ヘッダー ── %>
             <div class="flex items-center justify-between p-6 border-b border-gray-200">
               <h3 id="deactivate-modal-title"
                   class="text-lg font-bold text-red-700">
                 ⚠️ 退会の確認
               </h3>
+              <%# × 閉じるボタン %>
               <button type="button"
                       data-action="click->deactivate-modal#close"
                       class="p-1 rounded text-gray-400 hover:text-gray-600
@@ -661,6 +744,7 @@
               </button>
             </div>
 
+            <%# ── デスクトップ コンテンツ ── %>
             <div class="p-6 space-y-5">
               <p class="text-sm text-gray-700 font-medium">
                 退会すると以下のデータが処理されます。この操作は取り消しできません。
@@ -699,6 +783,7 @@
               </div>
             </div>
 
+            <%# ── デスクトップ フッター（ボタンエリア）── %>
             <div class="flex gap-3 p-6 border-t border-gray-200">
               <button type="button"
                       data-action="click->deactivate-modal#close"
@@ -709,6 +794,11 @@
                 キャンセル
               </button>
 
+              <%#
+                退会実行ボタン（デスクトップ）
+                button_to は Rails が <form> を生成して DELETE リクエストを送る。
+                data-disable_with: 送信中はボタンを無効化して二重送信を防ぐ。
+              %>
               <%= button_to t("settings.destroy.confirm_button"),
                   settings_path,
                   method: :delete,
@@ -721,8 +811,175 @@
 
           </div>
         </div>
+
+        <%#
+          ================================================================
+          スマホ用: ボトムシート（768px 未満で表示）
+          ================================================================
+          data-deactivate-modal-target="mobileSheet":
+            _openMobile() で style.display = "flex" にする対象。
+            初期状態は display: none（style 属性で制御）。
+
+          fixed inset-0:
+            画面全体を覆う固定レイヤー。
+            items-end でコンテンツ（sheetPanel）を画面下端に配置する。
+            → ボトムシートらしい見た目になる。
+
+          style="display: none;":
+            初期状態で非表示にする。
+            Tailwind の hidden クラス（!important）だと
+            JS の style.display = "flex" で上書きできないため
+            style 属性で直接制御する。
+        %>
+        <div data-deactivate-modal-target="mobileSheet"
+             class="fixed inset-0 items-end z-[60] pointer-events-none"
+             style="display: none;">
+
+          <%#
+            ボトムシートのカード本体
+            data-deactivate-modal-target="sheetPanel":
+              スライドアニメーション（translate-y-full → translate-y-0）の対象。
+              タッチジェスチャーのリスナー登録先。
+
+            transform translate-y-full:
+              初期状態: 要素の高さ分だけ下にずらして画面外（下）に隠す。
+              _openMobile() で translate-y-0 に変更してスライドインさせる。
+
+            transition-transform duration-300:
+              translate の変化に 300ms のアニメーションを付ける。
+              close() の setTimeout(300) と必ず合わせること。
+
+            rounded-t-[20px]:
+              要件の「border-radius 20px 20px 0 0」を Tailwind 任意値で実現。
+              上部の角だけ丸くしてボトムシートらしい見た目にする。
+
+            max-h-[85dvh]:
+              dvh（Dynamic Viewport Height）を使う理由:
+                iOS Safari のアドレスバーは動的に高さが変わる。
+                vh はアドレスバーを含んだ高さを基準にするため
+                実際の表示領域より大きくなり、画面からはみ出す場合がある。
+                dvh はアドレスバーを除いた実際の表示領域を基準にするため正確。
+
+            data-action の touchstart/touchmove/touchend:
+              スワイプダウンジェスチャーを検知して
+              DeactivateModalController の各メソッドに渡す。
+              Stimulus の data-action 方式で登録することで
+              passive でない（preventDefault() が使える）リスナーになる。
+          %>
+          <div data-deactivate-modal-target="sheetPanel"
+               class="bg-white rounded-t-[20px] shadow-2xl w-full pointer-events-auto
+                      max-h-[85dvh] overflow-y-auto
+                      transform translate-y-full transition-transform duration-300"
+               data-action="touchstart->deactivate-modal#touchStart
+                            touchmove->deactivate-modal#touchMove
+                            touchend->deactivate-modal#touchEnd">
+
+            <%#
+              スワイプハンドルバー
+              ボトムシートを引き下げられることを視覚的に示すグレーのバー。
+              aria-hidden="true" でスクリーンリーダーには読み上げない（装飾のため）。
+            %>
+            <div class="flex justify-center pt-3 pb-1" aria-hidden="true">
+              <div class="w-10 h-1.5 bg-gray-300 rounded-full"></div>
+            </div>
+
+            <%# ── スマホ ヘッダー ── %>
+            <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <h3 id="deactivate-sheet-title"
+                  class="text-base font-bold text-red-700">
+                ⚠️ 退会の確認
+              </h3>
+              <%# × 閉じるボタン %>
+              <button type="button"
+                      data-action="click->deactivate-modal#close"
+                      class="p-1 rounded text-gray-400 hover:text-gray-600
+                             focus:outline-none focus:ring-2 focus:ring-gray-400"
+                      aria-label="モーダルを閉じる">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                     aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+
+            <%# ── スマホ コンテンツ ── %>
+            <div class="px-5 py-4 space-y-4">
+              <p class="text-sm text-gray-700 font-medium">
+                退会すると以下のデータが処理されます。この操作は取り消しできません。
+              </p>
+
+              <div class="bg-red-50 border border-red-200 rounded-lg p-4">
+                <h4 class="text-sm font-semibold text-red-800 mb-2">
+                  🗑️ 即時に匿名化・削除されるデータ
+                </h4>
+                <ul class="text-sm text-red-700 space-y-1 list-disc list-inside">
+                  <li>ユーザー名・メールアドレス・LINE ID</li>
+                  <li>パスワード情報</li>
+                  <li>パスワードリセットトークン</li>
+                </ul>
+              </div>
+
+              <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h4 class="text-sm font-semibold text-gray-700 mb-2">
+                  📊 匿名化して保持されるデータ（統計・AI改善目的）
+                </h4>
+                <ul class="text-sm text-gray-600 space-y-1 list-disc list-inside">
+                  <li>習慣の達成記録・習慣一覧</li>
+                  <li>タスクの完了・未完了記録</li>
+                  <li>週次振り返りデータ</li>
+                  <li>AI分析結果</li>
+                </ul>
+                <p class="text-xs text-gray-500 mt-2">
+                  ※ 保持されるデータは個人を特定できない匿名の状態で保管されます。
+                </p>
+              </div>
+
+              <div class="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p class="text-xs text-blue-700">
+                  ℹ️ 退会後は同じメールアドレスで再登録いただけます。
+                </p>
+              </div>
+            </div>
+
+            <%# ── スマホ フッター（縦並びボタン）── %>
+            <div class="flex flex-col gap-3 px-5 pb-8 pt-4 border-t border-gray-200">
+
+              <%#
+                退会実行ボタン（スマホ用）
+                スマホでは flex-col で縦並びにして押しやすくする。
+                rounded-xl でよりスマホらしい角丸にする。
+              %>
+              <%= button_to t("settings.destroy.confirm_button"),
+                  settings_path,
+                  method: :delete,
+                  class: "w-full py-3 text-sm font-medium text-white
+                          bg-red-600 rounded-xl hover:bg-red-700 transition-colors
+                          focus:outline-none focus:ring-2 focus:ring-red-500
+                          focus:ring-offset-2",
+                  data: { disable_with: "退会処理中..." } %>
+
+              <button type="button"
+                      data-action="click->deactivate-modal#close"
+                      class="w-full py-3 text-sm font-medium text-gray-700
+                             bg-white border border-gray-300 rounded-xl
+                             hover:bg-gray-50 transition-colors
+                             focus:outline-none focus:ring-2 focus:ring-gray-400">
+                キャンセル
+              </button>
+
+            </div>
+
+          </div>
+        </div>
+
       </div>
+      <%# ▲ data-deactivate-modal-target="overlay" ここまで %>
+
     </div>
+    <%# ▲ data-controller="deactivate-modal" ここまで %>
+
   </section>
 
 </div>
+<%# ▲ settings/show.html.erb 末尾 %>

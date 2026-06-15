@@ -41,13 +41,13 @@
     ============================================================
     fixed inset-0  : 画面全体を覆う固定配置（スクロールしても動かない）
     bg-black/50    : 半透明の黒背景（オーバーレイ効果）
-    z-50           : 他の要素より前面に表示（z-index: 50）
+    z-[60]           : 他の要素より前面に表示（z-index: 60）
     style="display: none": JavaScript が open() で "flex" に変更するまで非表示
     ※ Tailwind の hidden クラス（display:none !important）は
       JavaScript から上書きできないため style 属性で直接制御する
   %>
   <div data-ai-limit-modal-target="desktopModal"
-       class="fixed inset-0 bg-black/50 items-center justify-center z-50 p-4"
+       class="fixed inset-0 bg-black/50 items-center justify-center z-[60] p-4"
        style="display: none;"
        data-action="click->ai-limit-modal#closeOnOverlay">
 
@@ -70,7 +70,7 @@
     style="display: none": デスクトップ版と同様に初期非表示
   %>
   <div data-ai-limit-modal-target="mobileSheet"
-       class="fixed inset-0 bg-black/50 items-end z-50"
+       class="fixed inset-0 bg-black/50 items-end z-[60]"
        style="display: none;"
        data-action="click->ai-limit-modal#closeOnOverlay">
 

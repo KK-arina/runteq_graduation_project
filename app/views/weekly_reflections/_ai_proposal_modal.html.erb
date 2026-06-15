@@ -28,7 +28,7 @@
     オーバーレイ（背景の暗幕）:
       fixed inset-0: 画面全体を覆う
       bg-black/50:   半透明の黒（Tailwind v3 の opacity shorthand 記法）
-      z-40:          モーダル本体（z-[50]）より後ろに表示する
+      z-[50]:        モーダル本体（z-[60]）より後ろに表示する
       data-action: 暗幕クリックでモーダルを閉じる
   %>
   <div class="fixed inset-0 bg-black/50 z-40"
@@ -39,11 +39,11 @@
   <%#
     デスクトップ用モーダル（sm 以上で表示）:
       fixed inset-0 flex items-center justify-center: 画面中央に固定
-      z-[50]: z-[50] で任意値指定（Tailwind 標準の z-50 でも可）
+      z-[60]: z-[60] で任意値指定（Bottom Navigation の z-50 より前面に表示する）
       hidden sm:flex: スマホでは非表示、sm（640px）以上で flex 表示
       px-4: モーダル両端に余白
   %>
-  <div class="fixed inset-0 flex items-center justify-center z-[50] hidden sm:flex px-4"
+  <div class="fixed inset-0 flex items-center justify-center z-[60] hidden sm:flex px-4"
        role="dialog"
        aria-modal="true"
        aria-labelledby="ai-proposal-modal-title">
@@ -59,12 +59,12 @@
     スマホ用ボトムシート（sm 未満で表示）:
       fixed bottom-0 left-0 right-0: 画面下部に固定
       sm:hidden: sm（640px）以上では非表示
-      z-[50]: 任意値指定（オーバーレイ z-40 より前面）
+      z-[60]: 任意値指定（オーバーレイ z-[50] より前面）
       rounded-t-2xl: 上部の角を丸くする（ボトムシートらしい見た目）
       max-h-[85dvh]: 画面の 85% まで（dvh で iOS Safari のアドレスバーを考慮）
       overflow-y-auto: スクロール可能
   %>
-  <div class="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[50]
+  <div class="fixed bottom-0 left-0 right-0 bg-white rounded-t-2xl shadow-2xl z-[60]
               sm:hidden max-h-[85dvh] overflow-y-auto"
        role="dialog"
        aria-modal="true"
@@ -85,15 +85,15 @@
         Stimulus から参照するための target 名。
         openReanalyzeConfirm(event) / closeReanalyzeConfirm(event) で hidden を切替する。
 
-      z-[60]: モーダル本体（z-[50]）より前面に表示する
-              Tailwind 任意値記法（z-60 は標準にない）。
-      z-[70]: 確認ダイアログ本体をオーバーレイより前面に表示する。
+      z-[70]: モーダル本体（z-[60]）より前面に表示する
+              Tailwind 任意値記法（z-70 は標準にない）。
+      z-[80]: 確認ダイアログ本体をオーバーレイより前面に表示する。
   %>
   <div data-ai-proposal-modal-target="reanalyzeConfirm"
        id="reanalyze-confirm-modal"
        hidden>
-    <div class="fixed inset-0 bg-black/60 z-[60]" aria-hidden="true"></div>
-    <div class="fixed inset-0 flex items-center justify-center z-[70] px-4">
+    <div class="fixed inset-0 bg-black/60 z-[70]" aria-hidden="true"></div>
+    <div class="fixed inset-0 flex items-center justify-center z-[80] px-4">
       <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
         <h3 class="text-base font-bold text-gray-900 mb-2">🔄 振り返り入力に戻りますか？</h3>
         <p class="text-sm text-gray-600 mb-6 leading-relaxed">
