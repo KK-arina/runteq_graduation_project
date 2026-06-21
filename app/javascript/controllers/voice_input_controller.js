@@ -1,225 +1,356 @@
 // app/javascript/controllers/voice_input_controller.js
-// =============================================================
-// Stimulus コントローラー: 音声入力（B-7 新規作成）
-// =============================================================
 //
-// 【役割】
-//   Web Speech API（SpeechRecognition）を使って音声入力を実現する。
-//   🎤 ボタンをクリックすると音声認識を開始/停止する。
-//   認識した文字列をテキストエリアに追記する。
+// ==============================================================================
+// VoiceInputController（H-3: 音声入力機能）最終確定版 v2
+// ==============================================================================
 //
-// 【Web Speech API について】
-//   ブラウザに標準搭載された音声認識 API。
-//   Chrome (デスクトップ・Android) / Safari (iOS 14.5+) で動作する。
-//   Firefox など未対応ブラウザでは graceful degradation（優雅な劣化）として
-//   🎤 ボタンを非表示にする。
-//   外部APIへの送信は行わない（ブラウザ内処理のみ）。
+// 【このコントローラーの役割】
+//   Web Speech API（SpeechRecognition）を使い、
+//   テキストエリア・入力フィールドに音声でテキストをリアルタイム追記する。
+//   音声データはブラウザ内で処理される。
+//   ※ Chrome 使用時は Google のサーバーで音声処理が行われる場合がある。
 //
-// 【webkitSpeechRecognition について】
-//   Chrome は標準の SpeechRecognition の前に
-//   webkitSpeechRecognition という独自実装を提供している。
-//   両方に対応するために「SpeechRecognition || webkitSpeechRecognition」
-//   という記述でどちらかが使えれば利用する。
+// 【対応ブラウザ】
+//   Chrome（デスクトップ・Android）: window.webkitSpeechRecognition
+//   Safari（iOS 14.5+ / macOS）   : window.SpeechRecognition
+//   Firefox                       : デフォルトで無効化されているため未対応扱い
+//                                    → connect() で🎤ボタンを自動非表示にする
 //
-// 【connect() でのブラウザ対応チェックについて】
-//   コントローラーが DOM に接続されたとき（= ページ読み込み時）に
-//   ブラウザの対応状況を確認する。
-//   未対応なら 🎤 ボタンを非表示にすることで
-//   「タップしても何も起きない」という混乱を防ぐ。
+// 【リアルタイム追記の実装方針（最重要）】
+//   handleResult() 内で event.results を 0 から全件ループし、
+//   isFinal=true（確定結果）と isFinal=false（暫定結果＝話している途中）を
+//   それぞれ別の変数に集計する。
+//   フィールドへ書き込む際は startValue + finalTranscript + interimTranscript
+//   をすべて連結する。これにより話している最中から文字が画面に出てくる。
 //
-// =============================================================
+// 【複数フィールド同時録音の防止】
+//   window.activeVoiceController にアクティブなコントローラーを記録し、
+//   新しいフィールドで録音開始すると前のコントローラーの録音を先に停止する。
+//
+// 【連打防止】
+//   isProcessing フラグで start() 呼び出し中〜onstart発火までをロックする。
+//
+// 【インライントースト v2】
+//   #flash-area は使わず、🎤ボタンの直後にインラインで警告メッセージを挿入する。
+//   表示位置の基準(position:relative)はHTML側のclass属性で用意する設計とし、
+//   JS側ではstyle.positionを強制付与しない（レイアウト責務の分離）。
+//   ✕ボタンのクリックハンドラーはonclickへの代入とし、
+//   再利用時にaddEventListenerが重複登録されることを防ぐ。
+//
+// 【HTML 側の使い方】
+//   <div class="relative" data-controller="voice-input">
+//     <textarea data-voice-input-target="field"></textarea>
+//     <button data-voice-input-target="button"
+//             data-action="click->voice-input#toggle">🎤</button>
+//   </div>
+//   ※ 親divに class="relative" が必須（showToastの絶対配置の基準になる）
+// ==============================================================================
 
 import { Controller } from "@hotwired/stimulus"
 
 export default class extends Controller {
-  // ===========================================================
-  // Targets の定義
-  // ===========================================================
-  static targets = [
-    // field: 音声認識結果のテキストを書き込む入力要素（テキストエリアなど）
-    //        data-voice-input-target="field" を付けた要素がターゲットになる
-    "field",
-    // button: 🎤 ボタン
-    //         録音中は赤くして「録音中」をユーザーに示す
-    "button"
-  ]
+  static targets = ["field", "button"]
 
-  // ===========================================================
-  // connect() ライフサイクルフック
-  // ===========================================================
-  //
-  // Stimulus コントローラーが DOM に接続されたときに自動的に呼ばれる。
-  // ブラウザの対応確認と SpeechRecognition の初期設定をここで行う。
+  // ============================================================
+  // connect(): コントローラーが DOM に接続されたとき自動で呼ばれる
+  // ============================================================
   connect() {
-    // SpeechRecognition または webkitSpeechRecognition が使えるか確認する
-    // window.SpeechRecognition: 標準準拠ブラウザ（Firefox の将来バージョンなど）
-    // window.webkitSpeechRecognition: Chrome / Safari
-    const SpeechRecognition =
+    const SpeechRecognitionAPI =
       window.SpeechRecognition || window.webkitSpeechRecognition
 
-    // 未対応ブラウザ（Firefox など）の場合
-    if (!SpeechRecognition) {
-      // 🎤 ボタンを非表示にする
-      // 「タップしても何も起きない」という混乱を防ぐための graceful degradation
+    if (!SpeechRecognitionAPI) {
+      // 未対応ブラウザ: 🎤ボタンを非表示にする
       if (this.hasButtonTarget) {
         this.buttonTarget.style.display = "none"
       }
-      // 後続の処理は不要なので早期リターンする
       return
     }
 
-    // SpeechRecognition のインスタンスを生成する
-    // インスタンス変数（this.recognition）に保存して
-    // toggle() メソッドからアクセスできるようにする
-    this.recognition = new SpeechRecognition()
-
-    // lang: 認識する言語を日本語に設定する
-    // "ja-JP" = 日本語（日本）
-    // この設定がないと英語で認識しようとする場合がある
+    this.recognition = new SpeechRecognitionAPI()
     this.recognition.lang = "ja-JP"
+    this.recognition.continuous = true
+    this.recognition.interimResults = true
 
-    // continuous: false にすると「発話が終わったら自動停止」する
-    // true にすると手動でstopを呼ぶまで認識し続ける
-    // メモ入力は短い文章を想定しているため false を使う
-    this.recognition.continuous = false
+    this.recognition.onresult = this.handleResult.bind(this)
+    this.recognition.onerror  = this.handleError.bind(this)
+    this.recognition.onend    = this.handleEnd.bind(this)
 
-    // interimResults: true にすると「認識途中の結果」も返す
-    // false にすると「確定した結果」のみ返す
-    // メモ入力では確定結果のみで十分なため false を使う
-    this.recognition.interimResults = false
-
-    // 録音状態を管理するフラグ
-    // toggle() メソッドで開始/停止を切り替えるために使う
-    this._isListening = false
-
-    // onresult: 音声認識が成功したときのコールバック
-    // event.results に認識結果の配列が入っている
-    this.recognition.onresult = (event) => {
-      // event.results[0][0].transcript: 最初の認識結果のテキスト
-      // transcript は認識したテキスト文字列
-      const transcript = event.results[0][0].transcript
-
-      // テキストエリアに認識結果を追記する
-      // 「+=」で追記することで、既存のメモを消さずに後ろに付け加える
-      // 追記前に半角スペースを1つ入れることで、前の文章とくっつかないようにする
-      if (this.hasFieldTarget) {
-        const current = this.fieldTarget.value
-        // 既存テキストが空でなければスペースを挟む
-        this.fieldTarget.value = current
-          ? current + " " + transcript
-          : transcript
-
-        // input イベントを手動で発火して文字数カウンターを更新する
-        // テキストエリアへの JS による直接代入では input イベントが発火しないため
-        // 手動でイベントを作成して発火させる必要がある
-        this.fieldTarget.dispatchEvent(new Event("input", { bubbles: true }))
-      }
-
-      // 認識が終わったらボタンを元の状態に戻す
-      this._setListeningState(false)
+    // onstart: 録音が実際に開始されたタイミングで呼ばれる
+    // 連打防止ロック（isProcessing）をここで解除する
+    this.recognition.onstart = () => {
+      this.isProcessing = false
     }
 
-    // onerror: 音声認識中にエラーが発生したときのコールバック
-    this.recognition.onerror = (event) => {
-      console.error("音声認識エラー:", event.error)
+    this.isListening  = false
+    this.startValue   = ""
+    this.isProcessing = false
 
-      // "not-allowed": マイクへのアクセスが拒否された
-      // この場合のみユーザーにメッセージを表示する
-      // その他のエラー（network, no-speech など）は静かに終了する
-      if (event.error === "not-allowed") {
-        alert("マイクへのアクセスを許可してください。\nブラウザの設定 → このサイトの権限 → マイク → 許可")
-      }
-
-      this._setListeningState(false)
-    }
-
-    // onend: 音声認識が終了したときのコールバック
-    // エラーや自動停止の場合も呼ばれる
-    this.recognition.onend = () => {
-      this._setListeningState(false)
-    }
+    // showToast() が生成するトーストの自動消去タイマーを保持する変数
+    this.toastTimer = null
   }
 
-  // ===========================================================
-  // disconnect() ライフサイクルフック
-  // ===========================================================
-  //
-  // Stimulus コントローラーが DOM から切り離されたとき（= ページ遷移時など）
-  // に自動的に呼ばれる。
-  // 認識中のまま画面遷移するとマイクが解放されないため、ここで停止する。
+  // ============================================================
+  // disconnect(): コントローラーが DOM から切断されたとき自動で呼ばれる
+  // ============================================================
   disconnect() {
-    if (this.recognition && this._isListening) {
-      this.recognition.stop()
+    if (this.recognition && this.isListening) {
+      this.recognition.abort()
+      this.isListening = false
+    }
+
+    if (window.activeVoiceController === this) {
+      window.activeVoiceController = null
+    }
+
+    // トーストのタイマーが残っていればクリアする
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer)
     }
   }
 
-  // ===========================================================
-  // toggle メソッド
-  // ===========================================================
-  //
-  // 【役割】
-  //   🎤 ボタンをクリックしたとき、音声認識の開始/停止を切り替える。
-  //
-  // 【_isListening フラグについて】
-  //   _isListening が true = 現在録音中 → stop() を呼んで停止する
-  //   _isListening が false = 現在停止中 → start() を呼んで開始する
+  // ============================================================
+  // toggle(): 🎤ボタンがクリックされたとき呼ばれる
+  // ============================================================
   toggle() {
-    // recognition が初期化されていない（= 未対応ブラウザ）場合は何もしない
-    if (!this.recognition) return
+    if (!this.recognition) {
+      this.showToast("お使いのブラウザは音声入力に対応していません", "warning")
+      return
+    }
 
-    if (this._isListening) {
-      // 録音中 → 停止する
-      this.recognition.stop()
-      this._setListeningState(false)
+    // 連打防止: start()呼び出し中〜onstart発火までクリックを無視する
+    if (this.isProcessing) return
+
+    if (this.isListening) {
+      this.stopRecording()
     } else {
-      // 停止中 → 開始する
-      try {
-        this.recognition.start()
-        this._setListeningState(true)
-      } catch (error) {
-        // start() は既に開始済みの場合にエラーを投げることがある
-        // その場合は無視して停止状態にリセットする
-        console.error("音声認識の開始に失敗しました:", error)
-        this._setListeningState(false)
+      this.startRecording()
+    }
+  }
+
+  // ============================================================
+  // startRecording(): 音声認識を開始する
+  // ============================================================
+  startRecording() {
+    if (!this.hasFieldTarget) return
+
+    this.isProcessing = true
+
+    // 複数フィールド同時録音の防止
+    if (window.activeVoiceController &&
+        window.activeVoiceController !== this &&
+        window.activeVoiceController.isListening) {
+      window.activeVoiceController.recognition.stop()
+      window.activeVoiceController.isListening = false
+      window.activeVoiceController.setButtonRecording(false)
+    }
+
+    window.activeVoiceController = this
+    this.startValue = this.fieldTarget.value
+
+    try {
+      this.recognition.start()
+      this.isListening = true
+      this.setButtonRecording(true)
+    } catch (error) {
+      console.error("[VoiceInput] recognition.start() failed:", error)
+      this.isListening = false
+      this.setButtonRecording(false)
+      this.showToast("音声入力の開始に失敗しました。もう一度お試しください", "warning")
+      this.isProcessing = false
+    }
+  }
+
+  // ============================================================
+  // stopRecording(): 音声認識を停止する
+  // ============================================================
+  stopRecording() {
+    this.recognition.stop()
+  }
+
+  // ============================================================
+  // handleResult(event): 音声認識結果が得られたとき呼ばれる（リアルタイム追記の本体）
+  // ============================================================
+  handleResult(event) {
+    if (!this.hasFieldTarget) return
+
+    let finalTranscript   = ""
+    let interimTranscript = ""
+
+    for (let i = 0; i < event.results.length; i++) {
+      const transcript = event.results[i][0].transcript
+
+      if (event.results[i].isFinal) {
+        finalTranscript += transcript
+      } else {
+        interimTranscript += transcript
       }
     }
+
+    const hasNewSpeech = finalTranscript.length > 0 || interimTranscript.length > 0
+    const needSeparator =
+      this.startValue.length > 0 &&
+      !this.startValue.endsWith("\n") &&
+      hasNewSpeech
+
+    const separator = needSeparator ? "\n" : ""
+
+    // 話している最中からリアルタイムに反映する（interimTranscriptを含める）
+    this.fieldTarget.value =
+      this.startValue + separator + finalTranscript + interimTranscript
+
+    this.fieldTarget.scrollTop = this.fieldTarget.scrollHeight
   }
 
-  // ===========================================================
-  // Private メソッド
-  // ===========================================================
+  // ============================================================
+  // handleError(event): 音声認識エラーが発生したとき呼ばれる
+  // ============================================================
+  handleError(event) {
+    if (event.error === "aborted") return
+    if (event.error === "no-speech") return
 
-  // _setListeningState
-  // 【役割】
-  //   録音状態のフラグを更新し、🎤 ボタンの見た目を変える。
-  //
-  // 【isListening が true の場合（録音中）】
-  //   ボタンに録音中スタイルを適用する
-  //   aria-label を「音声入力を停止する」に変更する
-  //
-  // 【isListening が false の場合（停止中）】
-  //   ボタンを通常スタイルに戻す
-  //   aria-label を「音声入力を開始する」に戻す
-  _setListeningState(isListening) {
-    this._isListening = isListening
+    let message = "音声入力でエラーが発生しました"
 
+    switch (event.error) {
+      case "not-allowed":
+      case "service-not-allowed":
+        message = "マイクへのアクセスを許可してください"
+        break
+      case "audio-capture":
+        message = "マイクが見つかりません。接続を確認してください"
+        break
+      case "network":
+        message = "ネットワークエラーが発生しました。接続を確認してください"
+        break
+    }
+
+    this.showToast(message, "alert")
+
+    this.isListening  = false
+    this.isProcessing = false
+    this.setButtonRecording(false)
+  }
+
+  // ============================================================
+  // handleEnd(): 音声認識が終了したとき呼ばれる
+  // ============================================================
+  handleEnd() {
+    this.isListening = false
+    this.setButtonRecording(false)
+
+    if (window.activeVoiceController === this) {
+      window.activeVoiceController = null
+    }
+  }
+
+  // ============================================================
+  // setButtonRecording(isRecording): ボタンの見た目を切り替える
+  // ============================================================
+  setButtonRecording(isRecording) {
     if (!this.hasButtonTarget) return
 
-    if (isListening) {
-      // 録音中: ボタンを赤くしてアニメーションを付ける
-      // animate-pulse は Tailwind CSS のクラスで「点滅するアニメーション」を適用する
-      this.buttonTarget.classList.add(
-        "text-red-500", "bg-red-50", "border-red-300", "animate-pulse"
-      )
-      this.buttonTarget.classList.remove("text-gray-500")
+    if (isRecording) {
       this.buttonTarget.setAttribute("aria-label", "音声入力を停止する")
-    } else {
-      // 停止中: ボタンを元のスタイルに戻す
-      this.buttonTarget.classList.remove(
-        "text-red-500", "bg-red-50", "border-red-300", "animate-pulse"
+      this.buttonTarget.classList.add(
+        "animate-pulse", "bg-red-100", "border-red-400", "text-red-600"
       )
-      this.buttonTarget.classList.add("text-gray-500")
+      this.buttonTarget.classList.remove("text-gray-500", "hover:bg-gray-50")
+    } else {
       this.buttonTarget.setAttribute("aria-label", "音声入力を開始する")
+      this.buttonTarget.classList.remove(
+        "animate-pulse", "bg-red-100", "border-red-400", "text-red-600"
+      )
+      this.buttonTarget.classList.add("text-gray-500", "hover:bg-gray-50")
     }
+  }
+
+  // ============================================================
+  // showToast(message, type): ボタン直下にインラインで警告を表示する
+  // ============================================================
+  //
+  // 【設計方針】
+  //   #flash-areaは使わない。🎤ボタンの直後に絶対配置(absolute)で
+  //   メッセージボックスを挿入する。位置の基準となるposition:relativeは
+  //   HTML側（親div）にあらかじめ用意されている前提で、JS側では
+  //   style.positionを設定しない（レイアウト責務をHTML/CSS側に置くため）。
+  showToast(message, type = "notice") {
+    if (!this.hasButtonTarget) return
+
+    // 既に同じコントローラー内に警告ボックスが表示中なら再利用する
+    let toastBox = this.element.querySelector("[data-voice-inline-toast]")
+
+    const styles = {
+      notice:  { bg: "bg-blue-50",   border: "border-blue-300",   text: "text-blue-900",   icon: "✅" },
+      alert:   { bg: "bg-red-50",    border: "border-red-300",    text: "text-red-900",    icon: "❌" },
+      warning: { bg: "bg-yellow-50", border: "border-yellow-300", text: "text-yellow-900", icon: "⚠️" }
+    }
+    const style = styles[type] || styles.notice
+
+    if (!toastBox) {
+      // 警告ボックスが存在しない場合は新規生成する
+      // position:relativeはHTML側のclass="relative"に依存するため
+      // ここでは設定しない
+      toastBox = document.createElement("div")
+      toastBox.setAttribute("data-voice-inline-toast", "true")
+      toastBox.setAttribute("role", "alert")
+      toastBox.setAttribute("aria-live", "polite")
+
+      // absolute: 親のrelativeを基準に浮かせて表示する
+      // bottom-full: 親要素の直上に配置する（押したボタンのすぐ上に出すため）
+      // right-0: 右端を親要素の右端に揃える
+      // mb-2: ボタンとの間に少し余白を作る
+      // z-50: 他要素より前面に表示する
+      // w-64: 横幅を固定して読みやすくする
+      // mb-2: ボタンとの間に少し余白を作る（topの場合のmt-2に相当）
+      toastBox.className =
+        "absolute bottom-full right-0 mb-2 z-50 w-64 px-3 py-2.5 rounded-lg border shadow-lg text-xs leading-relaxed"
+
+      this.buttonTarget.insertAdjacentElement("afterend", toastBox)
+    }
+
+    // 内容とスタイルを更新する（新規・再利用どちらの場合も実行）
+    toastBox.className =
+      `absolute bottom-full right-0 mb-2 z-50 w-64 px-3 py-2.5 rounded-lg border shadow-lg text-xs leading-relaxed ${style.bg} ${style.border} ${style.text}`
+
+    toastBox.innerHTML = `
+      <div class="flex items-start gap-1.5">
+        <span class="flex-shrink-0" aria-hidden="true">${style.icon}</span>
+        <span class="flex-1">${this.escapeHtml(message)}</span>
+        <button type="button"
+                class="flex-shrink-0 opacity-60 hover:opacity-100"
+                aria-label="閉じる">✕</button>
+      </div>
+    `
+
+    // ✕ボタンのクリックハンドラー
+    //
+    // addEventListenerではなくonclickへの代入を使う:
+    //   toastBoxを再利用するたびにaddEventListenerを呼ぶと
+    //   クリックハンドラーが何重にも積み重なってしまう。
+    //   onclickへの代入は常に1つだけのハンドラーに上書きされるため
+    //   再利用しても重複登録が起こらない。
+    const closeButton = toastBox.querySelector("button")
+    closeButton.onclick = () => {
+      toastBox.remove()
+    }
+
+    // 既存のタイマーをクリアしてから新しいタイマーをセットする
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer)
+    }
+
+    this.toastTimer = setTimeout(() => {
+      if (toastBox && toastBox.parentNode) {
+        toastBox.remove()
+      }
+    }, 4000)
+  }
+
+  // ============================================================
+  // escapeHtml(text): XSS 対策のための HTML エスケープ
+  // ============================================================
+  escapeHtml(text) {
+    const div = document.createElement("div")
+    div.appendChild(document.createTextNode(text))
+    return div.innerHTML
   }
 }

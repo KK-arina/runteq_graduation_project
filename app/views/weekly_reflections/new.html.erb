@@ -203,7 +203,7 @@
       <h3 class="text-sm font-bold text-gray-700">📝 振り返りのポイント</h3>
 
       <%# ── なぜ？（direct_reason）必須・🎤付き ────────────────────────────── %>
-      <div data-controller="voice-input">
+      <div class="relative" data-controller="voice-input">
         <%= f.label :direct_reason,
               class: "block text-sm font-semibold text-gray-700 mb-1" do %>
           なぜ？<span class="font-normal text-gray-500 ml-1">（直接の原因）</span>
@@ -238,7 +238,7 @@
       </div>
 
       <%# ── どう？（background_situation）必須・🎤付き ────────────────────── %>
-      <div data-controller="voice-input">
+      <div class="relative" data-controller="voice-input">
         <%= f.label :background_situation,
               class: "block text-sm font-semibold text-gray-700 mb-1" do %>
           どう？<span class="font-normal text-gray-500 ml-1">（改善策）</span>
@@ -273,7 +273,7 @@
       </div>
 
       <%# ── からの？（next_action）必須・🎤付き ────────────────────────────── %>
-      <div data-controller="voice-input">
+      <div class="relative" data-controller="voice-input">
         <%= f.label :next_action,
               class: "block text-sm font-semibold text-gray-700 mb-1" do %>
           からの？<span class="font-normal text-gray-500 ml-1">（次への展開）</span>
@@ -317,7 +317,7 @@
              （reflection_comment はもうエラーにならないため不要）
           ③ インラインエラーメッセージの表示ブロックを削除
     %>
-    <div data-controller="voice-input">
+    <div class="relative" data-controller="voice-input">
       <%= f.label :reflection_comment,
             class: "block text-sm font-semibold text-gray-700 mb-1" do %>
         自由コメント
