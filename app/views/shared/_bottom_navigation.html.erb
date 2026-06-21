@@ -203,15 +203,17 @@
     <%# ── タブ 4: グラフ ────────────────────────────────────── %>
     <%#
       アクティブ判定: controller_name == 'analytics'
-      【H-4 実装前の暫定対応】
-        analytics_path は H-4 実装後に存在する。
-        現時点では user_purpose_path（routes.rb 確認済み・単数形）を暫定リンク先にする。
-        H-4 実装（AnalyticsController 作成）後に以下を差し替える:
-          リンク先: user_purpose_path → analytics_path
-          controller_name の判定: 'analytics' のままでよい
+
+      【H-4 実装完了によりリンク先を確定】
+        H-1 実装時点では AnalyticsController が存在しなかったため、
+        暫定的に user_purpose_path をリンク先にしていた。
+        H-4 で AnalyticsController#index が実装されたため、
+        正式に analytics_path（config/routes.rb で定義済み）へ差し替える。
 
       バッジ: bn_ai_analysis_count > 0 の場合に青い数字バッジを表示。
-              PMVV分析完了(+1) + 直近7日以内の振り返りAI分析完了件数の合計。
+              PMVV分析完了 + 直近の振り返りAI分析完了件数の合計。
+              H-4 でこのカウントの基準時刻が「last_analytics_viewed_at」に
+              変更されたため、このページを一度開くとバッジが 0 にリセットされる。
     %>
     <% is_analytics_active = (controller_name == 'analytics') %>
     <%#
@@ -220,7 +222,7 @@
     %>
     <% ai_count = bn_ai_analysis_count %>
 
-    <%= link_to user_purpose_path,
+    <%= link_to analytics_path,
           class: "flex-1 flex flex-col items-center justify-center
                   relative gap-0.5 min-w-0 transition-colors
                   #{is_analytics_active ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'}",

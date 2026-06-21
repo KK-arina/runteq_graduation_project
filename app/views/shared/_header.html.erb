@@ -165,6 +165,31 @@
               aria: { current: controller_name == 'user_purposes' ? 'page' : false } %>
           <%# ──────────────────────────────────────────────────────────────────────── %>
 
+          <%# ── H-4 追加: グラフ・進捗分析リンク（PC用）──────────────────────────────── %>
+          <%#
+            【なぜ追加するのか】
+              H-4実装時点ではグラフページへのアクセス手段が
+              スマートフォン用 Bottom Navigation（768px未満のみ表示）に限定されており、
+              デスクトップ幅（768px以上）でグラフページにアクセスする手段が
+              存在しないという見落としがあった。
+              PC用ナビゲーションにも他の主要機能と同様にリンクを追加する。
+
+            controller_name == 'analytics':
+              AnalyticsController にいるとき aria-current="page" を設定する。
+              _bottom_navigation.html.erb の判定ロジックと同じ考え方を踏襲している。
+
+            配置場所の理由:
+              「目標管理」の直後、「設定」の前に置くことで、
+              「PMVV目標を立てる」→「グラフで進捗を振り返る」という
+              ユーザーの自然な行動の流れに合わせている。
+          %>
+          <%= link_to "グラフ", analytics_path,
+              class: "text-gray-600 hover:text-gray-900 px-3 py-2
+                      text-sm font-medium transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
+              aria: { current: controller_name == 'analytics' ? 'page' : false } %>
+          <%# ──────────────────────────────────────────────────────────────────────── %>
+
           <%# ── F-6 追加: 設定ページリンク（PC用）── %>
           <%= link_to "設定", settings_path,
               class: "text-gray-600 hover:text-gray-900 px-3 py-2
@@ -357,6 +382,24 @@
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
               aria: { current: controller_name == 'user_purposes' ? 'page' : false } %>
+          <%# ──────────────────────────────────────────────────────────────────────── %>
+
+          <%# ── H-4 追加: グラフ・進捗分析リンク（モバイル用）────────────────────────── %>
+          <%#
+            block: ブロック要素として表示する。
+              モバイルメニューの各リンクは縦一列に並ぶため block が必要。
+
+            【なぜここにも追加するのか】
+              モバイル幅でもハンバーガーメニューを開いた際に、
+              Bottom Navigation だけでなくこちらからも
+              グラフページへアクセスできるようにし、導線を統一する。
+          %>
+          <%= link_to "グラフ", analytics_path,
+              class: "block px-3 py-2 rounded-md text-sm font-medium
+                      text-gray-600 hover:text-gray-900 hover:bg-gray-100
+                      transition-colors
+                      focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
+              aria: { current: controller_name == 'analytics' ? 'page' : false } %>
           <%# ──────────────────────────────────────────────────────────────────────── %>
 
           <%# ── F-6 追加: 設定ページリンク（モバイル用）── %>

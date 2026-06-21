@@ -1,0 +1,191 @@
+<%# app/views/analytics/index.html.erb %>
+<%#
+  H-4: グラフ・進捗分析ページ（19番）
+
+  【このページの構成】
+    ① 期間フィルター（4週/12週/全期間）
+    ② Empty State（習慣も振り返りも0件のとき）
+    ③ 当月サマリーカード（達成率・最長ストリーク・平均気分）
+    ④ 習慣別達成率の折れ線グラフ（Chart.js）
+    ⑤ 気分スコアの棒グラフ（Chart.js）
+    ⑥ ストリーク一覧テーブル
+
+  【@habit_chart_data / @mood_chart_data を JSON として埋め込む箇所について】
+    = @habit_chart_data.to_json のように = で出力すると、
+    ERBは自動的にHTMLエスケープを行う（Railsのデフォルト挙動）。
+    JSON文字列に含まれる " は &quot; に変換されてHTML属性内に出力されるため、
+    HTMLとして安全かつ正しい形になる。ブラウザは &quot; を読み込み時に
+    自動的に " へ戻すため、JavaScript側では通常のJSON文字列として扱える。
+    これは Rails でJSONをdata属性に渡す際の標準的かつ安全な書き方。
+%>
+<% content_for :title, "グラフ・進捗分析 | HabitFlow" %>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+  <%# ── ページタイトル + 期間フィルター ──────────────────────────────── %>
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
+    <h1 class="text-2xl font-bold text-gray-900">📈 グラフ・進捗分析</h1>
+
+    <%# 習慣も振り返りも0件のとき（Empty State）はフィルターを出さない %>
+    <% if @has_data %>
+      <div class="flex gap-2" role="group" aria-label="集計期間の切り替え">
+        <%#
+          period の各選択肢をループでリンク表示する。
+          現在選択中の期間は青背景、それ以外は白背景にすることで
+          「今どの期間を見ているか」を視覚的に明確にする。
+        %>
+        <% [["4週", "4w"], ["12週", "12w"], ["全期間", "all"]].each do |label, key| %>
+          <%= link_to label, analytics_path(period: key),
+                class: "px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors
+                        #{@period == key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}",
+                aria: { current: @period == key ? "true" : "false" } %>
+        <% end %>
+      </div>
+    <% end %>
+  </div>
+
+  <%# ── Empty State（習慣・振り返りともに0件のとき） ──────────────────── %>
+  <% unless @has_data %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center"
+         data-testid="analytics-empty-state">
+      <p class="text-4xl mb-3" aria-hidden="true">📊</p>
+      <p class="text-sm font-bold text-gray-700 mb-1">まだ表示できるデータがありません</p>
+      <p class="text-xs text-gray-500 mb-5 leading-relaxed">
+        習慣を記録したり、週次振り返りを完了したりすると、<br class="hidden sm:block">
+        ここに達成率の推移やストリークのグラフが表示されます。
+      </p>
+      <%= link_to "ダッシュボードへ →", dashboard_path,
+            class: "inline-block text-xs font-bold text-white bg-blue-600
+                    hover:bg-blue-700 px-5 py-2.5 rounded-lg transition-colors" %>
+    </div>
+
+  <% else %>
+
+    <%# ── 当月サマリーカード ──────────────────────────────────────────── %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">
+        当月サマリー（<%= @monthly_summary[:month_label] %>）
+      </h2>
+      <div class="grid grid-cols-3 gap-3 sm:gap-4 text-center">
+        <div>
+          <%# rate_hex_color: app/helpers/application_helper.rb 既存のヘルパー。
+              達成率に応じて4段階（緑/青/黄/赤）で色分けする。
+              全画面共通の配色ルールに合わせるため既存ヘルパーをそのまま再利用する。 %>
+          <p class="text-xl sm:text-2xl font-extrabold"
+             style="color: <%= rate_hex_color(@monthly_summary[:avg_rate]) %>">
+            <%= @monthly_summary[:avg_rate] %>%
+          </p>
+          <p class="text-[11px] sm:text-xs text-gray-500 mt-1">習慣達成率</p>
+        </div>
+        <div>
+          <p class="text-xl sm:text-2xl font-extrabold text-orange-500">
+            🔥 <%= @monthly_summary[:longest_streak] %>日
+          </p>
+          <p class="text-[11px] sm:text-xs text-gray-500 mt-1">最長ストリーク</p>
+        </div>
+        <div>
+          <% if @monthly_summary[:avg_mood] %>
+            <p class="text-xl sm:text-2xl font-extrabold text-yellow-500">
+              ⭐<%= @monthly_summary[:avg_mood] %>
+            </p>
+          <% else %>
+            <p class="text-sm font-bold text-gray-300 mt-2">記録なし</p>
+          <% end %>
+          <p class="text-[11px] sm:text-xs text-gray-500 mt-1">平均気分</p>
+        </div>
+      </div>
+    </div>
+
+    <%#
+      Stimulus でグラフを描画するためのコンテナ。
+      data-analytics-chart-*-value にRubyのHashをJSON化して埋め込んでいる。
+      ── ファイル冒頭のコメント参照（HTMLエスケープの安全性について） ──
+    %>
+    <div data-controller="analytics-chart"
+         data-analytics-chart-habit-chart-value="<%= @habit_chart_data.to_json %>"
+         data-analytics-chart-mood-chart-value="<%= @mood_chart_data.to_json %>">
+
+      <%# ── 習慣別達成率の推移（折れ線グラフ） ────────────────────────── %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+        <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">
+          習慣別達成率の推移
+        </h2>
+        <% if @habit_chart_data[:datasets].empty? %>
+          <p class="text-sm text-gray-400">まだ習慣が登録されていません。</p>
+        <% else %>
+          <%#
+            h-64（256px）の高さを明示的に指定する。
+            Chart.js の maintainAspectRatio: false は「親要素の高さに
+            合わせて描画する」設定のため、親側で高さを指定しないと
+            canvas の高さが0になりグラフが表示されない。
+          %>
+          <div class="h-64">
+            <canvas data-analytics-chart-target="habitCanvas"
+                    role="img"
+                    aria-label="習慣別の週次達成率推移を表す折れ線グラフ"></canvas>
+          </div>
+        <% end %>
+      </div>
+
+      <%# ── 気分スコアの推移（棒グラフ） ──────────────────────────────── %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+        <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">
+          気分スコアの推移（週次振り返り）
+        </h2>
+        <% if @mood_chart_data[:labels].empty? %>
+          <p class="text-sm text-gray-400">まだ気分スコア付きの振り返りがありません。</p>
+        <% else %>
+          <div class="h-56">
+            <canvas data-analytics-chart-target="moodCanvas"
+                    role="img"
+                    aria-label="週次振り返り時の気分スコア推移を表す棒グラフ"></canvas>
+          </div>
+        <% end %>
+      </div>
+
+    </div>
+
+    <%# ── ストリーク一覧テーブル ──────────────────────────────────────── %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+      <h2 class="text-sm font-bold text-gray-500 uppercase tracking-wide mb-4">
+        🔥 ストリーク記録
+      </h2>
+      <% if @habits.empty? %>
+        <p class="text-sm text-gray-400">まだ習慣が登録されていません。</p>
+      <% else %>
+        <%#
+          overflow-x-auto: テーブルがスマホ画面（375px）でも横スクロールで
+          確認できるようにする（H-6スマホ対応の既存方針を踏襲）。
+        %>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-gray-200 text-left text-xs text-gray-500 uppercase">
+                <th class="py-2 pr-4">習慣</th>
+                <th class="py-2 pr-4">現在</th>
+                <th class="py-2">最高</th>
+              </tr>
+            </thead>
+            <tbody>
+              <%# 現在のストリークが長い順に並べることで「頑張れている習慣」が一目で分かる %>
+              <% @habits.sort_by { |habit| -habit.current_streak }.each do |habit| %>
+                <tr class="border-b border-gray-100 last:border-b-0">
+                  <td class="py-2 pr-4 font-medium text-gray-700">
+                    <%= habit.icon.presence || "📋" %> <%= habit.name %>
+                  </td>
+                  <td class="py-2 pr-4">
+                    <span class="<%= habit.current_streak > 0 ? 'text-orange-600 font-bold' : 'text-gray-400' %>">
+                      🔥 <%= habit.current_streak %>日
+                    </span>
+                  </td>
+                  <td class="py-2 text-gray-600"><%= habit.longest_streak %>日</td>
+                </tr>
+              <% end %>
+            </tbody>
+          </table>
+        </div>
+      <% end %>
+    </div>
+
+  <% end %>
+</div>

@@ -117,6 +117,24 @@ Rails.application.routes.draw do
 
   get "dashboard", to: "dashboards#index", as: :dashboard
 
+  # ============================================================
+  # H-4 追加: グラフ・進捗分析ページ（19番）のルーティング
+  # ============================================================
+  #
+  # 【なぜ resources ではなく get で単一アクションを定義するのか】
+  #   AnalyticsController は index アクション（一覧表示）のみを持つ
+  #   「単一画面のコントローラー」のため、resources :analytics の
+  #   フルセット（new/create/edit/update/destroy）は不要。
+  #   get で1ルートだけ定義することで意図が明確になる。
+  #
+  # 【as: :analytics の効果】
+  #   analytics_path / analytics_url というルーティングヘルパーが
+  #   使えるようになる。
+  #   app/views/shared/_bottom_navigation.html.erb のグラフタブが
+  #   このヘルパーを参照する（H-4実装前は暫定的に user_purpose_path を
+  #   参照していたが、本実装で analytics_path に差し替える）。
+  get "analytics", to: "analytics#index", as: :analytics
+
   resource :user_purpose, only: [:show, :new, :create, :edit, :update] do
     member do
       post :retry_analysis
