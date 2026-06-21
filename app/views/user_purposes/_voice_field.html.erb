@@ -66,7 +66,7 @@
     複数の voice-input が同一ページにあっても
     div ごとにスコープが独立するため干渉しない。
 %>
-<div data-controller="voice-input">
+<div class="relative" data-controller="voice-input">
 
   <%# ─────────────────────────────────────────────────────
       ラベル行（ラベル・必須バッジ・🎤ボタンを横並び）
@@ -121,20 +121,28 @@
     <% end %>
 
     <%#
-      音声入力ボタン（変更なし）
+      音声入力ボタン（H-3 修正: text-gray-500 / hover:bg-gray-50 クラスを追加）
+      ────────────────────────────────────────────────────────────────────────────
+      【なぜこのクラスが必要なのか】
+        voice_input_controller.js の setButtonRecording(false) で
+        classList.add("text-gray-500", "hover:bg-gray-50") を呼んで
+        録音停止後にボタンを元の見た目に戻す。
+        初期状態にこれらのクラスがないと「元に戻す」対象クラスが存在せず
+        停止後に文字色が赤のままになってしまう。
+
       data-action="click->voice-input#toggle":
         クリック時に voice_input_controller.js の toggle() を呼び出す。
       data-voice-input-target="button":
         voice_input_controller.js がこのボタンの見た目を制御する。
-        録音中は赤くなりアニメーションする。
-        未対応ブラウザでは自動的に非表示になる。
+        録音中は赤く点滅 / 未対応ブラウザでは自動的に非表示になる。
     %>
     <button type="button"
             data-action="click->voice-input#toggle"
             data-voice-input-target="button"
-            class="flex items-center gap-1 px-2 py-1 text-xs text-gray-500
-                   border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors
-                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+            class="flex items-center gap-1 px-2 py-1 text-xs
+                  text-gray-500 hover:bg-gray-50
+                  border border-gray-300 rounded-lg transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-blue-500"
             aria-label="音声入力を開始する">
       🎤
       <span class="hidden sm:inline">音声入力</span>

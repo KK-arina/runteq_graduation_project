@@ -36,15 +36,58 @@
                 data: { controller: "habit-form" } do |f| %>
 
     <%# 習慣名 %>
-    <div>
+    <%#
+      H-3 追加: 習慣名フィールドに音声入力（voice-input コントローラー）を追加する。
+      ────────────────────────────────────────────────────────────────────────
+      【変更内容】
+        ① div に data-controller="voice-input" を付与する
+           → この div 内の target が voice-input のスコープになる
+        ② text_field に data-voice-input-target="field" を付与する
+           → 音声認識テキストの書き込み先としてコントローラーが認識する
+        ③ text_field の class に pr-12 を追加する
+           → 右側に 3rem の余白を確保して 🎤 ボタンと重ならないようにする
+        ④ 🎤 ボタンを追加する
+           → 絶対配置で右端に配置する
+    %>
+    <div class="relative" data-controller="voice-input">
       <%= f.label :name, "習慣名",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
-      <%= f.text_field :name,
-            placeholder: "例: 読書、筋トレ、英語学習",
-            maxlength: 50,
-            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
-                    focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
-                    transition-colors" %>
+      <div class="relative">
+        <%= f.text_field :name,
+              placeholder: "例: 読書、筋トレ、英語学習",
+              maxlength: 50,
+              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+                      focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                      transition-colors",
+              data: { "voice-input-target": "field" } %>
+        <%#
+          🎤 ボタン（絶対配置で右端に配置）
+          ────────────────────────────────────
+          absolute right-3 top-1/2 -translate-y-1/2:
+            親の relative div を基準に右端・縦中央に配置する。
+            top-1/2 で上から 50% の位置に、-translate-y-1/2 で
+            ボタン自身の高さの半分だけ上にずらして正確に中央に合わせる。
+
+          text-gray-500 hover:bg-gray-50:
+            voice_input_controller.js の setButtonRecording(false) で
+            classList.add("text-gray-500", "hover:bg-gray-50") を呼ぶため
+            初期状態にもこれらのクラスが必要。
+
+          data-voice-input-target="button":
+            voice_input_controller.js がこのボタンの見た目を制御する。
+            録音中は赤く点滅 / 未対応ブラウザでは非表示になる。
+        %>
+        <button type="button"
+                data-voice-input-target="button"
+                data-action="click->voice-input#toggle"
+                class="absolute right-3 top-1/2 -translate-y-1/2
+                       p-1.5 rounded-lg border border-gray-300
+                       text-gray-500 hover:bg-gray-50 transition-colors
+                       focus:outline-none focus:ring-2 focus:ring-blue-500"
+                aria-label="音声入力を開始する">
+          🎤
+        </button>
+      </div>
     </div>
 
     <%# カラー選択（B-6 追加） %>
