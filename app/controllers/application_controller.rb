@@ -482,43 +482,45 @@ class ApplicationController < ActionController::Base
 
   # bn_ai_analysis_count
   # ----------------------------------------------------------
-  # 【H-1 修正】PMVV分析と週次振り返り分析の両方を集計して
-  # グラフタブのバッジに表示する合計件数（Integer）を返す。
+  # 【H-4 修正】last_analytics_viewed_at を基準にバッジ件数を計算するよう変更。
   #
-  # 【変更前: bn_ai_analysis_completed?（bool返却）の問題点】
-  #   Rubyでは false と nil 以外はすべて truthy（真）のため、
-  #   数値の 0 を返す bool メソッドを作ると
-  #   <% if bn_ai_analysis_completed? %> が 0 件でも真になってしまう。
-  #   メソッド名末尾の ? を外し、Integer を返すメソッドに変更する。
+  # 【変更前（H-1時点）の挙動】
+  #   常に「直近7日以内」に完了した分析の件数を返していた。
+  #   そのため、グラフページを開いて確認した後も、
+  #   7日が経過するまでバッジが表示され続けてしまう問題があった。
   #
-  # 【戻り値の仕様】
-  #   PMVV分析完了:              +1
-  #   直近7日以内の振り返りAI完了: +件数
-  #   いずれも未完了:            0（バッジ非表示）
+  # 【変更後（H-4）の挙動】
+  #   current_user.user_setting.last_analytics_viewed_at（グラフページを
+  #   最後に開いた日時）を基準時刻にする。
+  #   この時刻以降に完了した分析だけを「未確認」としてカウントする。
+  #   グラフページを開く → touch_analytics_viewed_at! が呼ばれる →
+  #   基準時刻が「今」に更新される → 古い分析は基準時刻より前になり
+  #   カウントされなくなる → バッジが 0 になる、という流れで
+  #   「グラフタブを開いたタイミングでバッジがリセットされる」を実現する。
   #
-  # 【週次振り返りを7日以内に限定する理由】
-  #   古い振り返りの分析完了でバッジが出続けるのを防ぐ。
-  #   「最近完了した分析」のみをユーザーに通知する設計。
+  # 【last_analytics_viewed_at が nil の場合のフォールバック】
+  #   一度もグラフページを開いたことがない新規ユーザーは nil になる。
+  #   nil のまま基準時刻にすると「全期間の分析」が対象になってしまい、
+  #   大昔の分析完了でもバッジが表示され続ける可能性がある。
+  #   H-1 時点の設計（7日以内）を踏襲し、nil の場合は 7.days.ago を
+  #   フォールバックの基準時刻として使う。
   #
-  # 【joins(:weekly_reflection) を使う理由】
-  #   ai_analyses テーブルだけでは「どのユーザーの振り返りか」が
-  #   わからないため、weekly_reflections テーブルを JOIN して
-  #   user_id で絞り込む。
-  #   belongs_to :weekly_reflection が ai_analysis.rb で定義済みのため
-  #   joins が使える（確認済み）。
-  #
-  # 【analysis_type: AiAnalysis.analysis_types[:weekly_reflection] の確認】
-  #   ai_analysis.rb の enum に weekly_reflection: 0 が定義済み（確認済み）。
-  #
-  # 【.where.not(actions_json: nil) を使う理由】
-  #   actions_json が nil = AI分析がスキップ or パース失敗したレコード。
-  #   正常に完了した分析のみをカウントするため nil を除外する。
-  #   actions_json カラムは db/schema.rb に存在することを確認済み。
+  # 【PMVV分析の判定に updated_at を使う理由】
+  #   UserPurpose には「分析完了日時」専用のカラムが存在しない。
+  #   PurposeAnalysisJob が analysis_state を :completed に更新する際、
+  #   ActiveRecord が自動的に updated_at を現在時刻に更新するため、
+  #   「completed? かつ updated_at が基準時刻以降」で
+  #   「基準時刻以降に完了した」と判定できる。
+  #   （UserPurpose は値の更新ではなく新規バージョン作成方式のため、
+  #     completed 後に他の理由で updated_at が変わることはほぼ無い）
   # ----------------------------------------------------------
   def bn_ai_analysis_count
     return 0 unless logged_in?
 
     @bn_ai_analysis_count ||= begin
+      # 基準時刻: グラフページを最後に開いた日時。未訪問なら7日前にフォールバックする。
+      since = current_user.user_setting&.last_analytics_viewed_at || 7.days.ago
+
       count = 0
 
       # ── PMVV分析の完了チェック ──
@@ -526,17 +528,17 @@ class ApplicationController < ActionController::Base
       # completed?: analysis_state == 'completed' の場合に true（enum定義済み）
       # &. でpurposeがnilの場合のNoMethodErrorを防ぐ
       purpose = UserPurpose.current_for(current_user)
-      count += 1 if purpose&.completed?
+      count += 1 if purpose&.completed? && purpose.updated_at >= since
 
       # ── 週次振り返りAI分析の完了チェック ──
-      # 直近7日以内に作成された振り返りAI分析レコードを集計する
+      # since（基準時刻）以降に作成された振り返りAI分析レコードを集計する
       recent_count = AiAnalysis
         .joins(:weekly_reflection)
         .where(
           weekly_reflections: { user_id: current_user.id },
           analysis_type: AiAnalysis.analysis_types[:weekly_reflection]
         )
-        .where("ai_analyses.created_at >= ?", 7.days.ago)
+        .where("ai_analyses.created_at >= ?", since)
         .where.not(actions_json: nil)
         .count
 

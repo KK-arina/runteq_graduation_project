@@ -264,6 +264,46 @@ end
 # そのため、このタスクでは DB マイグレーションは不要。
 gem "acts_as_list"
 
+# ==================== 将来のRubyバージョン互換性 ====================
+#
+# ============================================================
+# ostruct（将来の Ruby 3.5 デフォルトgem除外への事前対応）
+# ============================================================
+#
+# 【この警告が出ていた理由】
+#   test/services/line_notification_service_test.rb が OpenStruct を使用しているが、
+#   現在（Ruby 3.4系）は ostruct が「デフォルトgem」として標準ライブラリに
+#   バンドルされているため、明示的に Gemfile に書かなくても動いていた。
+#
+#   実行時に以下の警告が出る:
+#     "ostruct.rb was loaded from the standard library,
+#      but will no longer be part of the default gems starting from Ruby 3.5.0."
+#
+# 【なぜ「警告だから無視してよい」では済まされないのか】
+#   Ruby 3.5 がリリースされ、プロジェクトをそのバージョンに上げた瞬間、
+#   ostruct は標準では読み込まれなくなり LoadError でテストスイート全体が
+#   即座に落ちる。警告は「今のうちに直しておけ」という事前通知であり、
+#   放置すると将来必ず壊れることが確定している。
+#
+# 【gem "ostruct" を追加するとなぜ警告が消えるのか】
+#   Gemfile に明記すると、Ruby の標準添付gemの仕組みではなく
+#   Bundler がRubyGems経由で ostruct を管理するようになる。
+#   これにより「標準ライブラリからの読み込み」という警告の発生条件自体が
+#   なくなり、Ruby 3.5 になっても同じコードのまま動き続ける。
+#
+# 【development/test グループに限定せず、全環境で読み込む理由】
+#   現時点で確認できているのは test/services/line_notification_service_test.rb
+#   での使用だが、Rails本体や依存gem（Active Support 等）が内部的に
+#   OpenStruct を使うケースもゼロではない。
+#   1行追加するだけの低リスクな変更のため、環境を限定せず
+#   全グループ共通（production含む）で読み込めるようにしておくことで
+#   「テスト環境では動くが本番では LoadError になる」という事故を未然に防ぐ。
+#
+# 【バージョンを固定しない理由】
+#   faraday・resend・good_job など、このGemfile内の他のユーティリティ系gemと
+#   同様にバージョン固定せず、Bundlerに最新の安定版を解決させる。
+gem "ostruct"
+
 # ==================== 開発環境のみ ====================
 
 group :development do

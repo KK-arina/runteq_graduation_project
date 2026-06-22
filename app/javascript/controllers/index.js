@@ -100,3 +100,11 @@ application.register("voice-input", VoiceInputController)
 //   明示的に登録することで確実に動作する。
 import DismissibleController from "./dismissible_controller"
 application.register("dismissible", DismissibleController)
+
+// H-4 追加: グラフ・進捗分析ページのChart.js描画コントローラー
+// 【なぜ手動登録するのか】
+//   stimulus:manifest:update は自動生成だが、
+//   ファイル追加後に実行し忘れることがある。
+//   明示的に登録することで確実に動作する。
+import AnalyticsChartController from "./analytics_chart_controller"
+application.register("analytics-chart", AnalyticsChartController)

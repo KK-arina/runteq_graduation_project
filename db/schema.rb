@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_05_24_015832) do
+ActiveRecord::Schema[7.2].define(version: 2026_06_21_110636) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -312,6 +312,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_05_24_015832) do
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
     t.datetime "last_ai_requested_at", comment: "最後にAI分析リクエストを受け付けた日時。D-10レート制限で使用。"
+    t.datetime "last_analytics_viewed_at", comment: "グラフ・進捗分析ページ(H-4)を最後に開いた日時。Bottom Navigationの未確認AI分析バッジのリセット判定に使用。"
     t.index ["user_id"], name: "index_user_settings_on_user_id"
     t.index ["user_id"], name: "index_user_settings_on_user_id_unique", unique: true
   end

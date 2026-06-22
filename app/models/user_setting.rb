@@ -131,4 +131,29 @@ class UserSetting < ApplicationRecord
   def touch_ai_requested_at!
     update_columns(last_ai_requested_at: Time.current)
   end
+
+  # ============================================================
+  # H-4 追加: グラフ・進捗分析ページの最終閲覧日時を記録するメソッド
+  # ============================================================
+
+  # touch_analytics_viewed_at!
+  # ----------------------------------------------------------
+  # 【役割】
+  #   ユーザーが「グラフ・進捗分析ページ（19番）」を開いたタイミングで
+  #   last_analytics_viewed_at を現在時刻に更新する。
+  #   AnalyticsController#index の最初に呼び出される。
+  #
+  # 【update_columns を使う理由（touch_ai_requested_at! と同じ設計方針）】
+  #   update! はバリデーション・コールバックが全て走るため処理が重い。
+  #   ページを開くたびに毎回実行される処理なので、
+  #   update_columns でバリデーションをスキップし
+  #   SQL を1本だけ発行する軽量な実装にする。
+  #
+  # 【! （バングメソッド）の意味】
+  #   「DBへの書き込みという重要な副作用がある」ことを名前で明示する慣習。
+  #   touch_ai_requested_at! と命名規則を統一している。
+  # ----------------------------------------------------------
+  def touch_analytics_viewed_at!
+    update_columns(last_analytics_viewed_at: Time.current)
+  end
 end

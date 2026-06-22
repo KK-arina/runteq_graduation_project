@@ -27,4 +27,4 @@ pin "controllers/habit_checkbox_controller", to: "controllers/habit_checkbox_con
 #   ここに置いたファイルは自動的にアセットパイプラインに含まれる。
 pin "Sortable", to: "sortable.esm.js"
 
-pin "controllers/habit_sort_controller", to: "controllers/habit_sort_controller.js"
+pin "chart.js" # @4.5.1
