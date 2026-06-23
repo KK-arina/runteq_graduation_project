@@ -336,7 +336,10 @@ class ApplicationController < ActionController::Base
     return if controller_name.in?(%w[onboardings sessions users errors pages terms_agreement password_resets settings])
     return unless current_user&.first_login_at.nil?
 
-    redirect_to onboarding_step5_path, notice: t("onboarding.welcome")
+    # H-5変更: 初回ログインユーザーをstep2（習慣テンプレート選択 1/2）から開始する
+    # onboardings コントローラーは除外リストに含まれているため
+    # step2 → step5 の遷移中にこの before_action が再度発動してループしない
+    redirect_to onboarding_step2_path, notice: t("onboarding.welcome")
   end
 
   # ============================================================

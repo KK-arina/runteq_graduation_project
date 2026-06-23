@@ -80,7 +80,7 @@ class TermsAgreementController < ApplicationController
     #   1. first_login_at が nil → オンボーディングへ（初回ログインユーザー）
     #   2. それ以外              → ダッシュボードへ
     if current_user.first_login_at.nil?
-      redirect_to onboarding_step5_path,
+      redirect_to onboarding_step2_path,
                   notice: t("terms_agreement.agreed_and_onboarding")
     else
       redirect_to dashboard_path,

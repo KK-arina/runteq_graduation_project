@@ -1,7 +1,7 @@
 <%# app/views/onboardings/step5.html.erb %>
 <%#
   ==============================================================================
-  オンボーディング 5/5: PMVV目標入力ページ（E-1修正: 必須バッジ追加）
+  オンボーディング 2/2: PMVV目標入力ページ（H-5変更: ステップ表記を1/2・2/2に修正）
   ==============================================================================
   【E-1修正での変更内容】
     UserPurpose の5フィールドが必須化されたため、
@@ -23,29 +23,27 @@
     このファイルは情報バナーの文言変更のみ行う。
   ==============================================================================
 %>
-<% content_for :title, "目標を入力（5/5）| HabitFlow" %>
+<% content_for :title, "目標を入力（2/2）| HabitFlow" %>
 
 <div class="max-w-xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
   <%# ステップインジケーター %>
   <div class="flex justify-center items-center gap-2 mb-8"
-       aria-label="オンボーディング進捗: 5ステップ中の5ステップ目">
-    <% (1..4).each do |step| %>
-      <div class="w-8 h-8 rounded-full bg-green-500 text-white flex items-center
-                  justify-center text-xs font-bold flex-shrink-0"
-           aria-hidden="true">✓</div>
-      <div class="w-8 h-1 bg-green-400 flex-shrink-0" aria-hidden="true"></div>
-    <% end %>
+      aria-label="オンボーディング進捗: 2ステップ中の2ステップ目">
+    <div class="w-8 h-8 rounded-full bg-green-500 text-white flex items-center
+                justify-center text-xs font-bold flex-shrink-0"
+        aria-hidden="true">✓</div>
+    <div class="w-8 h-1 bg-green-400 flex-shrink-0" aria-hidden="true"></div>
     <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center
                 justify-center text-xs font-bold flex-shrink-0
                 ring-2 ring-blue-500 ring-offset-2"
-         aria-current="step" aria-label="ステップ 5（現在）">5</div>
+        aria-current="step" aria-label="ステップ 2（現在）">2</div>
   </div>
 
   <%# ページヘッダー %>
   <div class="mb-6 text-center">
     <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">
-      ステップ 5 / 5 — 最後のステップです
+      ステップ 2 / 2 — 最後のステップです
     </p>
     <h1 class="text-2xl font-bold text-gray-900">🎯 あなたの目標を教えてください</h1>
     <p class="mt-2 text-sm text-gray-500 leading-relaxed">

@@ -24,6 +24,24 @@ class OnboardingsController < ApplicationController
   before_action :ensure_needs_onboarding
 
   # ============================================================
+  # H-5追加: step2 アクション（GET /onboarding/step2）
+  # ============================================================
+  # 【役割】オンボーディング 1/2（習慣テンプレート選択）ページを表示する。
+  #
+  # 【@templates】
+  #   HabitTemplate.active_ordered で公開中・並び順でソートされた
+  #   テンプレート一覧を1クエリで取得する。
+  #
+  # 【@templates_by_category】
+  #   Ruby の group_by でカテゴリ別ハッシュに変換する。
+  #   例: { "health" => [t1, t2], "fitness" => [...] }
+  #   カテゴリフィルタ用に Stimulus コントローラーへ渡す。
+  def step2
+    @templates = HabitTemplate.active_ordered
+    @templates_by_category = @templates.group_by(&:category)
+  end
+
+  # ============================================================
   # step5 アクション（GET /onboarding/step5）
   # ============================================================
   # 【役割】オンボーディング 5/5（PMVV目標入力）ページを表示する。

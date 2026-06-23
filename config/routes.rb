@@ -44,11 +44,16 @@ Rails.application.routes.draw do
       to:  "omniauth_callbacks#failure",
       as:  :omniauth_failure
 
-  scope "/onboarding", controller: :onboardings do
-    get  "step5",    action: :step5,    as: :onboarding_step5
-    post "complete", action: :complete, as: :onboarding_complete
-    post "skip",     action: :skip,     as: :onboarding_skip
-  end
+scope "/onboarding", controller: :onboardings do
+  # H-5追加: 習慣テンプレート選択（オンボーディング 1/2）
+  # 【なぜ step2 という名前のままにするのか】
+  #   ファイル名・アクション名をリネームすると影響範囲が大きい。
+  #   内部名は step2 のまま維持し、ユーザーに見える表示だけ「1/2」にする。
+  get  "step2",    action: :step2,    as: :onboarding_step2
+  get  "step5",    action: :step5,    as: :onboarding_step5
+  post "complete", action: :complete, as: :onboarding_complete
+  post "skip",     action: :skip,     as: :onboarding_skip
+end
 
   resource :settings, only: %i[show destroy] do
     member do

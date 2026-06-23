@@ -166,7 +166,7 @@ class OnboardingsControllerTest < ActionDispatch::IntegrationTest
 
     get dashboard_path
 
-    assert_redirected_to onboarding_step5_path
+    assert_redirected_to onboarding_step2_path
   end
 
   # ── このテストは変更不要 ──────────────────────────────────────────────────
@@ -187,4 +187,28 @@ class OnboardingsControllerTest < ActionDispatch::IntegrationTest
     assert_equal 0, @user.user_purposes.count
   end
   # ────────────────────────────────────────────────────────────────────────────
+
+  # H-5追加: step2 アクションのテスト
+  test "GET /onboarding/step2 should return 200 for needs-onboarding user" do
+    get onboarding_step2_path
+    assert_response :success
+  end
+
+  test "step2 should render successfully" do
+    get onboarding_step2_path
+    assert_response :success
+  end
+
+  test "step2 should render category filter buttons" do
+    get onboarding_step2_path
+    assert_response :success
+    # カテゴリフィルタボタンはテンプレートの有無に関係なく常に表示される
+    assert_select "[data-category='all']"
+  end
+
+  test "step2 should redirect completed-onboarding user to dashboard" do
+    @user.update_column(:first_login_at, Time.current)
+    get onboarding_step2_path
+    assert_redirected_to dashboard_path
+  end
 end

@@ -103,9 +103,31 @@ ja:
     completed: "目標を保存しました。AIによる分析を開始しています... 完了後にダッシュボードでお知らせします 🎯"
     skipped: "オンボーディングをスキップしました。PMVV目標はあとから「目標管理」ページで入力できます。"
     already_completed: "オンボーディングは完了済みです。"
-    welcome: "ようこそ！まずは目標を設定しましょう。"
+    welcome: "ようこそ！まずは最初の習慣を選んでみましょう。"
     skip_button: "スキップ（後で入力する）"
     complete_button: "✨ 完了してダッシュボードへ"
+    # H-5追加: 習慣テンプレート選択ステップ（1/2）用
+    template_selection:
+      page_title: "習慣を選ぶ（1/2）| HabitFlow"
+      step_label: "ステップ 1 / 2 — まず習慣を決めましょう"
+      heading: "📋 続けたい習慣を選んでください"
+      description: "テンプレートから選ぶか、自分で自由に入力できます。"
+      tab_template: "テンプレートから選ぶ"
+      tab_manual: "自分で入力する"
+      category_all: "すべて"
+      category_health: "🌿 健康"
+      category_fitness: "💪 フィットネス"
+      category_study: "📚 学習"
+      category_mind: "🧘 マインド"
+      habit_name_label: "習慣名"
+      habit_name_placeholder: "例: 読書（15分）"
+      measurement_type_label: "記録タイプ"
+      unit_label: "単位"
+      unit_placeholder: "例: 分、冊"
+      form_heading: "習慣の詳細を確認・編集"
+      form_hint: "テンプレートを選ぶと自動入力されます。自由に変更できます。"
+      saved_notice: "習慣「%{name}」を登録しました！"
+      skip_link: "この手順をスキップして次へ"
 
   # ──────────────────────────────────────────────────────────────
   # エラーメッセージの汎用テンプレート

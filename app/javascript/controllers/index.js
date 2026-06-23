@@ -108,3 +108,7 @@ application.register("dismissible", DismissibleController)
 //   明示的に登録することで確実に動作する。
 import AnalyticsChartController from "./analytics_chart_controller"
 application.register("analytics-chart", AnalyticsChartController)
+
+// H-5追加: オンボーディング習慣テンプレート選択コントローラー
+import OnboardingTemplateController from "./onboarding_template_controller"
+application.register("onboarding-template", OnboardingTemplateController)

@@ -121,8 +121,18 @@ class HabitsController < ApplicationController
     end
 
     if result
-      flash[:notice] = "習慣を登録しました"
-      redirect_to habits_path
+      # H-5追加: オンボーディングから来た場合はstep5へ進む
+      # 【from_onboarding フラグ】
+      #   step2のフォームに hidden_field_tag :from_onboarding, "true" を埋め込み、
+      #   このフラグで通常の habits_path と step5 を振り分ける。
+      #   リダイレクト先は固定値のためオープンリダイレクト攻撃のリスクなし。
+      if params[:from_onboarding] == "true"
+        redirect_to onboarding_step5_path,
+                    notice: "習慣「#{@habit.name}」を登録しました！次は目標を入力しましょう。"
+      else
+        flash[:notice] = "習慣を登録しました"
+        redirect_to habits_path
+      end
     else
       flash.now[:alert] = "習慣の登録に失敗しました"
       render :new, status: :unprocessable_entity
