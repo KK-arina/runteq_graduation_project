@@ -112,3 +112,4 @@ application.register("analytics-chart", AnalyticsChartController)
 // H-5追加: オンボーディング習慣テンプレート選択コントローラー
 import OnboardingTemplateController from "./onboarding_template_controller"
 application.register("onboarding-template", OnboardingTemplateController)
+// H-5: force cache invalidation Wed Jun 24 23:20:18 JST 2026

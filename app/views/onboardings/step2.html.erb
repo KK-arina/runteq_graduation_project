@@ -188,11 +188,7 @@
     <%= form_with url: habits_path,
                   method: :post,
                   local: true,
-                  class: "space-y-4",
-                  data: {
-                    controller: "form-submit",
-                    action: "submit->form-submit#submit"
-                  } do |f| %>
+                  class: "space-y-4" do |f| %>
 
       <%#
         from_onboarding フラグ:

@@ -223,6 +223,16 @@ class ApplicationController < ActionController::Base
     end
   end
 
+  # ----------------------------------------------------------
+  # require_unlocked_unless_onboarding（H-5追加）
+  # ----------------------------------------------------------
+  # オンボーディング中（first_login_at が nil）のユーザーには
+  # PDCAロックを適用しない。
+  def require_unlocked_unless_onboarding
+    return if params[:from_onboarding] == "true" && current_user&.first_login_at.nil?
+    require_unlocked
+  end
+
   # ============================================================
   # ai_limit_exceeded?（D-6 新規追加）
   # ============================================================
@@ -333,7 +343,7 @@ class ApplicationController < ActionController::Base
     #   first_login_at が nil のユーザーが /settings にアクセスした際に
     #   onboarding_step5_path にリダイレクトされないようにするため。
     #   設定ページ（退会処理含む）はオンボーディング前でもアクセスできるべき。
-    return if controller_name.in?(%w[onboardings sessions users errors pages terms_agreement password_resets settings])
+    return if controller_name.in?(%w[onboardings sessions users errors pages terms_agreement password_resets settings habits])
     return unless current_user&.first_login_at.nil?
 
     # H-5変更: 初回ログインユーザーをstep2（習慣テンプレート選択 1/2）から開始する

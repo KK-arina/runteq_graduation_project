@@ -35,7 +35,8 @@ class HabitsController < ApplicationController
   #   ai_edit は「フォームを表示する」だけで DB を変更しない（GET リクエスト）。
   #   ロック中でも編集画面を表示して「ロック中は保存できない」ことを
   #   ユーザーに伝えるほうが UX として自然。
-  before_action :require_unlocked, only: [ :create, :update, :destroy, :archive, :sort, :ai_update ]
+  before_action :require_unlocked_unless_onboarding, only: [ :create ]
+  before_action :require_unlocked, only: [ :update, :destroy, :archive, :sort, :ai_update ]
 
   # ============================================================
   # before_action :set_habit（D-8 変更: :ai_edit / :ai_update を追加）
