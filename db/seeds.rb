@@ -127,7 +127,11 @@ puts "  ✓ WeeklyReflection を削除しました"
 Habit.unscoped.destroy_all
 puts "  ✓ Habit を削除しました"
 
-User.destroy_all
+# unscoped: デフォルトスコープ（active スコープ等）を無視して全件対象にする
+# delete_all: コールバック（prevent_physical_destroy）を発火させずにSQLで直接削除する
+#   destroy_all だと before_destroy :prevent_physical_destroy が発動し例外が発生するため
+#   delete_all を使う必要がある
+User.unscoped.delete_all
 puts "  ✓ User を削除しました"
 
 puts ""

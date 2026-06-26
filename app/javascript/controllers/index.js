@@ -90,9 +90,6 @@ application.register("terms-agreement", TermsAgreementController)
 import VoiceInputController from "./voice_input_controller"
 application.register("voice-input", VoiceInputController)
 
-// app/javascript/controllers/index.js への追記
-// （末尾の VoiceInputController の登録行の直後に追加する）
-
 // G-7 追加: バナーを×ボタンで非表示にする汎用コントローラー
 // 【なぜ手動登録するのか】
 //   stimulus:manifest:update は自動生成だが、
@@ -112,4 +109,3 @@ application.register("analytics-chart", AnalyticsChartController)
 // H-5追加: オンボーディング習慣テンプレート選択コントローラー
 import OnboardingTemplateController from "./onboarding_template_controller"
 application.register("onboarding-template", OnboardingTemplateController)
-// H-5: force cache invalidation Wed Jun 24 23:20:18 JST 2026
