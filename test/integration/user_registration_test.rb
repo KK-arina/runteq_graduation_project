@@ -27,7 +27,7 @@ class UserRegistrationTest < ActionDispatch::IntegrationTest
 
     # 2回目：dashboard_path にアクセスすると /onboarding/step5 へリダイレクト
     follow_redirect!
-    assert_redirected_to onboarding_step5_path
+    assert_redirected_to onboarding_step2_path
   end
 
   # ---- 無効な情報での登録失敗テスト ----

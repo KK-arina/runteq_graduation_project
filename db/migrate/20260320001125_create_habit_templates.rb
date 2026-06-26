@@ -10,11 +10,11 @@
 # ユーザーが選ぶと、テンプレートの設定値がフォームに自動入力される。
 #
 # 【category（カテゴリ）の値】
-#   0: health   → 健康・睡眠・食事など
-#   1: study    → 学習・読書・語学など
-#   2: fitness  → 運動・筋トレ・ジョギングなど
-#   3: mind     → 瞑想・日記・感謝リストなど
-#   4: other    → その他
+#   0: health  → 健康・睡眠・食事など
+#   1: fitness → 運動・筋トレ・ジョギングなど
+#   2: study   → 学習・読書・語学など
+#   3: mind    → 瞑想・日記・感謝リストなど
+#   4: other   → その他
 # ==============================================================================
 
 class CreateHabitTemplates < ActiveRecord::Migration[7.2]
@@ -53,7 +53,7 @@ class CreateHabitTemplates < ActiveRecord::Migration[7.2]
       # ─────────────────────────────────────────────────────────────────────
       # category: カテゴリ
       # ─────────────────────────────────────────────────────────────────────
-      # integer 型: Rails の enum で管理（0: health / 1: study / 2: fitness / 3: mind / 4: other）
+      # integer 型: Rails の enum で管理（0: health / 1: fitness / 2: study / 3: mind / 4: other）
       # null: false → 必須項目
       t.integer :category, null: false, default: 4
 

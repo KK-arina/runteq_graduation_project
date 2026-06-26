@@ -127,7 +127,11 @@ puts "  ✓ WeeklyReflection を削除しました"
 Habit.unscoped.destroy_all
 puts "  ✓ Habit を削除しました"
 
-User.destroy_all
+# unscoped: デフォルトスコープ（active スコープ等）を無視して全件対象にする
+# delete_all: コールバック（prevent_physical_destroy）を発火させずにSQLで直接削除する
+#   destroy_all だと before_destroy :prevent_physical_destroy が発動し例外が発生するため
+#   delete_all を使う必要がある
+User.unscoped.delete_all
 puts "  ✓ User を削除しました"
 
 puts ""
@@ -350,12 +354,15 @@ reflection_3w = WeeklyReflection.create!(
   user:            demo_user,
   week_start_date: three_weeks_ago_monday,
   week_end_date:   three_weeks_ago_sunday,
-  reflection_comment: <<~COMMENT
+  reflection_comment: <<~COMMENT,
     今週は全体的に調子が良く、ほとんどの習慣を達成できました。
     特に瞑想は毎日継続でき、精神的に落ち着いた1週間でした。
     筋トレも週5回の目標を達成。英語学習は水曜日に飲み会があり1回スキップしましたが、
     全体的には満足できる週でした。来週も同じペースを維持したいです。
   COMMENT
+  direct_reason:        "習慣を継続できたことで、自信がついてきた。",
+  background_situation: "睡眠時間を確保することで、集中力が上がった。",
+  next_action:          "来週も同じペースを維持し、英語学習を毎日続ける。"
 )
 
 WeeklyReflectionHabitSummary.create_all_for_reflection!(reflection_3w)
@@ -372,6 +379,9 @@ reflection_2w = WeeklyReflection.create!(
   user:            demo_user,
   week_start_date: two_weeks_ago_monday,
   week_end_date:   two_weeks_ago_sunday,
+  direct_reason:        "仕事が忙しく帰宅時間が遅くなったため達成率が下がった。",
+  background_situation: "朝の時間を活用すれば習慣を維持できると気づいた。",
+  next_action:          "来週は朝活を取り入れて習慣をこなす。",
   reflection_comment: <<~COMMENT
     先週より達成率が下がってしまいました。
     主な原因は仕事が忙しく、帰宅時間が遅くなったことです。
@@ -394,7 +404,10 @@ puts "  先週の振り返りを作成しています（未完了・ロック状
 reflection_last_week = WeeklyReflection.create!(
   user:            demo_user,
   week_start_date: last_week_monday,
-  week_end_date:   last_week_sunday
+  week_end_date:   last_week_sunday,
+  direct_reason:        "今週は体調不良で習慣を継続できなかった。",
+  background_situation: "体調管理の重要性を再認識した。",
+  next_action:          "体調を整えてから習慣を再開する。"
 )
 WeeklyReflectionHabitSummary.create_all_for_reflection!(reflection_last_week)
 puts "    ✓ 先週の振り返りを未完了状態で作成しました"

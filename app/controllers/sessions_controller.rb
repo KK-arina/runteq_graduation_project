@@ -168,7 +168,7 @@ class SessionsController < ApplicationController
   def determine_redirect_path(user, redirect_to_param)
     # 優先度1: 初回ログインユーザーはオンボーディングへ
     #   first_login_at が nil = オンボーディング未完了のユーザー
-    return onboarding_step5_path if user.first_login_at.nil?
+    return onboarding_step2_path if user.first_login_at.nil?
 
     # 優先度2: 安全なアプリ内パスが指定されている場合はそこへ遷移
     #   safe_redirect_path? は ApplicationController に定義したセキュリティチェックメソッド。

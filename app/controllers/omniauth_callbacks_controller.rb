@@ -203,7 +203,7 @@ class OmniauthCallbacksController < ApplicationController
   #   4. デフォルト             → ダッシュボード
   def determine_redirect_path_for_omniauth(user)
     return terms_agreement_path unless user.terms_agreed?
-    return onboarding_step5_path if user.first_login_at.nil?
+    return onboarding_step2_path if user.first_login_at.nil?
 
     stored_path = session[:return_to]
     if stored_path.present? && safe_redirect_path?(stored_path)

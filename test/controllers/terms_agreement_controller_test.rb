@@ -96,7 +96,7 @@ class TermsAgreementControllerTest < ActionDispatch::IntegrationTest
     post terms_agreement_agree_path, params: { terms_agreed: "1" }
 
     # 同意後、first_login_at が nil なのでオンボーディングへ遷移する
-    assert_redirected_to onboarding_step5_path
+    assert_redirected_to onboarding_step2_path
 
     user.destroy
   end

@@ -105,7 +105,8 @@ flowchart LR
 [![H-2 ボトムシートモーダル](https://img.shields.io/badge/H--2_ボトムシートモーダル-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/H-2-bottom-sheet-modal)
 [![H-3 音声入力機能](https://img.shields.io/badge/H--3_音声入力機能-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/H-3-voice-input)
 [![H-4 グラフ進捗分析](https://img.shields.io/badge/H--4_グラフ進捗分析-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/H-4-analytics-page)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-59%2F70_ISSUE-f59e0b?style=flat-square)]()
+[![H-5 オンボーディングstep2習慣テンプレート選択](https://img.shields.io/badge/H--5_オンボーディングstep2習慣テンプレート選択-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/H-5-onboarding-template-selection)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-60%2F70_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -228,6 +229,7 @@ flowchart LR
 | #H-2 | M-4退会確認モーダルのスマホボトムシート対応・全モーダルz-index修正・フッターBN対応 | 2026-06-14 | feature/H-2-bottom-sheet-modal |
 | #H-3 | 音声入力機能（voice_input_controller.js）Web Speech API・リアルタイム追記・連打防止・複数フィールド排他制御・インライントースト表示 | 2026-06-21 | feature/H-3-voice-input |
 | #H-4 | グラフ・進捗分析ページ（19番）Chart.js可視化（UMDビルド）・期間フィルター・N+1ゼロ設計・バッジ訪問ベースリセット・デスクトップ用ヘッダーリンク追加 | 2026-06-22 | feature/H-4-analytics-page |
+| #H-5 | オンボーディング step2 習慣テンプレート選択（1/2）・step5 テンプレート確認（2/2） | 2026-06-26 | feature/H-5-onboarding-template-selection |
 
 <br>
 
@@ -6306,6 +6308,103 @@ Chart.js を importmap 経由で導入する際、ESM版の配布形式に起因
 
 <br>
 
+### #H-5: オンボーディング step2 習慣テンプレート選択
+
+<br>
+
+**ブランチ:** `feature/H-5-onboarding-template-selection`<br>
+**完了日:** 2026-06-26<br>
+**概要:** オンボーディングのステップ構成を再設計し、step2（内部ファイル名）に習慣テンプレート選択画面（UI表示: 1/2）を実装。<br>
+step5（内部ファイル名・UI表示: 2/2）は既存のPMVV入力ステップ。<br>
+`habit_templates`（#A-5で登録済みのマスタデータ18件）をカテゴリ別に表示し、<br>
+選択した習慣をオンボーディング完了時に一括登録する。<br>
+PDCAロックをスキップする `require_unlocked_unless_onboarding` を実装し、<br>
+初回ユーザーがオンボーディング経由で習慣を作成できる設計を実現した。
+
+<br>
+
+#### 実装内容
+
+<br>
+
+| カテゴリ | 内容 |
+|:---|:---|
+| Controller | `OnboardingsController#step2` を新規追加（GETで習慣テンプレート一覧を表示） |
+| Controller | `OnboardingsController#complete` を修正（`selected_template_ids` パラメータを受け取り、選択テンプレートから習慣を一括作成） |
+| Controller | `ApplicationController` に `require_unlocked_unless_onboarding` メソッドを追加 |
+| Controller | `HabitsController#create` に `before_action :require_unlocked_unless_onboarding` を追加（PDCAロック中でも初回ログイン時はスキップ） |
+| Model | `HabitTemplate` モデルを参照（#A-5実装済み）・`category` スコープでカテゴリ別取得 |
+| Route | `get "onboarding/step2", to: "onboardings#step2", as: :onboarding_step2` を追加 |
+| View | `app/views/onboardings/step2.html.erb` を新規作成（カテゴリ別テンプレートカード・チェックボックス選択UI） |
+| Seeds | `seeds.rb` の `User.destroy_all` を `User.unscoped.delete_all` に変更（`prevent_physical_destroy` コールバック回避） |
+| Seeds | `find_or_initialize_by + assign_attributes + save!` パターンを維持（冪等性確保） |
+
+<br>
+
+#### require_unlocked_unless_onboarding の設計
+
+<br>
+
+| 条件 | 動作 |
+|:---|:---|
+| `params[:from_onboarding] == "true"` かつ `current_user.first_login_at.nil?` | PDCAロックチェックをスキップ |
+| 上記以外 | 通常の `require_unlocked` と同じ動作 |
+
+<br>
+
+オンボーディング経由（`from_onboarding=true`）かつ初回ユーザー（`first_login_at.nil?`）の場合のみ<br>
+ロックをスキップする二重条件チェックにより、通常フォームからの不正スキップを防ぐ設計になっている。
+
+<br>
+
+#### seeds.rb の User.unscoped.delete_all 変更
+
+<br>
+
+| 方式 | 動作 | 採用 |
+|:---|:---|:---:|
+| `User.destroy_all` | `before_destroy :prevent_physical_destroy` コールバックが発火し `RuntimeError` | ❌ |
+| `User.unscoped.delete_all` | コールバックを発火させずSQLで直接削除 | ✅ |
+
+<br>
+
+`prevent_physical_destroy` は本番・開発環境での物理削除を禁止するガード（#F-6で実装）。<br>
+seeds.rb でユーザーをリセットする際はコールバックを経由しない `delete_all` が唯一の安全な方法になる。<br>
+`User.delete_all` ではなく `User.unscoped.delete_all` を使う理由は、<br>
+`scope :active`（`deleted_at IS NULL`）が適用されてしまい退会済みユーザーが残る問題を防ぐため。
+
+<br>
+
+#### 作成・変更ファイル一覧
+
+<br>
+
+| ファイル | 変更内容 |
+|:---|:---|
+| `app/controllers/application_controller.rb` | `require_unlocked_unless_onboarding` メソッドを追加 |
+| `app/controllers/habits_controller.rb` | `before_action :require_unlocked_unless_onboarding, only: [:create]` を追加 |
+| `app/controllers/onboardings_controller.rb` | `step2` アクションを追加・`complete` を修正（テンプレート選択→習慣一括作成） |
+| `app/javascript/controllers/onboarding_template_controller.js` | 新規作成（テンプレートカード選択UI・チェックボックス連動） |
+| `app/javascript/controllers/index.js` | `onboarding-template` コントローラーを登録 |
+| `app/views/onboardings/step2.html.erb` | 新規作成（カテゴリ別テンプレートカード・ステップインジケーター） |
+| `config/locales/ja.yml` | オンボーディングstep2関連メッセージを追加 |
+| `config/routes.rb` | `get "onboarding/step2"` を追加 |
+| `db/migrate/20260320001125_create_habit_templates.rb` | コメントの category enum 順を修正（コードレビュー対応） |
+| `db/seeds.rb` | `User.destroy_all` → `User.unscoped.delete_all` に変更・コメント追加 |
+| `test/controllers/onboardings_controller_test.rb` | step2表示・テンプレート選択→習慣作成・require_unlocked_unless_onboarding動作確認テストを追加 |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+760 runs, 1891 assertions, 0 failures, 0 errors, 0 skips
+```
+
+<br>
+
 ---
 
 <br>
@@ -9799,6 +9898,76 @@ open() {
 
 <br>
 
+### 141. User.unscoped.delete_all が seeds.rb での唯一の安全なユーザー削除手段（#H-5）
+
+<br>
+
+`User.destroy_all` は開発環境でも `before_destroy :prevent_physical_destroy` コールバックが発火し<br>
+`RuntimeError: 物理削除は禁止されています` が発生する。<br>
+これは F-6 で実装した退会ポリシーのガードが seeds.rb にも影響するため。<br>
+`User.delete_all` は `scope :active`（`deleted_at IS NULL`）が適用され退会済みユーザーが残る。<br>
+`User.unscoped.delete_all` はコールバックとデフォルトスコープの両方を回避してSQLで直接削除する。<br>
+seeds.rb でユーザーをリセットする場合は必ず `unscoped.delete_all` を使うこと。<br>
+
+```ruby
+# ❌ destroy_all → prevent_physical_destroy が発火して RuntimeError
+User.destroy_all
+
+# ❌ delete_all → scope :active (deleted_at IS NULL) が適用されて退会済みが残る
+User.delete_all
+
+# ✅ unscoped.delete_all → コールバックもスコープもバイパスして全件削除
+User.unscoped.delete_all
+```
+
+<br>
+
+「既存ユーザーがいない状態でも問題なかった」理由は、<br>
+`prevent_physical_destroy` の `raise` は `before_destroy` コールバックのため<br>
+削除対象レコードが0件のとき `destroy_all` は何もしない（コールバックも発火しない）から。<br>
+ユーザーが存在する状態で初めてエラーが発生するため、開発初期に気づかなかった。
+
+<br>
+
+### 142. require_unlocked_unless_onboarding は二重条件チェックで不正スキップを防ぐ（#H-5）
+
+<br>
+
+PDCAロック中でもオンボーディング経由では習慣を作成できる設計にする際、<br>
+`params[:from_onboarding] == "true"` だけを条件にすると<br>
+通常フォームに `from_onboarding=true` を追加するだけでロックをバイパスできてしまう。<br>
+`first_login_at.nil?`（オンボーディング未完了ユーザー）との AND条件を加えることで<br>
+「初回ユーザーがオンボーディング経由で操作する場合のみ」に限定できる。<br>
+
+```ruby
+def require_unlocked_unless_onboarding
+  # オンボーディング経由（from_onboarding=true）かつ初回ユーザー（first_login_at未設定）の場合はスキップ
+  return if params[:from_onboarding] == "true" && current_user.first_login_at.nil?
+  require_unlocked
+end
+```
+
+<br>
+
+オンボーディング完了時に `first_login_at` が記録されるため、<br>
+完了後は `first_login_at.present?` になってスキップ条件が外れる自己終了設計になっている。
+
+<br>
+
+### 143. importmap の importmap:cache のキャッシュ問題はブラウザキャッシュ強制クリアで解消する（#H-5）
+
+<br>
+
+Stimulus コントローラーを新規追加（`onboarding_template_controller.js`）した後、<br>
+ブラウザで「コントローラーが読み込まれていない」症状が発生することがある。<br>
+原因は importmap のブラウザキャッシュ（`importmap.json` のキャッシュ）が古いままのため。<br>
+`Cmd+Shift+R`（Mac）/ `Ctrl+Shift+R`（Windows）で強制リフレッシュするか、<br>
+DevTools → Application → Storage → Clear site data で解消できる。<br>
+`docker compose exec web bin/rails importmap:cache` は開発環境では不要だが、<br>
+新規コントローラー追加後にキャッシュ問題が疑われる場合は試してみること。
+
+<br>
+
 ---
 
 <br>
@@ -10298,7 +10467,7 @@ habitflow/
 │   │   ├── errors_controller.rb           # カスタムエラーページ
 │   │   ├── pages_controller.rb            # ランディングページ
 │   │   ├── user_purposes_controller.rb    # #D-1 新規: PMVV目標管理（show/new/create/edit/update・バージョン管理）
-│   │   ├── onboardings_controller.rb      # #D-7 新規: step5/complete/skip・first_login_at管理・危機介入対応
+│   │   ├── onboardings_controller.rb      # 変更（H-5）: step2 アクション追加・complete を修正（selected_template_ids→習慣一括作成）
 │   │   ├── omniauth_callbacks_controller.rb   # 変更（F-2）: line アクション追加・skip_before_action に :line 追加
 │   │   ├── terms_agreement_controller.rb  # F-3 新規: show / agree アクション（require_login・ensure_needs_agreement）
 │   │   ├── pages_controller.rb            # 変更（F-3）: terms / privacy アクション追加（未ログイン閲覧可）
@@ -10356,7 +10525,8 @@ habitflow/
 │   │       ├── rest_mode_modal_controller.js  # G-4 新規: お休みモード確認モーダル（_setupModalListeners + addEventListener 方式・バブリング対策済み closeFromOverlay）
 │   │       ├── deactivate_modal_controller.js     # H-2 変更: open()冒頭で_closeTimerキャンセル・style.cssText=""完全クリア・requestAnimationFrame二重呼び出しによる確実アニメーション初期化・touchstart/touchmove/touchend追加（120pxスワイプで閉じる）
 │   │       ├── voice_input_controller.js      # #B-7 新規→#D-1 で voice_field パーシャルと連携強化: 音声入力（Web Speech API）
-│   │       └── analytics_chart_controller.js      # #H-4 新規: Chart.js描画（UMDビルド・折れ線/棒グラフ・disconnect()でdestroy）
+│   │       ├── analytics_chart_controller.js      # #H-4 新規: Chart.js描画（UMDビルド・折れ線/棒グラフ・disconnect()でdestroy）
+│   │       └── onboarding_template_controller.js  # H-5 新規: テンプレートカード選択UI・チェックボックス連動
 │   ├── helpers/
 │   │   └── application_helper.rb                       # 変更（E-2）: rate_hex_color / rate_color を3段階(80/50)から4段階(100/70/40)に変更・全画面プログレスバー色を統一
 │   ├── jobs/
@@ -10427,6 +10597,7 @@ habitflow/
 │       ├── layouts/
 │       │   └── application.html.erb  # 変更: yield :modals を</body>直前に追加（#B-5）・重複 id="flash-area" を1箇所に統一（#C-4バグ修正）
 │       ├── onboardings/
+│       │   ├── step2.html.erb             # H-5 新規: 1/2 習慣テンプレート選択ページ（カテゴリ別カード・チェックボックス・ステップインジケーター）
 │       │   └── step5.html.erb             # 変更（E-1）: バナー文言修正（「すべて任意入力です」→スキップ案内のみ）
 │       ├── sessions/
 │       │   └── new.html.erb                   # 変更（E-4）: hidden_field_tag :redirect_to を追加（ログイン失敗後も redirect_to が POST body に維持される）
@@ -10602,7 +10773,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-743 runs, 1861 assertions, 0 failures, 0 errors, 0 skips
+760 runs, 1891 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 

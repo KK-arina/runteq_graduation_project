@@ -1,0 +1,338 @@
+<%# app/views/onboardings/step2.html.erb %>
+<%#
+  ==============================================================================
+  H-5: オンボーディング 1/2 — 習慣テンプレート選択ページ
+  ==============================================================================
+  【このビューの役割】
+    初回ログインユーザーに習慣テンプレートをカテゴリ別に表示し、
+    選択するだけでフォームに自動入力できる画面。
+
+  【ステップ構成】
+    内部ファイル名は step2・step5 だが、ユーザーには 1/2・2/2 と表示する。
+    step1/3/4 は実装されていないため、実態に合わせて2ステップ構成にした。
+
+  【Stimulus コントローラー】
+    data-controller="onboarding-template" → タブ切り替え・フィルタ・自動入力
+    data-controller="habit-form"          → measurement_type切り替えでunit表示制御
+  ==============================================================================
+%>
+<% content_for :title, t("onboarding.template_selection.page_title") %>
+
+<div class="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-8"
+     data-controller="onboarding-template habit-form">
+
+  <%# ステップインジケーター（1/2） %>
+  <div class="flex justify-center items-center gap-2 mb-8"
+       aria-label="オンボーディング進捗: 2ステップ中の1ステップ目">
+    <%#
+      ステップ1（現在）: 青丸
+      ステップ2（未完了）: グレー丸
+      2ステップ構成のため、間のラインは1本だけ
+    %>
+    <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center
+                justify-center text-xs font-bold flex-shrink-0
+                ring-2 ring-blue-500 ring-offset-2"
+         aria-current="step" aria-label="ステップ 1（現在）">1</div>
+    <div class="w-8 h-1 bg-gray-200 flex-shrink-0" aria-hidden="true"></div>
+    <div class="w-8 h-8 rounded-full bg-gray-200 text-gray-500 flex items-center
+                justify-center text-xs font-bold flex-shrink-0"
+         aria-label="ステップ 2（未完了）">2</div>
+  </div>
+
+  <%# ページヘッダー %>
+  <div class="mb-6 text-center">
+    <p class="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">
+      <%= t("onboarding.template_selection.step_label") %>
+    </p>
+    <h1 class="text-2xl font-bold text-gray-900">
+      <%= t("onboarding.template_selection.heading") %>
+    </h1>
+    <p class="mt-2 text-sm text-gray-500 leading-relaxed">
+      <%= t("onboarding.template_selection.description") %>
+    </p>
+  </div>
+
+  <%# タブ切り替え %>
+  <div class="flex rounded-xl border border-gray-200 overflow-hidden mb-6 bg-gray-50"
+       role="tablist">
+    <button type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="panel-template"
+            data-onboarding-template-target="tabTemplate"
+            data-action="click->onboarding-template#switchToTemplate"
+            class="flex-1 py-3 px-4 text-sm font-medium transition-colors
+                   bg-white text-blue-600 border-b-2 border-blue-600
+                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
+      <%= t("onboarding.template_selection.tab_template") %>
+    </button>
+    <button type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="panel-manual"
+            data-onboarding-template-target="tabManual"
+            data-action="click->onboarding-template#switchToManual"
+            class="flex-1 py-3 px-4 text-sm font-medium transition-colors
+                   text-gray-500 hover:text-gray-700
+                   focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500">
+      <%= t("onboarding.template_selection.tab_manual") %>
+    </button>
+  </div>
+
+  <%# テンプレートタブパネル %>
+  <div id="panel-template"
+       role="tabpanel"
+       data-onboarding-template-target="panelTemplate">
+
+    <%# カテゴリフィルタ %>
+    <div class="flex flex-wrap gap-2 mb-4" role="group" aria-label="カテゴリフィルタ">
+      <button type="button"
+              data-onboarding-template-target="categoryButton"
+              data-category="all"
+              data-action="click->onboarding-template#filterByCategory"
+              class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors
+                     bg-blue-600 text-white border-blue-600
+                     focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500">
+        <%= t("onboarding.template_selection.category_all") %>
+      </button>
+
+      <% {
+        "health"  => t("onboarding.template_selection.category_health"),
+        "fitness" => t("onboarding.template_selection.category_fitness"),
+        "study"   => t("onboarding.template_selection.category_study"),
+        "mind"    => t("onboarding.template_selection.category_mind")
+      }.each do |category_key, category_label| %>
+        <button type="button"
+                data-onboarding-template-target="categoryButton"
+                data-category="<%= category_key %>"
+                data-action="click->onboarding-template#filterByCategory"
+                class="px-3 py-1.5 text-xs font-medium rounded-full border transition-colors
+                       bg-white text-gray-600 border-gray-300
+                       hover:border-blue-400 hover:text-blue-600
+                       focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500">
+          <%= category_label %>
+        </button>
+      <% end %>
+    </div>
+
+    <%# テンプレートカードグリッド %>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6"
+         data-onboarding-template-target="templateGrid">
+      <% @templates.each do |template| %>
+        <%#
+          data-template-* 属性:
+            Stimulus コントローラーがテンプレート選択時にフォームへ自動入力する値。
+            measurement_type は "check_type" or "numeric_type"。
+            unit はチェック型の場合空文字になる。
+        %>
+        <button type="button"
+                data-onboarding-template-target="templateCard"
+                data-category="<%= template.category %>"
+                data-template-name="<%= template.name %>"
+                data-template-measurement-type="<%= template.measurement_type %>"
+                data-template-unit="<%= template.default_unit.to_s %>"
+                data-template-weekly-target="<%= template.default_weekly_target %>"
+                data-action="click->onboarding-template#selectTemplate"
+                class="relative flex flex-col items-start p-3 rounded-xl border-2 text-left
+                       border-gray-200 bg-white hover:border-blue-400 hover:bg-blue-50
+                       transition-all duration-150 cursor-pointer group
+                       focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500">
+          <span class="text-sm font-semibold text-gray-800 group-hover:text-blue-700 mb-1 leading-tight">
+            <%= template.name %>
+          </span>
+          <span class="text-xs text-gray-500">
+            週 <%= template.default_weekly_target %> 回 ·
+            <%= template.check_type? ? "チェック" : "数値" %>型
+          </span>
+          <% if template.numeric_type? && template.default_unit.present? %>
+            <span class="text-xs text-blue-500 mt-0.5">単位: <%= template.default_unit %></span>
+          <% end %>
+          <%#
+            selectedBadge: 選択中に✓を表示するインジケーター
+            初期は hidden。selectTemplate() が classList.remove("hidden") する。
+          %>
+          <span class="absolute top-2 right-2 text-blue-600 text-xs font-bold hidden"
+                data-onboarding-template-target="selectedBadge">✓</span>
+        </button>
+      <% end %>
+    </div>
+
+    <% if @templates.empty? %>
+      <div class="text-center py-8 text-gray-400 text-sm">
+        テンプレートが見つかりませんでした
+      </div>
+    <% end %>
+  </div>
+
+  <%# 手入力タブパネル（初期は非表示） %>
+  <div id="panel-manual"
+       role="tabpanel"
+       hidden
+       data-onboarding-template-target="panelManual">
+    <div class="mb-4 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
+      <p class="text-sm text-blue-700">
+        💡 習慣名や記録方法を自由に入力してください。
+      </p>
+    </div>
+  </div>
+
+  <%# 習慣入力フォーム（両タブ共通・常に表示） %>
+  <div class="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
+    <h2 class="text-sm font-bold text-gray-700 mb-2">
+      <%= t("onboarding.template_selection.form_heading") %>
+    </h2>
+    <p class="text-xs text-gray-500 mb-4">
+      <%= t("onboarding.template_selection.form_hint") %>
+    </p>
+
+    <%= form_with url: habits_path,
+                  method: :post,
+                  local: true,
+                  class: "space-y-4" do |f| %>
+
+      <%#
+        from_onboarding フラグ:
+          HabitsController#create がこの値を見て
+          リダイレクト先を onboarding_step5_path に切り替える。
+      %>
+      <%= hidden_field_tag :from_onboarding, "true" %>
+
+      <%# 習慣名 %>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1.5"
+               for="onboarding_habit_name">
+          <%= t("onboarding.template_selection.habit_name_label") %>
+          <span class="text-red-500 ml-0.5" aria-label="必須">*</span>
+        </label>
+        <%#
+          data-onboarding-template-target="nameInput":
+            selectTemplate() がこのフィールドにテンプレート名を自動入力する。
+        %>
+        <%= text_field_tag "habit[name]",
+              nil,
+              id: "onboarding_habit_name",
+              placeholder: t("onboarding.template_selection.habit_name_placeholder"),
+              required: true,
+              class: "w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm
+                      focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                      placeholder-gray-400",
+              data: { "onboarding-template-target": "nameInput" } %>
+      </div>
+
+      <%# 記録タイプ %>
+      <div>
+        <p class="block text-sm font-medium text-gray-700 mb-2">
+          <%= t("onboarding.template_selection.measurement_type_label") %>
+        </p>
+        <div class="grid grid-cols-2 gap-3">
+          <%#
+            data-action に habit-form#toggleUnit と onboarding-template#onMeasurementTypeChange の
+            両方を指定する。
+            habit-form#toggleUnit → unit/weeklyTarget フィールドの表示/非表示を制御
+            onboarding-template#onMeasurementTypeChange → テンプレート選択状態をリセット
+          %>
+          <label class="flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer
+                         transition-colors border-blue-500 bg-blue-50"
+                 data-habit-form-target="measurementLabel">
+            <%= radio_button_tag "habit[measurement_type]",
+                  "check_type",
+                  true,
+                  id: "onboarding_check_type",
+                  class: "text-blue-600",
+                  data: {
+                    "habit-form-target": "measurementType",
+                    "onboarding-template-target": "measurementTypeRadio",
+                    action: "change->habit-form#toggleUnit change->onboarding-template#onMeasurementTypeChange"
+                  } %>
+            <span class="text-sm font-medium text-gray-700">✓ チェック型</span>
+          </label>
+
+          <label class="flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer
+                         transition-colors border-gray-200 hover:border-gray-300"
+                 data-habit-form-target="measurementLabel">
+            <%= radio_button_tag "habit[measurement_type]",
+                  "numeric_type",
+                  false,
+                  id: "onboarding_numeric_type",
+                  class: "text-blue-600",
+                  data: {
+                    "habit-form-target": "measurementType",
+                    "onboarding-template-target": "measurementTypeRadio",
+                    action: "change->habit-form#toggleUnit change->onboarding-template#onMeasurementTypeChange"
+                  } %>
+            <span class="text-sm font-medium text-gray-700">📊 数値型</span>
+          </label>
+        </div>
+      </div>
+
+      <%#
+        unit フィールド（数値型のみ表示）
+        data-habit-form-target="unitField": habit-form が toggleUnit() で hidden を付け外しする
+        初期値 hidden（チェック型がデフォルトのため）
+      %>
+      <div hidden data-habit-form-target="unitField">
+        <label class="block text-sm font-medium text-gray-700 mb-1.5"
+               for="onboarding_habit_unit">
+          <%= t("onboarding.template_selection.unit_label") %>
+        </label>
+        <%= text_field_tag "habit[unit]",
+              nil,
+              id: "onboarding_habit_unit",
+              placeholder: t("onboarding.template_selection.unit_placeholder"),
+              class: "w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm
+                      focus:ring-2 focus:ring-blue-500 focus:border-blue-500
+                      placeholder-gray-400",
+              data: { "onboarding-template-target": "unitInput" } %>
+      </div>
+
+      <%#
+        週次目標フィールド
+        data-habit-form-target="weeklyTargetField": 数値型のみ表示
+        チェック型では hidden + value=7 固定（habit-form が管理）
+      %>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1.5">
+          週次目標
+          <span class="text-xs text-gray-500 ml-1"
+                data-habit-form-target="weeklyTargetLabel">（1〜7回）</span>
+        </label>
+        <div hidden data-habit-form-target="weeklyTargetField">
+          <%= number_field_tag "habit[weekly_target]",
+                7,
+                id: "onboarding_habit_weekly_target",
+                min: 1,
+                class: "w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm
+                        focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
+                data: {
+                  "habit-form-target": "weeklyTargetInput",
+                  "onboarding-template-target": "weeklyTargetInput"
+                } %>
+        </div>
+      </div>
+
+      <%# 送信ボタン・スキップリンク %>
+      <div class="pt-2 space-y-3">
+        <button type="submit"
+                class="w-full py-3 px-6 bg-blue-600 text-white text-sm font-semibold
+                       rounded-xl hover:bg-blue-700 transition-colors
+                       focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+          この習慣を登録して次へ →
+        </button>
+
+        <%#
+          スキップリンク: 習慣を登録せずに step5（PMVV入力）へ直接進む。
+          習慣登録はオプションのため、スキップしてもオンボーディングは完了できる。
+        %>
+        <%= link_to t("onboarding.template_selection.skip_link"),
+              onboarding_step5_path,
+              class: "block w-full text-center py-3 px-6 text-gray-500 text-sm
+                      hover:text-gray-700 transition-colors rounded-xl
+                      focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" %>
+      </div>
+    <% end %>
+  </div>
+
+  <p class="mt-4 text-center text-xs text-gray-400 leading-relaxed">
+    習慣は後から習慣管理ページでいつでも追加・編集できます。
+  </p>
+</div>
