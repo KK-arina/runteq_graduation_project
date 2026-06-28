@@ -74,23 +74,47 @@
 
   <%# ── タスク一覧 ──────────────────────────────────────────────────────── %>
   <% if @tasks.empty? %>
-    <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
-      <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
-        <span class="text-3xl" aria-hidden="true">✅</span>
-      </div>
-      <% if @current_tab == "done" %>
-        <p class="text-gray-500 mb-2">完了済みのタスクはありません</p>
-        <p class="text-sm text-gray-400">タスクを完了すると、ここに表示されます</p>
-      <% else %>
-        <p class="text-gray-500 mb-4">
-          <%= @current_tab == "all" ? "タスクはまだ登録されていません" : "#{@current_tab.upcase} のタスクはありません" %>
-        </p>
-        <% unless @locked %>
-          <%= link_to "+ タスクを追加する", new_task_path,
-                class: "px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors" %>
-        <% end %>
-      <% end %>
-    </div>
+    <%#
+      タスク0件のとき: タブと状態に応じて Empty State の内容を変える。
+
+      【タブ別の出し分けロジック】
+        done タブ  : 完了タスクがない旨をシンプルに表示。CTAは不要。
+        ロック中   : 振り返り未完了中は追加できないためCTAを表示しない。
+        通常時     : タスク追加CTAを表示する（allタブのみCTAあり）。
+
+      【allタブのときだけCTAを表示する理由】
+        must/should/could タブが空の場合はその優先度のタスクがないだけで
+        全体としてはタスクが存在する可能性がある。
+        CTAを出すと「allタブに移動してから追加する」という不要な導線になるため
+        allタブのときのみCTAを出す設計にする。
+    %>
+    <% if @current_tab == "done" %>
+      <%# 完了タブが空のとき: CTAは不要のためシンプルに表示 %>
+      <%= render partial: "shared/empty_state", locals: {
+            icon:        "✅",
+            title:       "完了済みのタスクはありません",
+            description: "タスクを完了すると、ここに表示されます",
+            testid:      "tasks-done-empty-state"
+          } %>
+    <% elsif @locked %>
+      <%# ロック中: CTA を表示しない %>
+      <%= render partial: "shared/empty_state", locals: {
+            icon:        "✅",
+            title:       @current_tab == "all" ? "タスクはまだ登録されていません" : "#{@current_tab.upcase} のタスクはありません",
+            description: "振り返りを完了後、タスクを追加できます",
+            testid:      "tasks-empty-state"
+          } %>
+    <% else %>
+      <%# 通常時: allタブのときのみ CTA を表示する %>
+      <%= render partial: "shared/empty_state", locals: {
+            icon:        "✅",
+            title:       @current_tab == "all" ? "タスクはまだ登録されていません" : "#{@current_tab.upcase} のタスクはありません",
+            description: @current_tab == "all" ? "今日やるべきことをタスクに切り出して、確実に消化していきましょう" : nil,
+            cta_label:   @current_tab == "all" ? "タスクを追加する" : nil,
+            cta_path:    @current_tab == "all" ? new_task_path : nil,
+            testid:      "tasks-empty-state"
+          } %>
+    <% end %>
 
   <% else %>
 

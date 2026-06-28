@@ -61,19 +61,29 @@
       【条件】 @current_purpose が nil のとき
   ───────────────────────────────────────────────────────────────── %>
   <% unless @current_purpose %>
-    <div class="text-center py-16 px-6 bg-white border border-dashed border-gray-300 rounded-2xl">
-      <p class="text-5xl mb-4">🎯</p>
-      <h2 class="text-lg font-bold text-gray-700 mb-2">目標がまだ登録されていません</h2>
-      <p class="text-sm text-gray-500 mb-6 leading-relaxed">
-        PMVVを入力すると、AIがあなたの目標に合わせた<br>
-        習慣・タスクを提案します。
-      </p>
-      <%= link_to "目標を入力する →",
-                  new_user_purpose_path,
-                  class: "inline-block px-6 py-3 text-sm font-bold text-white
-                          bg-violet-600 rounded-xl hover:bg-violet-700 transition-colors
-                          focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2" %>
-    </div>
+    <%#
+      PMVV未入力のとき: 共通 Empty State パーシャルを使う。
+
+      【cta_class にバイオレット色と rounded-xl を使う理由】
+        PMVV ページのブランドカラーはバイオレット（紫）。
+        デフォルトクラス（bg-blue-600 / rounded-lg）ではなく
+        このページ専用のスタイルを cta_class で上書きする。
+        rounded-xl はこの画面の既存デザイン仕様を維持するため残す。
+        （レビュー指摘: デフォルトは rounded-lg に統一するが、
+          PMVV だけは既存仕様の rounded-xl を cta_class で指定して維持する。）
+    %>
+    <%= render partial: "shared/empty_state", locals: {
+          icon:        "🎯",
+          title:       "目標がまだ登録されていません",
+          description: "PMVVを入力すると、AIがあなたの目標に合わせた習慣・タスクを提案します。",
+          cta_label:   "目標を入力する →",
+          cta_path:    new_user_purpose_path,
+          cta_class:   "inline-flex items-center justify-center
+                         px-6 py-3 text-sm font-bold text-white
+                         bg-violet-600 rounded-xl hover:bg-violet-700 transition-colors
+                         focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2",
+          testid:      "user-purpose-empty-state"
+        } %>
 
   <%# ─────────────────────────────────────────────────────────────────
       PMVV が存在する場合

@@ -1,0 +1,176 @@
+<%#
+  app/views/shared/_empty_state.html.erb
+  ==============================================================================
+  【このパーシャルの役割】
+    全画面共通の Empty State（データが0件のとき表示する案内UI）を提供する。
+    各画面から render partial: で呼び出すことで Empty State の HTML を1か所に
+    まとめ（DRY原則）、デザインの一貫性を保つ。
+
+  【使い方（呼び出し例）】
+    = render partial: "shared/empty_state", locals: {
+          icon:        "📋",
+          title:       "まだ習慣がありません",
+          description: "習慣を登録すると達成率が表示されます",
+          cta_label:   "習慣を追加する",
+          cta_path:    new_habit_path,
+          testid:      "habits-empty-state"
+        }
+
+  【ローカル変数の説明】
+    icon        : Empty State 中央に表示する絵文字（必須）。
+                  各画面のテーマに合わせて呼び出し元で指定する。
+    title       : 「何もない」状態を端的に伝えるメインメッセージ（必須）。
+    description : タイトルを補足する説明文（省略可、省略時は非表示）。
+    cta_label   : CTA（Call To Action）ボタンのラベルテキスト（省略可）。
+                  cta_path とセットで指定する。片方だけではボタンを表示しない。
+    cta_path    : CTAボタンのリンク先パス（省略可）。
+                  cta_label とセットで指定する。
+    cta_class   : CTAボタンの追加Tailwindクラス文字列（省略可）。
+                  省略時はデフォルトの青いボタンスタイルを使う。
+    testid      : data-testid 属性の値（省略可、省略時は "empty-state"）。
+                  テストコードで assert_select "[data-testid='...']" として使う。
+
+  【render partial: locals: を使う理由】
+    render "shared/empty_state" の省略記法でも動作するが、
+    render partial: "shared/empty_state", locals: { ... } の明示的な書き方の方が
+    将来名前空間が増えたときの解決失敗リスクを防げる。
+    また「これはパーシャルにローカル変数を渡している」という意図が
+    コードを読む人に明確に伝わる。
+
+  【local_assigns.fetch を使う理由】
+    Railsパーシャルでデフォルト値を安全に設定する方法として
+    local_assigns.fetch(:key, default) が最も安全かつ明示的。
+    - defined?(変数名) はスコープ問題で意図しない挙動になることがある。
+    - ||= は false を渡したいケースで誤作動する可能性がある。
+    → local_assigns.fetch が最もトラブルが少ない書き方。
+
+  【アクセシビリティ】
+    - 絵文字に aria-hidden="true" を付けてスクリーンリーダーに読み上げさせない。
+      VoiceOver 等は絵文字を「📋 スパイラルバインダー 絵文字」等と読み上げ
+      ユーザーにとって不自然なため aria-hidden で非表示にする。
+      タイトルテキストが内容を十分に伝えているため情報は欠けない。
+    - CTAボタンに focus:ring を付けてキーボードフォーカスを視覚的に表示する。
+  ==============================================================================
+%>
+
+<%# ── ローカル変数のデフォルト値を設定する ── %>
+<% icon        = local_assigns.fetch(:icon,        "📋") %>
+<% title       = local_assigns.fetch(:title,       "データがありません") %>
+<% description = local_assigns.fetch(:description, nil) %>
+<% cta_label   = local_assigns.fetch(:cta_label,   nil) %>
+<% cta_path    = local_assigns.fetch(:cta_path,    nil) %>
+<% cta_class   = local_assigns.fetch(:cta_class,   nil) %>
+<% testid      = local_assigns.fetch(:testid,      "empty-state") %>
+
+<%#
+  外側のコンテナ
+  text-center        : 内容を中央揃えにする
+  py-10              : 上下に余白40px。py-16（64px）だとカード内で縦長になりすぎるため
+                       レビュー指摘を受けて py-10 に調整した。
+  border-2           : ボーダーの太さを2pxにする
+  border-dashed      : 破線ボーダーで「まだ何もない」ことを視覚的に表現する
+  border-gray-300    : 薄いグレーのボーダー色
+  rounded-xl         : 角丸12px でやわらかい印象にする
+  data-testid        : テストコードから要素を特定するための識別子。
+                       assert_select "[data-testid='...']" で使う。
+%>
+<div class="text-center py-10 border-2 border-dashed border-gray-300 rounded-xl"
+     data-testid="<%= testid %>">
+
+  <%#
+    アイコン表示エリア
+    w-16 h-16              : 64×64px の正方形コンテナ
+    rounded-full           : 完全な円（border-radius: 9999px）にする
+    bg-blue-100            : 薄い青背景でアイコンを目立たせる
+    flex items-center      : フレックスで縦中央揃え
+    justify-center         : フレックスで横中央揃え
+    mx-auto                : 水平方向に auto マージンを付けて中央寄せ
+    mb-4                   : 下マージン16px（タイトルとの間隔）
+  %>
+  <div class="w-16 h-16 rounded-full bg-blue-100
+              flex items-center justify-center mx-auto mb-4">
+    <%#
+      aria-hidden="true":
+        絵文字はスクリーンリーダーに読み上げさせない。
+        タイトルテキストが内容を十分に伝えているため情報は欠けない。
+      text-3xl: フォントサイズ1.875rem（30px）でアイコンを大きく表示する。
+    %>
+    <span class="text-3xl" aria-hidden="true"><%= icon %></span>
+  </div>
+
+  <%#
+    タイトル（メインメッセージ）
+    font-semibold          : セミボールドでタイトルとしての視認性を確保する。
+                             レビュー指摘: text-gray-500 だけでは読みにくいため追加。
+    text-gray-700          : 読みやすい濃いグレー。
+                             レビュー指摘: text-gray-500 より視認性が高い色に変更。
+    description.present?   : 説明文がある場合は mb-2（8px）、ない場合は mb-4（16px）
+                             説明文がある場合は説明文がCTAとの間隔を担うため
+                             タイトルの下マージンは小さくする。
+  %>
+  <p class="font-semibold text-gray-700 <%= description.present? ? 'mb-2' : 'mb-4' %>">
+    <%= title %>
+  </p>
+
+  <%#
+    説明文（省略可）
+    description.present? : nil や空文字のときは要素ごと非表示にする。
+    text-sm              : フォントサイズ0.875rem（14px）でタイトルより小さくする。
+    text-gray-400        : タイトルより薄いグレーで補足感を出す。
+    max-w-md             : 最大幅28rem（448px）に制限する。
+                           レビュー指摘: 長文説明が横幅いっぱいに広がって読みにくくなるため、
+                           max-w-md で読みやすい幅に制限する。
+    mx-auto              : max-w-md で幅を制限した後、中央に配置する。
+    mb-4                 : CTAボタンとの間隔16px。
+  %>
+  <% if description.present? %>
+    <p class="text-sm text-gray-400 max-w-md mx-auto mb-4"><%= description %></p>
+  <% end %>
+
+  <%#
+    CTAボタン（省略可）
+    cta_label と cta_path の両方が存在するときのみ表示する。
+    片方だけではリンクとして機能しないため、両方必須とする。
+
+    link_to:
+      Railsビューヘルパー。<a href="cta_path">cta_label</a> タグを生成する。
+      第1引数: リンクテキスト（ボタンラベル）
+      第2引数: リンク先パス
+      class:   適用するTailwindCSSクラス
+
+    cta_class.presence:
+      cta_class が nil または空文字のとき nil を返す。
+      || でデフォルトクラスにフォールバックする。
+
+    デフォルトクラスの説明:
+      inline-flex         : インライン要素としてフレックスコンテナにする。
+                            レビュー指摘: inline だけだと文字が中央揃えにならないことがある。
+                            inline-flex + items-center + justify-center で確実に中央揃えにする。
+      items-center        : フレックスアイテムを縦方向に中央揃えにする。
+      justify-center      : フレックスアイテムを横方向に中央揃えにする。
+      px-6 py-3           : 左右24px・上下12px の余白（押しやすいサイズ）
+      bg-blue-600         : 青背景（アプリのプライマリカラー）
+      text-white          : 白文字（青背景に対してコントラスト比が高い）
+      font-medium         : 少し太字でボタンとして読みやすくする
+      rounded-lg          : 角丸8px
+                            レビュー指摘: PMVVだけ rounded-xl にしていたが
+                            デフォルトは rounded-lg に統一し、
+                            PMVVは cta_class で rounded-xl を渡す設計にする。
+      hover:bg-blue-700   : ホバー時に濃い青になる
+      transition-colors   : 色変化を0.15sでアニメーションする
+                            レビュー指摘: transition-all は不要。transition-colors で十分。
+      focus:outline-none  : デフォルトのフォーカスアウトラインを消す
+      focus:ring-2        : フォーカス時に2pxのリングを表示する
+      focus:ring-blue-500 : フォーカスリングの色を青にする
+      focus:ring-offset-2 : フォーカスリングとボタンの間に2pxの隙間を作る
+  %>
+  <% if cta_label.present? && cta_path.present? %>
+    <%= link_to cta_label, cta_path,
+          class: cta_class.presence ||
+                 "inline-flex items-center justify-center
+                  px-6 py-3 bg-blue-600 text-white font-medium rounded-lg
+                  hover:bg-blue-700 transition-colors
+                  focus:outline-none focus:ring-2
+                  focus:ring-blue-500 focus:ring-offset-2" %>
+  <% end %>
+</div>

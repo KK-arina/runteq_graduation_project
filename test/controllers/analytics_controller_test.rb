@@ -226,4 +226,26 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
       assert_select "span[aria-label='#{badge_label}']", count: 0
     end
   end
+
+  # ============================================================
+  # H-7: Empty State data-testid 継続確認テスト
+  # ============================================================
+  #
+  # 【このテストの目的】
+  #   analytics/index.html.erb の Empty State を共通パーシャルに移行した後も
+  #   data-testid="analytics-empty-state" が正しく出力されることを確認する。
+  #   既存テスト "習慣も振り返りも0件のときEmpty Stateが表示される" と
+  #   同じ機能を検証しているが、H-7 の変更で壊れていないことの明示的な確認として残す。
+
+  test "H-7: 共通パーシャルに移行後も analytics-empty-state の testid が正しく出力される" do
+    # setup で @user.habits / weekly_reflections はクリア済み
+    get analytics_path
+    assert_response :success
+
+    # パーシャル側で testid: "analytics-empty-state" を正しく受け取っていること
+    assert_select "[data-testid='analytics-empty-state']"
+
+    # ダッシュボードへのリンクが存在すること
+    assert_select "a[href='#{dashboard_path}']", text: "ダッシュボードへ →"
+  end
 end

@@ -121,7 +121,36 @@
     </h2>
 
     <% if @habits.empty? %>
-      <p class="text-sm text-gray-400">まだ習慣が登録されていません。</p>
+      <%#
+        習慣0件のとき: 共通 Empty State パーシャルで CTA を表示する。
+
+        【ロック中のガード】
+          ロック中は習慣を追加できないため cta_label / cta_path を渡さない。
+          _empty_state.html.erb は cta_label が nil のときボタンを非表示にする設計。
+
+        【render partial: locals: を使う理由】
+          将来名前空間が増えたときの解決失敗リスクを防ぐため明示的な書き方にする。
+          render "shared/empty_state" の省略記法でも動作するが
+          partial: locals: の方が「パーシャルにローカル変数を渡している」という
+          意図がコードを読む人に明確に伝わる。
+      %>
+      <% if @locked %>
+        <%= render partial: "shared/empty_state", locals: {
+              icon:        "📊",
+              title:       "まだ習慣が登録されていません",
+              description: "振り返りを完了後、習慣を追加できます",
+              testid:      "dashboard-habits-empty-state"
+            } %>
+      <% else %>
+        <%= render partial: "shared/empty_state", locals: {
+              icon:        "📊",
+              title:       "まだ習慣が登録されていません",
+              description: "最初の習慣を登録して、記録を始めましょう",
+              cta_label:   "最初の習慣を追加する",
+              cta_path:    new_habit_path,
+              testid:      "dashboard-habits-empty-state"
+            } %>
+      <% end %>
     <% else %>
       <div class="mb-4">
         <div class="flex justify-between items-center mb-1">

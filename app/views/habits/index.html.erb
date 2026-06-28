@@ -60,16 +60,27 @@
   </div>
 
   <% if @habits.empty? %>
-    <div class="text-center py-16 border-2 border-dashed border-gray-300 rounded-xl">
-      <div class="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
-        <span class="text-3xl">📋</span>
-      </div>
-      <p class="text-gray-500 mb-4">まだ習慣が登録されていません</p>
-      <% unless @locked %>
-        <%= link_to "習慣を登録する", new_habit_path,
-              class: "px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors" %>
-      <% end %>
-    </div>
+    <%#
+      習慣0件のとき: 共通 Empty State パーシャルを使う。
+      ロック中は cta_label / cta_path を渡さずボタンを非表示にする。
+    %>
+    <% if @locked %>
+      <%= render partial: "shared/empty_state", locals: {
+            icon:        "📋",
+            title:       "まだ習慣が登録されていません",
+            description: "振り返りを完了後、習慣を追加できます",
+            testid:      "habits-empty-state"
+          } %>
+    <% else %>
+      <%= render partial: "shared/empty_state", locals: {
+            icon:        "📋",
+            title:       "まだ習慣が登録されていません",
+            description: "最初の習慣を登録して、記録を始めましょう",
+            cta_label:   "習慣を追加する",
+            cta_path:    new_habit_path,
+            testid:      "habits-empty-state"
+          } %>
+    <% end %>
 
   <% else %>
     <%#

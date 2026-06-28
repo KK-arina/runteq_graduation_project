@@ -218,4 +218,36 @@ class TasksControllerTest < ActionDispatch::IntegrationTest
     end
     assert_redirected_to %r{/login}
   end
+
+  # ============================================================
+  # H-7: タスク一覧 Empty State テスト
+  # ============================================================
+
+  test "タスクが0件のとき Empty State が表示される" do
+    # fixtures のタスクを論理削除して0件にする
+    @user.tasks.update_all(deleted_at: Time.current)
+
+    get tasks_path
+    assert_response :success
+
+    assert_select "[data-testid='tasks-empty-state']"
+  end
+
+  test "タスクが0件のとき all タブに「タスクを追加する」CTAリンクが表示される" do
+    @user.tasks.update_all(deleted_at: Time.current)
+
+    get tasks_path
+    assert_response :success
+
+    assert_select "a[href='#{new_task_path}']", text: "タスクを追加する"
+  end
+
+  test "done タブが0件のとき done 専用 Empty State が表示される" do
+    @user.tasks.update_all(deleted_at: Time.current)
+
+    get tasks_path, params: { tab: "done" }
+    assert_response :success
+
+    assert_select "[data-testid='tasks-done-empty-state']"
+  end
 end
