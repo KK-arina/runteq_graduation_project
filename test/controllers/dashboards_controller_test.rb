@@ -227,4 +227,37 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     # due_date も created_at も先週 → 集計対象が 0件 → セクション非表示
     assert_select "[data-testid='task-priority-stats-section']", count: 0
   end
+
+  # ============================================================
+  # H-7: Empty State UI テスト
+  # ============================================================
+  #
+  # 【テスト戦略】
+  #   習慣0件の状態を fixtures の論理削除で再現する。
+  #   assert_select "[data-testid='...']" でパーシャルが正しくレンダリングされるかを検証。
+  #   CTAリンクの href と表示テキストも合わせて確認し、
+  #   パーシャルの引数渡しに誤りがないことを保証する。
+
+  test "習慣が0件のときダッシュボードの Empty State が表示される" do
+    # fixtures の習慣を論理削除してクリーンな0件状態にする。
+    # update_all はコールバックを起こさず1クエリで完了するため高速。
+    @user.habits.update_all(deleted_at: Time.current)
+
+    get dashboard_path
+    assert_response :success
+
+    # data-testid="dashboard-habits-empty-state" を持つ要素が1件表示されること
+    assert_select "[data-testid='dashboard-habits-empty-state']"
+  end
+
+  test "習慣が0件かつ非ロック中は「最初の習慣を追加する」CTAリンクが表示される" do
+    # fixtures の習慣を0件にする（ロック状態ではない前提）
+    @user.habits.update_all(deleted_at: Time.current)
+
+    get dashboard_path
+    assert_response :success
+
+    # 「最初の習慣を追加する」リンクが new_habit_path を向いていること
+    assert_select "a[href='#{new_habit_path}']", text: "最初の習慣を追加する"
+  end
 end

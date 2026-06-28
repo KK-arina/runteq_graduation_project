@@ -143,10 +143,21 @@
     <h2 class="text-lg font-semibold text-gray-800 mb-4">📖 過去の振り返り履歴</h2>
 
     <% if @weekly_reflections.empty? %>
-      <div class="text-center py-8">
-        <p class="text-gray-400 text-sm">まだ振り返りがありません。</p>
-        <p class="text-gray-400 text-xs mt-1">日曜日の午前4時以降に最初の振り返りができます。</p>
-      </div>
+      <%#
+        振り返り0件のとき: 共通 Empty State パーシャルを使う。
+
+        【CTAを付けない理由】
+          振り返りは「毎週日曜日のAM4:00以降」のみ実行可能。
+          それ以外の時間帯にCTAを表示しても「期間外エラー」になり UX が悪い。
+          上部の「今週の状況」セクションが時間帯に応じたボタンを既に出し分けているため
+          ここでは案内テキストのみにとどめる。
+      %>
+      <%= render partial: "shared/empty_state", locals: {
+            icon:        "📖",
+            title:       "まだ振り返りがありません",
+            description: "毎週日曜日の午前4時以降に、今週の振り返りを記録できます。",
+            testid:      "weekly-reflections-empty-state"
+          } %>
 
     <% else %>
       <div class="space-y-3">
