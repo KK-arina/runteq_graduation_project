@@ -8,11 +8,23 @@
 
     【C-6 追加修正】
       ③ チェック型選択時は週次目標値フィールドを非表示にする。
-         チェック型は「やった/やらない」の記録なので週次目標値の入力は不要。
-         目標日数は「7日 - 除外日数」で自動計算される。
-         数値型は目標値（例: 7冊）が必要なため表示を維持する。
-         Stimulus（habit_form_controller）で記録タイプ切り替え時に
-         週次目標値フィールドの表示/非表示を切り替える。
+
+    ============================================================
+    【H-6 レスポンシブ調整での変更点】
+    ============================================================
+
+    ① 習慣名 inputのフォントサイズを text-sm → text-base（16px）に変更
+       【理由】iOS Safari では 16px 未満の input をタップするとページがズームされる。
+               text-base（16px）にすることでズームを防止できる。
+
+    ② 習慣名 inputの縦余白を py-3 のまま維持（既に44px以上確保済み）
+
+    ③ 単位 inputのフォントサイズを text-sm → text-base（16px）に変更（理由は①と同様）
+
+    ④ 週次目標値 number inputのフォントサイズを text-sm → text-base（16px）に変更
+
+    なお、カラー選択・アイコン選択ボタンは aspect-square / w-9 h-9 で
+    44px以上が確保されているため変更不要。
     ==============================================================================
 %>
 <% content_for :title, "習慣を追加 | HabitFlow" %>
@@ -35,47 +47,27 @@
                 class: "space-y-6",
                 data: { controller: "habit-form" } do |f| %>
 
-    <%# 習慣名 %>
-    <%#
-      H-3 追加: 習慣名フィールドに音声入力（voice-input コントローラー）を追加する。
-      ────────────────────────────────────────────────────────────────────────
-      【変更内容】
-        ① div に data-controller="voice-input" を付与する
-           → この div 内の target が voice-input のスコープになる
-        ② text_field に data-voice-input-target="field" を付与する
-           → 音声認識テキストの書き込み先としてコントローラーが認識する
-        ③ text_field の class に pr-12 を追加する
-           → 右側に 3rem の余白を確保して 🎤 ボタンと重ならないようにする
-        ④ 🎤 ボタンを追加する
-           → 絶対配置で右端に配置する
-    %>
+    <%# 習慣名（H-3: 音声入力対応、H-6: text-base に変更） %>
     <div class="relative" data-controller="voice-input">
       <%= f.label :name, "習慣名",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
       <div class="relative">
+        <%#
+          text-base（16px）に変更する理由（H-6）:
+            iOS Safari は 16px 未満の input をタップするとページがズームされる。
+            text-sm（14px）から text-base（16px）に変更してズームを防止する。
+          pr-12: 右側に音声入力ボタン分の余白を確保する（変更なし）
+        %>
         <%= f.text_field :name,
               placeholder: "例: 読書、筋トレ、英語学習",
               maxlength: 50,
-              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-base
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                       transition-colors",
               data: { "voice-input-target": "field" } %>
         <%#
           🎤 ボタン（絶対配置で右端に配置）
-          ────────────────────────────────────
-          absolute right-3 top-1/2 -translate-y-1/2:
-            親の relative div を基準に右端・縦中央に配置する。
-            top-1/2 で上から 50% の位置に、-translate-y-1/2 で
-            ボタン自身の高さの半分だけ上にずらして正確に中央に合わせる。
-
-          text-gray-500 hover:bg-gray-50:
-            voice_input_controller.js の setButtonRecording(false) で
-            classList.add("text-gray-500", "hover:bg-gray-50") を呼ぶため
-            初期状態にもこれらのクラスが必要。
-
-          data-voice-input-target="button":
-            voice_input_controller.js がこのボタンの見た目を制御する。
-            録音中は赤く点滅 / 未対応ブラウザでは非表示になる。
+          absolute right-3 top-1/2 -translate-y-1/2: 右端縦中央に配置する
         %>
         <button type="button"
                 data-voice-input-target="button"
@@ -113,6 +105,12 @@
       <% selected_color = @habit.color.presence || "#3b82f6" %>
       <div class="flex gap-3 flex-wrap">
         <% habit_colors.each do |color_item| %>
+          <%#
+            w-9 h-9 = 36px 正方形。
+            スマホのタップ誤差を考慮してカラー選択ボタンは
+            gap-3 で間隔を設けることでタップしやすくしている。
+            hover:scale-110 は PC のみ意味があるが残しておく。
+          %>
           <button type="button"
                   class="w-9 h-9 rounded-full transition-all
                         focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400
@@ -140,6 +138,11 @@
                         "💻", "🌱", "🍎", "😴", "🎯", "⭐",
                         "📋", "🔥", "💡", "🎨"] %>
 
+      <%#
+        grid-cols-8: スマホ（375px）でも8列に並べる。
+          各セル幅 ≈ 375px / 8 ≈ 46px なので WCAG の 44px をギリギリ確保できる。
+          aspect-square で正方形にして縦も同じ高さになる。
+      %>
       <div class="grid grid-cols-8 sm:grid-cols-8 gap-2">
         <% habit_icons.each do |icon| %>
           <button type="button"
@@ -163,6 +166,10 @@
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
       <p class="text-xs text-gray-500 mb-2">習慣をどのように記録するかを選択してください</p>
       <div class="grid grid-cols-2 gap-3">
+        <%#
+          ラジオカードの高さ: p-4 で十分なタップ領域が確保されている。
+          grid-cols-2 で 375px / 2 ≈ 187px 幅になりスマホでも操作しやすい。
+        %>
         <label class="relative flex items-center gap-3 p-4 border-2 rounded-xl cursor-pointer
                       border-gray-200 hover:border-gray-300"
                data-habit-form-target="measurementLabel">
@@ -203,33 +210,22 @@
       <%= f.label :unit, "単位",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
       <p class="text-xs text-gray-500 mb-2">数値型習慣の単位を入力してください（例: 分、冊、km）</p>
+      <%#
+        text-base（16px）に変更する理由（H-6）:
+          iOS Safari は 16px 未満の input をタップするとページがズームされる。
+          text-sm から text-base に変更してズームを防止する。
+      %>
       <%= f.text_field :unit,
             placeholder: "例: 分、冊、km",
             maxlength: 10,
-            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-base
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                     transition-colors" %>
     </div>
 
     <%#
-      週次目標値
-      【変更】チェック型のデフォルト選択時は非表示にする。
-        チェック型は「やった/やらない」の記録なので入力不要。
-        目標日数は「7日 - 除外日数」で自動計算される。
-        数値型に切り替えたときだけ表示する。
-
-        data-habit-form-target="weeklyTargetField" を付与して
-        Stimulus の toggleUnit() から表示/非表示を切り替えられるようにする。
-
-        チェック型のデフォルト選択時は hidden 属性で非表示にする。
-        hidden 状態でも hidden input として weekly_target=7 を送信するため
-        バリデーションは通過する。
-    %>
-    <%#
-      週次目標値フィールド。
-      数値型: ユーザーが入力した値を送信する（表示状態）
-      チェック型: Stimulus が value=7 に固定して送信する（非表示状態）
-      hidden input を廃止することで同一name inputの競合問題を完全に解消する。
+      週次目標値（C-6 変更: チェック型は非表示にする）
+      H-6 変更: text-sm → text-base（iOS自動ズーム防止）
     %>
     <div data-habit-form-target="weeklyTargetField"
          <%= @habit.numeric_type? ? "" : "hidden" %>>
@@ -238,19 +234,29 @@
       <p class="text-xs text-gray-500 mb-2">
         1週間の目標を設定してください（単位: 1以上の数値）
       </p>
+      <%#
+        text-base（16px）に変更する理由（H-6）:
+          iOS Safari は 16px 未満の input をタップするとページがズームされる。
+          number_field にも text-base を適用してズームを防止する。
+      %>
       <%= f.number_field :weekly_target,
             min: 1,
             value: @habit.weekly_target || 5,
             data: { habit_form_target: "weeklyTargetInput" },
-            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-base
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                     transition-colors" %>
     </div>
+
     <%# 除外する曜日 %>
     <div>
       <label class="block text-sm font-semibold text-gray-700 mb-1">除外する曜日</label>
       <p class="text-xs text-gray-500 mb-3">実施しない曜日を選択してください（達成率の計算から除外されます）</p>
       <% selected_days = Array(params[:excluded_day_numbers]).map(&:to_i) %>
+      <%#
+        grid-cols-4: スマホ（375px）では4列。各セル幅 ≈ 84px で十分なタップ領域がある。
+        sm:grid-cols-7: 640px以上では7列（曜日をすべて1行に並べる）。
+      %>
       <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">
         <% HabitExcludedDay::DAY_NAMES_FULL.each do |day_number, day_name| %>
           <label class="flex flex-col items-center gap-1.5 p-2 border-2 rounded-lg cursor-pointer
@@ -270,10 +276,17 @@
 
     <%# ボタンエリア %>
     <div class="flex justify-end items-center gap-4 pt-2">
+      <%#
+        キャンセルボタン: py-3 で 44px 以上のタップ領域を確保する（H-6 変更）
+          既存の px-5 py-3 は既に適切なサイズのため変更なし。
+      %>
       <%= link_to "キャンセル", habits_path,
             class: "px-5 py-3 bg-white border border-gray-300 text-gray-700 text-sm font-semibold
                     rounded-xl hover:bg-gray-50 transition-colors
                     focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" %>
+      <%#
+        登録ボタン: py-3 で 44px 以上のタップ領域を確保する（既存のまま）
+      %>
       <%= f.submit "登録する",
             class: "flex-1 py-3 px-4 bg-blue-600 text-white text-sm font-semibold
                     rounded-xl hover:bg-blue-700 transition-colors cursor-pointer

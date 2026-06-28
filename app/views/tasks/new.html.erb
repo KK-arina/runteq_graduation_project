@@ -17,6 +17,27 @@
   【使用するインスタンス変数（TasksController#new / #create で設定）】
     @task: Task.new で作成した空のインスタンス
            バリデーションエラー時は入力値とエラーメッセージを保持している
+
+  ============================================================
+  【H-6 レスポンシブ調整での変更点】
+  ============================================================
+
+  ① タスク名 inputのフォントサイズを（指定なし）→ text-base（16px）に追加
+     【理由】iOS Safari は 16px 未満の input をタップするとページがズームされる。
+             text-base（16px）を明示することでズームを防止できる。
+
+  ② 期限日 date inputにも text-base を追加（理由は①と同様）
+
+  ③ 見積時間 number inputにも text-base を追加（理由は①と同様）
+
+  ④ タスク種別 selectにも text-base を追加（理由は①と同様）
+
+  ⑤ 保存ボタンの縦余白を py-2.5 → py-3 に変更
+     【理由】タップ領域を WCAG 2.1 推奨の 44px 以上確保するため。
+             py-2.5（10px×2=20px）+ テキスト高さ ≈ 40px で基準未満のため
+             py-3（12px×2=24px）+ テキスト高さ ≈ 44px 以上に変更する。
+
+  ⑥ キャンセルボタンの縦余白を py-2.5 → py-3 に変更（理由は⑤と同様）
 ==============================================================================
 %>
 <% content_for :title, "タスクを追加 | HabitFlow" %>
@@ -38,12 +59,8 @@
 
   <%#
     ── バリデーションエラーメッセージ ─────────────────────────────────────
-    @task.errors.any?:
-      バリデーションエラーが1件以上あるかどうかを true/false で返す。
-    @task.errors.full_messages:
-      エラーメッセージの配列。例: ["タスク名を入力してください"]
-    div[role="alert"]:
-      スクリーンリーダーにエラーメッセージを通知するための ARIA 属性。
+    @task.errors.any? で1件以上エラーがある場合に表示する。
+    div[role="alert"]: スクリーンリーダーにエラーメッセージを通知するための ARIA 属性。
   %>
   <% if @task.errors.any? %>
     <div class="mb-6 bg-red-50 border border-red-200 rounded-lg p-4" role="alert">
@@ -66,43 +83,29 @@
     form_with model: @task:
       @task が新規（未保存）のインスタンスなので、
       action="/tasks" method="POST" のフォームを生成する。
-      @task が保存済みなら action="/tasks/1" method="PATCH" になる（Rails の規約）。
-
-    local: true:
-      Turbo Drive のデフォルト動作（非同期送信）を無効にして
-      通常の HTML フォーム送信を行う。
-      C-1 の段階では Turbo Stream は使わないため local: true にする。
-      ※ C-2 以降で Turbo Stream を使う場合は local: true を外す。
+    local: true: Turbo Drive の非同期送信を無効にする。
   %>
   <%= form_with model: @task, local: true,
         class: "bg-white border border-gray-200 rounded-xl shadow-sm p-6" do |f| %>
 
     <%# ── ① タスク名 ──────────────────────────────────────────────────── %>
     <div class="mb-5">
-      <%#
-        f.label :title, "タスク名":
-          <label for="task_title">タスク名</label> を生成する。
-          for 属性が input の id と一致することで、
-          ラベルをクリックすると input にフォーカスが当たる（アクセシビリティ）。
-      %>
       <%= f.label :title, "タスク名",
             class: "block text-sm font-bold text-gray-700 mb-1" %>
       <span class="text-red-500 text-xs ml-1" aria-hidden="true">必須</span>
 
       <%#
-        f.text_field :title:
-          <input type="text" name="task[title]" id="task_title" value="..."> を生成する。
-          value は @task.title の値が自動で入る（バリデーションエラー後の入力値復元）。
-
-        aria-required="true":
-          スクリーンリーダーに「必須フィールドです」と伝える。
-
-        aria-describedby="title-hint":
-          id="title-hint" の要素の内容をこの input の補足説明として読み上げる。
+        text-base（16px）を追加する理由（H-6）:
+          iOS Safari は 16px 未満の input をタップするとページがズームされる。
+          text-base を明示することでズームを防止できる。
+        py-3 を使う理由（H-6）:
+          タップ領域を WCAG 2.1 推奨の 44px 以上確保するため。
+          py-2.5（上下10px）+ テキスト高さ ≈ 40px から
+          py-3（上下12px）+ テキスト高さ ≈ 44px に変更する。
       %>
       <%= f.text_field :title,
             placeholder: "例: 企画書作成、メール返信",
-            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+            class: "w-full px-4 py-3 border border-gray-300 rounded-lg text-base
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
                     #{ @task.errors[:title].any? ? 'border-red-400 bg-red-50' : '' }",
             maxlength: 100,
@@ -120,7 +123,6 @@
         data-controller="priority-card":
           priority_card_controller.js をこの div に紐付ける。
           この div 内の全 label・card が Stimulus のターゲットとして管理される。
-
         role="radiogroup" aria-label="...":
           スクリーンリーダーに「これはラジオボタングループ」と伝える。
       %>
@@ -130,28 +132,32 @@
            data-controller="priority-card">
 
         <%#
-          Must カード
-          data-priority-card-target="label": Stimulus がこの label を認識する
-          data-active-class: チェック時に card に追加するクラス
-          data-inactive-class: チェックが外れたときに card に追加するクラス
-        %>
-        <label class="cursor-pointer"
-               data-priority-card-target="label">
-          <%#
-            f.radio_button :priority, "must":
-              <input type="radio" name="task[priority]" value="must"> を生成する。
-              @task.priority == "must" なら checked 属性が自動で付く。
-              バリデーションエラー後も送信した値が復元される。
+          優先度カード: p-3 で内側余白を確保している。
+          grid-cols-3 により 375px / 3 ≈ 125px 幅になり
+          タップしやすいサイズが確保されている。
 
-            data-action="change->priority-card#select":
-              このラジオボタンの change イベントで priority-card コントローラーの
-              select メソッドを呼び出す。
-          %>
+          【H-6 追加修正】カードの高さ統一
+          label に h-full を付ける理由:
+            grid の各セルは最も高いセルに揃う（CSS Grid の仕様）。
+            label が h-full でセルいっぱいに広がることで
+            内側の div も stretch される。
+          内側 div に h-full を付ける理由:
+            flex flex-col items-center justify-center と組み合わせることで
+            アイコン・タイトル・説明文が縦方向に中央揃えになる。
+            「できればやる」が2行になっても他のカードと高さが統一される。
+        %>
+        <label class="cursor-pointer h-full"
+               data-priority-card-target="label">
           <%= f.radio_button :priority, "must",
                 class: "sr-only",
                 id:    "task_priority_must",
                 data:  { action: "change->priority-card#select" } %>
-          <div class="border-2 rounded-lg p-3 text-center transition-all"
+          <%#
+            h-full: label の高さいっぱいに広がる
+            flex flex-col items-center justify-center: コンテンツを縦中央揃えにする
+          %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all h-full
+                      flex flex-col items-center justify-center"
                data-priority-card-target="card"
                data-active-class="border-red-500 bg-red-50"
                data-inactive-class="border-gray-200">
@@ -161,22 +167,15 @@
           </div>
         </label>
 
-        <%# Should カード（デフォルト選択・初期状態はアクティブクラスを付けておく） %>
-        <label class="cursor-pointer"
+        <label class="cursor-pointer h-full"
                data-priority-card-target="label">
           <%= f.radio_button :priority, "should",
                 class: "sr-only",
                 id:    "task_priority_should",
                 data:  { action: "change->priority-card#select" } %>
-          <%#
-            Should カードの初期スタイル:
-              @task.priority が "should"（デフォルト）なので
-              connect() 時に Stimulus が border-blue-500 bg-blue-50 を付ける。
-              初期表示を自然にするため、HTML 上は border-gray-200 をベースにしておく。
-              Stimulus の connect() が即座に updateCards() を呼ぶため
-              ページ表示時に正しいスタイルが適用される。
-          %>
-          <div class="border-2 rounded-lg p-3 text-center transition-all"
+          <%# h-full + flex: Must カードと同じ理由で高さを統一する %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all h-full
+                      flex flex-col items-center justify-center"
                data-priority-card-target="card"
                data-active-class="border-blue-500 bg-blue-50"
                data-inactive-class="border-gray-200">
@@ -186,14 +185,15 @@
           </div>
         </label>
 
-        <%# Could カード %>
-        <label class="cursor-pointer"
+        <label class="cursor-pointer h-full"
                data-priority-card-target="label">
           <%= f.radio_button :priority, "could",
                 class: "sr-only",
                 id:    "task_priority_could",
                 data:  { action: "change->priority-card#select" } %>
-          <div class="border-2 rounded-lg p-3 text-center transition-all"
+          <%# h-full + flex: Must カードと同じ理由で高さを統一する %>
+          <div class="border-2 rounded-lg p-3 text-center transition-all h-full
+                      flex flex-col items-center justify-center"
                data-priority-card-target="card"
                data-active-class="border-green-500 bg-green-50"
                data-inactive-class="border-gray-200">
@@ -211,15 +211,13 @@
             class: "block text-sm font-bold text-gray-700 mb-1" %>
       <span class="text-xs text-gray-400 ml-1">任意</span>
       <%#
-        f.date_field :due_date:
-          <input type="date" name="task[due_date]"> を生成する。
-          ブラウザのネイティブな日付ピッカーが表示される。
-          min: Date.today.to_s で過去の日付を選べなくする。
-          （厳密には AM4:00 基準の今日にすべきだが、
-           フォームの利便性を優先して今日の日付にする）
+        text-base（16px）を追加する理由（H-6）:
+          date input も 16px 未満だと iOS で自動ズームが発生する。
+          text-base を明示してズームを防止する。
+        py-3: タップ領域 44px 確保のため（H-6 変更）
       %>
       <%= f.date_field :due_date,
-            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+            class: "w-full px-4 py-3 border border-gray-300 rounded-lg text-base
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
             min: Date.current.to_s %>
     </div>
@@ -230,12 +228,14 @@
             class: "block text-sm font-bold text-gray-700 mb-1" %>
       <span class="text-xs text-gray-400 ml-1">任意</span>
       <%#
-        step: "0.5" → 0.5 刻みで入力できる（0.5, 1.0, 1.5, 2.0...）
-        min: "0.5"  → 0 以下の入力を防ぐ（HTML バリデーション）
+        text-base（16px）を追加する理由（H-6）:
+          number input も 16px 未満だと iOS で自動ズームが発生する。
+          text-base を明示してズームを防止する。
+        py-3: タップ領域 44px 確保のため（H-6 変更）
       %>
       <%= f.number_field :estimated_hours,
             placeholder: "例: 1.5",
-            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+            class: "w-full px-4 py-3 border border-gray-300 rounded-lg text-base
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent",
             step: "0.5",
             min: "0.5" %>
@@ -247,34 +247,36 @@
             class: "block text-sm font-bold text-gray-700 mb-1" %>
       <span class="text-xs text-gray-400 ml-1">任意</span>
       <%#
-        include_blank を削除して selected: "normal" をデフォルトにする。
-        理由: include_blank で「未選択」を許すと空文字が送信され、
-              DB の NOT NULL 制約（task_type は null: false）に違反する。
-              task_type は「通常タスク」をデフォルトとして扱うため、
-              フォーム上でも最初から「通常タスク」を選択状態にする。
+        text-base（16px）を追加する理由（H-6）:
+          select 要素も 16px 未満だと iOS で自動ズームが発生する。
+          text-base を明示してズームを防止する。
+        py-3: タップ領域 44px 確保のため（H-6 変更）
+        bg-white: select 要素のデフォルト背景を白に固定する（iOS ではグレーになる場合がある）。
       %>
       <%= f.select :task_type,
             [["通常タスク", "normal"], ["習慣関連", "habit"], ["改善タスク", "improve"]],
             { selected: @task.task_type.presence || "normal" },
-            class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
+            class: "w-full px-4 py-3 border border-gray-300 rounded-lg text-base
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
                     bg-white" %>
     </div>
 
     <%# ── 送信ボタンエリア ────────────────────────────────────────────── %>
     <div class="flex gap-3">
-      <%# キャンセルボタン: フォームを閉じてタスク一覧に戻る %>
+      <%#
+        キャンセルボタン: py-3 でタップ領域 44px 以上を確保する（H-6 変更）
+          py-2.5（20px余白）→ py-3（24px余白）で合計高さ約44px以上になる。
+      %>
       <%= link_to "キャンセル", tasks_path,
-            class: "flex-1 text-center px-4 py-2.5 border border-gray-300 rounded-lg
+            class: "flex-1 text-center px-4 py-3 border border-gray-300 rounded-lg
                     text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors" %>
 
       <%#
-        保存ボタン
-        data-controller="form-submit" はすでに実装済みの FormSubmitController を使う。
-        フォーム送信中にボタンをローディング状態にして二重送信を防止する。
+        保存ボタン: py-3 でタップ領域 44px 以上を確保する（H-6 変更）
+          FormSubmitController と連携して送信中はローディング表示になる。
       %>
       <%= f.submit "タスクを保存する",
-            class: "flex-2 flex-grow px-6 py-2.5 bg-blue-600 text-white rounded-lg
+            class: "flex-2 flex-grow px-6 py-3 bg-blue-600 text-white rounded-lg
                     text-sm font-bold hover:bg-blue-700 transition-colors cursor-pointer" %>
     </div>
   <% end %>

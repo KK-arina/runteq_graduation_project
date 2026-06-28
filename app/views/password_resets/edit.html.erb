@@ -16,6 +16,23 @@
   URL の :id（生トークン）をフォームの送信先に含める必要がある。
   form_with url: password_reset_path(params[:id]) で
   PATCH /password_resets/abc123 に送信する。
+
+  ============================================================
+  【H-6 レスポンシブ調整での変更点】
+  ============================================================
+
+  ① password inputのフォントサイズ text-base（16px）を明示
+     【理由】
+       iOS Safari では 16px 未満の input をタップするとページがズームされる。
+       text-base を明示することでズームを防止できる。
+
+  ② password inputの縦余白を py-2 → py-3 に変更
+     【理由】
+       タップ領域を WCAG 2.1 推奨の 44px 以上確保するため。
+       py-2（上下8px）+ テキスト高さ ≈ 38px → py-3（上下12px）+ テキスト高さ ≈ 46px
+
+  ③ submitボタンの縦余白を py-2 → py-3 に変更
+     【理由】同上（タップ領域 44px 確保のため）
 %>
 <% content_for :title, "新しいパスワードの設定 | HabitFlow" %>
 
@@ -67,11 +84,16 @@
       <div class="mb-4">
         <%= f.label :password, "新しいパスワード",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%#
+          text-base（16px）: iOS自動ズーム防止のため明示指定する
+          py-3: タップ領域 44px 以上確保（WCAG 2.1 達成基準 2.5.5 準拠）
+        %>
         <%= f.password_field :password,
             placeholder: "8文字以上で入力してください",
             autofocus: true,
             required: true,
-            class: "w-full px-4 py-2 border border-gray-300 rounded-md
+            class: "w-full px-4 py-3 border border-gray-300 rounded-md
+                    text-base
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
         <p class="mt-1 text-xs text-gray-500">8文字以上で入力してください</p>
       </div>
@@ -79,15 +101,20 @@
       <div class="mb-6">
         <%= f.label :password_confirmation, "新しいパスワード（確認）",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%# text-base / py-3: 上記と同様（iOS ズーム防止・タップ領域確保） %>
         <%= f.password_field :password_confirmation,
             placeholder: "もう一度入力してください",
             required: true,
-            class: "w-full px-4 py-2 border border-gray-300 rounded-md
+            class: "w-full px-4 py-3 border border-gray-300 rounded-md
+                    text-base
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
+      <%#
+        py-3: submitボタンもタップ領域 44px 以上を確保するため変更する
+      %>
       <%= f.submit "パスワードを変更する",
-          class: "w-full px-4 py-2 bg-blue-600 text-white rounded-md
+          class: "w-full px-4 py-3 bg-blue-600 text-white rounded-md
                   hover:bg-blue-700 transition font-medium cursor-pointer" %>
     <% end %>
 

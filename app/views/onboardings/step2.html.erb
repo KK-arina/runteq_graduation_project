@@ -9,11 +9,21 @@
 
   【ステップ構成】
     内部ファイル名は step2・step5 だが、ユーザーには 1/2・2/2 と表示する。
-    step1/3/4 は実装されていないため、実態に合わせて2ステップ構成にした。
 
-  【Stimulus コントローラー】
-    data-controller="onboarding-template" → タブ切り替え・フィルタ・自動入力
-    data-controller="habit-form"          → measurement_type切り替えでunit表示制御
+  ============================================================
+  【H-6 レスポンシブ調整での変更点】
+  ============================================================
+
+  ① 習慣名 text_field_tag に text-base（16px）を追加
+     【理由】iOS Safari は 16px 未満の input をタップするとページがズームされる。
+             text-base（16px）を明示することでズームを防止できる。
+
+  ② 単位 text_field_tag に text-base（16px）を追加（理由は①と同様）
+
+  ③ 週次目標 number_field_tag に text-base（16px）を追加（理由は①と同様）
+
+  縦余白は px-3 py-2.5 で維持する（既存デザインを崩さないため）。
+  py-3 への変更はオンボーディングの軽快さを重視してあえて行わない。
   ==============================================================================
 %>
 <% content_for :title, t("onboarding.template_selection.page_title") %>
@@ -24,11 +34,6 @@
   <%# ステップインジケーター（1/2） %>
   <div class="flex justify-center items-center gap-2 mb-8"
        aria-label="オンボーディング進捗: 2ステップ中の1ステップ目">
-    <%#
-      ステップ1（現在）: 青丸
-      ステップ2（未完了）: グレー丸
-      2ステップ構成のため、間のラインは1本だけ
-    %>
     <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center
                 justify-center text-xs font-bold flex-shrink-0
                 ring-2 ring-blue-500 ring-offset-2"
@@ -116,15 +121,15 @@
     </div>
 
     <%# テンプレートカードグリッド %>
+    <%#
+      grid-cols-2 sm:grid-cols-3: スマホ（375px）では2列、640px以上は3列。
+        スマホで2列にすることで各カード幅 ≈ 167px になりタップしやすくなる。
+        H-6 変更前の grid-cols-2 sm:grid-cols-3 のまま維持する
+        （既に適切なレスポンシブ設定がされていた）。
+    %>
     <div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6"
          data-onboarding-template-target="templateGrid">
       <% @templates.each do |template| %>
-        <%#
-          data-template-* 属性:
-            Stimulus コントローラーがテンプレート選択時にフォームへ自動入力する値。
-            measurement_type は "check_type" or "numeric_type"。
-            unit はチェック型の場合空文字になる。
-        %>
         <button type="button"
                 data-onboarding-template-target="templateCard"
                 data-category="<%= template.category %>"
@@ -147,10 +152,6 @@
           <% if template.numeric_type? && template.default_unit.present? %>
             <span class="text-xs text-blue-500 mt-0.5">単位: <%= template.default_unit %></span>
           <% end %>
-          <%#
-            selectedBadge: 選択中に✓を表示するインジケーター
-            初期は hidden。selectTemplate() が classList.remove("hidden") する。
-          %>
           <span class="absolute top-2 right-2 text-blue-600 text-xs font-bold hidden"
                 data-onboarding-template-target="selectedBadge">✓</span>
         </button>
@@ -205,15 +206,16 @@
           <span class="text-red-500 ml-0.5" aria-label="必須">*</span>
         </label>
         <%#
-          data-onboarding-template-target="nameInput":
-            selectTemplate() がこのフィールドにテンプレート名を自動入力する。
+          text-base（16px）を追加する理由（H-6）:
+            iOS Safari は 16px 未満の input をタップするとページがズームされる。
+            placeholder-gray-400 クラスの前に text-base を追加してズームを防止する。
         %>
         <%= text_field_tag "habit[name]",
               nil,
               id: "onboarding_habit_name",
               placeholder: t("onboarding.template_selection.habit_name_placeholder"),
               required: true,
-              class: "w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm
+              class: "w-full px-3 py-2.5 border border-gray-300 rounded-xl text-base
                       focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                       placeholder-gray-400",
               data: { "onboarding-template-target": "nameInput" } %>
@@ -226,10 +228,8 @@
         </p>
         <div class="grid grid-cols-2 gap-3">
           <%#
-            data-action に habit-form#toggleUnit と onboarding-template#onMeasurementTypeChange の
-            両方を指定する。
-            habit-form#toggleUnit → unit/weeklyTarget フィールドの表示/非表示を制御
-            onboarding-template#onMeasurementTypeChange → テンプレート選択状態をリセット
+            ラジオカードのタップ領域: p-3 で十分確保されている。
+            grid-cols-2 で 375px / 2 ≈ 187px 幅になりスマホでも操作しやすい。
           %>
           <label class="flex items-center gap-2 p-3 rounded-xl border-2 cursor-pointer
                          transition-colors border-blue-500 bg-blue-50"
@@ -267,19 +267,22 @@
 
       <%#
         unit フィールド（数値型のみ表示）
-        data-habit-form-target="unitField": habit-form が toggleUnit() で hidden を付け外しする
-        初期値 hidden（チェック型がデフォルトのため）
+        H-6: text-base を追加（iOS自動ズーム防止）
       %>
       <div hidden data-habit-form-target="unitField">
         <label class="block text-sm font-medium text-gray-700 mb-1.5"
                for="onboarding_habit_unit">
           <%= t("onboarding.template_selection.unit_label") %>
         </label>
+        <%#
+          text-base（16px）を追加する理由（H-6）:
+            iOS Safari は 16px 未満の input をタップするとページがズームされる。
+        %>
         <%= text_field_tag "habit[unit]",
               nil,
               id: "onboarding_habit_unit",
               placeholder: t("onboarding.template_selection.unit_placeholder"),
-              class: "w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm
+              class: "w-full px-3 py-2.5 border border-gray-300 rounded-xl text-base
                       focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                       placeholder-gray-400",
               data: { "onboarding-template-target": "unitInput" } %>
@@ -287,8 +290,7 @@
 
       <%#
         週次目標フィールド
-        data-habit-form-target="weeklyTargetField": 数値型のみ表示
-        チェック型では hidden + value=7 固定（habit-form が管理）
+        H-6: text-base を追加（iOS自動ズーム防止）
       %>
       <div>
         <label class="block text-sm font-medium text-gray-700 mb-1.5">
@@ -297,11 +299,16 @@
                 data-habit-form-target="weeklyTargetLabel">（1〜7回）</span>
         </label>
         <div hidden data-habit-form-target="weeklyTargetField">
+          <%#
+            text-base（16px）を追加する理由（H-6）:
+              iOS Safari は 16px 未満の input をタップするとページがズームされる。
+              number_field_tag にも text-base を適用してズームを防止する。
+          %>
           <%= number_field_tag "habit[weekly_target]",
                 7,
                 id: "onboarding_habit_weekly_target",
                 min: 1,
-                class: "w-full px-3 py-2.5 border border-gray-300 rounded-xl text-sm
+                class: "w-full px-3 py-2.5 border border-gray-300 rounded-xl text-base
                         focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
                 data: {
                   "habit-form-target": "weeklyTargetInput",
@@ -312,6 +319,10 @@
 
       <%# 送信ボタン・スキップリンク %>
       <div class="pt-2 space-y-3">
+        <%#
+          送信ボタン: py-3 で 44px 以上のタップ領域を確保する。
+          オンボーディングの主要ボタンのため大きめに設定する。
+        %>
         <button type="submit"
                 class="w-full py-3 px-6 bg-blue-600 text-white text-sm font-semibold
                        rounded-xl hover:bg-blue-700 transition-colors
@@ -321,7 +332,7 @@
 
         <%#
           スキップリンク: 習慣を登録せずに step5（PMVV入力）へ直接進む。
-          習慣登録はオプションのため、スキップしてもオンボーディングは完了できる。
+          py-3 で 44px 以上のタップ領域を確保する。
         %>
         <%= link_to t("onboarding.template_selection.skip_link"),
               onboarding_step5_path,

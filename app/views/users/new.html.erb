@@ -1,5 +1,26 @@
 <%# app/views/users/new.html.erb %>
-<%# F-3: 利用規約・プライバシーポリシー同意チェックボックスを追加 %>
+<%#
+  ============================================================
+  【H-6 レスポンシブ調整での変更点】
+  ============================================================
+
+  ① 全 inputフィールドのフォントサイズを text-sm（14px）→ text-base（16px）に変更
+     【理由】
+       iOS Safari の仕様として、フォントサイズが 16px 未満の input をタップすると
+       ページが自動的にズームされてしまう（iOS のアクセシビリティ仕様）。
+       text-base（16px）に統一することでズームを防止できる。
+
+  ② 全 inputフィールドの縦余白を py-2 → py-3 に変更
+     【理由】
+       タップ領域を WCAG 2.1 推奨の 44px 以上に確保するため。
+       py-2（上下8px）+ テキスト高さ ≈ 38px で基準未満のため
+       py-3（上下12px）+ テキスト高さ ≈ 46px に変更する。
+
+  ③ submitボタンの縦余白を py-2 → py-3 に変更
+     【理由】同上（タップ領域 44px 確保のため）
+
+  F-3 で追加した利用規約同意チェックボックスの動作は変更なし。
+%>
 <% content_for :title, "新規登録 | HabitFlow" %>
 
 <div class="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -49,36 +70,47 @@
       <div class="mb-4">
         <%= f.label :name, "ユーザー名",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%#
+          text-base（16px）: iOS自動ズーム防止（16px未満だとタップ時にページがズームする）
+          py-3: タップ領域 44px 以上確保（WCAG 2.1 達成基準 2.5.5）
+        %>
         <%= f.text_field :name,
             placeholder: "山田太郎",
-            class: "w-full px-4 py-2 border border-gray-300 rounded-md
+            class: "w-full px-4 py-3 border border-gray-300 rounded-md
+                    text-base
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
       <div class="mb-4">
         <%= f.label :email, "メールアドレス",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%# text-base / py-3: 上記と同様（iOS ズーム防止・タップ領域確保） %>
         <%= f.email_field :email,
             placeholder: "email@example.com",
-            class: "w-full px-4 py-2 border border-gray-300 rounded-md
+            class: "w-full px-4 py-3 border border-gray-300 rounded-md
+                    text-base
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
       <div class="mb-4">
         <%= f.label :password, "パスワード",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%# text-base / py-3: 上記と同様（iOS ズーム防止・タップ領域確保） %>
         <%= f.password_field :password,
             placeholder: "8文字以上",
-            class: "w-full px-4 py-2 border border-gray-300 rounded-md
+            class: "w-full px-4 py-3 border border-gray-300 rounded-md
+                    text-base
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
       <div class="mb-4">
         <%= f.label :password_confirmation, "パスワード（確認）",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%# text-base / py-3: 上記と同様（iOS ズーム防止・タップ領域確保） %>
         <%= f.password_field :password_confirmation,
             placeholder: "パスワードを再入力",
-            class: "w-full px-4 py-2 border border-gray-300 rounded-md
+            class: "w-full px-4 py-3 border border-gray-300 rounded-md
+                    text-base
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
@@ -89,7 +121,6 @@
         <label class="flex items-start gap-3 cursor-pointer">
           <%#
             f.check_box :terms_agreed について:
-              Rails の check_box フォームヘルパー。
               チェックあり → params[:user][:terms_agreed] = "1"
               チェックなし → params[:user][:terms_agreed] = "0"
               "0" は falsy として :acceptance バリデーションに失敗する。
@@ -128,9 +159,11 @@
       <%#
         送信ボタン（初期状態は非活性）
 
+        py-3: タップ領域 44px 確保のため（H-6 変更点）
+              py-2（16px余白）→ py-3（24px余白）に変更して合計高さ約46pxにする。
+
         disabled: true:
           初期表示時にボタンを非活性にする（チェックなし状態なのでクリック不可にする）。
-          JavaScript が無効な環境でもサーバー側バリデーション（:acceptance）で弾くため安全。
 
         data-terms-agreement-target="button":
           Stimulus コントローラーがこのボタンを参照して disabled / クラスを切り替える。
@@ -140,7 +173,7 @@
       %>
       <%= f.submit "登録する",
           disabled: true,
-          class: "w-full px-4 py-2 text-white rounded-md
+          class: "w-full px-4 py-3 text-white rounded-md
                   transition font-medium bg-gray-400 cursor-not-allowed",
           data: {
             "terms-agreement-target": "button",
