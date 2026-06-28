@@ -10,6 +10,25 @@
   【画面遷移】
   ログインページ（sessions/new）の「パスワードを忘れた方」リンク → ここ
   フォーム送信 → PasswordResetsController#create → ログインページにリダイレクト
+
+  ============================================================
+  【H-6 レスポンシブ調整での変更点】
+  ============================================================
+
+  ① email inputのフォントサイズを（指定なし・ブラウザデフォルト）→ text-base（16px）に明示
+     【理由】
+       iOS Safari の仕様として、フォントサイズが 16px 未満の input をタップすると
+       ページが自動的にズームされてしまう。
+       text-base（16px）を明示することでズームを防止できる。
+
+  ② email inputの縦余白を py-2 → py-3 に変更
+     【理由】
+       タップ領域を WCAG 2.1 推奨の 44px 以上に確保するため。
+       py-2（上下8px）+ テキスト高さ ≈ 38px で基準未満のため
+       py-3（上下12px）+ テキスト高さ ≈ 46px に変更する。
+
+  ③ submitボタンの縦余白を py-2 → py-3 に変更
+     【理由】同上（タップ領域 44px 確保のため）
 %>
 <% content_for :title, "パスワードをお忘れの方 | HabitFlow" %>
 
@@ -40,16 +59,25 @@
       <div class="mb-4">
         <%= f.label :email, "メールアドレス",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%#
+          text-base（16px）: iOS自動ズーム防止のため明示指定する
+          py-3: タップ領域 44px 以上確保（WCAG 2.1 達成基準 2.5.5 準拠）
+        %>
         <%= f.email_field :email,
             placeholder: "email@example.com",
             autofocus: true,
             required: true,
-            class: "w-full px-4 py-2 border border-gray-300 rounded-md
+            class: "w-full px-4 py-3 border border-gray-300 rounded-md
+                    text-base
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
+      <%#
+        py-3: submitボタンもタップ領域 44px 以上を確保するため変更する
+              py-2（16px余白）→ py-3（24px余白）で合計高さ約46pxになる
+      %>
       <%= f.submit "リセットメールを送信する",
-          class: "w-full px-4 py-2 bg-blue-600 text-white rounded-md
+          class: "w-full px-4 py-3 bg-blue-600 text-white rounded-md
                   hover:bg-blue-700 transition font-medium cursor-pointer" %>
     <% end %>
 

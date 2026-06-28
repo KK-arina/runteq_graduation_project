@@ -9,10 +9,20 @@
 
     【C-6 追加修正】
       ④ チェック型習慣の weekly_target フィールドを非表示にする。
-         チェック型は「やった/やらない」の記録なので週次目標値の入力は不要。
-         目標日数は除外日設定から自動計算される（7日 - 除外日数）。
-         数値型は目標値（例: 7冊）が必要なため表示を維持する。
-         hidden input で値を送信することでバリデーションエラーを防ぐ。
+
+    ============================================================
+    【H-6 レスポンシブ調整での変更点】
+    ============================================================
+
+    ① 習慣名 inputのフォントサイズを text-sm → text-base（16px）に変更
+       【理由】iOS Safari は 16px 未満の input をタップするとページがズームされる。
+               text-base（16px）にすることでズームを防止できる。
+
+    ② 単位 inputのフォントサイズを text-sm → text-base（16px）に変更（理由は①と同様）
+
+    ③ 週次目標値 number inputのフォントサイズを text-sm → text-base（16px）に変更（理由は①と同様）
+
+    縦余白（py-3）は既に適切なサイズが設定されているため変更なし。
     ==============================================================================
 %>
 <% content_for :title, "習慣を編集 | HabitFlow" %>
@@ -33,14 +43,19 @@
                 class: "space-y-6",
                 data: { controller: "habit-form" } do |f| %>
 
-    <%# 習慣名 %>
+    <%# 習慣名（H-6: text-base に変更） %>
     <div>
       <%= f.label :name, "習慣名",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
+      <%#
+        text-base（16px）に変更する理由（H-6）:
+          iOS Safari は 16px 未満の input をタップするとページがズームされる。
+          text-sm（14px）から text-base（16px）に変更してズームを防止する。
+      %>
       <%= f.text_field :name,
             placeholder: "例: 読書、筋トレ、英語学習",
             maxlength: 50,
-            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+            class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-base
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                     transition-colors" %>
     </div>
@@ -127,28 +142,23 @@
       <div>
         <%= f.label :unit, "単位",
               class: "block text-sm font-semibold text-gray-700 mb-1" %>
+        <%#
+          text-base（16px）に変更する理由（H-6）:
+            iOS Safari は 16px 未満の input をタップするとページがズームされる。
+            text-sm から text-base に変更してズームを防止する。
+        %>
         <%= f.text_field :unit,
               placeholder: "例: 分、冊、km",
               maxlength: 10,
-              class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+              class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-base
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                       transition-colors" %>
       </div>
     <% end %>
 
     <%#
-      週次目標値
-      【変更】チェック型は非表示にする。
-        チェック型は「やった/やらない」の記録なので
-        週次目標値をユーザーが入力する必要はない。
-        目標日数は「7日 - 除外日数」で自動計算される。
-        （例: 土日を除外すると週5日が目標になる）
-
-        hidden input で weekly_target = 7 を送信することで
-        Rails のバリデーション（presence: true, numericality）を通過させる。
-        7 は1週間の最大日数であり、除外日設定で実際の目標日数が決まる。
-
-        数値型は目標値（例: 毎週7冊読む）が必要なため引き続き表示する。
+      週次目標値（C-6 変更: チェック型は非表示）
+      H-6 変更: text-sm → text-base（iOS自動ズーム防止）
     %>
     <% if @habit.check_type? %>
       <%# チェック型: weekly_target を hidden で送信する（7固定）%>
@@ -161,9 +171,14 @@
         <p class="text-xs text-gray-500 mb-2">
           1週間の目標を設定してください（単位: 1以上の数値）
         </p>
+        <%#
+          text-base（16px）に変更する理由（H-6）:
+            iOS Safari は 16px 未満の input をタップするとページがズームされる。
+            number_field にも text-base を適用してズームを防止する。
+        %>
         <%= f.number_field :weekly_target,
               min: 1,
-              class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-sm
+              class: "w-full px-4 py-3 border border-gray-300 rounded-xl text-base
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                       transition-colors" %>
       </div>
@@ -178,6 +193,10 @@
                          else
                            @habit.excluded_day_numbers
                          end %>
+      <%#
+        grid-cols-4: スマホ（375px）では4列。各セル幅 ≈ 84px で十分なタップ領域がある。
+        sm:grid-cols-7: 640px以上では7列（曜日をすべて1行に並べる）。
+      %>
       <div class="grid grid-cols-4 sm:grid-cols-7 gap-2">
         <% HabitExcludedDay::DAY_NAMES_FULL.each do |day_number, day_name| %>
           <label class="flex flex-col items-center gap-1.5 p-2 border-2 rounded-lg cursor-pointer

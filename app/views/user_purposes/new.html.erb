@@ -9,22 +9,22 @@
     5フィールド（Purpose/Mission/Vision/Value/Current）と
     音声入力ボタン（🎤）を備えたフォームを提供する。
 
-  【フォームの送信先】
-    form_with model: @user_purpose で送信先が自動決定される。
-    @user_purpose が新規（unsaved）→ POST /user_purpose → create アクション
+  ============================================================
+  【H-6 レスポンシブ調整での変更点】
+  ============================================================
 
-  【スキップについて】
-    オンボーディングからの遷移時はスキップできる（D-7 で実装予定）。
-    通常の 17 番ページではスキップリンクは表示しない。
+  ① voice_field パーシャル（_voice_field.html.erb）内の textarea に text-base が必要
+     【理由】
+       iOS Safari は 16px 未満の textarea をタップするとページがズームされる。
+       このビューは _voice_field.html.erb パーシャルを render しているため、
+       パーシャル側に text-base を追加するだけで全フィールドに適用できる。
 
-  【音声入力について】
-    voice-input Stimulus コントローラーと連携する（B-7 実装済み）。
-    data-controller="voice-input" で各テキストエリアに紐付ける。
-    未対応ブラウザでは 🎤 ボタンが自動的に非表示になる。
+  【このファイル自体への変更】
+     このビューは render "user_purposes/voice_field" で textarea を生成するため、
+     このファイル自体の変更は不要。
+     _voice_field.html.erb に text-base を追加することで対応する。
 
-  【スマホ・デスクトップ両対応】
-    max-w-xl で横幅を制限し中央寄せにする。
-    テキストエリアの rows 設定でモバイルでも見やすい高さにする。
+  ※ _voice_field.html.erb を修正した上で、このファイルはそのまま維持する。
   ==============================================================================
 %>
 <% content_for :title, "目標を入力 | HabitFlow" %>
@@ -50,7 +50,6 @@
 
   <%# ─────────────────────────────────────────────────────────────────
       情報バナー
-      【役割】保存後に AI 分析が始まることをユーザーに伝える。
   ───────────────────────────────────────────────────────────────── %>
   <div class="mb-6 flex items-start gap-3 px-4 py-3
               bg-violet-50 border border-violet-200 rounded-xl">
@@ -63,37 +62,12 @@
 
   <%# ─────────────────────────────────────────────────────────────────
       バリデーションエラー表示
-      【役割】shared/form_errors パーシャルでエラーを表示する。
-      model: @user_purpose を渡すことで UserPurpose のエラーを表示できる。
   ───────────────────────────────────────────────────────────────── %>
   <%= render "shared/form_errors", model: @user_purpose %>
 
   <%# ─────────────────────────────────────────────────────────────────
       PMVV 入力フォーム
-      【form_with の設定】
-        model: @user_purpose → 新規（unsaved）なので POST /user_purpose になる
-        local: true → Turbo を使わず通常のフォーム送信にする
-                      （保存後に redirect_to でページ遷移するため Turbo 不要）
-        data-controller="form-submit" → 送信中の二重送信防止（既存コントローラー）
   ───────────────────────────────────────────────────────────────── %>
-  <%#
-    【なぜ url: の明示が必要なのか】
-    
-    通常の resources :user_purposes（複数形）の場合:
-      form_with model: @user_purpose（新規）
-      → Rails が自動で user_purposes_path（POST）を選ぶ ← これは動く
-    
-    今回の resource :user_purpose（単数形）の場合:
-      form_with model: @user_purpose（新規）
-      → Rails が user_purposes_path を探しに行く ← 存在しないのでエラーになる
-    
-    単数形リソースでは url: を明示することで正しいパスを指定する。
-    
-    【生成されるルートの確認】
-      docker compose exec web bin/rails routes | grep user_purpose
-      POST /user_purpose → user_purposes#create
-      → url: user_purpose_path と method: :post を明示する
-  %>
   <%= form_with model: @user_purpose,
                 url: user_purpose_path,
                 method: :post,
@@ -103,13 +77,6 @@
                   controller: "form-submit",
                   action: "submit->form-submit#submit"
                 } do |f| %>
-
-    <%#
-      render "user_purposes/voice_field":
-        _voice_field.html.erb パーシャルを呼び出す。
-        f: フォームオブジェクトをそのまま渡す。
-        各フィールド固有の引数（field/label_text/hint_text/placeholder/example/rows/maxlength）を指定する。
-    %>
 
     <%# PURPOSE %>
     <%= render "user_purposes/voice_field",
@@ -168,18 +135,11 @@
 
     <%# ── ボタンエリア ───────────────────────────────────────────── %>
     <div class="flex justify-end items-center gap-4 pt-2">
-      <%# キャンセルボタン %>
       <%= link_to "キャンセル",
                   user_purpose_path,
                   class: "px-5 py-3 bg-white border border-gray-300 text-gray-700
                           text-sm font-semibold rounded-xl hover:bg-gray-50 transition-colors
                           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400" %>
-      <%# 保存ボタン %>
-      <%#
-        f.submit: フォームの送信ボタンを生成する。
-        data-form-submit-target="button" と data-loading-text を設定することで
-        form_submit_controller.js が送信中に「保存中...」に変更して二重送信を防ぐ。
-      %>
       <%= f.submit "✨ 保存してAI分析を開始",
             class: "flex-1 py-3 px-4 bg-violet-600 text-white text-sm font-semibold
                     rounded-xl hover:bg-violet-700 transition-colors cursor-pointer
@@ -193,9 +153,4 @@
   <% end %>
 </div>
 
-<%#
-  D-5: 危機介入モーダル（17-M）
-  UserPurposesController#create が flash[:crisis] = true をセットした場合、
-  Stimulus が自動でモーダルを表示する。
-%>
 <%= render "shared/crisis_intervention_modal" %>

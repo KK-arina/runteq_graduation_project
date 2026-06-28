@@ -1,4 +1,27 @@
 <%# app/views/sessions/new.html.erb %>
+<%#
+  ============================================================
+  【H-6 レスポンシブ調整での変更点】
+  ============================================================
+
+  ① inputフィールドのフォントサイズを text-sm（14px）→ text-base（16px）に変更
+     【理由】
+       iOS Safari の仕様として、フォントサイズが 16px 未満の input / textarea /
+       select をタップすると、ページが自動的にズームされてしまう。
+       text-base（16px）にすることで自動ズームを防止できる。
+       WCAG 2.1 の「知覚可能」要件とも合致する。
+
+  ② inputフィールドの縦余白を py-2 → py-3 に変更
+     【理由】
+       タップ領域の確保のため。
+       WCAG 2.1 達成基準 2.5.5（ターゲットのサイズ）では
+       タップ領域を最低 44×44px にすることを推奨している。
+       py-2（上下8px）+ テキスト高さ ≈ 38px で基準未満のため
+       py-3（上下12px）+ テキスト高さ ≈ 46px に変更する。
+
+  ③ submitボタンの縦余白を py-2 → py-3 に変更
+     【理由】同上（タップ領域 44px 確保のため）
+%>
 <% content_for :title, "ログイン | HabitFlow" %>
 
 <div class="max-w-md mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -19,23 +42,37 @@
 
       <%= hidden_field_tag :redirect_to, params[:redirect_to] %>
 
-      <%# メールアドレス入力エリア %>
+      <%# ── メールアドレス入力エリア ── %>
       <div class="mb-4">
         <%= f.label :email, "メールアドレス",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%#
+          text-base（16px）を使う理由:
+            iOS Safari は 16px 未満の input をタップすると自動ズームする。
+            H-6 対応として全フォームの input を text-base（16px）に統一する。
+          py-3 を使う理由:
+            タップ領域を 44px 以上確保するため（WCAG 2.1 準拠）。
+            py-2（8×2=16px）+ テキスト高さ ≈ 38px で不足するため
+            py-3（12×2=24px）+ テキスト高さ ≈ 46px に変更する。
+        %>
         <%= f.email_field :email,
             placeholder: "email@example.com",
-            class: "w-full px-4 py-2 border border-gray-300 rounded-md
+            class: "w-full px-4 py-3 border border-gray-300 rounded-md
+                    text-base
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
       </div>
 
-      <%# パスワード入力エリア %>
+      <%# ── パスワード入力エリア ── %>
       <div class="mb-6">
         <%= f.label :password, "パスワード",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
+        <%#
+          text-base / py-3: 上記メールアドレス入力と同じ理由（iOS ズーム防止・タップ領域確保）
+        %>
         <%= f.password_field :password,
             placeholder: "パスワードを入力",
-            class: "w-full px-4 py-2 border border-gray-300 rounded-md
+            class: "w-full px-4 py-3 border border-gray-300 rounded-md
+                    text-base
                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500" %>
         <%#
           F-4 追加: パスワードをお忘れの方へのリンク
@@ -49,8 +86,13 @@
         </div>
       </div>
 
+      <%#
+        py-3 を使う理由:
+          submitボタンもタップ領域 44px を確保するため。
+          py-2（16px余白）→ py-3（24px余白）に変更して合計高さ約46pxにする。
+      %>
       <%= f.submit "ログイン",
-          class: "w-full px-4 py-2 bg-blue-600 text-white rounded-md
+          class: "w-full px-4 py-3 bg-blue-600 text-white rounded-md
                   hover:bg-blue-700 transition font-medium",
           data: {
             "form-submit-target": "button",
@@ -63,7 +105,6 @@
     <%# F-2 追加: LINE ログインボタン %>
     <%# ============================================================ %>
 
-    <%# メールログインと SNS ログインの視覚的な区切り線 %>
     <%# Google または LINE の少なくとも1つが有効な場合に区切り線を表示する %>
     <% if ENV["GOOGLE_CLIENT_ID"].present? || ENV["LINE_CHANNEL_ID"].present? %>
       <div class="relative my-6">
@@ -76,27 +117,14 @@
       </div>
     <% end %>
 
-    <%#
-      Google ログインボタンを呼び出す。
-      button_text でボタンのラベルを渡す。
-      ENV["GOOGLE_CLIENT_ID"] が未設定の場合はパーシャル内で非表示になる。
-    %>
     <%= render "shared/google_auth_button", button_text: "Google アカウントでログイン" %>
 
-    <%#
-      F-2 追加: LINE ログインボタンを呼び出す。
-      button_text でボタンのラベルを渡す。
-      Google ボタンとの間にマージンを設ける（mt-3）。
-      ENV["LINE_CHANNEL_ID"] が未設定の場合はパーシャル内で非表示になる。
-    %>
     <div class="mt-3">
       <%= render "shared/line_auth_button", button_text: "LINEでログイン" %>
     </div>
 
     <%#
       omniauth_error パラメータが URL に存在する場合のエラーメッセージ表示。
-      config/initializers/omniauth.rb の on_failure または
-      OmniauthCallbacksController#failure からリダイレクトされた場合に付与される。
       Google / LINE どちらのエラーにも対応する汎用メッセージを表示する。
     %>
     <% if params[:omniauth_error].present? %>

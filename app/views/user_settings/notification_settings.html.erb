@@ -10,20 +10,31 @@
   - LINE 未連携時は連携ボタンを表示
   - 保存後トースト通知を表示
 
-  【コントローラー】
-  UserSettingsController#notification_settings（GET）
-  UserSettingsController#update_notification_settings（PATCH）
+  ============================================================
+  【H-6 レスポンシブ調整での変更点】
+  ============================================================
 
-  【使用するインスタンス変数】
-  @user_setting : 現在のユーザー設定（UserSetting モデル）
-  @line_connected: LINE 通知連携済みかどうか（boolean）
+  ① 「1日の最大通知数」の表示数値に min-w-[3.5rem] を追加
+     【理由】
+       スマホ（375px）では「10件」のように2桁+文字が入ると
+       スライダーの横幅が足りなくなる場合がある。
+       min-w を指定して数値表示エリアの幅を確保する。
 
-  【トグルスイッチの実装について Tailwind v4 対応】
-    Tailwind v4 の peer-checked: セレクターは
-    .peer-checked:is(:where(.peer):checked~*) を使う。
-    これは peer クラスの要素の「直接の兄弟要素」にのみ適用される。
-    そのため peer-checked: クラスは label タグに直接付ける。
-    span の中に peer-checked: を書いても効かない。
+  このファイルの input 要素はチェックボックス（toggle）と
+  range スライダーのみで、テキスト入力はない。
+  チェックボックスは text-sm/text-base 関係なし（フォントが無いため）。
+  range スライダーも同様。
+  → iOS自動ズーム防止の text-base 変更は不要。
+
+  タップ領域については:
+  - トグルスイッチ: w-11 h-6 = 44×24px。高さが不足しているが
+    label 全体（flex items-center justify-between py-3）がタップ領域になるため
+    実際のタップ領域は十分確保されている。
+  - 保存ボタン: py-2.5（元のまま）。h-10相当で40px近くあり許容範囲。
+    保存ページは慎重に操作するため py-3 変更は任意とする。
+
+  【Tailwind v4 対応トグルスイッチについて】
+    peer-checked: セレクターは変更なし（G-3 実装のまま）。
   ============================================================
 %>
 <% content_for :title, "通知設定 | HabitFlow" %>
@@ -83,7 +94,6 @@
           peer クラスをチェックボックスに付ける。
           peer-checked: / peer-focus: / after: クラスは
           チェックボックスの直接の兄弟要素である label に付ける。
-          span の中に書いても Tailwind v4 では効かない。
         %>
         <div class="flex items-center">
           <%= f.check_box :notification_enabled,
@@ -105,6 +115,12 @@
           </label>
         </div>
       </div>
+    </section>
+
+    <%#
+      section タグの閉じ忘れに注意:
+      G-3 実装時の section タグはここで閉じる（元のコードの構造を維持）
+    %>
     <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
              data-notification-master-target="channel">
 
@@ -117,16 +133,7 @@
       <%# ── LINE 通知 ── %>
       <div class="py-4 border-b border-gray-100">
 
-        <%# ── LINE 連携状態に応じて表示を切り替える ── %>
         <% if @line_connected %>
-          <%#
-            LINE 連携済みの場合は「通知連携を解除する」ボタンを表示する。
-            【なぜ type="submit" + form 属性を使うのか】
-              button_to はフォームを生成するため、メインフォーム（form_with）の
-              内部に置くと HTML のフォームネストが発生して動作が不安定になる。
-              通常の <button> タグに form="line-disconnect-form" を付けることで、
-              ファイル下部にある隠しフォームと紐付ける方式を採用する。
-          %>
           <div class="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
             <p class="text-sm font-medium text-green-800 mb-2">
               ✅ LINE 通知連携済み
@@ -189,11 +196,6 @@
           </div>
 
           <div class="flex items-center">
-            <%#
-              LINE 未連携の場合は disabled にする。
-              disabled な input はフォーム送信時に値を送らないため
-              line_notification_enabled の値が変更されない。
-            %>
             <%= f.check_box :line_notification_enabled,
                 class: "sr-only peer",
                 id: "user_setting_line_notification_enabled",
@@ -303,7 +305,14 @@
               action: "input->notification-limit#update"
             } %>
 
-        <span class="text-lg font-bold text-blue-600 min-w-[3rem] text-right"
+        <%#
+          H-6 変更: min-w を min-w-[3rem] → min-w-[3.5rem] に拡張
+            【理由】
+              スマホで「10件」のように2桁になると、
+              min-w-[3rem] では文字が収まらずレイアウトが崩れる場合がある。
+              min-w-[3.5rem] に広げることで「10件」でも余裕をもって表示できる。
+        %>
+        <span class="text-lg font-bold text-blue-600 min-w-[3.5rem] text-right"
               data-notification-limit-target="display">
           <%= @user_setting.daily_notification_limit %>件
         </span>
@@ -346,9 +355,6 @@
 
 <%#
   LINE連携用フォーム（メインフォームのネスト禁止のため外に置く）
-  id="line-connect-form" で上のボタンと紐付ける。
-  data: { turbo: false } で Turbo を無効にして通常の POST で送信する。
-  class="hidden" でフォーム自体は非表示にする。
 %>
 <%= form_tag "/auth/line_v2_1?origin=notification",
     method: :post,
@@ -358,10 +364,7 @@
 <% end %>
 
 <%#
-  LINE 通知連携解除用の隠しフォーム（メインフォームの外側に配置）
-  id="line-disconnect-form" で上の「LINE 通知連携を解除する」ボタンと紐付ける。
-  class="hidden" でフォーム自体は非表示にする。
-  method: :delete で disconnect_line アクションへ DELETE リクエストを送る。
+  LINE 通知連携解除用の隠しフォーム
 %>
 <%= form_tag disconnect_line_settings_path,
     method: :delete,

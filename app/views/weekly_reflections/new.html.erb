@@ -5,11 +5,23 @@
   ==============================================================================
   【E-1修正での変更内容】
     reflection_comment（自由コメント）を任意入力に戻す。
-    ① ラベルの「必須」バッジを削除し「任意」表記に戻す
-    ② バリデーションエラー時の赤枠処理を削除（エラーは発生しなくなるため）
-    ③ インラインエラーメッセージ表示を削除
 
-    direct_reason / background_situation / next_action は引き続き必須のまま。
+  ============================================================
+  【H-6 レスポンシブ調整での変更点】
+  ============================================================
+
+  ① 全 textarea に text-base（16px）を追加
+     【理由】
+       iOS Safari は 16px 未満の textarea をタップすると
+       ページが自動的にズームされてしまう。
+       input だけでなく textarea にも text-base（16px）を明示することで
+       振り返り入力ページでのズームを防止できる。
+       対象: direct_reason / background_situation / next_action / reflection_comment
+             各テキストエリアの class に text-base を追加する。
+
+  ② submitボタン（振り返りを完了する）は py-3 で既に 44px 以上確保済みのため変更なし。
+
+  ③ キャンセルボタンも py-3 で既に 44px 以上確保済みのため変更なし。
   ==============================================================================
 %>
 
@@ -68,10 +80,14 @@
                          class="text-xs text-gray-500 flex-shrink-0">
                     今週の実際の記録を補正:
                   </label>
+                  <%#
+                    text-base（16px）: iOS自動ズーム防止のため明示指定する
+                    数値補正フィールドも input なので対象に含める
+                  %>
                   <input type="number"
                          id="correction_<%= habit.id %>"
                          name="reflection_numeric_corrections[habit_<%= habit.id %>]"
-                         class="w-24 px-2 py-1 text-sm border border-gray-300 rounded-lg
+                         class="w-24 px-2 py-1 text-base border border-gray-300 rounded-lg
                                 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
                          min="0" step="any"
                          value="<%= format("%g", (stats[:numeric_sum] || 0).round(1)) %>"
@@ -115,10 +131,11 @@
                          class="text-xs text-gray-500 flex-shrink-0">
                     今週の実際の記録を補正:
                   </label>
+                  <%# text-base（16px）: iOS自動ズーム防止 %>
                   <input type="number"
                          id="correction_<%= habit.id %>"
                          name="reflection_numeric_corrections[habit_<%= habit.id %>]"
-                         class="w-24 px-2 py-1 text-sm border border-gray-300 rounded-lg
+                         class="w-24 px-2 py-1 text-base border border-gray-300 rounded-lg
                                 focus:outline-none focus:ring-2 focus:ring-blue-500 text-center"
                          min="0" step="any"
                          value="<%= format("%g", (stats[:numeric_sum] || 0).round(1)) %>"
@@ -211,11 +228,17 @@
         <% end %>
         <p class="text-xs text-gray-500 mb-2">できなかった理由を1つ書いてみましょう</p>
         <div class="relative">
+          <%#
+            text-base（16px）に変更する理由（H-6追加対応）:
+              iOS Safari は 16px 未満の textarea をタップするとページがズームされる。
+              input だけでなく textarea も text-base（16px）に統一してズームを防止する。
+              H-6の指摘で「textarea も対象」と確認できたため追加修正する。
+          %>
           <%= f.text_area :direct_reason,
               rows: 3,
               placeholder: "なぜできなかったのか？理由を1つ書いてみましょう（例: 残業が続き、帰宅後に動ける体力が残っていなかった）",
               maxlength: 1000,
-              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-base
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                       resize-none transition-colors
                       #{ @weekly_reflection.errors[:direct_reason].any? ? 'border-red-400 focus:ring-red-500' : '' }",
@@ -246,11 +269,12 @@
         <% end %>
         <p class="text-xs text-gray-500 mb-2">来週どうすれば変えられそうか書いてみましょう</p>
         <div class="relative">
+          <%# text-base（16px）: textarea のiOS自動ズーム防止（H-6追加対応） %>
           <%= f.text_area :background_situation,
               rows: 3,
               placeholder: "どうすれば来週は変えられそうですか？（例: 帰宅後ではなく朝に時間を確保する）",
               maxlength: 1000,
-              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-base
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                       resize-none transition-colors
                       #{ @weekly_reflection.errors[:background_situation].any? ? 'border-red-400 focus:ring-red-500' : '' }",
@@ -281,11 +305,12 @@
         <% end %>
         <p class="text-xs text-gray-500 mb-2">この振り返りから他の習慣・行動に活かせることは？</p>
         <div class="relative">
+          <%# text-base（16px）: textarea のiOS自動ズーム防止（H-6追加対応） %>
           <%= f.text_area :next_action,
               rows: 3,
               placeholder: "この振り返りから他の習慣・行動に活かせることは？（例: 朝の時間を有効活用する仕組みを他の習慣にも広げる）",
               maxlength: 1000,
-              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+              class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-base
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                       resize-none transition-colors
                       #{ @weekly_reflection.errors[:next_action].any? ? 'border-red-400 focus:ring-red-500' : '' }",
@@ -310,38 +335,24 @@
 
     <%# ============================================================
         自由コメント（reflection_comment）任意・🎤付き
-        ============================================================
         【E-1修正: 必須 → 任意に戻す】
-          ① ラベルの「必須」バッジを削除し「任意」表記を復活させる
-          ② バリデーションエラー時の border-red-400 クラスを削除
-             （reflection_comment はもうエラーにならないため不要）
-          ③ インラインエラーメッセージの表示ブロックを削除
     %>
     <div class="relative" data-controller="voice-input">
       <%= f.label :reflection_comment,
             class: "block text-sm font-semibold text-gray-700 mb-1" do %>
         自由コメント
-        <%#
-          「任意」バッジ:
-            bg-gray-100 / text-gray-600 で必須の赤バッジと区別する。
-            任意項目であることをユーザーに視覚的に伝える。
-        %>
         <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-600">任意</span>
       <% end %>
       <p class="text-xs text-gray-500 mb-2">
         その他、感じたことを自由に記入してください（1000文字以内）
       </p>
       <div class="relative">
-        <%#
-          エラー時の赤枠を削除:
-            reflection_comment は任意になったためバリデーションエラーは発生しない。
-            条件分岐ごと削除して通常のボーダーのみにする。
-        %>
+        <%# text-base（16px）: textarea のiOS自動ズーム防止（H-6追加対応） %>
         <%= f.text_area :reflection_comment,
             rows: 4,
             placeholder: "その他、感じたことを自由に記入してください",
             maxlength: 1000,
-            class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-sm
+            class: "w-full px-4 py-3 pr-12 border border-gray-300 rounded-xl text-base
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                     resize-none transition-colors",
             data: { "voice-input-target": "field" } %>
@@ -355,7 +366,6 @@
           🎤
         </button>
       </div>
-      <%# インラインエラーメッセージは削除（任意化により不要）%>
     </div>
 
     <div class="flex justify-end items-center gap-4 pt-2">

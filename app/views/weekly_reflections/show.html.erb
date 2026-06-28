@@ -7,6 +7,23 @@
     セクション③（振り返りコメント）内の先頭に気分スコア表示を追加する。
     mood カラムの値（1〜5）を星（★☆）と絵文字ラベルで表示する。
     mood が nil（未入力）の場合は「入力されていませんでした」と表示する。
+
+  ============================================================
+  【H-6 レスポンシブ調整での変更点】
+  ============================================================
+
+  ① セクション②-B のタスク実績リストに overflow-x-auto を追加
+     【理由】
+       タスクカードの flex レイアウトはスマホ（375px）では
+       コンテンツが横にはみ出す可能性がある。
+       overflow-x-auto でラッパーを設定することで横スクロール対応にする。
+       ただし、タスクカードは flex-wrap + min-w-0 で折り返し対応済みのため
+       大きな問題は発生しにくい。念のため対応しておく。
+
+  ② セクション②-B のプログレスバー部分も同様にラッパー追加
+
+  ③ フッターボタンのレスポンシブ確認
+     flex-col sm:flex-row はすでに設定済みのため変更なし。
   ==============================================================================
 %>
 
@@ -59,8 +76,6 @@
 
     <%#
       総合達成率プログレスバー（E-2 修正: rate_hex_color に統一）
-        Tailwind クラス直書きから rate_hex_color ヘルパーに変更する。
-        ヘルパーを経由することで全画面で閾値・色が統一される（DRY）。
     %>
     <div class="w-full bg-gray-200 rounded-full h-4 overflow-hidden"
          role="progressbar"
@@ -78,33 +93,6 @@
   </div>
 
   <%# セクション②: 習慣別 実績サマリー %>
-  <%#
-    ============================================================
-    【E-2 変更内容】
-      数値型習慣の実績を正しく表示するために summary_text メソッドを使う。
-
-    【変更前の問題】
-      「N / M 回達成」と決め打ちで表示していた。
-      → 数値型（例: ジョギング90分）でも「0 / 5 回達成」と誤表示されていた。
-
-    【変更後】
-      summary.summary_text を呼び出すことで
-        チェック型 → 「5 / 7 日（71%）」
-        数値型     → 「90 / 120 分（75%）」
-      と正しく表示される。
-
-    【UI重複の解消（E-2 レビュー反映）】
-      summary_text に「実績 / 目標 単位（達成率%）」が含まれているため、
-      右側の「週X目標」表示は削除してシンプルにした。
-      情報が重複すると読みにくくなるため。
-
-    【summary_text の実装場所】
-      app/models/weekly_reflection_habit_summary.rb の
-      summary_text インスタンスメソッドで一元管理している。
-      ビューでロジックを持たせず、モデルに委譲するのが
-      Rails の設計原則（Fat Model, Thin View）。
-    ============================================================
-  %>
   <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 mb-6">
     <h2 class="text-lg font-semibold text-gray-800 mb-5">📋 習慣別 実績サマリー</h2>
 
@@ -120,26 +108,12 @@
 
             <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
               <div class="flex items-center gap-2">
-                <%#
-                  達成アイコンの表示：
-                    三項演算子で達成時と未達成時のアイコンを切り替える。
-                    絵文字を直接テキストとして出力するため html_safe 不要。
-                    ERB の =  は文字列をそのまま出力し、
-                    絵文字は HTML エンティティではないためエスケープの影響を受けない。
-                %>
                 <span class="text-lg">
                   <%= summary.achievement_rate >= 100 ? "✅" : "⬜" %>
                 </span>
                 <span class="font-medium text-gray-800 text-sm"><%= summary.habit_name %></span>
               </div>
 
-              <%#
-                達成率バッジ：
-                  achievement_rate_text メソッドを使うことで
-                  常に「75.00%」のような統一フォーマットで表示される。
-                  直接 achievement_rate を表示すると「75.0%」「75.33%」など
-                  桁数が揺れてしまうため、メソッドに委譲する。
-              %>
               <span class="text-xs font-semibold px-2 py-1 rounded-full
                 <%= summary.achievement_rate >= 100 ? 'bg-green-100 text-green-700' :
                     summary.achievement_rate >= 70  ? 'bg-blue-100 text-blue-700' :
@@ -149,25 +123,10 @@
               </span>
             </div>
 
-            <%#
-              【E-2 変更・レビュー反映】実績表示を summary_text に統一
-                summary_text は以下を一括で返す:
-                  チェック型: 「5 / 7 日（71%）」
-                  数値型:     「90 / 120 分（75%）」
-                  数値型0件:  「0 / 120 分（0%）」
-
-                右側の「週X目標」は summary_text に既に目標値が含まれているため削除。
-                情報重複を排除してUIをシンプルにする（E-2 レビュー反映）。
-            %>
             <div class="text-xs text-gray-500 mb-2">
               <span><%= summary.summary_text %></span>
             </div>
 
-            <%#
-              習慣別プログレスバー（E-2 修正: rate_hex_color に統一）
-                Tailwind クラス直書きから rate_hex_color ヘルパーに変更する。
-                総合達成率・ダッシュボード・習慣管理と同じ4段階の閾値で色が統一される。
-            %>
             <div class="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
               <div class="h-2 rounded-full transition-all duration-500"
                    style="width: <%= [summary.achievement_rate, 100].min %>%;
@@ -232,31 +191,42 @@
         <% end %>
       </div>
 
-      <div class="space-y-2">
-        <% @task_summaries.each do |summary| %>
-          <div class="flex items-start gap-3 p-3 rounded-xl border
-            <%= summary.was_completed ? 'bg-gray-50 border-gray-100' : 'bg-white border-gray-200' %>">
-            <div class="flex-shrink-0 mt-0.5">
-              <%= summary.was_completed ? '<span class="text-green-500 text-lg">✅</span>'.html_safe : '<span class="text-gray-300 text-lg">⬜</span>'.html_safe %>
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium <%= summary.was_completed ? 'text-gray-400 line-through' : 'text-gray-800' %>">
-                <%= summary.title %>
-              </p>
-              <div class="flex items-center gap-2 mt-1 flex-wrap">
-                <span class="inline-block px-2 py-0.5 rounded text-xs font-bold <%= summary.priority_color_class %>">
-                  <%= summary.priority_label %>
-                </span>
-                <% if summary.due_date.present? %>
-                  <span class="text-xs text-gray-400">期限: <%= summary.due_date.strftime("%m/%d") %></span>
-                <% end %>
-                <% if summary.was_completed && summary.completed_at.present? %>
-                  <span class="text-xs text-gray-400">完了: <%= summary.completed_at.strftime("%m/%d %H:%M") %></span>
-                <% end %>
+      <%#
+        【H-6 追加】 overflow-x-auto ラッパー
+          タスクカードのリストをスマホで横スクロール対応にする。
+          各タスクカードは flex-wrap + min-w-0 で折り返し対応済みだが、
+          長いタイトルや多くのバッジが重なった場合に備えて
+          overflow-x-auto でスクロール可能にしておく。
+          タスク名テキストは truncate で省略されているため
+          通常は横スクロールは不要だが、念のため対応する。
+      %>
+      <div class="overflow-x-auto">
+        <div class="space-y-2">
+          <% @task_summaries.each do |summary| %>
+            <div class="flex items-start gap-3 p-3 rounded-xl border
+              <%= summary.was_completed ? 'bg-gray-50 border-gray-100' : 'bg-white border-gray-200' %>">
+              <div class="flex-shrink-0 mt-0.5">
+                <%= summary.was_completed ? '<span class="text-green-500 text-lg">✅</span>'.html_safe : '<span class="text-gray-300 text-lg">⬜</span>'.html_safe %>
+              </div>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium <%= summary.was_completed ? 'text-gray-400 line-through' : 'text-gray-800' %>">
+                  <%= summary.title %>
+                </p>
+                <div class="flex items-center gap-2 mt-1 flex-wrap">
+                  <span class="inline-block px-2 py-0.5 rounded text-xs font-bold <%= summary.priority_color_class %>">
+                    <%= summary.priority_label %>
+                  </span>
+                  <% if summary.due_date.present? %>
+                    <span class="text-xs text-gray-400">期限: <%= summary.due_date.strftime("%m/%d") %></span>
+                  <% end %>
+                  <% if summary.was_completed && summary.completed_at.present? %>
+                    <span class="text-xs text-gray-400">完了: <%= summary.completed_at.strftime("%m/%d %H:%M") %></span>
+                  <% end %>
+                </div>
               </div>
             </div>
-          </div>
-        <% end %>
+          <% end %>
+        </div>
       </div>
 
       <% completed_total = @task_summaries.count(&:was_completed) %>
@@ -276,22 +246,9 @@
 
     <%# ════════════════════════════════════════════════════════
         E-1 追加: 気分スコア表示ブロック
-        ════════════════════════════════════════════════════════
-        【なぜこの場所に置くのか】
-          振り返りコメントセクションの先頭に置くことで、
-          「感情状態→振り返り内容」の流れで確認できる。
-
         【mood の値とラベルの対応】
-          1 → 😞 とても悪い
-          2 → 😕 悪い
-          3 → 😐 普通
-          4 → 😊 良い
-          5 → 😄 とても良い
-
-        【星表示の実装】
-          1〜5 を each でループし、mood 値以下を ★（黄色）、
-          mood 値より大きいものを ☆（グレー）で表示する。
-          純粋な Ruby 条件分岐で実装するためJSは不要。
+          1 → 😞 とても悪い / 2 → 😕 悪い / 3 → 😐 普通
+          4 → 😊 良い / 5 → 😄 とても良い
     %>
     <div class="mb-5 pb-5 border-b border-gray-100">
       <div class="flex items-center gap-2 mb-3">
@@ -306,7 +263,6 @@
           5 => "😄 とても良い"
         } %>
         <div class="flex items-center gap-3 flex-wrap">
-          <%# 星（★☆）を 1〜5 の順に並べる %>
           <div class="flex items-center gap-0.5">
             <% (1..5).each do |score| %>
               <span class="text-2xl leading-none <%= score <= @weekly_reflection.mood ? 'text-yellow-400' : 'text-gray-300' %>"
@@ -315,21 +271,17 @@
               </span>
             <% end %>
           </div>
-          <%# スコア数値 %>
           <span class="text-sm font-semibold text-gray-700">
             <%= @weekly_reflection.mood %> / 5
           </span>
-          <%# テキストラベル %>
           <span class="text-sm text-gray-500">
             <%= mood_labels[@weekly_reflection.mood] %>
           </span>
         </div>
       <% else %>
-        <%# mood が nil（未入力）の場合 %>
         <p class="text-gray-400 text-sm italic px-1">入力されていませんでした。</p>
       <% end %>
     </div>
-    <%# ══ E-1 気分スコア表示ブロック ここまで ══ %>
 
     <%# なぜ？（direct_reason） %>
     <div class="mb-5">
@@ -409,26 +361,12 @@
 
   <%# ===========================================================
       セクション⑤: AI分析コメント（E-5 追加）
-      ===========================================================
-      【表示ロジックの全体像】
-        @ai_analysis が nil（レコード自体なし）→ セクション全体を非表示
-        @ai_analysis あり + analysis_comment あり → 分析完了UI
-        @ai_analysis あり + analysis_comment なし → 待機中UI（自動ポーリング）
   =========================================================== %>
   <% if @ai_analysis.present? %>
     <div id="ai-analysis-section" class="bg-white rounded-2xl shadow-sm border border-indigo-100 p-6 mb-6">
       <h2 class="text-lg font-semibold text-gray-800 mb-5">🤖 AI分析コメント</h2>
 
       <% if @ai_analysis.analysis_comment.present? %>
-        <%# -------------------------------------------------------
-            【パターンA】AI分析が完了している場合の表示
-        ------------------------------------------------------- %>
-
-        <%# --- 総合コメント（analysis_comment が存在する前提のため nil チェック不要）--- %>
-        <%# simple_format を使う理由:                                                    %>
-        <%#   AI が返すテキストは改行コード(\n)を含む複数段落のテキスト。               %>
-        <%#   simple_format は \n を <br>、\n\n を <p> に変換する Rails 標準ヘルパー。  %>
-        <%#   内部で html_escape が動くため XSS（悪意ある HTML 挿入）も自動防止される。 %>
         <div class="mb-5">
           <div class="flex items-center gap-2 mb-2">
             <span class="text-sm font-bold text-gray-700">💬 総合コメント</span>
@@ -438,9 +376,6 @@
           </div>
         </div>
 
-        <%# --- 根本原因（任意項目: nil・空文字の場合はブロックごと非表示）--- %>
-        <%# .present? は nil と空文字("")の両方を false と判定する。              %>
-        <%# これにより「空のカード」が表示される問題を防ぐ。                      %>
         <% if @ai_analysis.root_cause.present? %>
           <div class="mb-5">
             <div class="flex items-center gap-2 mb-2">
@@ -452,7 +387,6 @@
           </div>
         <% end %>
 
-        <%# --- 改善提案（任意項目）--- %>
         <% if @ai_analysis.improvement_suggestions.present? %>
           <div class="mb-5">
             <div class="flex items-center gap-2 mb-2">
@@ -464,7 +398,6 @@
           </div>
         <% end %>
 
-        <%# --- コーチングメッセージ（任意項目）--- %>
         <% if @ai_analysis.coaching_message.present? %>
           <div class="mb-5">
             <div class="flex items-center gap-2 mb-2">
@@ -477,30 +410,17 @@
         <% end %>
 
       <% else %>
-        <%# -------------------------------------------------------
-            【パターンB】AI分析が待機中・処理中の場合の表示
-            -------------------------------------------------------
-            data-controller="ai-analysis-polling":
-              Stimulus コントローラを接続する属性。
-              この div が DOM に追加されると connect() が自動実行される。
-
-            data-ai-analysis-polling-url-value:
-              ポーリングで叩く URL をコントローラに渡す。
-              url_for を使うことで routes.rb の変更に追従できる。
-              文字列ハードコードより安全。
-
-            data-ai-analysis-polling-interval-value="10000":
-              ポーリング間隔（ミリ秒）。10秒ごとに状態確認する。
-              短すぎるとサーバー負荷が上がるため 10000ms を推奨。
-        ------------------------------------------------------- %>
+        <%#
+          AI分析が待機中・処理中の場合の表示。
+          ai-analysis-polling コントローラーが10秒ごとにポーリングして
+          完了後に自動切り替えする。
+        %>
         <div
           data-controller="ai-analysis-polling"
           data-ai-analysis-polling-url-value="<%= weekly_reflection_path(@weekly_reflection) %>"
           data-ai-analysis-polling-interval-value="10000"
           class="flex flex-col items-center justify-center p-8 bg-gray-50 rounded-xl border border-dashed border-gray-200"
         >
-          <%# animate-spin: Tailwind CSS のスピナーアニメーション。           %>
-          <%# border-b-2 border-indigo-600 の組み合わせで回転するリングを表現。 %>
           <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mb-3"
                aria-hidden="true"></div>
           <p class="text-sm font-medium text-gray-600">
@@ -513,24 +433,10 @@
       <% end %>
     </div>
 
-    <%# AI免責バナー: AI分析レコードが存在する場合のみ描画する。              %>
-    <%# render "shared/ai_disclaimer" はパーシャルの呼び出し。                %>
-    <%# ファイル名は _ai_disclaimer.html.erb だが render 時は _ を省略する。 %>
     <div class="mb-8">
       <%= render "shared/ai_disclaimer" %>
     </div>
 
-    <%#
-      G-9 追加: AI提案確認ボタン（show ページから直接モーダルを開く）
-      【なぜ weekly_reflections_path に遷移しないのか】
-        一覧ページへ移動するだけではモーダルが自動で開かない。
-        show ページ内に _ai_proposal_modal パーシャルを render し、
-        window.dispatchEvent で 'open-ai-proposal-modal' を発火させることで
-        一覧ページと同じモーダルをページ遷移なしで直接開ける。
-      【@weekly_reflection を渡す理由】
-        confirm_proposals POST に必要な reflection_id を
-        _ai_proposal_modal_content が hidden_field_tag で送信するため。
-    %>
     <% if @ai_analysis&.actions_json.present? %>
       <%= render "weekly_reflections/ai_proposal_modal",
             ai_analysis:  @ai_analysis,
@@ -552,8 +458,8 @@
       </div>
     <% end %>
   <% end %>
-  <%# セクション⑤ ここまで %>
-  <%# フッターボタン %>
+
+  <%# フッターボタン（flex-col sm:flex-row は既存でスマホ対応済み） %>
   <div class="flex flex-col sm:flex-row gap-3 justify-between">
     <%= link_to "← 振り返り一覧", weekly_reflections_path,
           class: "inline-flex items-center justify-center px-6 py-3 bg-white border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors" %>
