@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_06_21_110636) do
+ActiveRecord::Schema[7.2].define(version: 2026_06_28_130358) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
@@ -38,6 +38,20 @@ ActiveRecord::Schema[7.2].define(version: 2026_06_21_110636) do
     t.index ["user_purpose_id"], name: "index_ai_analyses_on_user_purpose_id_fk"
     t.index ["weekly_reflection_id"], name: "index_ai_analyses_latest_weekly_reflection_unique", unique: true, where: "((weekly_reflection_id IS NOT NULL) AND (is_latest = true))"
     t.index ["weekly_reflection_id"], name: "index_ai_analyses_on_weekly_reflection_id"
+  end
+
+  create_table "ai_user_profiles", force: :cascade do |t|
+    t.bigint "user_id", null: false
+    t.jsonb "habit_patterns"
+    t.jsonb "reflection_trends"
+    t.jsonb "proposal_adoption"
+    t.text "context_summary"
+    t.datetime "analyzed_at"
+    t.datetime "created_at", null: false
+    t.datetime "updated_at", null: false
+    t.index ["analyzed_at"], name: "index_ai_user_profiles_on_analyzed_at"
+    t.index ["user_id"], name: "index_ai_user_profiles_on_user_id"
+    t.index ["user_id"], name: "index_ai_user_profiles_on_user_id_unique", unique: true
   end
 
   create_table "good_job_batches", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
@@ -390,6 +404,7 @@ ActiveRecord::Schema[7.2].define(version: 2026_06_21_110636) do
 
   add_foreign_key "ai_analyses", "user_purposes", on_delete: :cascade
   add_foreign_key "ai_analyses", "weekly_reflections", on_delete: :cascade
+  add_foreign_key "ai_user_profiles", "users", on_delete: :cascade
   add_foreign_key "habit_excluded_days", "habits", on_delete: :cascade
   add_foreign_key "habit_records", "habits", on_delete: :cascade
   add_foreign_key "habit_records", "users", on_delete: :cascade

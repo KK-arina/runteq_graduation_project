@@ -93,6 +93,33 @@ Rails.application.configure do
       cron:        "10 19 * * *",
       class:       "RestModeExpiryJob",
       description: "毎日 JST AM4:10 に rest_mode_until が過ぎた設定を自動解除する"
+    },
+
+    # --------------------------------------------------------------------------
+    # ⑦ パーソナライズAIプロファイル週次更新ジョブ（H-8 追加）
+    # --------------------------------------------------------------------------
+    #
+    # 【実行タイミング】
+    #   毎週月曜日 JST AM4:15 に実行する。
+    #   WeeklyReportJob（AM9:00）より前に実行することで、
+    #   週次レポートメールが送信される前にプロファイルが最新状態になる。
+    #
+    # 【UTC 変換の計算】
+    #   JST 04:15 = UTC 19:15（JST は UTC+9 のため 9 時間引く）
+    #   cron: "15 19 * * 1"
+    #     → 分:15 時:19 日:* 月:* 曜日:1（月曜日）
+    #     → UTC 19:15 毎週月曜 = JST 04:15 毎週月曜
+    #
+    # 【なぜ JST AM4:15 か】
+    #   AM4:05: StreakCalculationJob（ストリーク計算）
+    #   AM4:10: RestModeExpiryJob（お休みモード解除）
+    #   AM4:15: UpdateAiProfileJob（プロファイル更新）← ここ
+    #   AM9:00: WeeklyReportJob（週次レポートメール）
+    #   この順番で実行することで、最新の習慣データを元にプロファイルを更新できる。
+    update_ai_profiles: {
+      cron:        "15 19 * * 1",
+      class:       "UpdateAiProfileJob",
+      description: "毎週月曜日 JST AM4:15 に全ユーザーのパーソナライズAIプロファイルを更新する"
     }
   }
 end
