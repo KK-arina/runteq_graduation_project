@@ -132,6 +132,24 @@ class WeeklyReflectionCompleteService
 
     WeeklyReflectionAnalysisJob.perform_later(@reflection.id)
     Rails.logger.info "[WeeklyReflectionCompleteService] WeeklyReflectionAnalysisJob をエンキューしました: weekly_reflection_id=#{@reflection.id}"
+
+    # ── H-8 追加: 振り返り完了後にパーソナライズAIプロファイルを非同期更新する ──
+    #
+    # 【なぜ WeeklyReflectionAnalysisJob の後に呼ぶのか】
+    #   プロファイルの更新は「今回の振り返りデータを含めた状態」で行いたい。
+    #   振り返りデータは save! 後には既に DB に保存されているため、
+    #   この時点で呼んでも最新データを参照できる。
+    #
+    # 【なぜ AI分析上限チェックの外側に置くのか】
+    #   プロファイル更新は AI API を呼ばない（UserContextBuilderService は
+    #   DB集計のみ）。月次上限とは無関係に常に実行して良い。
+    #
+    # 【perform_later を使う理由】
+    #   プロファイル更新はユーザーの体験に直接影響しない。
+    #   非同期で実行することでレスポンスタイムを短縮する。
+    UpdateAiProfileJob.perform_later(@user.id)
+    Rails.logger.info "[WeeklyReflectionCompleteService] UpdateAiProfileJob をエンキューしました: user_id=#{@user.id}"
+    # ──────────────────────────────────────────────────────────────────────────
   end
 
   def complete_last_week_reflection!

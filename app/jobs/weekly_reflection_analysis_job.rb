@@ -182,6 +182,19 @@ class WeeklyReflectionAnalysisJob < ApplicationJob
   #   という提案もできるようにするため。
   #   AIが「現状のユーザーのリスト」を知っていることが前提となる。
   def build_prompt(reflection, user_purpose, current_habits, current_tasks)
+    # ── H-8 追加: パーソナライズコンテキストを取得する ───────────────────────
+    #
+    # 【UserContextBuilderService.context_text_for を使う理由】
+    #   プロファイルが存在しないユーザーの場合は空文字を返す（フォールバック）。
+    #   これにより新規ユーザーや分析前のユーザーでも
+    #   既存のAI分析が正常に動作することが保証される。
+    #
+    # 【プロンプト先頭に注入する理由】
+    #   LLMはプロンプトの先頭の情報を重視する傾向があるため、
+    #   ユーザー傾向データを先頭に置くことでAIが全提案に反映しやすくなる。
+    personalize_context = UserContextBuilderService.context_text_for(reflection.user)
+    # ──────────────────────────────────────────────────────────────────────────
+
     pmvv_section = if user_purpose.present?
       <<~PMVV
         ## ユーザーの PMVV 情報（目標・価値観）
@@ -274,7 +287,7 @@ class WeeklyReflectionAnalysisJob < ApplicationJob
     reflection_comment   = reflection.reflection_comment.presence   || "未入力"
 
     <<~PROMPT
-      あなたは優秀なライフコーチです。
+      #{personalize_context.present? ? "#{personalize_context}\n\n---\n\n" : ""}あなたは優秀なライフコーチです。
       ユーザーの今週の振り返りデータを分析し、
       次週に向けた具体的なアドバイスと行動提案を提供してください。
 

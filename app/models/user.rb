@@ -77,6 +77,9 @@ class User < ApplicationRecord
   has_many :tasks
   has_one  :user_setting
   has_many :user_purposes
+  # H-8 追加: パーソナライズAIプロファイル（1ユーザー1プロファイル）
+  # dependent: :destroy → ユーザーが退会時にプロファイルも削除される
+  has_one :ai_user_profile, dependent: :destroy
 
   # ============================================================
   # F-6 追加: 論理削除スコープ
