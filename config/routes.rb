@@ -145,6 +145,12 @@ end
       post :retry_analysis
       get  :ai_result
       post :apply_proposals
+      # ── H-9 追加: ダッシュボードのPMVV完了バナーを✖で閉じたことを保存する ──
+      # 【patch を使う理由】
+      #   user_settings の pmvv_banner_dismissed_at という「既存リソースの一部」を
+      #   更新する操作のため、RESTの慣習で PATCH を使う。
+      #   （singular resource のため member ブロックに置いても id なしパスになる）
+      patch :dismiss_completion_banner
     end
   end
 
@@ -178,6 +184,13 @@ end
     collection do
       post :complete_without_ai
       post :confirm_proposals
+      # ── H-9 追加: ダッシュボードの振り返り完了バナーを✖で閉じたことを保存する ──
+      # 【collection に置く理由】
+      #   特定の振り返りIDに紐づく操作ではなく、user_settings の
+      #   reflection_banner_dismissed_at を更新する「ユーザー単位」の操作のため、
+      #   id 不要の collection ルートにする。
+      # 【patch を使う理由】既存リソースの一部（閉じた日時）を更新するため。
+      patch :dismiss_completion_banner
     end
   end
 

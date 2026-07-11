@@ -267,6 +267,30 @@ class UserPurposesController < ApplicationController
                 alert: "提案の登録中にエラーが発生しました。もう一度お試しください。"
   end
 
+  # ============================================================
+  # H-9 追加: dismiss_completion_banner
+  # ============================================================
+  # 【役割】
+  #   ダッシュボードのPMVV完了バナーの✖ボタン（dismissible_controller.js）から
+  #   PATCH で呼ばれ、user_setting の pmvv_banner_dismissed_at を現在時刻に更新する。
+  #   これにより、リロードしてもバナーが復元されなくなる（=✖で閉じた状態が永続化）。
+  #
+  # 【throttle_ai_request の対象外である理由】
+  #   before_action :throttle_ai_request は create/update/retry_analysis のみ対象。
+  #   このアクションは AI ジョブを投入しない軽量な状態更新のため throttle は不要。
+  #
+  # 【head :no_content（204）を返す理由】
+  #   JS 側は fetch で叩くだけで画面遷移しない（✖押下時にJSが即座に hidden 済み）。
+  #   返すべきビューが無いため、ボディなしの 204 No Content を返す。
+  #
+  # 【user_setting が nil の場合の &. ガード】
+  #   通常は全ユーザーに user_setting が存在するが、万一 nil でも
+  #   NoMethodError にせず 204 を返してUIを壊さない。
+  def dismiss_completion_banner
+    current_user.user_setting&.touch_pmvv_banner_dismissed_at!
+    head :no_content
+  end
+
   private
 
   # ── D-5 追加: record_crisis_analysis_for_purpose ──────────────────────────
