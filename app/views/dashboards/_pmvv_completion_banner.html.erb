@@ -53,23 +53,18 @@
   <% if user_purpose&.completed? %>
 
     <%#
-      バナー本体: data-controller="dismissible" をここに付ける
-      【なぜ内側 div に付けるのか】
-        hide() は this.element（= data-controller の要素）に hidden クラスを付ける。
-        この div だけを hidden にすることで、外側の id 付き div は DOM に残り続ける。
-        次回 broadcast_replace_to が来たとき、外側の id 付き div を正しく発見できる。
-        ページをリロードすると hidden が消えるため、
-        ページを開き直した時に重複してバナーが出ることもない。
-
-      role="status":
-        スクリーンリーダーに「ここは状態通知エリア」と伝える ARIA ロール。
-      aria-live="polite":
-        Turbo Stream で動的に挿入されたこの要素を
-        スクリーンリーダーが現在の読み上げ終了後に自動で読み上げる。
+      H-9 追加: data-dismissible-dismiss-url-value
+      ✖押下時に dismissible_controller.js がこのURLへ PATCH を送り、
+      user_setting.pmvv_banner_dismissed_at を保存する。
+      これでリロードしてもバナーが復元されなくなる（=✖で閉じた状態が永続化）。
+      dismiss_completion_banner_user_purpose_path は singular resource のため引数不要。
+      （このパーシャルはダッシュボードのサーバー描画と PurposeAnalysisJob のライブ配信の
+        両方から render されるが、パスヘルパーはどちらの描画コンテキストでも解決できる）
     %>
     <div class="mb-6 flex items-center justify-between gap-3 px-4 py-3
                 bg-green-50 border border-green-300 rounded-xl"
          data-controller="dismissible"
+         data-dismissible-dismiss-url-value="<%= dismiss_completion_banner_user_purpose_path %>"
          role="status"
          aria-live="polite">
 

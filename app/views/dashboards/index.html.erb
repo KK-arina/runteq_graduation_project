@@ -38,27 +38,25 @@
     </div>
   <% end %>
 
-  <%#
-    G-7 追加: ダッシュボード専用の完了通知ストリームを購読する。
-
-    【なぜ @current_purpose の if ブロックの外に移動したのか】
-      @current_purpose が nil のユーザー（PMVV未入力・目標設定をしたばかり）でも
-      このストリームを購読できるようにするため。
-      if ブロックの内側にあると、@current_purpose が nil のときに
-      turbo_stream_from タグが出力されず、ブロードキャストを受信できなかった。
-
-    【ストリーム名に current_user.id を使う理由】
-      @current_purpose.id ではなく current_user.id にする理由:
-      PMVV を更新（再分析）しても user_id は変わらないため、
-      ページをリロードせずに購読し続けられる。
-      user_purpose.id が変わっても購読が途切れない。
-
-    【turbo_stream_from を id 付き div の直前に置く理由】
-      購読タグとプレースホルダーを近い位置に置くことで、
-      「この購読はこのバナー用」という対応関係がコードを読んで分かりやすくなる。
-  %>
   <%= turbo_stream_from "dashboard_notifications_#{current_user.id}" %>
-  <div id="dashboard_pmvv_completion_banner"></div>
+  <%#
+    H-9 追加: PMVV完了バナーをリロード後も✖を押すまで表示し続ける。
+    【なぜ空divの中に描画するのか】
+      ライブ配信（PurposeAnalysisJob#broadcast_dashboard_completion）は
+      target: "dashboard_pmvv_completion_banner" にこのバナーを流し込む。
+      サーバー描画でも同じ id の中に同じパーシャルを描画することで、
+      「ページを開いた瞬間から未確認バナーを表示」と「その後のライブ更新」を両立する。
+      振り返りバナー（dashboard_reflection_completion_banner）と同じ設計。
+    【@show_pmvv_completion_banner が false のとき】
+      中身が空になり、バナーは表示されない（✖で閉じた後・未完了・危機検出時）。
+  %>
+  <div id="dashboard_pmvv_completion_banner">
+    <% if @show_pmvv_completion_banner %>
+      <%= render "dashboards/pmvv_completion_banner",
+            user_purpose: @current_purpose,
+            ai_analysis:  @ai_analysis %>
+    <% end %>
+  </div>
   <%# G-7 追加: 振り返りAI分析完了バナーのプレースホルダー %>
   <%#
     @reflection_analysis_pending: ダッシュボード初期表示時に分析中かを判定する。
@@ -80,10 +78,12 @@
         </div>
       </div>
     </div>
-  <% elsif @reflection_ai_analysis.present? %>
+  <% elsif @show_reflection_completion_banner %>
     <%#
-      既に分析完了済みの場合は完了バナーを直接表示する。
-      （ページをリロードしたときなど）
+      H-9 変更: 分析完了済み かつ 未確認（✖で閉じていない or 閉じた後に再分析された）
+      の場合のみ、完了バナーを復元表示する。
+      変更前は @reflection_ai_analysis.present? だけで無条件に描画していたため、
+      ✖で閉じてもリロードで復活していた。PMVV完了バナーと同じ方式に統一する。
     %>
     <div id="dashboard_reflection_completion_banner">
       <%= render "dashboards/reflection_completion_banner",
