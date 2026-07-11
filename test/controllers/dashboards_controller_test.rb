@@ -11,19 +11,10 @@
 #   tasks.yml に ai_generated_task（user: one）が存在するため、
 #   各テストの冒頭で @user.tasks.update_all(deleted_at: Time.current) を呼び
 #   fixtures タスクを論理削除してからテスト用データを作成する。
-#   これにより fixtures の影響を受けずに集計結果を制御できる。
 #
-# 【assert_select のセレクタ指定】
-#   "span" だけではページ全体の全 span にマッチしてしまい
-#   ユーザー名など無関係な要素も検索対象になる。
-#   data-testid 属性を使って「テスト用の識別子」を HTML に埋め込み、
-#   "[data-testid='priority-badge-must']" のように具体的に絞り込む。
-#
-# 【ログイン成功の保証】
-#   post login_path だけではログイン失敗してもテストが落ちない可能性がある。
-#   assert_redirected_to dashboard_path でリダイレクト先を確認し、
-#   follow_redirect! で実際にダッシュボードページへ遷移してから
-#   ログイン済み状態であることを保証する。
+# 【H-9 追加】
+#   PMVV完了バナー / 振り返り完了バナーの「✖を押すまでリロード後も残す」
+#   永続表示ロジックの回帰テストを末尾に追加。
 # ==============================================================================
 
 require "test_helper"
@@ -32,35 +23,19 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
   # ============================================================
   # setup: 各テスト前に実行する共通処理
   # ============================================================
-  # travel_to で日付を水曜日に固定する。
-  # 理由:
-  #   beginning_of_week(:monday) が使われているため、
-  #   月曜日に実行すると週の範囲が1日分になり
-  #   データが集計されないバグが起きやすい。
-  #   水曜日に固定することで「月〜水」の3日分の範囲が確保される。
   setup do
     # 2026-04-15（水曜日）に固定する
     travel_to Time.zone.local(2026, 4, 15, 10, 0, 0)
 
     @user = users(:one)
 
-    # ログイン処理
-    # post だけではログイン失敗してもテストが続行してしまう場合がある。
-    # assert_redirected_to でログイン成功後のリダイレクト先を確認し、
-    # follow_redirect! でダッシュボードページへ実際に遷移することで
-    # 「ログイン済み状態」を確実に保証する。
     post login_path, params: { session: { email: @user.email, password: "password" } }
     assert_redirected_to dashboard_path
     follow_redirect!
 
-    # fixtures のタスク（ai_generated_task など）を論理削除して
-    # 各テストがクリーンな状態から始められるようにする。
-    # update_all はコールバックを起こさず1クエリで完了するため高速。
     @user.tasks.update_all(deleted_at: Time.current)
   end
 
-  # teardown で travel_to を必ず元に戻す。
-  # 戻し忘れると他のテストの時刻が汚染される。
   teardown do
     travel_back
   end
@@ -79,13 +54,8 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
   # ============================================================
 
   test "タスクが0件のとき達成率セクション全体が非表示になる" do
-    # setup で全タスクを論理削除済み → 追加作成しない
-
     get dashboard_path
     assert_response :success
-
-    # total が全て 0 のため「今週のタスク達成率」セクションが非表示になること。
-    # data-testid="task-priority-stats-section" で絞り込む。
     assert_select "[data-testid='task-priority-stats-section']", count: 0
   end
 
@@ -136,7 +106,6 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
   test "archived タスクも完了として達成率にカウントされる" do
     today = HabitRecord.today_for_record
 
-    # archived タスクを1件作成する（1/1 = 100%）
     @user.tasks.create!(
       title:        "アーカイブ済みタスク",
       priority:     :could,
@@ -148,17 +117,13 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     get dashboard_path
     assert_response :success
 
-    # Could バッジが表示されること
     assert_select "[data-testid='priority-badge-could']", text: "Could"
-
-    # archived を done としてカウントするため 100% になること
     assert_select "[data-testid='priority-rate-could']", text: "100%"
   end
 
   test "Could タスクが 0 件のとき Could の行が非表示になる" do
     today = HabitRecord.today_for_record
 
-    # Must タスクのみ作成（Could は作らない）
     @user.tasks.create!(
       title:    "Mustのみ",
       priority: :must,
@@ -169,10 +134,7 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     get dashboard_path
     assert_response :success
 
-    # Must バッジは表示されること
     assert_select "[data-testid='priority-badge-must']", text: "Must"
-
-    # Could バッジは表示されないこと（total が 0 のため行ごと非表示）
     assert_select "[data-testid='priority-badge-could']", count: 0
   end
 
@@ -201,7 +163,6 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
   end
 
   test "今週の範囲外（先週）のタスクは達成率に含まれない" do
-    # 先週の due_date を持つタスクを作成する
     last_week_date = HabitRecord.today_for_record - 8.days
 
     task = @user.tasks.create!(
@@ -211,11 +172,6 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
       due_date: last_week_date
     )
 
-    # created_at も先週に設定する。
-    # Task.create! は travel_to の時刻（今週）で created_at を設定するため、
-    # created_at が今週の BETWEEN 条件にヒットしてしまう。
-    # update_columns はバリデーション・コールバックをスキップして
-    # 直接カラムを書き換えるため、タイムスタンプを任意の値に設定できる。
     task.update_columns(
       created_at: last_week_date.in_time_zone.beginning_of_day,
       updated_at: last_week_date.in_time_zone.beginning_of_day
@@ -224,40 +180,190 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     get dashboard_path
     assert_response :success
 
-    # due_date も created_at も先週 → 集計対象が 0件 → セクション非表示
     assert_select "[data-testid='task-priority-stats-section']", count: 0
   end
 
   # ============================================================
   # H-7: Empty State UI テスト
   # ============================================================
-  #
-  # 【テスト戦略】
-  #   習慣0件の状態を fixtures の論理削除で再現する。
-  #   assert_select "[data-testid='...']" でパーシャルが正しくレンダリングされるかを検証。
-  #   CTAリンクの href と表示テキストも合わせて確認し、
-  #   パーシャルの引数渡しに誤りがないことを保証する。
 
   test "習慣が0件のときダッシュボードの Empty State が表示される" do
-    # fixtures の習慣を論理削除してクリーンな0件状態にする。
-    # update_all はコールバックを起こさず1クエリで完了するため高速。
     @user.habits.update_all(deleted_at: Time.current)
 
     get dashboard_path
     assert_response :success
 
-    # data-testid="dashboard-habits-empty-state" を持つ要素が1件表示されること
     assert_select "[data-testid='dashboard-habits-empty-state']"
   end
 
   test "習慣が0件かつ非ロック中は「最初の習慣を追加する」CTAリンクが表示される" do
-    # fixtures の習慣を0件にする（ロック状態ではない前提）
     @user.habits.update_all(deleted_at: Time.current)
 
     get dashboard_path
     assert_response :success
 
-    # 「最初の習慣を追加する」リンクが new_habit_path を向いていること
     assert_select "a[href='#{new_habit_path}']", text: "最初の習慣を追加する"
+  end
+
+  # ============================================================
+  # H-9 追加: PMVV完了バナーの永続表示（✖を押すまでリロード後も残す）
+  # ============================================================
+  #
+  # 【共通ヘルパー】完了済みPMVV＋最新の purpose_breakdown 分析を用意する。
+  #   version は fixtures との (user_id, version) 衝突を避けるため大きめの値を使う。
+  #   input_snapshot はPMVV分析のスキーマ検証（5キー必須）を満たすため全キーを渡す。
+  def create_completed_pmvv_with_analysis(user)
+    user.user_purposes.update_all(is_active: false) # 既存の有効PMVVを無効化して一意にする
+    purpose = user.user_purposes.create!(
+      purpose: "P", mission: "M", vision: "V", value: "Va", current_situation: "C",
+      version: 99, is_active: true, analysis_state: :completed
+    )
+    analysis = AiAnalysis.create!(
+      user_purpose_id: purpose.id,
+      analysis_type:   :purpose_breakdown,
+      input_snapshot:  { purpose: "P", mission: "M", vision: "V", value: "Va", current_situation: "C" },
+      actions_json:    [ { "type" => "habit", "title" => "テスト習慣" } ],
+      is_latest:       true
+    )
+    [ purpose, analysis ]
+  end
+
+  test "PMVV分析が完了していてバナー未確認なら、ダッシュボードに完了バナーが表示される" do
+    travel_to Time.zone.local(2026, 4, 15, 10, 0, 0) do
+      create_completed_pmvv_with_analysis(@user)
+      @user.user_setting.update_columns(pmvv_banner_dismissed_at: nil)
+
+      get dashboard_path
+      assert_response :success
+      assert_select "p", text: "目標分析が完了しました", count: 1
+    end
+  end
+
+  test "✖で閉じた後（dismissed_atが分析より新しい）はリロードしてもPMVVバナーが表示されない" do
+    travel_to Time.zone.local(2026, 4, 15, 10, 0, 0) do
+      _purpose, analysis = create_completed_pmvv_with_analysis(@user)
+      @user.user_setting.update_columns(pmvv_banner_dismissed_at: analysis.created_at + 1.second)
+
+      get dashboard_path
+      assert_response :success
+      assert_select "p", text: "目標分析が完了しました", count: 0
+    end
+  end
+
+  test "✖で閉じた後にPMVVを再分析（新しい分析）したらバナーが再表示される" do
+    travel_to Time.zone.local(2026, 4, 15, 10, 0, 0) do
+      _purpose, first_analysis = create_completed_pmvv_with_analysis(@user)
+      @user.user_setting.update_columns(pmvv_banner_dismissed_at: first_analysis.created_at + 1.second)
+    end
+
+    travel_to Time.zone.local(2026, 4, 15, 11, 0, 0) do
+      purpose = @user.user_purposes.find_by(is_active: true)
+      AiAnalysis.create!(
+        user_purpose_id: purpose.id,
+        analysis_type:   :purpose_breakdown,
+        input_snapshot:  { purpose: "P", mission: "M", vision: "V", value: "Va", current_situation: "C" },
+        actions_json:    [ { "type" => "habit", "title" => "再分析の習慣" } ],
+        is_latest:       true
+      )
+
+      get dashboard_path
+      assert_response :success
+      assert_select "p", text: "目標分析が完了しました", count: 1
+    end
+  end
+
+  test "dismiss_completion_banner(PMVV)を叩くと pmvv_banner_dismissed_at が更新される" do
+    assert_nil @user.user_setting.pmvv_banner_dismissed_at
+
+    travel_to Time.zone.local(2026, 4, 15, 12, 0, 0) do
+      patch dismiss_completion_banner_user_purpose_path
+      assert_response :no_content
+    end
+
+    @user.user_setting.reload
+    assert_not_nil @user.user_setting.pmvv_banner_dismissed_at
+    assert_equal Time.zone.local(2026, 4, 15, 12, 0, 0), @user.user_setting.pmvv_banner_dismissed_at
+  end
+
+  # ============================================================
+  # H-9 追加: 振り返り完了バナーの永続表示（PMVVと対称）
+  # ============================================================
+  #
+  # 【共通ヘルパー】完了済み振り返り＋最新の振り返りAI分析（actions_json あり）を用意する。
+  #   week_start_date は fixtures（2026-01〜02）と衝突しない at 基準の週にする。
+  def create_completed_reflection_with_analysis(user, at:)
+    week_start = at.to_date.beginning_of_week(:monday) - 1.week
+    reflection = user.weekly_reflections.create!(
+      week_start_date:      week_start,
+      week_end_date:        week_start + 6.days,
+      direct_reason:        "テスト理由",
+      background_situation: "テスト状況",
+      next_action:          "テスト次のアクション",
+      completed_at:         at,
+      is_locked:            true
+    )
+    analysis = AiAnalysis.create!(
+      weekly_reflection: reflection,
+      analysis_type:     :weekly_reflection,
+      actions_json:      [ { "type" => "habit", "title" => "振り返り提案" } ],
+      is_latest:         true
+    )
+    [ reflection, analysis ]
+  end
+
+  test "振り返り分析が完了していてバナー未確認なら、ダッシュボードに完了バナーが表示される" do
+    travel_to Time.zone.local(2026, 4, 15, 10, 0, 0) do
+      create_completed_reflection_with_analysis(@user, at: Time.current)
+      @user.user_setting.update_columns(reflection_banner_dismissed_at: nil)
+
+      get dashboard_path
+      assert_response :success
+      assert_select "p", text: "振り返りAI分析が完了しました", count: 1
+    end
+  end
+
+  test "✖で閉じた後（dismissed_atが分析より新しい）はリロードしても振り返りバナーが表示されない" do
+    travel_to Time.zone.local(2026, 4, 15, 10, 0, 0) do
+      _reflection, analysis = create_completed_reflection_with_analysis(@user, at: Time.current)
+      @user.user_setting.update_columns(reflection_banner_dismissed_at: analysis.created_at + 1.second)
+
+      get dashboard_path
+      assert_response :success
+      assert_select "p", text: "振り返りAI分析が完了しました", count: 0
+    end
+  end
+
+  test "✖で閉じた後に振り返りを再分析したらバナーが再表示される" do
+    reflection = nil
+    travel_to Time.zone.local(2026, 4, 15, 10, 0, 0) do
+      reflection, first_analysis = create_completed_reflection_with_analysis(@user, at: Time.current)
+      @user.user_setting.update_columns(reflection_banner_dismissed_at: first_analysis.created_at + 1.second)
+    end
+
+    travel_to Time.zone.local(2026, 4, 15, 11, 0, 0) do
+      AiAnalysis.create!(
+        weekly_reflection: reflection,
+        analysis_type:     :weekly_reflection,
+        actions_json:      [ { "type" => "habit", "title" => "再分析の提案" } ],
+        is_latest:         true
+      )
+
+      get dashboard_path
+      assert_response :success
+      assert_select "p", text: "振り返りAI分析が完了しました", count: 1
+    end
+  end
+
+  test "dismiss_completion_banner(振り返り)を叩くと reflection_banner_dismissed_at が更新される" do
+    assert_nil @user.user_setting.reflection_banner_dismissed_at
+
+    travel_to Time.zone.local(2026, 4, 15, 13, 0, 0) do
+      patch dismiss_completion_banner_weekly_reflections_path
+      assert_response :no_content
+    end
+
+    @user.user_setting.reload
+    assert_not_nil @user.user_setting.reflection_banner_dismissed_at
+    assert_equal Time.zone.local(2026, 4, 15, 13, 0, 0), @user.user_setting.reflection_banner_dismissed_at
   end
 end
