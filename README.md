@@ -109,7 +109,8 @@ flowchart LR
 [![H-6 スマホ対応レスポンシブ調整](https://img.shields.io/badge/H--6_スマホ対応レスポンシブ調整-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/h-6-responsive-adjustment)
 [![H-7 Empty State UI](https://img.shields.io/badge/H--7_Empty_State_UI-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/h-7-empty-state-ui)
 [![H-8 パーソナライズAIコンテキスト生成](https://img.shields.io/badge/H--8_パーソナライズAIコンテキスト生成-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/h-8-personalize-ai-context)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-63%2F70_ISSUE-f59e0b?style=flat-square)]()
+[![H-9 N+1最適化・バナー永続化](https://img.shields.io/badge/H--9_N%2B1最適化・バナー永続化-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/H-9-n-plus-one-optimization)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-64%2F70_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -236,6 +237,7 @@ flowchart LR
 | #H-6 | スマホ対応レスポンシブ調整（iOS自動ズーム防止・タップ領域44px・横スクロール対応） | 2026-06-27 | feature/h-6-responsive-adjustment |
 | #H-7 | Empty State UI 実装（共通パーシャル化・全画面統一） | 2026-06-28 | feature/h-7-empty-state-ui |
 | #H-8 | パーソナライズAIコンテキスト生成（UserContextBuilderService） | 2026-06-29 | feature/h-8-personalize-ai-context |
+| #H-9 | N+1クエリ検知・includes最適化（Habit#excluded_day_numbers の pluck→map）・グラフタブ青バッジ重複カウント修正（bn_ai_analysis_count に is_latest 絞り込み）・aria-current統一・PMVV/振り返り完了バナーの永続表示（✖を押すまでリロード後も残す） | 2026-07-09 | feature/H-9-n-plus-one-optimization |
 
 <br>
 
@@ -6636,6 +6638,91 @@ AIプロンプトに注入するパーソナライズコンテキスト（contex
 H-8テスト:  14 runs, 22 assertions, 0 failures, 0 errors, 0 skips
 全テスト:  780 runs, 1930 assertions, 0 failures, 0 errors, 0 skips
 ```
+
+<br>
+
+---
+
+<br>
+
+### #H-9: N+1クエリ検知・includes最適化（全一覧ページ）+ 完了バナー永続化
+
+<br>
+
+**ブランチ:** `feature/H-9-n-plus-one-optimization`<br>
+**完了日:** 2026-07-09<br>
+**概要:** 一覧系ページのN+1を bullet で検査し、実際に残っていた唯一のN+1（`Habit#excluded_day_numbers` の `.pluck`）を解消。<br>
+あわせてグラフタブ青バッジの重複カウント（`bn_ai_analysis_count` の `is_latest` 未絞り込み）と `aria-current` の表記不統一を修正。<br>
+実装確認中に発見したPMVV・振り返り完了バナーの「リロードで消える／✖で消しても復活する」不具合も本ISSUE内で修正した。
+
+<br>
+
+#### N+1・パフォーマンス対応
+
+<br>
+
+| 対象 | 実態 | H-9での対応 |
+|:---|:---|:---|
+| `Habit#excluded_day_numbers` | `.pluck` が preload を無視して毎回SELECT発行（習慣一覧でN+1＋Unused Eager Loading警告） | `.map(&:day_of_week)` に変更し preload済み配列を使用 |
+| ダッシュボード / 習慣一覧 | `@today_records_hash`＋`group(:habit_id)`集計で既にN+1フリー | `includes(:habit_records)` は逆効果のため追加せず |
+| タスク一覧 | 優先度別カウントは既に `group(:priority).count` | 追加変更なし |
+| 週次振り返り一覧 | 既に `includes(:habit_summaries)` 済み | 追加変更なし |
+| AI提案モーダル | 提案は `actions_json`（JSONB）から描画・`ai_proposed_*` 未参照 | `includes` は no-op のため追加せず |
+
+<br>
+
+#### バグ修正・整合性対応
+
+<br>
+
+| 項目 | 内容 |
+|:---|:---|
+| グラフタブ青バッジの重複カウント | `bn_ai_analysis_count` に `.where(ai_analyses: { is_latest: true })` を追加。再分析で `is_latest: false` になった古い分析を除外（`index_ai_analyses_latest_weekly_reflection_unique` によりDB側でも1振り返り＝最新1件を保証） |
+| aria-current の表記統一 | `analytics/index.html.erb` の期間フィルターを `? "page" : false`（`_header.html.erb` と同じWAI-ARIAトークン）に統一。非選択時は属性自体を出力しない |
+
+<br>
+
+#### 完了バナーの永続表示（PMVV・振り返り／✖まで残す）
+
+<br>
+
+| 項目 | 内容 |
+|:---|:---|
+| 追加カラム | `user_settings.pmvv_banner_dismissed_at` / `reflection_banner_dismissed_at`（✖で閉じた日時） |
+| 表示判定 | `dashboards_controller` で「最新分析の `created_at` が閉じた日時より新しければ表示」。リロード後も✖まで残り、再分析で再表示される |
+| dismiss経路 | `PATCH /user_purpose/dismiss_completion_banner`・`PATCH /weekly_reflections/dismiss_completion_banner` を追加。`dismissible_controller.js` を汎用化し、✖押下時に fetch で閉じ状態を保存（204応答） |
+| ライブ配信との共存 | 既存の `broadcast_dashboard_completion`（Turbo Stream）はそのまま維持 |
+
+<br>
+
+#### Issue記載より「実コード」を優先した判断
+
+<br>
+
+| Issueチェックリスト | 判断 |
+|:---|:---|
+| `includes(:habit_records)` 追加 | 追加せず（既存の集計クエリ方式が最適・eager loadは逆効果） |
+| `includes(:ai_proposed_habits, :ai_proposed_tasks)` 追加 | 追加せず（モーダルは `actions_json` 描画で no-op） |
+| bullet を test グループに追加し `raise` | 見送り（無関係な既存テストを巻き込むため）。`/habits` のクエリ数を数える決定論的な回帰テストで代替（CI全体での bullet 強制は Week I で別途検討） |
+
+<br>
+
+#### テスト結果
+
+<br>
+
+```
+H-9追加分:  dashboards 18 runs（バナー永続化8本）/ analytics（重複カウント2本）/ habits（N+1クエリ数1本）
+全テスト:  791 runs, 1974 assertions, 0 failures, 0 errors, 0 skips
+動作確認:  http://localhost:3000 で両バナーの「表示→F5で残る→✖→F5で復活しない」・PATCH 204 を確認
+Bullet:    docker compose logs web | grep -iE "eager loading|N+1 Query" → 警告なし（合格）
+```
+
+<br>
+
+> 💡 **N+1は「preload しても `.pluck`／`.where`／`.count` を使うと再クエリが飛ぶ」**<br>
+> `includes` を付けても、モデルメソッド内で `.pluck` を使うと preload が無視され N+1 になる。<br>
+> bullet の「Unused Eager Loading」警告はこのパターンを検知するシグナルになる。
 
 <br>
 
@@ -13827,6 +13914,59 @@ nil チェックなしに安全にアクセスできる。
 | `ActiveRecord::RecordInvalid` | バリデーションエラー | uniqueness 違反など |
 | `ActiveRecord::StatementInvalid` | DBエラー | UNIQUE インデックス競合など |
 | `StandardError` | 予期しないエラー | 上記以外の全エラー |
+
+<br>
+
+### 153. `.pluck` は preload を無視して常にSQLを発行する（#H-9）
+
+<br>
+
+`includes(:habit_excluded_days)` で preload しても、モデルメソッド内で<br>
+`habit_excluded_days.pluck(:day_of_week)` を使うと、ロード済み association を無視して<br>
+毎回新しい SELECT が発行される。一覧ページでは習慣数だけクエリが飛び N+1 になる。<br>
+`.map(&:day_of_week)` に変えると preload 済み配列を読むだけで追加クエリは0件になる。<br>
+bullet の「Unused Eager Loading detected」は、preload したのに reader 経由で使われていない<br>
+（＝`.pluck` 等でバイパスしている）ことを知らせるシグナルである。
+
+<br>
+
+```ruby
+# ❌ preload を無視して習慣ごとに SELECT が飛ぶ（N+1 + Unused Eager Loading 警告）
+def excluded_day_numbers
+  habit_excluded_days.pluck(:day_of_week).sort
+end
+
+# ✅ preload 済み association を使う（追加クエリ0件）
+def excluded_day_numbers
+  habit_excluded_days.map(&:day_of_week).sort
+end
+```
+
+<br>
+
+### 154. Issueのチェックリストより「実コード」を優先する（#H-9）
+
+<br>
+
+Issue に「`includes(:habit_records)` を追加」とあっても、実装が既に<br>
+`group(:habit_id)` 集計＋ハッシュ参照で N+1 を解消している場合、<br>
+`includes` を足すと全レコードをメモリに eager load するだけで逆効果になる。<br>
+AI提案モーダルのように `actions_json`（JSONB）から描画していて<br>
+`ai_proposed_*` テーブルを参照しないケースでは `includes` は no-op。<br>
+チェックリストを機械的に消化せず、実コードを bullet で検証してから対応を決めること。
+
+<br>
+
+### 155. リアルタイム通知バナーを「✖まで残す」には閉じた状態をサーバーに保存する（#H-9）
+
+<br>
+
+Turbo Stream の broadcast 専用バナー（プレースホルダは空div）は、<br>
+ライブ配信の瞬間だけ表示され、リロードすると必ず消える。<br>
+「✖を押すまでリロード後も残す」には、クライアント側で hidden にするだけでは不十分で<br>
+（リロードで復活する）、「閉じた日時」を `user_settings` に保存し、<br>
+サーバー描画時に「最新分析の `created_at` > 閉じた日時」で復元表示を判定する必要がある。<br>
+再分析すると新しい分析の `created_at` が閉じた日時を上回るため自然に再表示される。
 
 <br>
 
