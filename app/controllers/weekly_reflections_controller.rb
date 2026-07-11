@@ -572,6 +572,24 @@ class WeeklyReflectionsController < ApplicationController
     @current_purpose = UserPurpose.current_for(current_user)
   end
 
+  # ============================================================
+  # H-9 追加: dismiss_completion_banner
+  # ============================================================
+  # 【役割】
+  #   ダッシュボードの振り返り完了バナーの✖ボタン（dismissible_controller.js）から
+  #   PATCH で呼ばれ、user_setting の reflection_banner_dismissed_at を現在時刻に更新する。
+  #   これでリロードしてもバナーが復元されなくなる（✖で閉じた状態を永続化）。
+  #   UserPurposesController#dismiss_completion_banner（PMVV側）と対になる実装。
+  #
+  # 【head :no_content（204）を返す理由】
+  #   JS は fetch で叩くだけで画面遷移しないため、返すビューが無い。
+  #
+  # 【&. ガード】通常 user_setting は必ず存在するが、nil でも 204 を返してUIを壊さない。
+  def dismiss_completion_banner
+    current_user.user_setting&.touch_reflection_banner_dismissed_at!
+    head :no_content
+  end
+
   private
 
   # complete_without_ai 専用のパラメータ取得メソッド

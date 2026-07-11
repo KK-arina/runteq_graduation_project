@@ -174,7 +174,22 @@ class Habit < ApplicationRecord
   end
 
   def excluded_day_numbers
-    habit_excluded_days.pluck(:day_of_week).sort
+    # ── H-9 修正: .pluck → .map に変更（N+1 と bullet の Unused Eager Loading 警告を解消）──
+    # 【なぜ .pluck をやめるのか】
+    #   .pluck(:day_of_week) は includes(:habit_excluded_days) で preload 済みであっても
+    #   常に新しい SELECT を発行する（ActiveRecord の仕様）。
+    #   習慣一覧(habits#index)は includes(:habit_excluded_days) 済みで各カードが
+    #   このメソッドを呼ぶため、.pluck のままだと習慣数だけ SELECT が飛ぶ N+1 になり、
+    #   さらに「preload したのに reader 経由で使われていない」として
+    #   bullet が Unused Eager Loading 警告を出す（H-9 完了条件「bullet が警告を出さない」に抵触）。
+    #
+    # 【.map(&:day_of_week) にすると何が変わるか】
+    #   preload 済みなら、メモリ上のロード済み association を読むだけで追加クエリ 0 件。
+    #   preload されていない文脈（例: calculate_streak! のバッチ処理）でも
+    #   association を1回ロードするだけで、.pluck と同等以下のクエリ数に収まる。
+    #   analytics_controller.rb が既に採用している回避策(habit_excluded_days.map(&:day_of_week))と
+    #   同じ考え方をモデル側に反映し、全呼び出し箇所で N+1 を根絶する。
+    habit_excluded_days.map(&:day_of_week).sort
   end
 
   def effective_weekly_target

@@ -29,16 +29,21 @@
     <%# 習慣も振り返りも0件のとき（Empty State）はフィルターを出さない %>
     <% if @has_data %>
       <div class="flex gap-2" role="group" aria-label="集計期間の切り替え">
-        <%#
-          period の各選択肢をループでリンク表示する。
-          現在選択中の期間は青背景、それ以外は白背景にすることで
-          「今どの期間を見ているか」を視覚的に明確にする。
-        %>
         <% [["4週", "4w"], ["12週", "12w"], ["全期間", "all"]].each do |label, key| %>
+          <%#
+            H-9: aria-current の値を _header.html.erb の慣習に統一する。
+            変更前: @period == key ? "true" : "false"（文字列。非選択リンクにも aria-current="false" が出力されていた）
+            変更後: @period == key ? "page" : false
+              - 選択中 → "page"（WAI-ARIA のトークン値。_header.html.erb と同じ表記）
+              - 非選択 → false（Ruby の false。link_to は値が false の場合その属性自体を出力しないため、
+                        余分な aria-current="false" が DOM に残らずクリーンになる）
+            ※ 厳密には「ページ内フィルタ」は "true" がより意味的に適切とも言えるが、
+              本ISSUE(#H-9)はヘッダーとの表記統一を完了条件としているため "page" に揃える。
+          %>
           <%= link_to label, analytics_path(period: key),
                 class: "px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors
                         #{@period == key ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}",
-                aria: { current: @period == key ? "true" : "false" } %>
+                aria: { current: @period == key ? "page" : false } %>
         <% end %>
       </div>
     <% end %>

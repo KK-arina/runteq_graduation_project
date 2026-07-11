@@ -493,7 +493,6 @@ class ApplicationController < ActionController::Base
   end
   helper_method :bn_must_incomplete_count
 
-  # bn_ai_analysis_count
   # ----------------------------------------------------------
   # 【H-4 修正】last_analytics_viewed_at を基準にバッジ件数を計算するよう変更。
   #
@@ -522,10 +521,7 @@ class ApplicationController < ActionController::Base
   #   UserPurpose には「分析完了日時」専用のカラムが存在しない。
   #   PurposeAnalysisJob が analysis_state を :completed に更新する際、
   #   ActiveRecord が自動的に updated_at を現在時刻に更新するため、
-  #   「completed? かつ updated_at が基準時刻以降」で
-  #   「基準時刻以降に完了した」と判定できる。
-  #   （UserPurpose は値の更新ではなく新規バージョン作成方式のため、
-  #     completed 後に他の理由で updated_at が変わることはほぼ無い）
+  #   「completed? かつ updated_at が基準時刻以降」で判定できる。
   # ----------------------------------------------------------
   def bn_ai_analysis_count
     return 0 unless logged_in?
@@ -551,6 +547,23 @@ class ApplicationController < ActionController::Base
           weekly_reflections: { user_id: current_user.id },
           analysis_type: AiAnalysis.analysis_types[:weekly_reflection]
         )
+        # ── H-9 追加: 最新の分析のみをカウントする ─────────────────────────────
+        # 【なぜ is_latest: true で絞り込むのか】
+        #   同じ週次振り返りに対してAI再分析を行うと、AiAnalysis レコードが複数生成される。
+        #   AiAnalysis の before_create :deactivate_previous_analyses が
+        #   古い分析を is_latest: false に更新するため、最新は常に1件だけが is_latest: true になる。
+        #   この絞り込みが無いと、再分析で is_latest: false になった古い分析（actions_json を持つ）も
+        #   すべてカウントされ、グラフタブの青バッジが「3」のように過大表示されるバグが起きる。
+        #   （schema.rb の index_ai_analyses_latest_weekly_reflection_unique により
+        #    「1振り返り＝is_latest:true は最大1件」がDB制約でも保証されている）
+        #
+        # 【ai_analyses: { is_latest: true } とテーブル名を明示する理由】
+        #   joins(:weekly_reflection) でテーブルを結合しているため、単に is_latest: true と書くと
+        #   どのテーブルのカラムか曖昧になりうる。ai_analyses: { ... } と明示して
+        #   確実に ai_analyses.is_latest を指定する。
+        #   （index_ai_analyses_on_is_latest_true 部分インデックスが効くため高速）
+        .where(ai_analyses: { is_latest: true })
+        # ────────────────────────────────────────────────────────────────────────
         .where("ai_analyses.created_at >= ?", since)
         .where.not(actions_json: nil)
         .count

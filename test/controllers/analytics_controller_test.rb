@@ -228,6 +228,109 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
   end
 
   # ============================================================
+  # H-9: 同一振り返りへの複数回AI分析でも青バッジが「1」件としてカウントされる
+  # ============================================================
+  #
+  # 【このテストの狙い（回帰テスト）】
+  #   bn_ai_analysis_count（application_controller.rb）の週次振り返り分析カウントは
+  #   H-9 修正前、is_latest: true で絞り込んでいなかったため、
+  #   同じ振り返りに対してAI再分析を複数回行うと、is_latest: false になった
+  #   古い分析（actions_json を持つ）もすべてカウントされ、
+  #   グラフタブの青バッジが「3」のように過大表示されるバグがあった。
+  #   本テストは同一振り返りに 3 件の AiAnalysis を作成し（＝2回再分析した状態）、
+  #   バッジが「3」ではなく正しく「1」と表示されることを検証する。
+  #
+  # 【なぜ 3 件作成しても is_latest: true は 1 件になるのか】
+  #   AiAnalysis の before_create :deactivate_previous_analyses が
+  #   同じ weekly_reflection_id の既存分析を is_latest: false に更新するため、
+  #   逐次 create! すると常に最後の 1 件だけが is_latest: true になる。
+  #
+  # 【PMVV分析の件数を混入させないための前処理】
+  #   bn_ai_analysis_count は「PMVV分析 + 週次振り返り分析」の合算を返す。
+  #   本テストは週次振り返り分析の重複カウントのみを検証したいため、
+  #   user_purposes を is_active: false にして current_for を nil にし、PMVV側の加算を 0 に固定する。
+  #
+  # 【バッジ数字の検証方法】
+  #   _bottom_navigation.html.erb はグラフタブに
+  #   <span aria-label="AIによる最新の分析が完了しました">件数</span> を描画する。
+  #   span のテキスト（件数）が "1" であることを assert_select の text: で検証する。
+  test "H-9: 同一振り返りに複数回AI分析しても青バッジは1件としてカウントされる" do
+    reflection = nil
+
+    travel_to Time.zone.local(2026, 6, 24, 10, 0, 0) do
+      reflection = @user.weekly_reflections.create!(
+        week_start_date:      HabitRecord.today_for_record.beginning_of_week(:monday) - 1.week,
+        week_end_date:        HabitRecord.today_for_record.beginning_of_week(:monday) - 1.week + 6.days,
+        direct_reason:        "テスト理由",
+        background_situation: "テスト状況",
+        next_action:          "テスト次のアクション",
+        completed_at:         Time.current,
+        is_locked:            true
+      )
+
+      # 同じ振り返りに対して 3 回 AI 分析を実行した状態を再現する。
+      3.times do |i|
+        AiAnalysis.create!(
+          weekly_reflection: reflection,
+          analysis_type:     :weekly_reflection,
+          actions_json:      [ { "type" => "habit", "title" => "テスト習慣#{i + 1}" } ]
+        )
+      end
+
+      # 前提の確認: actions_json 付きは 3 件、is_latest: true は 1 件だけ。
+      assert_equal 3, reflection.ai_analyses.where.not(actions_json: nil).count
+      assert_equal 1, reflection.ai_analyses.where(is_latest: true).count
+    end
+
+    # PMVV分析の加算を 0 に固定する（週次振り返りの重複カウントのみを検証するため）
+    @user.user_purposes.update_all(is_active: false)
+
+    badge_label = I18n.t("shared.bottom_navigation.tabs.analytics.badge_aria_label")
+
+    travel_to Time.zone.local(2026, 6, 24, 10, 0, 1) do
+      get dashboard_path
+      assert_response :success
+      assert_select "span[aria-label='#{badge_label}']", text: "1"
+    end
+  end
+
+  # ============================================================
+  # H-9（レビュー⑦対応）: 最新AI分析が1件だけのときも青バッジは「1」と表示される
+  # ============================================================
+  #
+  # 【このテストの狙い】
+  #   重複カウント修正（is_latest: true 追加）によって、逆に「正常な1件」まで
+  #   数え落とす（0件になる）ような副作用が無いことを保証する。
+  #   3件→1件テストと対にすることで「多くても少なくても正しく1件」を担保する。
+  test "H-9: 最新AI分析が1件だけのときも青バッジは1件として表示される" do
+    travel_to Time.zone.local(2026, 6, 24, 10, 0, 0) do
+      reflection = @user.weekly_reflections.create!(
+        week_start_date:      HabitRecord.today_for_record.beginning_of_week(:monday) - 1.week,
+        week_end_date:        HabitRecord.today_for_record.beginning_of_week(:monday) - 1.week + 6.days,
+        direct_reason:        "テスト理由",
+        background_situation: "テスト状況",
+        next_action:          "テスト次のアクション",
+        completed_at:         Time.current,
+        is_locked:            true
+      )
+      AiAnalysis.create!(
+        weekly_reflection: reflection,
+        analysis_type:     :weekly_reflection,
+        actions_json:      [ { "type" => "habit", "title" => "単一分析テスト" } ]
+      )
+    end
+
+    @user.user_purposes.update_all(is_active: false)
+    badge_label = I18n.t("shared.bottom_navigation.tabs.analytics.badge_aria_label")
+
+    travel_to Time.zone.local(2026, 6, 24, 10, 0, 1) do
+      get dashboard_path
+      assert_response :success
+      assert_select "span[aria-label='#{badge_label}']", text: "1"
+    end
+  end
+
+  # ============================================================
   # H-7: Empty State data-testid 継続確認テスト
   # ============================================================
   #

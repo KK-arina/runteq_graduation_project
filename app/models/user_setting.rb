@@ -156,4 +156,39 @@ class UserSetting < ApplicationRecord
   def touch_analytics_viewed_at!
     update_columns(last_analytics_viewed_at: Time.current)
   end
+
+  # ============================================================
+  # H-9 追加: PMVV完了バナーを「閉じた」時刻を記録するメソッド
+  # ============================================================
+
+  # touch_pmvv_banner_dismissed_at!
+  # ----------------------------------------------------------
+  # 【役割】
+  #   ダッシュボードのPMVV完了バナーの✖ボタンが押されたときに
+  #   pmvv_banner_dismissed_at を現在時刻に更新する。
+  #   UserPurposesController#dismiss_completion_banner から呼ばれる。
+  #
+  # 【update_columns を使う理由（touch_analytics_viewed_at! と同じ設計方針）】
+  #   閉じたフラグの1列だけを更新する軽量処理のため、
+  #   バリデーション・コールバックをスキップして SQL を1本だけ発行する。
+  #
+  # 【! （バングメソッド）の意味】
+  #   「DBへの書き込みという副作用がある」ことを名前で明示する慣習。
+  #   touch_analytics_viewed_at! と命名規則を統一している。
+  # ----------------------------------------------------------
+  def touch_pmvv_banner_dismissed_at!
+    update_columns(pmvv_banner_dismissed_at: Time.current)
+  end
+
+  # touch_reflection_banner_dismissed_at!
+  # ----------------------------------------------------------
+  # 【役割】
+  #   ダッシュボードの振り返り完了バナーの✖ボタンが押されたときに
+  #   reflection_banner_dismissed_at を現在時刻に更新する。
+  #   WeeklyReflectionsController#dismiss_completion_banner から呼ばれる。
+  #   touch_pmvv_banner_dismissed_at! と同じ設計（update_columns で軽量更新）。
+  # ----------------------------------------------------------
+  def touch_reflection_banner_dismissed_at!
+    update_columns(reflection_banner_dismissed_at: Time.current)
+  end
 end

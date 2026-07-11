@@ -99,6 +99,34 @@ class DashboardsController < ApplicationController
     # これにより SELECT クエリが1回で済む。
     @user_setting = current_user.user_setting
 
+    # ── H-9 追加: PMVV完了バナーの永続表示判定 ────────────────────────────
+    #
+    # 【役割】
+    #   これまでPMVV完了バナーは Turbo Stream のライブ配信専用で、
+    #   リロードすると消えていた。この判定を加えることで、
+    #   サーバー描画時にも「未確認の完了バナー」を復元表示できるようにする。
+    #   （振り返りバナーが @reflection_ai_analysis で復元表示するのと同じ考え方）
+    #
+    # 【表示条件（すべて満たすとき true）】
+    #   ① @current_purpose が completed?         → 分析が完了している
+    #   ② @ai_analysis が存在する                → 表示すべき最新の分析結果がある
+    #   ③ crisis_detected? が false              → 危機検出スキップの分析は完了バナーを出さない
+    #   ④ 未確認である                            → まだ✖で閉じていない、または閉じた後に再分析された
+    #        pmvv_banner_dismissed_at が nil（一度も閉じていない）、または
+    #        最新分析の created_at が閉じた日時より新しい（=再分析で新しい結果が来た）
+    #
+    # 【④の created_at 比較の意味】
+    #   ✖ を押すと pmvv_banner_dismissed_at = 現在時刻 になる。
+    #   その時点の分析は created_at <= dismissed_at になり非表示。
+    #   その後 PMVV を再分析すると新しい分析の created_at > dismissed_at となり再表示される。
+    pmvv_banner_dismissed_at = @user_setting&.pmvv_banner_dismissed_at
+    @show_pmvv_completion_banner =
+      @current_purpose&.completed? &&
+      @ai_analysis.present? &&
+      !@ai_analysis.crisis_detected? &&
+      (pmvv_banner_dismissed_at.nil? || @ai_analysis.created_at > pmvv_banner_dismissed_at)
+    # ─────────────────────────────────────────────────────────────────────
+
     # ── G-9 追加: 振り返りAI分析中・完了バナー用データ ──────────────────────
     #
     # 【なぜ追加が必要か】
@@ -137,6 +165,30 @@ class DashboardsController < ApplicationController
     @reflection_analysis_pending = @latest_completed_reflection.present? &&
                                    @reflection_ai_analysis.nil? &&
                                    @latest_completed_reflection.completed_at >= 1.week.ago
+    # ─────────────────────────────────────────────────────────────────────
+
+    # ── H-9 追加: 振り返り完了バナーの永続表示判定 ────────────────────────
+    #
+    # 【役割】
+    #   これまで振り返り完了バナーは @reflection_ai_analysis の有無だけで
+    #   無条件に復元描画され、✖で閉じてもリロードで復活していた。
+    #   PMVV完了バナー（@show_pmvv_completion_banner）と同じ方式で、
+    #   「未確認（✖で閉じていない、または閉じた後に再分析された）」ときだけ表示する。
+    #
+    # 【表示条件】
+    #   ① @reflection_ai_analysis が存在する（＝既存の表示条件を維持）
+    #   ② 未確認である:
+    #        reflection_banner_dismissed_at が nil（一度も閉じていない）、または
+    #        最新の振り返り分析の created_at が閉じた日時より新しい（=再分析で新しい結果）
+    #
+    # 【crisis 等の追加フィルタを入れない理由】
+    #   既存バナーの表示条件（@reflection_ai_analysis.present?）を変えずに
+    #   「閉じた記憶」だけを上乗せする最小変更に留め、スコープ外の挙動変化を避ける。
+    reflection_banner_dismissed_at = @user_setting&.reflection_banner_dismissed_at
+    @show_reflection_completion_banner =
+      @reflection_ai_analysis.present? &&
+      (reflection_banner_dismissed_at.nil? ||
+       @reflection_ai_analysis.created_at > reflection_banner_dismissed_at)
     # ─────────────────────────────────────────────────────────────────────
   end
 

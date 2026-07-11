@@ -131,4 +131,63 @@ class HabitsControllerTest < ActionDispatch::IntegrationTest
     # assert_redirected_to → 指定URLへリダイレクトされることを確認
     assert_redirected_to %r{/login}
   end
+
+  # ============================================================
+  # H-9: 習慣一覧で habit_excluded_days への追加SELECTが発生しないこと（N+1 回帰テスト）
+  # ============================================================
+  #
+  # 【このテストの狙い】
+  #   Habit#excluded_day_numbers を .pluck → .map に変更したことで、
+  #   habits#index（includes(:habit_excluded_days) 済み）を表示しても
+  #   除外日テーブルへの追加 SELECT が発生しない（preload 済み配列を使う）ことを、
+  #   実際に発行された SQL を数えて決定論的に検証する。
+  #
+  # 【なぜ bullet を test 環境全体で raise させないのか】
+  #   Bullet.raise を test 全体で有効化すると、H-9 と無関係の既存ページに
+  #   潜在的な N+1 があった場合にも別テストが巻き込まれて落ちるリスクがある。
+  #   スコープを本 ISSUE に限定し redo を避けるため、
+  #   /habits に限定した「クエリ数カウント」で検証する。
+  #
+  # 【検証ロジック】
+  #   includes(:habit_excluded_days) の preload は 1 回だけ SELECT を発行する。
+  #   修正後（.map）は各カードが preload 済み配列を読むため追加 SELECT は 0 件
+  #   → habit_excluded_days への SELECT 合計は「1 回以下」になる。
+  #   修正前（.pluck）なら習慣数だけ SELECT が飛び、この assert は失敗する。
+  test "H-9: 習慣一覧で habit_excluded_days への追加SELECTが発生しない（N+1回帰）" do
+    travel_to Time.zone.local(2026, 6, 24, 10, 0, 0) do
+      # 除外日を持つ習慣を複数作成する（N+1 が起きうる状況を作る）
+      3.times do |i|
+        habit = @user.habits.create!(
+          name:             "N+1テスト習慣#{i + 1}",
+          measurement_type: :check_type,
+          weekly_target:    5
+        )
+        habit.habit_excluded_days.create!(day_of_week: 0) # 日曜を除外
+        habit.habit_excluded_days.create!(day_of_week: 6) # 土曜を除外
+      end
+
+      # habit_excluded_days への実 SELECT（キャッシュ・スキーマ照会を除く）を収集する
+      excluded_day_selects = []
+      subscriber = ActiveSupport::Notifications.subscribe("sql.active_record") do |*args|
+        event   = ActiveSupport::Notifications::Event.new(*args)
+        payload = event.payload
+        next if payload[:cached]            # クエリキャッシュのヒットは実DBアクセスではない
+        next if payload[:name] == "SCHEMA"  # スキーマ照会は対象外
+        sql = payload[:sql].to_s
+        excluded_day_selects << sql if sql =~ /SELECT.+habit_excluded_days/i
+      end
+
+      begin
+        get habits_path
+        assert_response :success
+      ensure
+        # 後続テストに影響しないよう必ず購読解除する
+        ActiveSupport::Notifications.unsubscribe(subscriber)
+      end
+
+      assert excluded_day_selects.size <= 1,
+             "habit_excluded_days への SELECT が #{excluded_day_selects.size} 回発行された（N+1 の疑い）。" \
+             "includes(:habit_excluded_days) の preload 済み配列を .map で読むべき。"
+    end
+  end
 end

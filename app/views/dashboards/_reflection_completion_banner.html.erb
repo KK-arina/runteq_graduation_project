@@ -23,9 +23,18 @@
 
 <div>
   <% if reflection.present? %>
+    <%#
+      H-9 追加: data-dismissible-dismiss-url-value
+      ✖押下時に dismissible_controller.js がこのURLへ PATCH を送り、
+      user_setting.reflection_banner_dismissed_at を保存する（リロード後も✖まで残す）。
+      dismiss_completion_banner_weekly_reflections_path は collection ルートのため引数不要。
+      このパーシャルはダッシュボードのサーバー描画と WeeklyReflectionAnalysisJob の
+      ライブ配信の両方から render されるが、パスヘルパーはどちらでも解決できる。
+    %>
     <div class="mb-6 flex items-center justify-between gap-3 px-4 py-3
                 bg-blue-50 border border-blue-300 rounded-xl"
          data-controller="dismissible"
+         data-dismissible-dismiss-url-value="<%= dismiss_completion_banner_weekly_reflections_path %>"
          role="status"
          aria-live="polite">
 
