@@ -127,63 +127,74 @@ class DashboardsController < ApplicationController
       (pmvv_banner_dismissed_at.nil? || @ai_analysis.created_at > pmvv_banner_dismissed_at)
     # ─────────────────────────────────────────────────────────────────────
 
-    # ── G-9 追加: 振り返りAI分析中・完了バナー用データ ──────────────────────
+    # ── G-9 追加 / H-10 修正: 振り返りAI分析の状態判定（分析中・完了・危機スキップ）──
     #
-    # 【なぜ追加が必要か】
-    #   dashboards_controller.rb に WeeklyReflection 関連の処理が存在しないため、
-    #   ダッシュボード初期表示時に「AI分析中」を判定できずバナーが表示されなかった。
-    #   Turbo Stream は「完了時のみ」ブロードキャストするため、
-    #   ページを開いた瞬間にジョブが実行中でも何も表示されない問題が発生していた。
-    #
-    # 【@pending_reflection_analysis の取得条件】
-    #   直近の完了済み振り返りに紐づく AiAnalysis が存在しない
-    #   = AI分析がまだ完了していない（分析中 or 分析待ち）
-    #   この場合「AI分析中」バナーを表示する。
+    # 【H-10 で直している不具合】
+    #   D-5（危機介入機能）で危機ワードが検出されると AI分析はスキップされ、
+    #   crisis_detected: true / actions_json: nil の「スキップ専用レコード」だけが作られる。
+    #   修正前はこのブロックで .where.not(actions_json: nil) を掛けて
+    #   「actions_json が nil のレコード」を除外していたため、危機スキップが最新だと
+    #   「分析結果が1件も無い＝分析中」と誤解釈され、スピナーバナーが永久表示された。
+    #   → 最新レコードを“絞り込まずに”1件取得し、crisis_detected で分岐して解決する。
+
+    # 直近で「完了済み（completed_at あり）」の振り返りを1件取得する。
+    # order(completed_at: :desc).first で「一番最近完了した振り返り」を得る。
     @latest_completed_reflection = current_user.weekly_reflections
                                                .completed
                                                .order(completed_at: :desc)
                                                .first
 
-    @reflection_ai_analysis = if @latest_completed_reflection
-                                 @latest_completed_reflection
-                                   .ai_analyses
-                                   .latest
-                                   .where.not(actions_json: nil)
-                                   .first
-                               end
+    # その振り返りに紐づく「最新（is_latest: true）」の AI分析レコードを1件だけ取得する。
+    #
+    # 【なぜ .latest（= where(is_latest: true)）で1件に絞れるのか】
+    #   ① AiAnalysis の before_create :deactivate_previous_analyses が、
+    #      新しい分析を作る前に同じ振り返りの古い分析を is_latest: false にする。
+    #   ② schema.rb の部分ユニークインデックス（weekly_reflection_id かつ is_latest = true）で
+    #      「1振り返りにつき is_latest: true は最大1件」がDBレベルで保証されている。
+    #   よって .latest.first は「その振り返りの最新分析ちょうど1件（無ければ nil）」になる。
+    #   （危機介入レコードが複数あっても、is_latest: true は常に最新の1件だけ）
+    latest_reflection_analysis =
+      @latest_completed_reflection&.ai_analyses&.latest&.first
 
-    # 分析中フラグ: 直近の振り返りが完了しているが AI 分析がまだ終わっていない場合 true
+    # ① 危機介入によって分析がスキップされたか？（レビュー指摘①: present? を明示）
     #
-    # 【変更前の問題】
-    #   exists? は「AiAnalysisレコードが作成済みだが完了前」を想定していたが、
-    #   振り返り送信直後はジョブ実行前でレコード自体が存在しないため exists? が false になる。
-    #
-    # 【変更後の設計】
-    #   1週間以内に完了した振り返りに限定することで
-    #   「過去の古い振り返り」で分析中バナーが出るリスクを防ぐ。
-    #   exists? を削除して「AI分析なし = 分析待ち or 分析中」として扱う。
-    @reflection_analysis_pending = @latest_completed_reflection.present? &&
-                                   @reflection_ai_analysis.nil? &&
-                                   @latest_completed_reflection.completed_at >= 1.week.ago
-    # ─────────────────────────────────────────────────────────────────────
+    # 【present? && crisis_detected? という書き方にした理由】
+    #   latest_reflection_analysis&.crisis_detected? || false でも動くが、
+    #   「&.（safe navigation）」と「|| false」が混ざると初心者には読みにくい。
+    #   「レコードが存在する（present?）かつ 危機検出（crisis_detected?）」と
+    #   日本語の条件そのままに読めるこの形にする。
+    #   present? が false のときは && の短絡評価でそこで確定するため、
+    #   結果は必ず true / false のどちらかになる（nil にならない）。
+    @reflection_crisis_skipped =
+      latest_reflection_analysis.present? && latest_reflection_analysis.crisis_detected?
 
-    # ── H-9 追加: 振り返り完了バナーの永続表示判定 ────────────────────────
+    # ② 「完了バナー」を出す対象＝通常完了した分析だけを採用する。
     #
-    # 【役割】
-    #   これまで振り返り完了バナーは @reflection_ai_analysis の有無だけで
-    #   無条件に復元描画され、✖で閉じてもリロードで復活していた。
-    #   PMVV完了バナー（@show_pmvv_completion_banner）と同じ方式で、
-    #   「未確認（✖で閉じていない、または閉じた後に再分析された）」ときだけ表示する。
+    # 【actions_json.nil? で判定する理由（＝挙動を一切変えない）】
+    #   修正前の DB 条件 .where.not(actions_json: nil) と“完全に同じ意味”を Ruby 側で再現する。
+    #   （.present? ではなく .nil? を使うのは、提案が空配列 [] の完了分析も従来どおり
+    #     「完了」として扱い、既存挙動と1ミリもズレないようにするため）
+    #   通常完了は actions_json に提案配列が入り nil ではない／危機スキップは nil なので
+    #   ここで自然に除外され、@reflection_ai_analysis には通常完了だけが入る。
     #
-    # 【表示条件】
-    #   ① @reflection_ai_analysis が存在する（＝既存の表示条件を維持）
-    #   ② 未確認である:
-    #        reflection_banner_dismissed_at が nil（一度も閉じていない）、または
-    #        最新の振り返り分析の created_at が閉じた日時より新しい（=再分析で新しい結果）
+    #   ※将来 ai_analyses に status カラム（例: :failed）を追加する際は、この判定を
+    #     AiAnalysis モデルの述語メソッド（completed? 等）へ切り出すとより堅牢になる。
+    #     今回は本ISSUEのスコープ（ダッシュボード表示ロジックのみ）に留め、挙動を維持する。
+    @reflection_ai_analysis =
+      if latest_reflection_analysis && !latest_reflection_analysis.actions_json.nil?
+        latest_reflection_analysis
+      end
+
+    # ③ 「振り返りAI分析中...」バナーを出すかのフラグ。
+    #   判定条件が長くなるため、レビュー指摘⑤に従い private の
+    #   reflection_analysis_pending? に切り出して呼び出す（index を読みやすく保つ）。
+    @reflection_analysis_pending = reflection_analysis_pending?
+
+    # ── H-9: 振り返り完了バナーの永続表示判定（ロジック変更なし）──
     #
-    # 【crisis 等の追加フィルタを入れない理由】
-    #   既存バナーの表示条件（@reflection_ai_analysis.present?）を変えずに
-    #   「閉じた記憶」だけを上乗せする最小変更に留め、スコープ外の挙動変化を避ける。
+    # @reflection_ai_analysis（＝通常完了の分析）が存在し、かつ「未確認（✖で閉じていない or
+    # 閉じた後に再分析された）」ときだけ表示する。危機スキップ時は @reflection_ai_analysis が
+    # nil になるため、このバナーは自動的に非表示になる（＝通常完了バナーの挙動に影響しない）。
     reflection_banner_dismissed_at = @user_setting&.reflection_banner_dismissed_at
     @show_reflection_completion_banner =
       @reflection_ai_analysis.present? &&
@@ -193,6 +204,29 @@ class DashboardsController < ApplicationController
   end
 
   private
+
+  # ── H-10 追加: 「振り返りAI分析中」バナーを出すかの判定（レビュー指摘⑤で切り出し）──
+  #
+  # 【なぜ private メソッドに切り出すか】
+  #   index アクションが縦に長くなり読みにくくなるため、判定条件だけを別メソッドにまとめる。
+  #   このメソッドは index の中で先にセットしたインスタンス変数に依存しているので、
+  #   必ず @latest_completed_reflection / @reflection_ai_analysis / @reflection_crisis_skipped を
+  #   セットした後に呼び出すこと。
+  #
+  # 【各条件の意味】
+  #   @latest_completed_reflection.present?  … 完了済み振り返りが存在する
+  #   @reflection_ai_analysis.nil?           … 通常完了の分析結果がまだ無い
+  #   !@reflection_crisis_skipped            … 危機スキップではない（★H-10 の肝。
+  #                                            これが無いと危機スキップを「分析中」と誤判定し
+  #                                            スピナーが永久表示される）
+  #   completed_at >= 1.week.ago             … 直近1週間以内の振り返りに限定
+  #                                            （古い振り返りで分析中バナーが出るのを防ぐ）
+  def reflection_analysis_pending?
+    @latest_completed_reflection.present? &&
+      @reflection_ai_analysis.nil? &&
+      !@reflection_crisis_skipped &&
+      @latest_completed_reflection.completed_at >= 1.week.ago
+  end
 
   # ============================================================
   # C-6: build_task_priority_stats（タイムゾーン修正版）
