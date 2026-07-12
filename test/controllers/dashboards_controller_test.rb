@@ -366,4 +366,101 @@ class DashboardsControllerTest < ActionDispatch::IntegrationTest
     assert_not_nil @user.user_setting.reflection_banner_dismissed_at
     assert_equal Time.zone.local(2026, 4, 15, 13, 0, 0), @user.user_setting.reflection_banner_dismissed_at
   end
+
+  # =========================================================================
+  # H-10 追加: 危機介入レコードによるダッシュボード「分析中」誤表示の修正
+  # =========================================================================
+  #
+  # 【背景】
+  #   D-5（危機介入機能）で危機ワードが検出されると AI分析はスキップされ、
+  #   crisis_detected: true / actions_json: nil の AiAnalysis だけが作られる。
+  #   修正前はこれを「分析未完了」と誤判定し「振り返りAI分析中...」バナーが
+  #   永久表示された。ここでは回帰しないことを保証するテストを追加する。
+  #
+  # 【検証を文言でなく data-testid で行う理由（レビュー指摘④）】
+  #   assert_select で日本語文言を直接見ると、将来 ja.yml の文言を変えただけで
+  #   テストが落ちてしまう。バナーに付けた data-testid（構造の目印）で検証すれば
+  #   文言変更に強いテストになる。
+
+  # 【共通ヘルパー】完了済み振り返り＋危機スキップの分析（actions_json: nil）を用意する。
+  #   week_start_date は fixtures（2026-01〜02）と衝突しない at 基準の週にする。
+  def create_crisis_skipped_reflection(user, at:)
+    week_start = at.to_date.beginning_of_week(:monday) - 1.week
+    reflection = user.weekly_reflections.create!(
+      week_start_date:      week_start,
+      week_end_date:        week_start + 6.days,
+      direct_reason:        "テスト理由",
+      background_situation: "テスト状況",
+      next_action:          "テスト次のアクション",
+      completed_at:         at,
+      is_locked:            true
+    )
+    analysis = AiAnalysis.create!(
+      weekly_reflection: reflection,
+      analysis_type:     :weekly_reflection,
+      crisis_detected:   true,   # 危機検出によりAI分析をスキップしたレコード
+      actions_json:      nil,    # スキップのため提案（actions_json）は持たない
+      is_latest:         true
+    )
+    [ reflection, analysis ]
+  end
+
+  test "H-10: 危機スキップの分析が最新でも『分析中』スピナーが永続表示されない" do
+    travel_to Time.zone.local(2026, 4, 15, 10, 0, 0) do
+      create_crisis_skipped_reflection(@user, at: Time.current)
+
+      get dashboard_path
+      assert_response :success
+      # 「分析中」スピナーが出ないこと（永続表示バグが直っていること）
+      assert_select "[data-testid='reflection-analysis-pending']", count: 0
+      # 通常の完了バナーも出ないこと（危機スキップは完了ではない）
+      assert_select "[data-testid='reflection-completion']",       count: 0
+    end
+  end
+
+  test "H-10: 危機スキップ時は専用の案内バナーが1件だけ表示される" do
+    travel_to Time.zone.local(2026, 4, 15, 10, 0, 0) do
+      create_crisis_skipped_reflection(@user, at: Time.current)
+
+      get dashboard_path
+      assert_response :success
+      assert_select "[data-testid='reflection-crisis-skipped']", count: 1
+    end
+  end
+
+  test "H-10: 危機スキップの後に通常再分析すると完了バナーへ切り替わる（分析中で止まらない）" do
+    reflection = nil
+    travel_to Time.zone.local(2026, 4, 15, 10, 0, 0) do
+      reflection, _crisis = create_crisis_skipped_reflection(@user, at: Time.current)
+    end
+
+    travel_to Time.zone.local(2026, 4, 15, 11, 0, 0) do
+      # 同じ振り返りへの通常の再分析。is_latest: true にすると
+      # before_create :deactivate_previous_analyses が危機レコードを is_latest: false にする。
+      AiAnalysis.create!(
+        weekly_reflection: reflection,
+        analysis_type:     :weekly_reflection,
+        actions_json:      [ { "type" => "habit", "title" => "再分析の提案" } ],
+        is_latest:         true
+      )
+      # 完了バナーが「未確認」で出るよう、閉じた記録をクリアしておく
+      @user.user_setting.update_columns(reflection_banner_dismissed_at: nil)
+
+      get dashboard_path
+      assert_response :success
+      # 「分析中」でも「見送り」でもなく、完了バナーが出ること（＝待機→完了に切り替わる）
+      assert_select "[data-testid='reflection-analysis-pending']", count: 0
+      assert_select "[data-testid='reflection-crisis-skipped']",   count: 0
+      assert_select "[data-testid='reflection-completion']",       count: 1
+    end
+  end
+
+  test "H-10: バナー用の i18n キーが ja.yml に定義されている（文言テストの代わりの定義漏れ検知）" do
+    # I18n.exists? は「キーが辞書に存在するか」を真偽で返す。
+    # 文言そのものを assert しないため、文言変更ではこのテストは壊れない。
+    # 第2引数に :ja を渡し、default_locale の設定に依存せず日本語辞書を確認する。
+    assert I18n.exists?("dashboards.index.analysis_pending", :ja),   "analysis_pending が未定義です"
+    assert I18n.exists?("dashboards.index.crisis_skipped", :ja),     "crisis_skipped が未定義です"
+    assert I18n.exists?("dashboards.index.crisis_skipped_sub", :ja), "crisis_skipped_sub が未定義です"
+  end
 end

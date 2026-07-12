@@ -1,5 +1,4 @@
-<%# Tailwind の purge 対策: bg-green-500 bg-blue-500 bg-red-400 bg-red-500 text-green-600 text-blue-600 text-red-500 %>
-<%#
+<%# Tailwind の purge 対策: bg-green-500 bg-blue-500 bg-red-400 bg-red-500 text-green-600 text-blue-600 text-red-500 bg-amber-50 border-amber-200 text-amber-800 text-amber-700
   ダッシュボード画面。
   今週の習慣達成率・今日の習慣チェック・タスク優先度別達成率・今日のタスクを表示する。
 
@@ -64,33 +63,71 @@
     初期表示で分析中の場合はコントローラで判定して直接表示する。
   %>
   <% if @reflection_analysis_pending %>
-    <div id="dashboard_reflection_completion_banner">
+    <%# ── ブランチ①: AIが分析実行中の「待機中スピナーバナー」 ── %>
+    <%# data-testid: テストは文言でなくこの識別子で検証するため、文言変更でテストが壊れない %>
+    <div id="dashboard_reflection_completion_banner" data-testid="reflection-analysis-pending">
       <div class="mb-6 flex items-center gap-3 px-4 py-3
                   bg-blue-50 border border-blue-300 rounded-xl"
            role="status" aria-live="polite">
         <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin flex-shrink-0"
              aria-hidden="true"></div>
         <div class="min-w-0">
-          <p class="text-sm font-semibold text-blue-800">振り返りAI分析中...</p>
-          <p class="text-xs text-blue-600 mt-0.5">
-            分析が完了すると自動でお知らせします
-          </p>
+          <%# t(...) で ja.yml の日本語メッセージを安全に呼び出す（i18n） %>
+          <p class="text-sm font-semibold text-blue-800"><%= t("dashboards.index.analysis_pending") %></p>
+          <p class="text-xs text-blue-600 mt-0.5"><%= t("dashboards.index.analysis_pending_sub") %></p>
+        </div>
+      </div>
+    </div>
+  <% elsif @reflection_crisis_skipped %>
+    <%#
+      ── ブランチ②【H-10 新設】危機介入によりAI分析を「見送った」ときの温かい案内バナー ──
+
+      【なぜこのブランチが必要か】
+        危機ワード検出時（D-5）は AI分析をあえてスキップする。修正前はこのレコードを
+        「分析中」と誤判定してスピナーが永久表示された。ここで「分析中」ではなく
+        「見送った」ことを、責めない温かい言葉で伝える。
+
+      【id を他ブランチと同じにする理由】
+        if / elsif / else はどれか1つしか描画されないため、画面上の
+        dashboard_reflection_completion_banner は常に1つだけになる（同一 id が2つ
+        存在すると Turbo の DOM 整合性が崩れるため、必ず1つに保つ）。
+
+      【✖ボタン（閉じる）を付けない理由】
+        このバナーは「分析中スピナー」の置き換え相当で、閉じ状態を保存する専用カラムを
+        持たない最小構成にしている（完了バナーのような dismissible 化は DB 変更を伴うため
+        本ISSUEのスコープ外）。
+    %>
+    <div id="dashboard_reflection_completion_banner" data-testid="reflection-crisis-skipped">
+      <div class="mb-6 flex items-start gap-3 px-4 py-3
+                  bg-amber-50 border border-amber-200 rounded-xl"
+           role="status" aria-live="polite">
+        <span class="text-xl flex-shrink-0" aria-hidden="true">💛</span>
+        <div class="min-w-0">
+          <p class="text-sm font-semibold text-amber-800"><%= t("dashboards.index.crisis_skipped") %></p>
+          <p class="text-xs text-amber-700 mt-0.5"><%= t("dashboards.index.crisis_skipped_sub") %></p>
+          <% if @latest_completed_reflection %>
+            <%# ユーザーが自分の振り返り本文にはいつでもアクセスできるよう詳細ページへのリンクを置く %>
+            <%= link_to t("dashboards.index.view_reflection"),
+                  weekly_reflection_path(@latest_completed_reflection),
+                  class: "mt-1 inline-block text-xs font-bold text-amber-800 hover:underline
+                          focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-1 rounded" %>
+          <% end %>
         </div>
       </div>
     </div>
   <% elsif @show_reflection_completion_banner %>
     <%#
-      H-9 変更: 分析完了済み かつ 未確認（✖で閉じていない or 閉じた後に再分析された）
-      の場合のみ、完了バナーを復元表示する。
-      変更前は @reflection_ai_analysis.present? だけで無条件に描画していたため、
-      ✖で閉じてもリロードで復活していた。PMVV完了バナーと同じ方式に統一する。
+      ── ブランチ③: H-9。分析完了済み かつ 未確認（✖で閉じていない or 閉じた後に再分析）
+      のときだけ完了バナーを復元表示する。危機スキップ時は上の elsif で処理済みのため
+      ここには来ない（＝完了バナーの既存挙動は不変）。
     %>
-    <div id="dashboard_reflection_completion_banner">
+    <div id="dashboard_reflection_completion_banner" data-testid="reflection-completion">
       <%= render "dashboards/reflection_completion_banner",
             reflection:  @latest_completed_reflection,
             ai_analysis: @reflection_ai_analysis %>
     </div>
   <% else %>
+    <%# ── ブランチ④: 表示すべきバナーが無い場合。Turbo Stream が後から差し込めるよう空divを残す ── %>
     <div id="dashboard_reflection_completion_banner"></div>
   <% end %>
 
