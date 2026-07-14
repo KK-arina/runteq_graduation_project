@@ -145,4 +145,51 @@ class CrisisDetectorTest < ActiveSupport::TestCase
     assert_not user_purpose.crisis_word_detected?,
                "通常の入力では検出しないはず"
   end
+
+  # ============================================================
+  # I-1 追加: 全 CRISIS_KEYWORDS の網羅検出 + 誤検出（false positive）ガード
+  # ============================================================
+
+  # 【なぜ全キーワードをループで検証するのか】
+  #   既存テストは代表的な数語だけを個別に確認している。CRISIS_KEYWORDS は
+  #   30語以上あり、将来パターン生成（Regexp.union）をいじったときに
+  #   「一部の語が検出されなくなる」退行を1テストで防ぎたい。
+  #   全キーワードを1語ずつ入力して、必ず検出されることを保証する。
+  test "CRISIS_KEYWORDS の全ワードが検出される" do
+    CrisisDetector::CRISIS_KEYWORDS.each do |keyword|
+      reflection = WeeklyReflection.new(
+        user:            @user,
+        week_start_date: Date.new(2026, 4, 13),  # 月曜
+        week_end_date:   Date.new(2026, 4, 19),  # 6日後の日曜
+        direct_reason:   "#{keyword}という気持ちです"
+      )
+      reflection.valid?  # before_validation で check_crisis_keywords が走る
+      assert reflection.crisis_word_detected?,
+             "危機ワード「#{keyword}」が検出されなかった（パターン生成の退行の可能性）"
+    end
+  end
+
+  # 【なぜ誤検出（false positive）を検証するのか】
+  #   危機ワードと文字が一部重なるだけの一般語まで検出してしまうと、
+  #   通常利用のユーザーに危機介入モーダルが誤表示され体験を損なう。
+  #   完全一致（union の各語そのもの）でのみ反応することを確認する。
+  test "危機ワードと文字が一部重なる一般語は検出しない" do
+    safe_phrases = [
+      "必死に頑張りました",   # 「死」を含むが「死にたい」等ではない
+      "仕事を終わらせたい",   # 「終わりにしたい」とは別語
+      "消しゴムを買いたい",   # 「消えたい」とは別語
+      "自然の中を散歩した"    # 「自殺」とは別語
+    ]
+    safe_phrases.each do |phrase|
+      reflection = WeeklyReflection.new(
+        user:            @user,
+        week_start_date: Date.new(2026, 4, 13),
+        week_end_date:   Date.new(2026, 4, 19),
+        direct_reason:   phrase
+      )
+      reflection.valid?
+      assert_not reflection.crisis_word_detected?,
+                 "一般語「#{phrase}」を誤検出した（過剰検出）"
+    end
+  end
 end

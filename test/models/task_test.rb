@@ -468,4 +468,161 @@ class TaskTest < ActiveSupport::TestCase
     )
     assert_not task.ai_generated?
   end
+
+  # ============================================================
+  # I-1 追加: task_type enum・set_default_task_type コールバック
+  # ============================================================
+  #
+  # 【なぜ追加するのか】
+  #   既存テストは priority / status の enum は検証していたが、
+  #   task_type（normal / habit / improve）の enum と、
+  #   task_type が未指定のときに normal を自動設定する
+  #   before_validation :set_default_task_type コールバックが
+  #   一度も検証されていなかった。I-1（本リリースのテスト網羅）で補う。
+
+  test "task_type enum に normal / habit / improve が定義されている" do
+    # 【assert_includes を使う理由】
+    #   assert_equal 0, Task.task_types[:normal] だと enum の数値順を
+    #   変えた瞬間に壊れる。「キーが存在するか」を見る方が将来変更に強い。
+    assert_includes Task.task_types.keys, "normal",  "normal が task_type enum に定義されていない"
+    assert_includes Task.task_types.keys, "habit",   "habit が task_type enum に定義されていない"
+    assert_includes Task.task_types.keys, "improve", "improve が task_type enum に定義されていない"
+  end
+
+  test "normal? / habit? / improve? が正しく動作する" do
+    # enum を定義すると Rails が自動で「◯◯?」という述語メソッドを生成する。
+    # その述語が現在の task_type と一致したときだけ true を返すことを確認する。
+    @valid_task.task_type = :habit
+    assert @valid_task.habit?
+    assert_not @valid_task.normal?
+
+    @valid_task.task_type = :improve
+    assert @valid_task.improve?
+  end
+
+  test "task_type が nil のとき set_default_task_type で normal が自動設定される" do
+    # 【このテストが検証している実際のバグ】
+    #   フォームで種別を選ばずに送信すると task_type が空（nil）で届く。
+    #   tasks.task_type は NOT NULL 制約なので、そのまま保存すると
+    #   DB エラー（NOT NULL 制約違反）になってしまう。
+    #   before_validation :set_default_task_type がこれを防ぐ。
+    #
+    # 【なぜ new した直後ではなく nil を代入して検証するのか】
+    #   Task.new は DB のデフォルト値(default: 0 = normal)を読み込むため、
+    #   何も指定しなくても task_type は最初から "normal" になっている。
+    #   そのため「コールバックが効いているか」を正しく確かめるには、
+    #   一度 nil にリセットしてから valid?（＝before_validation発火）を通す必要がある。
+    task = Task.new(user: @user, title: "種別未指定タスク", priority: :must)
+    task.task_type = nil      # フォーム未選択で送られてきた状況を再現する
+    assert_nil task.task_type # この時点ではまだ nil
+
+    task.valid?               # valid? を呼ぶと before_validation が走る
+
+    assert task.normal?, "task_type が nil のとき normal が自動設定されること"
+  end
+
+  # ============================================================
+  # I-1 追加: priority の presence バリデーション
+  # ============================================================
+  #
+  # 【なぜ追加するのか】
+  #   既存テストは must?/should?/could? の動作は見ていたが、
+  #   「priority が空なら無効」という presence バリデーション自体を
+  #   検証していなかった。優先度は必須項目なので明示的にテストする。
+  test "priority が nil なら無効（必須項目）" do
+    # enum 属性には nil を代入できる（未選択状態を表現できる）。
+    # その状態で presence: true のバリデーションが働くことを確認する。
+    @valid_task.priority = nil
+    assert_not @valid_task.valid?
+    # ja.yml の errors.models.task.priority.blank = "を入力してください"
+    # が使われるため、エラー配列にこの文言が含まれる。
+    assert_includes @valid_task.errors[:priority], "を入力してください"
+  end
+
+  # ============================================================
+  # I-1 追加: belongs_to :habit は optional（習慣に紐付かなくても有効）
+  # ============================================================
+  #
+  # 【なぜ追加するのか】
+  #   Task は habit_id が NULL 許容（習慣と無関係のタスクも作れる）。
+  #   モデルで optional: true を付け忘れると "Habit must exist" エラーで
+  #   全タスク作成が失敗する。回帰を防ぐため明示的に検証する。
+  test "habit を紐付けなくてもタスクは有効" do
+    @valid_task.habit = nil
+    assert @valid_task.valid?, @valid_task.errors.full_messages.to_s
+  end
+
+  # ============================================================
+  # I-1 追加: scope overdue（期限切れ かつ 未完了）
+  # ============================================================
+  #
+  # 【なぜ追加するのか】
+  #   既存テストには overdue?（インスタンスメソッド）のテストはあるが、
+  #   一覧取得に使う Task.overdue（スコープ）のテストが無かった。
+  #   メソッドとスコープは別物（片方だけ壊れることがある）なので個別に検証する。
+  test "scope overdue は期限切れかつ done/archived 以外のタスクを返す" do
+    # HabitRecord.today_for_record は AM4:00 基準の「今日」を返す共通メソッド。
+    # 日付の基準を1箇所に統一するため、テストでもこれを使う。
+    overdue_todo = Task.create!(
+      user:     @user,
+      title:    "期限切れ・未完了",
+      priority: :must,
+      status:   :todo,
+      due_date: HabitRecord.today_for_record - 1.day   # 昨日が期限
+    )
+    overdue_done = Task.create!(
+      user:     @user,
+      title:    "期限切れ・完了済み",
+      priority: :must,
+      status:   :done,
+      due_date: HabitRecord.today_for_record - 1.day
+    )
+    future_todo = Task.create!(
+      user:     @user,
+      title:    "未来期限・未完了",
+      priority: :must,
+      status:   :todo,
+      due_date: HabitRecord.today_for_record + 1.day   # 明日が期限
+    )
+
+    overdue_ids = Task.overdue.where(user: @user).pluck(:id)
+    assert_includes     overdue_ids, overdue_todo.id, "期限切れ未完了は overdue に含まれる"
+    assert_not_includes overdue_ids, overdue_done.id, "完了済みは overdue から除外される"
+    assert_not_includes overdue_ids, future_todo.id,  "未来期限は overdue に含まれない"
+  end
+
+  # ============================================================
+  # I-1 追加: scope active の並び順
+  # ============================================================
+  #
+  # 【なぜ追加するのか】
+  #   既存テストは active が「deleted_at IS NULL を返す」ことは見ていたが、
+  #   active スコープが持つ ORDER BY（priority ASC → due_date ASC NULLS LAST
+  #   → created_at ASC）の並び順を検証していなかった。
+  #   一覧の表示順はUXに直結するため、順序そのものを固定テストで守る。
+  test "scope active は priority昇順 → due_date昇順(NULLは最後) の順に並ぶ" do
+    # @user は setup で作った新規ユーザーなので、既存タスクは持たない。
+    # そのため下記3件だけで並び順を厳密に検証できる。
+    must_today = Task.create!(
+      user: @user, title: "must-今日", priority: :must,
+      due_date: HabitRecord.today_for_record
+    )
+    must_no_due = Task.create!(
+      user: @user, title: "must-期限なし", priority: :must
+      # due_date を指定しない → NULL（NULLS LAST で最後に並ぶ）
+    )
+    should_today = Task.create!(
+      user: @user, title: "should-今日", priority: :should,
+      due_date: HabitRecord.today_for_record
+    )
+
+    ordered_ids = Task.active.where(user: @user).pluck(:id)
+
+    # 期待順:
+    #   1. must-今日     … priority=must(0)・due_dateあり
+    #   2. must-期限なし … priority=must(0)・due_dateがNULL → 同じpriority内では最後
+    #   3. should-今日   … priority=should(1) → mustより後
+    assert_equal [ must_today.id, must_no_due.id, should_today.id ], ordered_ids,
+                 "active スコープの並び順が priority昇順→due_date昇順(NULL最後) になっていない"
+  end
 end

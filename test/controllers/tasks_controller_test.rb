@@ -250,4 +250,45 @@ class TasksControllerTest < ActionDispatch::IntegrationTest
 
     assert_select "[data-testid='tasks-done-empty-state']"
   end
+
+  # ============================================================
+  # I-1 追加: 作成→完了→アーカイブの一連フロー（エンドツーエンド）
+  # ============================================================
+  #
+  # 【なぜ追加するのか】
+  #   既存テストは create / toggle_complete / archive を「個別に」検証しているが、
+  #   POSTで作成したタスクを完了にし、さらにアーカイブするという
+  #   一連の動線（エンドツーエンド）は通しで検証されていなかった。
+  #   1本のフローとして繋げ、状態遷移が最後まで破綻しないことを保証する。
+  test "作成→完了→アーカイブの一連フローが最後まで正しく遷移する" do
+    # ① 作成: POST で新規タスクを作る（通常のHTMLリクエスト）
+    assert_difference "@user.tasks.count", 1 do
+      post tasks_path, params: {
+        task: { title: "通しフロー用タスク", priority: "must", task_type: "normal" }
+      }
+    end
+    assert_redirected_to tasks_path
+
+    task = @user.tasks.order(:created_at).last
+    assert task.todo?, "作成直後は todo 状態"
+
+    # ② 完了: toggle_complete で done にする（Turbo Stream）
+    patch toggle_complete_task_path(task),
+          headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    assert_response :success
+    task.reload
+    assert task.done?,             "完了操作後は done 状態"
+    assert_not_nil task.completed_at, "完了日時が記録される"
+
+    # ③ アーカイブ: done のタスクを archive する（Turbo Stream）
+    patch archive_task_path(task),
+          headers: { "Accept" => "text/vnd.turbo-stream.html" }
+    assert_response :success
+    task.reload
+    assert task.archived?,         "アーカイブ操作後は archived 状態"
+
+    # ④ 最終確認: 有効な done 一覧には残らない（アーカイブされたため）
+    assert_not_includes @user.tasks.active.where(status: :done), task,
+                        "アーカイブ後は有効な完了タスク一覧から外れる"
+  end
 end
