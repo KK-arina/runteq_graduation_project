@@ -293,15 +293,23 @@ class UserPurposesController < ApplicationController
 
   private
 
-  # ── D-5 追加: record_crisis_analysis_for_purpose ──────────────────────────
+  # ── D-5 追加 / I-1 修正: record_crisis_analysis_for_purpose ────────────────
   #
   # 【役割】
   #   PMVV 入力で危機ワードが検出されたときに
-  #   crisis_detected=true の AiAnalysis レコードを作成する。
+  #   crisis_detected=true の AiAnalysis レコードを作成する（危機検出の監査記録）。
   #
   # 【なぜ create（!なし）を使うか】
   #   crisis の記録に失敗しても PMVV の保存は成功扱いにするため。
   #   create! は例外を発生させるので使わない。
+  #
+  # 【I-1 修正の要点（重要）】
+  #   この分析は analysis_type: :purpose_breakdown なので、AiAnalysis の
+  #   D-9 バリデーション input_snapshot_schema_valid により
+  #   input_snapshot に purpose / mission / vision / value / current_situation の
+  #   5キーが必須になる。修正前はこの5キーを入れていなかったため検証で弾かれ、
+  #   create（非bang）が保存に失敗し「危機の監査レコードが残らない」不具合があった。
+  #   → input_snapshot に PMVV の5キーを含めて検証を満たし、確実に保存されるようにする。
   def record_crisis_analysis_for_purpose(user_purpose)
     result = AiAnalysis.create(
       user_purpose_id:  user_purpose.id,
@@ -309,6 +317,14 @@ class UserPurposesController < ApplicationController
       crisis_detected:  true,
       is_latest:        true,
       input_snapshot: {
+        # D-9 スキーマ検証（purpose_breakdown は5キー必須）を満たすためのPMVV5キー。
+        # 値は nil でも「キーが存在すれば可」の設計なのでそのまま渡してよい。
+        purpose:            user_purpose.purpose,
+        mission:            user_purpose.mission,
+        vision:             user_purpose.vision,
+        value:              user_purpose.value,
+        current_situation:  user_purpose.current_situation,
+        # 危機検出の監査用メタ情報（従来どおり保持）
         user_purpose_id:    user_purpose.id,
         version:            user_purpose.version,
         crisis_detected_at: Time.current.iso8601,

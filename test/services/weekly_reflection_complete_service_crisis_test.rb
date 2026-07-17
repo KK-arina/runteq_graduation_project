@@ -118,4 +118,41 @@ class WeeklyReflectionCompleteServiceCrisisTest < ActiveSupport::TestCase
       ).call
     end
   end
+
+  # ============================================================
+  # I-1 追加: 危機検出時のジョブ抑制と記録内容の詳細検証
+  # ============================================================
+
+  # 【なぜ UpdateAiProfileJob も検証するのか】
+  #   危機検出時、サービスは enqueue_analysis_job_if_eligible を通らない設計。
+  #   そのため AI分析ジョブだけでなく、その中で呼ばれる
+  #   AIプロファイル更新ジョブ(UpdateAiProfileJob)も一緒に抑制される。
+  #   この「巻き添え抑制」が保たれていることを確認する。
+  test "危機ワード検出時は UpdateAiProfileJob もエンキューされない" do
+    assert_no_enqueued_jobs(only: UpdateAiProfileJob) do
+      WeeklyReflectionCompleteService.new(
+        reflection: @reflection,
+        user:       @user,
+        was_locked: false
+      ).call
+    end
+  end
+
+  # 【なぜ記録の中身まで検証するのか】
+  #   crisis_detected: true だけでなく、あとから運営が追跡・集計できるよう
+  #   「最新フラグ(is_latest)」「分析種別(weekly_reflection)」
+  #   「prompt_version が crisis_skip」であることまで固定する。
+  test "危機時に作成される AiAnalysis の中身が正しい" do
+    WeeklyReflectionCompleteService.new(
+      reflection: @reflection,
+      user:       @user,
+      was_locked: false
+    ).call
+
+    ai = AiAnalysis.order(created_at: :desc).first
+    assert ai.crisis_detected,                       "crisis_detected は true"
+    assert ai.is_latest,                             "is_latest は true（最新分析として記録）"
+    assert_equal "weekly_reflection", ai.analysis_type,  "分析種別は weekly_reflection"
+    assert_equal "crisis_skip",       ai.prompt_version, "prompt_version は crisis_skip"
+  end
 end
