@@ -111,7 +111,8 @@ flowchart LR
 [![H-8 パーソナライズAIコンテキスト生成](https://img.shields.io/badge/H--8_パーソナライズAIコンテキスト生成-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/h-8-personalize-ai-context)
 [![H-9 N+1最適化・バナー永続化](https://img.shields.io/badge/H--9_N%2B1最適化・バナー永続化-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/H-9-n-plus-one-optimization)
 [![H-10 危機介入バナー誤表示修正](https://img.shields.io/badge/H--10_危機介入バナー誤表示修正-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/h-10-crisis-skipped-banner)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-65%2F70_ISSUE-f59e0b?style=flat-square)]()
+[![I-1 統合・モデルテスト](https://img.shields.io/badge/I--1_統合・モデルテスト-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-1-integration-model-tests)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-66%2F70_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
