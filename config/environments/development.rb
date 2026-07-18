@@ -19,11 +19,55 @@ Rails.application.configure do
 
   # Enable/disable caching. By default caching is disabled.
   # Run rails dev:cache to toggle caching.
+  #
+  # ============================================================
+  # Issue #I-6: 開発環境のキャッシュストアを Solid Cache に変更
+  # ============================================================
+  #
+  # 【tmp/caching-dev.txt トグルの仕組み（既存・変更なし）】
+  #   docker compose exec web bin/rails dev:cache を実行すると
+  #   tmp/caching-dev.txt が作られ（もう一度実行すると消える）、
+  #   このファイルの有無でキャッシュのON/OFFが切り替わる。
+  #   普段の開発ではキャッシュOFF（= コードやデータの変更が即座に画面に反映される）、
+  #   キャッシュの動作確認をしたいときだけONにする、という使い分けができる。
+  #
+  # 【#I-6 での変更点: :memory_store → :solid_cache_store】
+  #
+  #   変更前（:memory_store）の問題:
+  #     Ruby プロセスのメモリ上にキャッシュを持つため、
+  #     本番（Solid Cache = DBのテーブル）とは別物の実装になる。
+  #     すると「開発では動いたのに本番でだけ落ちる」典型的な事故が起きる:
+  #       ・solid_cache_entries テーブルの作り忘れに気づけない
+  #         （本番で初めて PG::UndefinedTable が出る）
+  #       ・Solid Cache 固有の制約（delete_matched が使えない等）を
+  #         開発中に踏まずにすり抜けてしまう
+  #
+  #   変更後（:solid_cache_store）の利点:
+  #     開発環境でも本番とまったく同じキャッシュ実装を使う。
+  #     これは config/application.rb の GoodJob 設定コメントにある
+  #     「全環境で一貫して使うことで『開発と本番の動作差異』をなくす」という
+  #     HabitFlow の既存方針と同じ考え方。
+  #     ローカルの habitflow_development に solid_cache_entries が作られ、
+  #     マイグレーションが正しく通っていることも同時に検証できる。
+  #
+  # 【キャッシュOFF時に :null_store のままにする理由（変更なし）】
+  #   :null_store は「書き込みを捨て、読み込みは常に空を返す」ストア。
+  #   Rails.cache.fetch("key") { 重い計算 } は毎回ブロックを実行するため、
+  #   キャッシュを入れる前とまったく同じ挙動になる。
+  #   普段の開発でデータ変更が即反映されるこの状態を維持したいので、
+  #   既定はOFF（:null_store）のままにする。
   if Rails.root.join("tmp/caching-dev.txt").exist?
     config.action_controller.perform_caching = true
+
+    # enable_fragment_cache_logging: true
+    #   ビューの cache ブロックがヒットしたか外したかを
+    #   Rails のログに "Read fragment views/... (0.5ms)" のように出力する。
+    #   #I-6 の動作確認（2回目のアクセスでDBクエリが減っているか）で必須。
     config.action_controller.enable_fragment_cache_logging = true
 
-    config.cache_store = :memory_store
+    # #I-6 変更: :memory_store → :solid_cache_store
+    config.cache_store = :solid_cache_store
+
     config.public_file_server.headers = { "Cache-Control" => "public, max-age=#{2.days.to_i}" }
   else
     config.action_controller.perform_caching = false

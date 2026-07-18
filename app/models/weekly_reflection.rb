@@ -57,6 +57,44 @@ class WeeklyReflection < ApplicationRecord
   before_validation :set_year_and_week_number
 
   # ============================================================
+  # Issue #I-6: キャッシュの無効化（after_commit）
+  # ============================================================
+  #
+  # 【役割】
+  #   振り返りが保存・完了・更新されたとき、グラフページ（19番）の
+  #   キャッシュを削除する。ISSUE の
+  #   「グラフ集計データ: 振り返り保存時に expire」に対応する。
+  #
+  # 【なぜグラフだけでダッシュボードは消さないのか】
+  #   ダッシュボードのキャッシュに入っているのは
+  #   「習慣記録の集計値」だけで、振り返りのデータは一切含まれていない。
+  #   （ダッシュボードの振り返りバナーは @reflection_ai_analysis 等の
+  #     インスタンス変数で毎回DBから取得しており、キャッシュしていない）
+  #   関係のないキャッシュを消すのは無駄なDELETEクエリを増やすだけなので消さない。
+  #
+  # 【グラフページのどこに影響するのか】
+  #   ・気分スコアの棒グラフ（mood_chart_data）
+  #   ・当月サマリーカードの「平均気分」（monthly_summary[:avg_mood]）
+  #   どちらも completed な weekly_reflections を集計しているため、
+  #   complete!（update! で completed_at をセット）のタイミングで
+  #   この after_commit が発火して確実にキャッシュが消える。
+  #
+  # 【WeeklyReflectionCompleteService との関係】
+  #   complete! は ApplicationRecord.with_transaction の内側で呼ばれるが、
+  #   after_commit はそのトランザクションの COMMIT 完了後に発火する。
+  #   「トランザクション内はDBアクセスのみ」という #A-7 の原則を守れる。
+  #
+  # 【数値補正（apply_numeric_corrections!）との二重発火について】
+  #   振り返り完了時は habit_record も更新されるため、
+  #   HabitRecord 側の after_commit からもグラフのキャッシュ削除が呼ばれる。
+  #   結果として同じキーへの DELETE が複数回走ることがあるが、
+  #   存在しないキーへの delete は false を返すだけで例外にならず、
+  #   キャッシュが「消えすぎる」ことによる不具合も起きない。
+  #   重複を避けるための複雑な制御を入れるより、
+  #   確実に消えることを優先するほうが安全という判断。
+  after_commit :expire_analytics_cache_for_user
+
+  # ============================================================
   # バリデーション
   # ============================================================
   validates :week_start_date, presence: true
@@ -174,6 +212,24 @@ class WeeklyReflection < ApplicationRecord
   # プライベートメソッド
   # ============================================================
   private
+
+  # ── Issue #I-6 追加: expire_analytics_cache_for_user ──────────────────────
+  #
+  # 【役割】
+  #   この振り返りの持ち主のグラフページのキャッシュを削除する。
+  #
+  # 【メソッド名に _for_user を付ける理由】
+  #   ApplicationRecord.expire_analytics_cache と名前が衝突すると
+  #   「どちらを呼んでいるのか」が読み手に伝わりにくい。
+  #   「このユーザーの分を消す」という意図を名前で明示する。
+  #
+  # 【user_id を使う理由】
+  #   weekly_reflections テーブルは user_id カラムを持つため、
+  #   self.user を呼ばずに直接読めば追加のDBアクセスは0件。
+  def expire_analytics_cache_for_user
+    ApplicationRecord.expire_analytics_cache(user_id)
+  end
+  # ──────────────────────────────────────────────────────────────────────────
 
   def crisis_text_fields
     [

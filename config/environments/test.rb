@@ -22,6 +22,29 @@ Rails.application.configure do
 
   # Show full error reports and disable caching.
   config.consider_all_requests_local = true
+
+  # ============================================================
+  # Issue #I-6: テスト環境ではキャッシュを無効のままにする（意図的な判断）
+  # ============================================================
+  #
+  # 【なぜ #I-6 で Solid Cache を導入してもテスト環境は :null_store のままなのか】
+  #
+  #   ① 既存 841 テストを1つも壊さないため（最重要）
+  #      :null_store は「書き込みを捨て、読み込みは常に空を返す」ストア。
+  #      Rails.cache.fetch("key") { 集計処理 } は毎回ブロックを実行するので、
+  #      キャッシュ導入前とまったく同じ挙動になる。
+  #      逆にここを :solid_cache_store にすると、テスト間でキャッシュが残り
+  #      「単体では通るのにランダム実行順で落ちる」という
+  #      最も原因究明が困難な不安定テストを生む危険がある。
+  #
+  #   ② キャッシュそのものの検証は専用テストで行うため
+  #      test/integration/solid_cache_store_test.rb で、そのテストの中だけ
+  #      一時的に Rails.cache を :solid_cache_store に差し替えて検証し、
+  #      teardown で必ず元に戻す。
+  #      これにより「キャッシュ機構は検証する」「他テストは汚さない」を両立する。
+  #
+  #   ③ perform_caching = false によりビューの cache ブロックも素通りする
+  #      18番ページのフラグメントキャッシュがテスト結果に影響しない。
   config.action_controller.perform_caching = false
   config.cache_store = :null_store
 

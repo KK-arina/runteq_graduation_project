@@ -43,12 +43,24 @@ class AnalyticsController < ApplicationController
   before_action :require_login
 
   # PERIOD_KEYS: 期間フィルターとして許可する値のホワイトリスト
-  # 【なぜホワイトリスト方式にするのか】
+  #
+  # 【なぜホワイトリスト方式にするのか（変更なし）】
   #   params[:period] はユーザーが自由に書き換えられるクエリパラメータ。
   #   想定外の値（例: ?period=DROP TABLE 等）が来ても、
   #   presence_in でこの配列に含まれる値以外は弾かれて
   #   デフォルト値（4w）にフォールバックするため安全。
-  PERIOD_KEYS = %w[4w 12w all].freeze
+  #
+  # 【#I-6 変更: 定義元を ApplicationRecord に移した理由】
+  #   habit_record や weekly_reflection が保存されたとき、
+  #   モデルの after_commit が「4w / 12w / all すべてのキャッシュ」を消す必要がある。
+  #   モデル側から AnalyticsController::PERIOD_KEYS を参照すると
+  #   「モデルがコントローラーに依存する」という依存関係の逆流が起きるため、
+  #   定義そのものを ApplicationRecord に移動し、こちらが参照する形にした。
+  #
+  #   これにより「期間の種類」の定義はアプリ内で1箇所だけになり、
+  #   将来 24w を追加したときにキャッシュの消し忘れが起きない。
+  #   値（%w[4w 12w all]）は従来と完全に同一のため、既存の動作・テストに影響はない。
+  PERIOD_KEYS = ApplicationRecord::ANALYTICS_PERIOD_KEYS
 
   # CHART_COLOR_PALETTE: 習慣にカラーが未設定の場合に使う既定の配色
   # 【なぜ必要か】
@@ -112,15 +124,85 @@ class AnalyticsController < ApplicationController
     # ビュー側は @has_data が false のときだけ Empty State を表示する。
     return unless @has_data
 
-    @weeks_count = resolve_weeks_count(@period)
+    # ── #I-6: 集計結果をキャッシュから取得する ────────────────────────────
+    #
+    # 【なぜこのページのキャッシュが最も効果的なのか】
+    #   このページは3つのSQLに加えて、
+    #     「習慣の数 × 週の数」のネストしたRubyループ（build_habit_chart_data）
+    #     「月の日数 × 習慣の数」のループ（build_monthly_summary）
+    #   を毎回実行している。全期間（最大260週＝約5年）を選ぶと
+    #   数千件の習慣記録に対してRubyの計算が走る、アプリで最も重い画面。
+    #   完成したグラフ用データをそのままキャッシュすることで、
+    #   2回目以降はSQLもRubyの計算も丸ごとスキップできる。
+    #
+    # 【expires_in: 6.hours（ISSUE の指定どおり）】
+    #   after_commit による明示的な削除が主役で、これは保険。
+    #   グラフは「振り返って眺めるページ」でありリアルタイム性を要求しないため、
+    #   ダッシュボード（1時間）より長い6時間を設定している。
+    #
+    # 【キャッシュに入れるもの・入れないものの線引き】
+    #   ○ 入れる: @habit_chart_data / @monthly_summary / @mood_chart_data
+    #             → 数値・文字列・配列だけで構成された素のHash（Marshal 可能）
+    #   ✗ 入れない: @habits
+    #             → ActiveRecord のインスタンス。キャッシュすると
+    #               「習慣名を変えたのにグラフの下の一覧だけ古い」といった
+    #               不整合が起きるうえ、Marshal のサイズも無駄に大きくなる。
+    #               毎回DBから取得する（元々1クエリなので影響はごく小さい）。
+    #
+    # 【キーに current_user.id を含める重要性】
+    #   含め忘れると他人のグラフが表示される重大な情報漏洩になる。
+    #   ApplicationRecord.analytics_cache_key が必ず user_id を含めて組み立てる。
+    cached = Rails.cache.fetch(
+      ApplicationRecord.analytics_cache_key(current_user.id, @period, @today),
+      expires_in: 6.hours
+    ) do
+      build_chart_payload
+    end
+
+    # キャッシュから取り出した値をビュー用のインスタンス変数に展開する。
+    # 【なぜ @週変数を減らしたのか】
+    #   @weeks_count / @week_starts はビュー（analytics/index.html.erb）では
+    #   使われていない内部計算用の変数だったため、
+    #   build_chart_payload の中のローカル変数に格下げした。
+    #   キャッシュに入れる必要がないデータを減らすことで、
+    #   保存サイズと「何がキャッシュされているか」の分かりにくさを削減する。
+    @habit_chart_data = cached[:habit_chart_data]
+    @monthly_summary  = cached[:monthly_summary]
+    @mood_chart_data  = cached[:mood_chart_data]
+  end
+
+  private
+
+  # ── #I-6 追加: build_chart_payload ────────────────────────────────────────
+  #
+  # 【役割】
+  #   グラフページに必要な3種類のデータを組み立てて1つのHashで返す。
+  #   このメソッドの中身がまるごとキャッシュされる。
+  #
+  # 【なぜ1つのHashにまとめるのか】
+  #   Rails.cache.fetch を3回に分けると、キャッシュの読み書きも3回になる
+  #   （＝Solid Cache では SELECT が3回に増える）。
+  #   3つのデータは常にセットで必要になるため、1つのキーにまとめることで
+  #   キャッシュアクセスを1回に抑えられる。
+  #
+  # 【H-4 の N+1 対策はそのまま維持している】
+  #   ・habit_records は期間全体を1回の pluck でまとめて取得
+  #   ・bulk_range_start でグラフ用と当月サマリー用の範囲を統合して1クエリに集約
+  #   ・target は習慣ごとに1回だけ計算してループの外に出す
+  #   これらの設計は一切変更していない。
+  #   （キャッシュが効かない初回アクセス時のクエリ数は今までと同一）
+  def build_chart_payload
+    # weeks_count / chart_period_start / month_start / bulk_range_start / week_starts は
+    # このメソッドの中でしか使わないためローカル変数にする（元は @ 付きだった）。
+    weeks_count = resolve_weeks_count(@period)
 
     # チャートに表示する期間の開始日（必ず月曜日になる）
-    chart_period_start = @today.beginning_of_week(:monday) - (@weeks_count - 1).weeks
+    chart_period_start = @today.beginning_of_week(:monday) - (weeks_count - 1).weeks
 
     # 当月サマリー用の月初日
     month_start = @today.beginning_of_month
 
-    # ── 習慣記録の一括取得（N+1対策の核心部分）────────────────────────────
+    # ── 習慣記録の一括取得（N+1対策の核心部分・H-4 から変更なし）──────────
     #
     # 【bulk_range_start の意味】
     #   チャート期間の開始日と「当月の月初日」のうち、より早い方を
@@ -128,16 +210,10 @@ class AnalyticsController < ApplicationController
     #     ① 折れ線グラフ用のデータ（chart_period_start 〜 today）
     #     ② 当月サマリー用のデータ（month_start 〜 today）
     #   の両方を「1回のクエリ」でカバーできる。
-    #   月次サマリー専用に別クエリを発行すると2クエリ目が発生してしまうため、
-    #   範囲を統合して1クエリに集約している。
     bulk_range_start = [ chart_period_start, month_start ].min
 
-    @week_starts = build_week_starts(chart_period_start, @today)
+    week_starts = build_week_starts(chart_period_start, @today)
 
-    # 【pluck を使う理由】
-    #   ActiveRecord オブジェクトを生成せず、必要な4カラムの値だけを
-    #   配列の配列として取得する。大量の習慣記録を扱う可能性がある画面のため、
-    #   オブジェクト生成コストを避けて軽量に処理する。
     habit_records =
       if @has_habits
         HabitRecord
@@ -152,10 +228,7 @@ class AnalyticsController < ApplicationController
         []
       end
 
-    @habit_chart_data = build_habit_chart_data(@habits, @week_starts, habit_records)
-    @monthly_summary  = build_monthly_summary(@habits, habit_records, month_start)
-
-    # ── 気分スコアの推移データ（棒グラフ用）────────────────────────────────
+    # ── 気分スコアの推移データ（棒グラフ用・H-4 から変更なし）──────────────
     # mood が nil の振り返り（気分スコア未入力）はグラフに含めない。
     reflections = current_user.weekly_reflections
                               .completed
@@ -164,10 +237,17 @@ class AnalyticsController < ApplicationController
                               .order(:week_start_date)
                               .pluck(:week_start_date, :mood)
 
-    @mood_chart_data = build_mood_chart_data(reflections)
+    # 【戻り値がキャッシュされる】
+    #   シンボルキーのHashで返す。Marshal でシリアライズされ、
+    #   solid_cache_entries.value（bytea）に保存される。
+    #   中身は数値・文字列・Date・配列のみのため安全に復元できる。
+    {
+      habit_chart_data: build_habit_chart_data(@habits, week_starts, habit_records),
+      monthly_summary:  build_monthly_summary(@habits, habit_records, month_start),
+      mood_chart_data:  build_mood_chart_data(reflections)
+    }
   end
-
-  private
+  # ──────────────────────────────────────────────────────────────────────────
 
   # ============================================================
   # resolve_weeks_count: 期間フィルターに対応する週数を返す

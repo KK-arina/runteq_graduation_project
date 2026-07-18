@@ -397,6 +397,47 @@ end
 # 【参考】https://github.com/rails/solid_cable
 gem "solid_cable"
 
+# ============================================================
+# Issue #I-6: Solid Cache（Redis不要のキャッシュストア）
+# ============================================================
+#
+# 【Solid Cache とは何か】
+#   PostgreSQL のテーブル（solid_cache_entries）を保存先として使う
+#   ActiveSupport::Cache::Store の実装。
+#   Rails.cache.fetch / Rails.cache.write などの標準APIがそのまま使える。
+#
+# 【なぜ Solid Cache を選ぶのか】
+#   キャッシュの保存先には複数の選択肢がある:
+#     - Redis / Memcached → 別サーバーが必要。Render では有料アドオンになる
+#     - :memory_store     → プロセスごとに別のキャッシュを持つ。
+#                            本番は Puma Worker が2つ動いているため、
+#                            Worker1 が消したキャッシュが Worker2 に残り
+#                            「古いデータが表示され続ける」事故が起きる
+#     - :file_store（Rails既定） → Render はデプロイのたびにファイルが消える
+#                                   （エフェメラルなファイルシステム）
+#     - Solid Cache       → 既存の Neon PostgreSQL をそのまま使える。
+#                            全 Worker が同じテーブルを見るため上記の不整合が起きない ← これを採用
+#
+#   HabitFlow は既に GoodJob（PostgreSQLベースのジョブ基盤）と
+#   solid_cable（PostgreSQLベースの Action Cable）を採用しており、
+#   「Redis を足さずに PostgreSQL だけで完結させる」という一貫した方針に合致する。
+#
+# 【なぜ "~> 1.0" でバージョンを固定するのか】
+#   最新安定版は 1.0.10（2025年11月8日リリース・MITライセンス・無料）。
+#   ~> 1.0 は「1.x 系の最新版」を許可し、2.0 への破壊的変更を自動で取り込まない。
+#   solid_cable を "solid_cable"（固定なし）で書いている箇所もあるが、
+#   Solid Cache は Rails 8 で標準採用された関係でメジャーバージョンが上がる
+#   可能性があるため、rack-attack や omniauth-line-v2_1 と同じく明示的に固定する。
+#
+# 【Rails 7.2.3 で使えるのか】
+#   solid_cache 1.0.10 の依存は activejob / activerecord / railties が
+#   すべて ">= 7.2"。本アプリは Rails 7.2.3 なので条件を満たす。
+#   Rails 8 では標準バックエンドになるため、将来 Rails 8 へ上げる際も
+#   この gem 行を消すだけで移行できる（設定コードはそのまま使える）。
+#
+# 【参考】https://github.com/rails/solid_cache
+gem "solid_cache", "~> 1.0"
+
 # ==================== コメントアウト（未使用）のgem ====================
 
 # Redis: インメモリデータベース
