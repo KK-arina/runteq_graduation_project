@@ -47,6 +47,40 @@ class Habit < ApplicationRecord
   acts_as_list column: :position, scope: :user_id, add_new_at: :bottom
 
   # ============================================================
+  # Issue #I-6: キャッシュの無効化（after_commit）
+  # ============================================================
+  #
+  # 【なぜ HabitRecord だけでなく Habit にも必要なのか】
+  #   #I-6 のダッシュボードのキャッシュは
+  #   「習慣記録の集計値（habit_id ごとの完了数・数値合計）」を保存している。
+  #   ここで習慣そのものが増減すると、次の問題が起きる:
+  #
+  #     ・習慣を新規作成 → 記録がまだ無いので集計に含まれず 0 と表示される（正しい）
+  #     ・アーカイブした習慣を復元 → 過去の記録があるのに、
+  #       キャッシュされた集計にはその習慣が含まれていないため 0 と表示される（誤り）
+  #     ・習慣を論理削除 → 集計に残っていても表示側で無視されるので実害なし
+  #
+  #   「復元」のケースだけが実害のあるズレになるため、
+  #   習慣そのものの変更（create / update / destroy）でもキャッシュを消す。
+  #
+  # 【weekly_target や色・名前の変更はキャッシュに影響しない】
+  #   #I-6 の設計では、達成率の割り算（記録数 ÷ 目標値）は
+  #   キャッシュに入れず毎回 Ruby で計算している。
+  #   そのため目標値を変えても即座に画面へ反映される。
+  #   ただしグラフページ（19番）は完成形をキャッシュしているため、
+  #   名前・色の変更を即反映させるにはこの after_commit が必要になる。
+  #
+  # 【❗この after_commit が発火しないケース（既知の制限・#I-4 で README に記載）】
+  #   ① calculate_streak! は update_columns を使っているためコールバックが動かない
+  #      → グラフの「最長ストリーク」カードが最大6時間古い可能性がある
+  #   ② acts_as_list の並び替えは update_all を使っているためコールバックが動かない
+  #      → グラフの凡例の順番・配色が最大6時間古い可能性がある
+  #   どちらも ISSUE が「リアルタイム性が不要」と定義したグラフページ内の
+  #   表示上の話であり、データそのものが誤ることはない。
+  #   6時間（expires_in）で必ず解消するため、意図的に対応しない。
+  after_commit :expire_related_caches
+
+  # ============================================================
   # アソシエーション（変更なし）
   # ============================================================
   belongs_to :user
@@ -277,6 +311,21 @@ class Habit < ApplicationRecord
   end
 
   private
+
+  # ── Issue #I-6 追加: expire_related_caches ────────────────────────────────
+  #
+  # 【役割】
+  #   習慣の増減・変更によって古くなるキャッシュを削除する。
+  #   詳しい設計理由は ApplicationRecord のキャッシュキー定義を参照。
+  #
+  # 【user_id を使う理由】
+  #   self.user を呼ぶと users テーブルへの SELECT が発生する。
+  #   habits テーブルは user_id カラムを持つため直接読めば追加クエリ0件。
+  def expire_related_caches
+    ApplicationRecord.expire_dashboard_habit_stats_cache(user_id)
+    ApplicationRecord.expire_analytics_cache(user_id)
+  end
+  # ──────────────────────────────────────────────────────────────────────────
 
   def current_week_range
     today      = HabitRecord.today_for_record

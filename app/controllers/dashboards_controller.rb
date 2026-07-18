@@ -264,9 +264,99 @@ class DashboardsController < ApplicationController
   end
 
   # ============================================================
-  # build_habit_stats（B-2: 除外日対応。変更なし）
+  # build_habit_stats（B-2: 除外日対応 / I-6: キャッシュ導入）
   # ============================================================
+  #
+  # 【#I-6 での変更内容と設計思想（最重要・必読）】
+  #
+  #   このメソッドは元々「DBから集計する処理」と「達成率を割り算する処理」が
+  #   ひと続きになっていた。#I-6 ではこれを2つに分割し、
+  #   ★DBから集計する部分だけ★ をキャッシュする。
+  #
+  #     fetch_weekly_record_counts … DBに問い合わせる（2クエリ）→ キャッシュ対象
+  #     build_stats_from_counts    … 割り算するだけ（0クエリ）  → 毎回実行
+  #
+  # 【なぜ達成率まで一緒にキャッシュしないのか（これが設計の肝）】
+  #
+  #   達成率の分母は habit.effective_weekly_target で、
+  #   その中身は「weekly_target と (7 - 除外日数) の小さいほう」である。
+  #   もし達成率まで丸ごとキャッシュすると、次の不具合が起きる:
+  #
+  #     ・習慣の「週の目標回数」を 5回 → 3回 に変更しても、
+  #       最大1時間ダッシュボードの達成率が古いままになる
+  #     ・「日曜は除外」の設定を変えても、最大1時間反映されない
+  #
+  #   一方、割り算だけを毎回行う設計なら:
+  #
+  #     ・effective_weekly_target は includes(:habit_excluded_days) で
+  #       事前読み込み済みの配列を数えるだけなので【追加クエリ0件】
+  #     ・目標値・除外日の変更が【即座に】画面へ反映される
+  #     ・除外日を管理する habit_excluded_day.rb に一切手を加えずに済む
+  #
+  #   「キャッシュするのはDBアクセスだけ。CPUで一瞬で終わる計算はキャッシュしない」
+  #   という原則を守ることで、速度と正確さを両立できる。
+  #
+  # 【キャッシュが古い習慣を含む/含まないケースの安全性】
+  #   キャッシュの中身は { habit_id => 件数 } のハッシュ。
+  #     ・習慣を新規作成 → キャッシュにその id が無い → 0件として扱う（正しい。記録がまだ無いため）
+  #     ・習慣を削除     → キャッシュに id が残るが、habits に無いので無視される（実害なし）
+  #     ・アーカイブ復元 → 過去の記録があるのに0件になる恐れがあるため、
+  #                        Habit モデルの after_commit でキャッシュを消して対処している
   def build_habit_stats(habits, user)
+    # Rails.cache.fetch(キー, expires_in:) do ... end
+    #   【動作】
+    #     ① キーに対応する値がキャッシュにあれば、その値を返す（ブロックは実行しない）
+    #     ② 無ければブロックを実行し、その戻り値をキャッシュに保存してから返す
+    #
+    #   【expires_in: 1.hour にする理由（ISSUE の指定どおり）】
+    #     after_commit による明示的な削除があるので、通常この期限に頼ることはない。
+    #     これは「保険」として機能する:
+    #       ・update_all など、コールバックを通さない経路でデータが変わった場合
+    #       ・キャッシュ削除の DELETE が何らかの理由で失敗した場合
+    #     最悪でも1時間で必ず正しい値に戻ることを保証する安全装置。
+    #
+    #   【キーに user.id を含める理由（セキュリティ上の必須事項）】
+    #     含め忘れると、全ユーザーが同じキーを共有してしまい、
+    #     他人の習慣達成率が自分の画面に表示されるという重大な情報漏洩になる。
+    #     ApplicationRecord.dashboard_habit_stats_cache_key が必ず user_id を含む形で
+    #     キーを組み立てるため、呼び出し側で入れ忘れる事故を防いでいる。
+    counts = Rails.cache.fetch(
+      ApplicationRecord.dashboard_habit_stats_cache_key(user.id),
+      expires_in: 1.hour
+    ) do
+      fetch_weekly_record_counts(habits, user)
+    end
+
+    build_stats_from_counts(habits, counts)
+  end
+
+  # ── I-6 追加: fetch_weekly_record_counts（キャッシュ対象の「DBアクセス部分」）──
+  #
+  # 【役割】
+  #   今週（月曜〜今日）の習慣記録を habit_id ごとに集計する。
+  #   このメソッドの中身だけが2回のSQLを発行する。
+  #
+  # 【戻り値の形】
+  #   {
+  #     check_counts: { 1 => 3, 2 => 5 },        # チェック型: habit_id => 完了日数
+  #     numeric_sums: { 3 => 120.0 }             # 数値型:     habit_id => 数値の合計
+  #   }
+  #
+  # 【❗キャッシュに保存できる値の条件】
+  #   Solid Cache は値を Marshal（Rubyの標準シリアライズ）でバイナリ化して
+  #   PostgreSQL の bytea カラムに保存する。
+  #   そのため保存できるのは「Marshal 可能なオブジェクト」に限られる。
+  #     ○ Hash / Array / Integer / Float / BigDecimal / String / Date … すべて可
+  #     ✗ ActiveRecord のインスタンス（可能だが、DBの最新状態とズレるため厳禁）
+  #     ✗ Proc / IO / データベース接続など
+  #   ここで返しているのは数値のハッシュだけなので安全。
+  #   （group(...).count / group(...).sum(...) は ActiveRecord オブジェクトではなく
+  #     素の Hash を返すため、そのままキャッシュに入れられる）
+  #
+  # 【B-2 からのロジック変更は一切ない】
+  #   元の build_habit_stats の前半部分をそのまま切り出しただけ。
+  #   SQL の内容・条件は完全に同一のため、集計結果は今までと1ミリも変わらない。
+  def fetch_weekly_record_counts(habits, user)
     today      = HabitRecord.today_for_record
     week_start = today.beginning_of_week(:monday)
     week_range = week_start..today
@@ -274,6 +364,8 @@ class DashboardsController < ApplicationController
     check_habit_ids   = habits.select(&:check_type?).map(&:id)
     numeric_habit_ids = habits.select(&:numeric_type?).map(&:id)
 
+    # 該当する習慣が0件のときは SQL を発行せず空ハッシュを返す。
+    # （where(habit_id: []) でも動くが、無駄なクエリを1回節約できる）
     check_counts = if check_habit_ids.any?
       HabitRecord
         .where(user: user, habit_id: check_habit_ids, record_date: week_range, completed: true)
@@ -292,8 +384,41 @@ class DashboardsController < ApplicationController
       {}
     end
 
+    { check_counts: check_counts, numeric_sums: numeric_sums }
+  end
+
+  # ── I-6 追加: build_stats_from_counts（毎回実行する「割り算部分」）──────────
+  #
+  # 【役割】
+  #   キャッシュから取り出した集計値と、DBから毎回取得している最新の習慣情報を
+  #   組み合わせて達成率を計算する。DBアクセスは0件。
+  #
+  # 【habit.effective_weekly_target が追加クエリを発生させない理由】
+  #   DashboardsController#index が
+  #     current_user.habits.active.includes(:habit_excluded_days)
+  #   で除外日を事前読み込み（preload）しているため、
+  #   effective_weekly_target の内部で呼ばれる habit_excluded_days.size は
+  #   メモリ上の配列を数えるだけで済む。
+  #   （もし .pluck を使っていたら preload 済みでも毎回SQLが飛ぶ。
+  #     この違いは #H-9 で Habit#excluded_day_numbers を .pluck → .map に
+  #     変更した際に確認済み）
+  #
+  # 【counts[:check_counts] に || {} を付ける理由】
+  #   万一キャッシュに想定外の形（nil や古い構造）が入っていても
+  #   NoMethodError で画面が真っ白になるのを防ぐ防御。
+  #   キーが無ければ「0件」として扱われ、達成率0%と表示されるだけで済む。
+  #
+  # 【計算ロジックは B-2 から一切変更なし】
+  #   clamp(0, 100).floor（切り捨て）も含めて元のコードと完全に同一。
+  #   既存テスト（Must 2/3件 → 66% 等）の期待値がそのまま通る。
+  def build_stats_from_counts(habits, counts)
+    check_counts = counts[:check_counts] || {}
+    numeric_sums = counts[:numeric_sums] || {}
+
     habits.each_with_object({}) do |habit, hash|
       if habit.check_type?
+        # effective_weekly_target: 除外日を考慮した実質的な目標回数。
+        # 毎回計算するため、除外日の設定変更が即座に反映される。
         target          = habit.effective_weekly_target
         completed_count = check_counts[habit.id] || 0
         rate = target.zero? ? 0 :
@@ -301,6 +426,8 @@ class DashboardsController < ApplicationController
         hash[habit.id] = { rate: rate, completed_count: completed_count, numeric_sum: nil,
                            effective_target: target }
       else
+        # to_f を付ける理由: sum(:numeric_value) は decimal カラムのため
+        # BigDecimal を返す。ビューでの表示や割り算を Float に統一する。
         numeric_sum = (numeric_sums[habit.id] || 0).to_f
         rate = habit.weekly_target.zero? ? 0 :
           ((numeric_sum / habit.weekly_target) * 100).clamp(0, 100).floor

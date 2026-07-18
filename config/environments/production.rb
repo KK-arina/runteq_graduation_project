@@ -235,7 +235,58 @@ Rails.application.configure do
   # 【スレッド数を増やしたい場合】
   # Neonの接続上限を超えないよう計算してから変更すること
   config.good_job.max_threads = 2
-  
+
+  # ============================================================
+  # Issue #I-6: キャッシュストアの設定（Solid Cache）
+  # ============================================================
+  #
+  # 【変更前の状態と、それが問題だった理由】
+  #   これまで production.rb に config.cache_store の記述が無かったため、
+  #   Rails の既定値である :file_store（tmp/cache 配下にファイルを書く）が
+  #   使われていた。これは Render では2重の意味で機能しない:
+  #     ① Render はデプロイのたびにコンテナを作り直すため、
+  #        tmp/cache のファイルは毎回消える（エフェメラルなファイルシステム）
+  #     ② Puma は Worker 2プロセス構成のため、Worker1 が書いたキャッシュを
+  #        Worker2 が消せず、片方だけ古い値を返し続ける事故が起きうる
+  #
+  # 【:solid_cache_store にすると何が変わるか】
+  #   キャッシュの実体が PostgreSQL（Neon）の solid_cache_entries テーブルになる。
+  #     ・デプロイしてもキャッシュが残る（DBは永続）
+  #     ・全 Worker が同じテーブルを見るため、無効化が全プロセスに即時反映される
+  #     ・Redis を追加しないので Render の追加コストが 0 円のまま
+  #
+  # 【接続先はどこになるのか】
+  #   config/cache.yml で database: を指定していないため、
+  #   Solid Cache は ActiveRecord::Base のコネクションプール（= primary）を使う。
+  #   つまり Neon の既存DBの中に solid_cache_entries が作られ、
+  #   新しいコネクションプールは一切増えない（Neon の接続上限を守れる）。
+  #
+  # 【テーブルが無いとどうなるか】
+  #   最初のキャッシュアクセスで
+  #   PG::UndefinedTable (relation "solid_cache_entries" does not exist)
+  #   が発生して 500 エラーになる。
+  #   Render の Build Command には bin/rails db:migrate が含まれており、
+  #   #I-6 のマイグレーション（db/migrate 配下）が起動前に適用されるため
+  #   この事故は起きない。Build Command は変更不要。
+  config.cache_store = :solid_cache_store
+
+  # ------------------------------------------------------------
+  # フラグメントキャッシュの有効化を明示する
+  # ------------------------------------------------------------
+  # perform_caching: true
+  #   ビューの <% cache ... do %> ブロック（フラグメントキャッシュ）を
+  #   実際に機能させるためのスイッチ。
+  #
+  # 【もともと Rails の既定値が true なのに、なぜあえて書くのか】
+  #   ① development.rb には明示されているのに production.rb には無く、
+  #      「本番でキャッシュが効いているのか」がコードを読んだだけでは分からない
+  #   ② #I-6 で 18番（AI分析結果）ページにフラグメントキャッシュを入れるため、
+  #      この設定が前提であることをコード上に残しておきたい
+  #   ③ 将来 Rails をアップグレードして既定値が変わった場合でも
+  #      挙動が変わらないよう固定する
+  #   動作は変わらない（既定値と同じ true を明示するだけ）ので安全な追記。
+  config.action_controller.perform_caching = true
+
   # ============================================================
   # Issue #A-4: Action Mailer 本番環境設定（Resend）
   # ============================================================

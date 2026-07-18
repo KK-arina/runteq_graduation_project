@@ -91,6 +91,47 @@ class HabitRecord < ApplicationRecord
   # ──────────────────────────────────────────────────────────────────────────
 
   # ============================================================
+  # Issue #I-6: キャッシュの無効化（after_commit）
+  # ============================================================
+  #
+  # 【役割】
+  #   習慣の記録が保存・更新・削除されたとき、
+  #   その記録を元に計算しているキャッシュを削除する。
+  #   これにより ISSUE の完了条件
+  #   「habit_record 保存後にダッシュボードが最新データを表示する」を満たす。
+  #
+  # 【❗なぜ after_save や after_commit のどちらかで after_commit なのか】
+  #   after_save は「トランザクションがコミットされる前」に呼ばれる。
+  #   もし後続の処理で例外が起きてロールバックされると、
+  #   DBの記録は元に戻るのにキャッシュだけ消えた状態になる。
+  #   （この場合は再計算されるだけなので実害は小さいが）
+  #
+  #   逆に深刻なのは Solid Cache 特有の事情である。
+  #   config/cache.yml で database: を指定していないため、
+  #   Solid Cache はアプリ本体と同じコネクション・同じトランザクションを使う。
+  #   つまり after_save でキャッシュを消すと、その DELETE も
+  #   同じトランザクションに入り、ロールバック時に「消したはずのキャッシュが復活」する。
+  #
+  #   after_commit は「COMMIT が完全に成功した後」に1回だけ呼ばれるため、
+  #   ・DBに確実に保存された後にキャッシュを消せる
+  #   ・キャッシュ削除がロールバックの巻き添えにならない
+  #   の両方を満たす。ISSUE の指定どおり after_commit を使う。
+  #
+  # 【引数なしの after_commit は create / update / destroy すべてで発火する】
+  #   on: :create のように限定しないことで、
+  #   ・新規チェック（create）
+  #   ・チェックを外す・数値を変更（update）
+  #   ・記録の削除（destroy）
+  #   のすべてでキャッシュが確実に消える。
+  #
+  # 【WeeklyReflectionCompleteService との関係（重要）】
+  #   振り返り完了時の数値補正（apply_numeric_corrections!）は
+  #   ApplicationRecord.with_transaction の内側で habit_record を更新する。
+  #   after_commit はそのトランザクションが COMMIT された後に発火するため、
+  #   「トランザクション内はDBアクセスのみ」という #A-7 の原則を守れる。
+  after_commit :expire_related_caches
+
+  # ============================================================
   # スコープ
   # ============================================================
 
@@ -233,4 +274,37 @@ class HabitRecord < ApplicationRecord
     return unless numeric_value.nil?
     errors.add(:numeric_value, "を入力してください（数値型習慣では必須です）")
   end
+
+  # ── Issue #I-6 追加: expire_related_caches ────────────────────────────────
+  #
+  # 【役割】
+  #   この記録の変更によって「計算し直しが必要になるキャッシュ」を削除する。
+  #
+  # 【なぜダッシュボードとグラフの両方を消すのか】
+  #   ダッシュボード（5-1番）: 今週の習慣達成率が変わる
+  #   グラフページ（19番）:    週次達成率の折れ線・当月サマリーが変わる
+  #   どちらも habit_records を集計しているため、両方消さないと
+  #   「ダッシュボードは更新されたのにグラフだけ古い」という
+  #   ユーザーが混乱する状態になる。
+  #
+  #   ISSUE には「グラフは振り返り保存時に expire」としか書かれていないが、
+  #   それだけだとチェックを入れた直後にグラフを開いても
+  #   最大6時間は反映されないことになる。
+  #   ISSUE の意図（キャッシュが正しく無効化されること）を優先し、
+  #   習慣記録の保存時にもグラフのキャッシュを消す。
+  #
+  # 【user_id を使う理由（user を使わない）】
+  #   self.user と書くと users テーブルへの SELECT が1回発生する。
+  #   habit_records テーブルは user_id カラムを持っているため、
+  #   user_id を直接使えば追加のDBアクセスは一切発生しない。
+  #
+  # 【destroy 時も user_id が読める理由】
+  #   after_commit は destroy 後も呼ばれるが、
+  #   そのときインスタンスはメモリ上に属性値を保持したまま（frozen）なので
+  #   user_id は問題なく読み取れる。
+  def expire_related_caches
+    ApplicationRecord.expire_dashboard_habit_stats_cache(user_id)
+    ApplicationRecord.expire_analytics_cache(user_id)
+  end
+  # ──────────────────────────────────────────────────────────────────────────
 end
