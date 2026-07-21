@@ -122,6 +122,30 @@ class LineNotificationService
     # 予期しない例外（ネットワークエラー等）をキャッチしてログに記録する
     # rescue => e: StandardError 以上の例外をすべて捕まえる省略形
     Rails.logger.error "[LineNotificationService] 予期しないエラー: #{e.class} #{e.message}"
+
+    # ── Issue #I-5 追加: LINE送信の「予期しない失敗」だけを Sentry へ通知 ──
+    # 【なぜここだけ capture するのか（ノイズを出さない設計）】
+    #   この rescue に来るのは、ネットワーク切断・SSLエラー・タイムアウトなど
+    #   「予期しないインフラ障害」だけ。返り値は {success:false} で握り潰され、
+    #   上位（NotificationService）も再raiseしないため sentry-rails の自動捕捉が効かない
+    #   ＝放置すると LINE通知基盤が壊れていても誰も気づけない。だから明示通知する。
+    #
+    #   一方、HTTP 400（Bot未友達追加）/ 429（レート上限）/ 401（トークン無効）は
+    #   handle_response が {success:false} を返すだけで、この rescue には来ない。
+    #   これらは「想定内の失敗」で日常的に大量発生するため、あえて Sentry に送らない
+    #   （送るとノイズで本物の障害が埋もれる）。
+    #
+    # 【個人情報を送らない配慮】
+    #   line_user_id は LINE の個人識別子のため scope には載せず、
+    #   service タグだけ付けて「どの経路の障害か」を判別できるようにする。
+    # 【Sentry.initialized? でガードする理由】本番のみ送信（dev/test は no-op）。
+    if Sentry.initialized?
+      Sentry.with_scope do |scope|
+        scope.set_tags(service: "line_notification")
+        Sentry.capture_exception(e)
+      end
+    end
+
     { success: false, error: "#{e.class}: #{e.message}" }
   end
 

@@ -306,8 +306,42 @@ class ApplicationController < ActionController::Base
   end
 
   def render_500(exception = nil)
+    # 元々あった Rails 標準ログへの出力（直近5行のバックトレースでログ肥大を防ぐ）
     Rails.logger.error "500 Internal Server Error: #{exception&.message}"
     Rails.logger.error exception&.backtrace&.first(5)&.join("\n")
+
+    # ── [★最重要] Issue #I-5: 本番の予期しない例外を Sentry へ明示送信する ──
+    #
+    # 【なぜここで明示的な capture が必須なのか（不具合回避の肝）】
+    #   本番環境では本クラス上部の `rescue_from StandardError, with: :render_500` が
+    #   あらゆる予期せぬ例外を先回りで捕捉する。ユーザーには綺麗な500画面が出るが、
+    #   例外がここで「処理済み」となり Rack 最外殻まで伝播しないため、
+    #   sentry-rails の自動捕捉ミドルウェアが一切反応しない。
+    #   → 手動で capture しないと「本番でエラーが出ても Sentry に届かない」状態になる。
+    #     これを防いで完了条件を確実に満たすため、ここで明示送信する。
+    #
+    # 【なぜ defined?(Sentry) ではなく Sentry.initialized? を使うのか】
+    #   gem 導入後は Sentry 定数が常に存在するため defined? は常に真になり判定にならない。
+    #   Sentry.initialized? は「Sentry が実際に初期化されて有効か」を返すため、
+    #   本番（初期化済み）でのみ true になり、dev/test では no-op 呼び出しすら発生させず
+    #   確実にスキップできる。意図が明確で安全。
+    #
+    # 【with_scope / set_user(id:) / set_tags の意味】
+    #   send_default_pii = false によりメール等の個人情報は送らないが、
+    #   「特定の1名」か「全員」かを判別するため匿名の current_user.id のみを付与する。
+    #   set_tags で「この通知は render_500 経由の手動捕捉」と印を付け、
+    #   Sentry 画面で自動捕捉と区別・検索しやすくする。
+    #   with_scope でこの1件のイベントだけにスコープを限定し、他処理を汚染しない。
+    if Sentry.initialized? && exception
+      Sentry.with_scope do |scope|
+        scope.set_user(id: current_user.id) if current_user
+        scope.set_tags(source: "application_controller#render_500")
+        Sentry.capture_exception(exception)
+      end
+    end
+    # ──────────────────────────────────────────────────────────────────────────
+
+    # 元々あったエラー専用画面（500）のレンダリング処理
     render_error_page("errors/internal_server_error", :internal_server_error)
   end
 

@@ -113,7 +113,8 @@ flowchart LR
 [![H-10 危機介入バナー誤表示修正](https://img.shields.io/badge/H--10_危機介入バナー誤表示修正-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/h-10-crisis-skipped-banner)
 [![I-1 統合・モデルテスト](https://img.shields.io/badge/I--1_統合・モデルテスト-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-1-integration-model-tests)
 [![I-6 Solid Cacheキャッシュ戦略](https://img.shields.io/badge/I--6_Solid_Cacheキャッシュ戦略-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-6-solid-cache)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-67%2F70_ISSUE-f59e0b?style=flat-square)]()
+[![I-5 エラー監視](https://img.shields.io/badge/I--5_エラー監視(Sentry)-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-5-sentry)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-68%2F70_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -244,6 +245,7 @@ flowchart LR
 | #H-10 | 危機介入レコードによるダッシュボード「分析中」誤表示の修正（最新AiAnalysisを is_latest で取得し `crisis_detected` で分岐・`@reflection_crisis_skipped` 追加・pending条件に `!@reflection_crisis_skipped`・💛「見送り」専用バナー・回帰テスト4件・`data-testid`検証・バナー文言のi18n化） | 2026-07-12 | feature/h-10-crisis-skipped-banner |
 | #I-1 | 統合・モデルテスト（本リリース分）＋ `db:migrate:status` の `NO FILE` 棚卸し＋危機監査レコード保存バグ修正 | 2026-07-14 | feature/i-1-integration-model-tests |
 | #I-6 | キャッシュ戦略設計（Solid Cache 導入・ダッシュボード/グラフ/AI分析結果ページのキャッシュ・`after_commit` 無効化）＋ Redis不要の単一DB構成 | 2026-07-18 | feature/i-6-solid-cache |
+| #I-5 | エラー監視・本番ログ基盤構築（Sentry） | 2026-07-21 | feature/i-5-sentry |
 
 <br>
 
@@ -7007,6 +7009,44 @@ ISSUE原文は `Date.today.cweek` だったが、これは本アプリの2つの
 
 <br>
 
+### #I-5: エラー監視・本番ログ基盤構築（Sentry）
+
+<br>
+
+**ブランチ:** `feature/i-5-sentry`<br>
+**完了日:** 2026-07-21<br>
+**対象:** 本番で発生する Rails 例外・AI API エラー・GoodJob 失敗・フロントエンド JS エラー・LINE 通知の予期しない失敗を、Sentry でリアルタイムに検知・通知する監視基盤
+
+<br>
+
+#### 監視対象と捕捉方式
+
+<br>
+
+| 監視対象 | 捕捉方式 |
+|:---|:---|
+| Rails 例外（本番） | `ApplicationController#render_500` から明示 `Sentry.capture_exception`（`rescue_from` で握られ自動ミドルウェアに届かないため） |
+| AI API エラー | `AiClient` がタイムアウト（warning）・認証失敗401（fatal）を明示通知 |
+| GoodJob ジョブ失敗 | sentry-rails の ActiveJob 連携が自動捕捉 |
+| GoodJob スレッド基盤エラー | `config.good_job.on_thread_error` で通知 |
+| フロントエンド JS エラー | Sentry Browser SDK（self-host）を `<head>` で読み込み未捕捉エラーを通知 |
+| 週次AIプロファイル生成の失敗 | `UserContextBuilderService` の予期しない例外を通知 |
+| LINE 通知の予期しない障害 | `LineNotificationService` のネットワーク/SSL/タイムアウト等を通知 |
+
+<br>
+
+#### 設計上の要点
+
+<br>
+
+- **本番のみ有効**: `SENTRY_DSN` が設定された本番環境でのみ初期化。開発・テストでは無効（無料枠を本番専用に温存）。<br>
+- **ノイズ除外**: 404系（`RecordNotFound` / `RoutingError`）は送信せず、LINE の想定内失敗（Bot未友達追加400・レート上限429）も除外。<br>
+- **PII 保護**: `send_default_pii = false`。ユーザー識別は `user.id` のみで、メールアドレス等は送らない。<br>
+- **Performance Monitoring**: `traces_sample_rate 0.1`（本番の10%）。<br>
+- **Release Tracking**: Render が自動提供する `RENDER_GIT_COMMIT` をリリースに紐付け、不具合とデプロイの相関を追跡。
+
+<br>
+
 ---
 
 <br>
@@ -10982,6 +11022,47 @@ IDが変わるだけでキャッシュキーが変わり、古いキャッシュ
 
 <br>
 
+### 168. Sentry エラー監視基盤の設計ポイント（#I-5）
+
+<br>
+
+**① `rescue_from StandardError` が Sentry の自動捕捉を無効化する落とし穴**
+
+<br>
+
+本番の `ApplicationController` は `rescue_from StandardError` で 500 画面を描画するため、例外が Rack 層（sentry-rails の自動捕捉ミドルウェア）まで伝播しない。<br>
+そのままでは「エラー画面は出るが Sentry には届かない」状態になるため、`render_500` 内で明示的に `Sentry.capture_exception` を呼んで初めて本番エラーが通知される。これが本タスク最大の要点。
+
+<br>
+
+**② JS 監視は self-host 方式（実行時 CDN 非依存）**
+
+<br>
+
+Sentry Browser SDK を `public/sentry/bundle.min.js` として自己ホストし、classic `<script>` で `<head>` の先頭付近から読み込む。<br>
+外部 CDN の障害でアプリが巻き添えにならず、importmap 構成とも競合しない。Stimulus/Turbo より前に読み込むことで初期段階の JS エラーも取りこぼさない。
+
+<br>
+
+**③ 「入れる」より「ノイズを出さない」capture 設計**
+
+<br>
+
+監視は通知を増やすほど良いわけではなく、本物の障害が埋もれないことが重要。<br>
+404 系は既定除外。LINE 通知は予期しないインフラ障害のみ通知し、Bot 未友達追加(400)・レート上限(429)等の想定内失敗は送らない。<br>
+メール送信失敗は再 raise により sentry-rails が自動捕捉するため、手動 capture を足さず二重通知を回避している。
+
+<br>
+
+**④ テスト時の Sentry は「破棄イベント統計」の送信に注意**
+
+<br>
+
+`before_send` で捨てたイベントは Sentry が client reports（破棄統計）として集計し、`Sentry.close` 時に実送信を試みる。<br>
+テストでは `config.send_client_reports = false` で無効化し、ダミー DSN への実ネットワークアクセスを断つことで安定させている。
+
+<br>
+
 ---
 
 <br>
@@ -11023,7 +11104,7 @@ IDが変わるだけでキャッシュキーが変わり、古いキャッシュ
 | Gemini API（gemini-2.5-flash） | AI分析デフォルトプロバイダ（PMVV・週次振り返り） | #D-2 / #D-4 | ✅ 完了（#D-2）|
 | Groq API（llama-3.3-70b-versatile） | AI分析フォールバックプロバイダ | #D-2 / #D-4 | ✅ 完了（#D-2）|
 | Solid Cache 1.0.10 | Redis不要のキャッシュ（ダッシュボード/グラフ/AI分析結果・単一DB構成） | #I-6 | ✅ 完了 |
-| Sentry | エラー監視・本番ログ | #I-5 | ⬜ 未着手 |
+| Sentry | エラー監視・本番ログ基盤（Rails/AI/GoodJob/JS） | #I-5 ✅ |
 | acts_as_list | 習慣の並び替え | #B-6 | ✅ 完了 |
 | Chart.js v4（UMDビルド） | グラフ可視化（折れ線・棒グラフ） | #H-4 | ✅ 完了 |
 
@@ -11501,7 +11582,7 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 habitflow/
 ├── app/
 │   ├── controllers/
-│   │   ├── application_controller.rb      # 変更（E-4）: require_login に redirect_to パラメータ対応追加・safe_redirect_path? 追加（ダブルスラッシュ対策含む）
+│   │   ├── application_controller.rb      # #I-5: render_500 で Sentry へ明示通知
 │   │   ├── dashboards_controller.rb       # 変更（G-9）: @latest_completed_reflection/@reflection_ai_analysis/@reflection_analysis_pending 追加・振り返り分析中バナー3状態分岐対応
 │   │   ├── habits_controller.rb           # 変更（D-8）: ai_edit / ai_update アクション追加・set_habit に :ai_edit / :ai_update 追加・require_unlocked に :ai_update 追加・set_ai_context / verify_ai_context / clear_ai_context / ai_update_params を private に追加
 │   │   ├── habit_records_controller.rb    # 変更（E-3）: build_turbo_stream_response 追加（referer判定でページ別Turbo Stream応答）・build_habit_stats 追加（週次統計再計算）
@@ -11544,10 +11625,10 @@ habitflow/
 │   │   ├── ai_proposal_confirm_service.rb          # #A-7: AI提案確定フロー骨格（#D-3〜#D-4で本実装）
 │   │   ├── ai_client.rb                   # 変更（G-9）: maxOutputTokens/max_tokens を 8192 に更新
 │   │   ├── notification_service.rb        # 変更（G-3修正）: 独立制御に変更（if-elsif→if-if）・LINE失敗時メールフォールバック廃止・use_line?/use_email?にnotification_enabledチェック追加
-│   │   ├── line_notification_service.rb   # G-1 新規: Net::HTTP で LINE Push Message API を呼び出し
+│   │   ├── line_notification_service.rb   # #I-5: LINE送信の予期しない障害を通知
 │   │   ├── csv_export_service.rb              # G-5 新規: CSV生成（UTF-8 BOM付き・CRLF・LARGE_DATA_THRESHOLD=1000）
 │   │   ├── csv_download_token_service.rb      # G-5 新規: MessageVerifier署名付きトークン（即時5分/非同期24時間）
-│   │   └── user_context_builder_service.rb   # H-8 新規: 過去8週間の行動データ分析・AIプロンプト注入用コンテキスト生成（インコンテキスト学習）
+│   │   └── user_context_builder_service.rb   # #I-5: 週次AIプロファイル生成の予期しない失敗を通知
 │   ├── javascript/
 │   │   └── controllers/
 │   │       ├── habit_record_controller.js     # チェックボックス即時保存（変更: saveNumeric event.target方式に変更 #B-1）（変更: メモ関連メソッド追加・NOT_PROVIDED部分更新対応 #B-7）
@@ -11728,8 +11809,9 @@ habitflow/
 │   ├── database.yml                       # #D-3 修正: 各環境に cable: 接続を追加（solid_cable 用）
 │   ├── cache.yml                          # #I-6: Solid Cache 設定（max_age/max_entries・database:未指定でprimary共有）
 │   ├── initializers/
-│   │   ├── content_security_policy.rb     # CSP 設定（nonce 方式）
-│   │   ├── good_job.rb                    # 変更（H-8）: update_ai_profiles cron を追加（毎週月曜 JST AM4:15）
+│   │   ├── sentry.rb                      # #I-5: Sentry 初期化（本番のみ有効）
+│   │   ├── good_job.rb                    # #I-5: on_thread_error で Sentry 通知（追記）
+│   │   ├── content_security_policy.rb     # #I-5: connect_src に Sentry を許可（追記）
 │   │   ├── resend.rb                      # #A-4: Resend APIキー初期化
 │   │   ├── bullet.rb                      # #A-6: N+1検出設定（development環境のみ）
 │   │   ├── rack_mini_profiler.rb          # #A-6: クエリ数・実行時間可視化（development環境のみ）
@@ -11741,6 +11823,9 @@ habitflow/
 │       ├── development.rb                 # 変更: letter_opener設定（#A-4）・CSS preload警告抑制（E-5）・#I-6: キャッシュON時のストアを solid_cache_store に統一
 │       ├── production.rb                  # 変更: Action Mailer設定・GoodJob :async化（#A-4）・#I-6: cache_store = :solid_cache_store / perform_caching = true
 │       └── test.rb                        # #I-6: null_store 維持を明示（既存841テストを保護）
+├── public/
+│   └── sentry/
+│       └── bundle.min.js                    # #I-5: Sentry Browser SDK（self-host・v10.66.0）
 ├── Dockerfile                             # 本番用 Docker イメージ（マルチステージビルド）
 ├── Dockerfile.dev                         # 開発用 Docker イメージ
 ├── docker-compose.yml                     # Docker Compose 設定
@@ -11790,7 +11875,9 @@ habitflow/
     │   ├── memo_flow_test.rb              # #B-7: メモ保存・部分更新・バリデーションエラー・スペース変換テスト（6件）
     │   ├── rack_attack_test.rb                # #F-5: throttle動作確認（setup/teardown でルール登録・enabled 切替）
     │   ├── omniauth_login_flow_test.rb  # #I-1 新規: OmniAuth(Google/LINE)コールバック→セッション→遷移先
-    │   └── pmvv_analysis_flow_test.rb   # #I-1 新規: PMVV create/危機/update/apply_proposals フロー
+    │   ├── pmvv_analysis_flow_test.rb   # #I-1 新規: PMVV create/危機/update/apply_proposals フロー
+    │   ├── sentry_initialization_test.rb    # #I-5: 疎通・404除外・GoodJob連携
+    │   └── sentry_browser_test.rb            # #I-5: JSバンドル配置・本番限定出力
     └── controllers/
         ├── analytics_controller_test.rb   # 変更（H-7）: パーシャル移行後も analytics-empty-state testidが正しく出力されることを確認するテストを追加
         ├── habits_archive_controller_test.rb  # #B-4: アーカイブコントローラーテスト（6件：archived一覧・archive・unarchive・他ユーザー防止）
@@ -11835,7 +11922,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-841 runs, 2223 assertions, 0 failures, 0 errors, 0 skips
+861 runs, 2290 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -14546,6 +14633,45 @@ PostgreSQL の実ディスク使用量と誤差が出るうえ、掃除判定の
 再作成のたびに新しいレコード（新ID）を作る設計なら、IDが変わるだけでキーが変わり、古いキャッシュは自動で読まれなくなる。<br>
 このとき `belongs_to :parent, touch: true` を足すのは逆効果で、作成のたびに親テーブルへ無意味な `UPDATE` が1回増えるだけ。<br>
 ISSUE に「touch: true を設定」と書かれていても、実際のデータの作られ方（更新か新規作成か）を見て、不要なら追加しない判断が正しい。
+
+<br>
+
+### `rescue_from` は Sentry の自動捕捉より先に例外を握る
+
+<br>
+
+コントローラで `rescue_from StandardError` を使ってエラー画面を出していると、例外がフレームワークの最外殻に伝播せず、<br>
+sentry-rails の自動捕捉ミドルウェアが反応しない。エラー画面は出るのに監視ツールには何も届かない、という見落としが起きる。<br>
+この場合はエラーハンドラ内で明示的に `Sentry.capture_exception` を呼ぶ必要がある（#I-5 で実践）。
+
+<br>
+
+### 監視は「入れる」より「ノイズを出さない」設計が本質
+
+<br>
+
+すべての失敗を通知すると、404 やユーザー操作起因の想定内エラーで画面が埋まり、本当の障害を見逃す。<br>
+既定除外（404系）を活かし、外部通信の失敗は「予期しないインフラ障害のみ」に絞り、<br>
+既に自動捕捉される経路には手動通知を足さない（二重通知の回避）ことで、通知の信頼性を保つ。
+
+<br>
+
+### 外部SDKのバージョン管理は self-host とCDNのトレードオフを理解して選ぶ
+
+<br>
+
+フロントの Sentry SDK は、CDN 読み込み（更新が楽だが実行時に外部依存）と self-host（更新は手動だが外部障害に強い）の二択。<br>
+importmap 構成（バンドラなし）では npm 導入が大改修になるため、self-host を選び、更新手順を README に明記して保守性を担保した。
+
+<br>
+
+### テスト環境の外部SDKは「見えない外部通信」に注意する
+
+<br>
+
+Sentry はイベントを捨てても「破棄統計（client reports）」を溜め、シャットダウン時に送信を試みる。<br>
+テストでダミーDSNを使うとこの送信が接続エラーになる。`send_client_reports = false` で統計送信を止め、<br>
+外部通信を完全に断つことでテストを安定させた（実装ロジックではなくテストインフラ側の落とし穴）。
 
 <br>
 

@@ -26,6 +26,43 @@ Rails.application.configure do
   config.good_job.cleanup_preserved_jobs_before_seconds_ago = 86_400
 
   # ============================================================================
+  # Issue #I-5: GoodJob スレッド内システムエラーの Sentry 連携
+  # ============================================================================
+  #
+  # 【on_thread_error フックとは何か】
+  #   通常のジョブ失敗（perform 内の raise）は sentry-rails の ActiveJob 連携が
+  #   ジョブ名付きで自動報告する。一方、GoodJob の実行スレッドやスケジューラ内部
+  #   （＝ジョブの外側）で起きた致命的エラーは、そのままでは Sentry に届かない。
+  #   このフックで拾って通知する。
+  #
+  # 【なぜ先に Rails.logger.error でログを残すのか（重要な保険）】
+  #   on_thread_error を上書きすると GoodJob 既定のエラーログ出力も置き換わる。
+  #   Sentry 通知だけにすると、Sentry 無効な開発環境（DSN未設定）では
+  #   スレッドエラーが「無言で消える」危険がある。まずログに残して全環境で
+  #   可視性を保証し、その上で本番だけ Sentry に送る。
+  #
+  # 【with_scope で情報を付与する理由（追跡性の向上）】
+  #   ・set_tags(source: ...) … Sentry 画面で「GoodJob基盤のエラー」だけを絞り込める。
+  #   ・set_context("good_job", thread:) … perform 外のエラーはジョブ名が特定できないため、
+  #     せめてどのスレッドで落ちたかの手掛かりを残す。
+  #     Thread.current.name は名前未設定スレッドでは nil を返すため "unknown" で補い、
+  #     Sentry 画面に thread=null が並ぶのを防ぐ。
+  #
+  # 【Sentry.initialized? でガードする理由】
+  #   本番のみ初期化されるため、dev/test では送信されない（no-op）。
+  config.good_job.on_thread_error = ->(exception) do
+    Rails.logger.error("[GoodJob] thread error: #{exception.class} - #{exception.message}")
+
+    if Sentry.initialized?
+      Sentry.with_scope do |scope|
+        scope.set_tags(source: "good_job.on_thread_error")
+        scope.set_context("good_job", { thread: Thread.current.name || "unknown" })
+        Sentry.capture_exception(exception)
+      end
+    end
+  end
+
+  # ============================================================================
   # cron（定期ジョブ）の設定
   # ============================================================================
   config.good_job.cron = {

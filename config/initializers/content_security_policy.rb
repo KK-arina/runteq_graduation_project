@@ -27,6 +27,26 @@ Rails.application.config.content_security_policy do |policy|
   policy.script_src  :self, :https, :unsafe_inline
   policy.style_src   :self, :https, :unsafe_inline
 
+  # ── Issue #I-5 追加: Sentry(ブラウザSDK) のエラー送信先への通信を許可 ──
+  #
+  # 【なぜ connect_src の追加が必要か】
+  #   CSP はブラウザからの外部通信（fetch / XHR / sendBeacon / WebSocket）を
+  #   既定で default_src(:self) に制限している。Sentry の Browser SDK は
+  #   捕捉した JS エラーを Sentry の収集サーバー（ingest エンドポイント）へ
+  #   POST 送信するため、その宛先を明示的に許可しないとブラウザが
+  #   「不正な外部通信」としてブロックし、エラーが1件も届かなくなる。
+  #
+  # 【なぜ "https://*.sentry.io" なのか】
+  #   Sentry の ingest ホストはプロジェクトのリージョンにより
+  #   o0000.ingest.us.sentry.io / o0000.ingest.de.sentry.io のように変化する。
+  #   "*.sentry.io" は .sentry.io で終わる全ホスト（=全リージョンの ingest）に
+  #   マッチするため、DSN を将来変えても CSP を直さずに済む。
+  #
+  # 【なぜ :self を残すのか】
+  #   同一オリジンへの通信（Turbo の fetch や ActionCable の WebSocket 等）を
+  #   引き続き許可するため。これを外すと既存のリアルタイム機能が壊れる。
+  policy.connect_src :self, "https://*.sentry.io"
+
   # ── F-1/F-2 追加: フォーム送信先の許可設定 ────────────────────────────
   #
   # form_action:

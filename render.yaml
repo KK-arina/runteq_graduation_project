@@ -64,3 +64,22 @@ services:
       #   GitHub に秘密情報を上げないためこの形式を使う。
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false
+
+      # ============================================================
+      # I-5 追加: Sentry エラー監視用 DSN
+      # ============================================================
+      #
+      # 【SENTRY_DSN とは】
+      #   Sentry プロジェクトの送信先URL。Sentry管理画面で発行される。
+      #   これが本番に設定されているときだけ Sentry が有効になる
+      #   （config/initializers/sentry.rb が if ENV["SENTRY_DSN"].present? で判定）。
+      #
+      # 【sync: false の意味】
+      #   実際の値は Render ダッシュボードから手動で設定する（GitHubに秘密情報を上げない）。
+      #
+      # 【Release Tracking について】
+      #   デプロイのコミットSHAは Render が RENDER_GIT_COMMIT 環境変数として
+      #   自動提供するため、ここに追記する必要はない。
+      #   sentry.rb 側で config.release = ENV["RENDER_GIT_COMMIT"] として読み込む。
+      - key: SENTRY_DSN
+        sync: false

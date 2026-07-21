@@ -138,6 +138,27 @@ class UserContextBuilderService
     # 上記以外の予期しないエラー
     Rails.logger.error "[UserContextBuilderService] 予期しないエラー: user_id=#{@user.id}, error=#{e.class} - #{e.message}"
     Rails.logger.error e.backtrace.first(5).join("\n")
+
+    # ── Issue #I-5 追加: 週次AIプロファイル生成の予期しない失敗を Sentry へ通知 ──
+    # 【なぜ capture が必要か】
+    #   このサービスは週次 cron（UpdateAiProfileJob）から呼ばれ、失敗しても
+    #   { success: false } を返すだけで例外が握り潰される（＝上位に伝播しない）。
+    #   sentry-rails の自動捕捉が効かないため、放置すると
+    #   「パーソナライズ機能が静かに壊れ続けているのに誰も気づかない」状態になる。
+    #   RecordInvalid / StatementInvalid（uniqueness 競合＝想定内）は上の専用 rescue で
+    #   処理済みなので、ここに来るのは本当に予期しないバグだけ＝通知価値が高い。
+    # 【with_scope で付与する情報】
+    #   ・set_tags(service:) … Sentry 画面で service:user_context_builder で絞り込める。
+    #   ・set_user(id:)       … どのユーザーで起きたか（send_default_pii=false と整合し id のみ）。
+    # 【Sentry.initialized? でガードする理由】本番のみ送信（dev/test は no-op）。
+    if Sentry.initialized?
+      Sentry.with_scope do |scope|
+        scope.set_tags(service: "user_context_builder")
+        scope.set_user(id: @user.id)
+        Sentry.capture_exception(e)
+      end
+    end
+
     { success: false, error: e.message }
   end
 
