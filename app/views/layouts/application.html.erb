@@ -90,6 +90,45 @@
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
     <%#
+      ==========================================================================
+      Issue #I-5: Sentry Browser SDK（フロントエンドJSエラー監視）
+      ==========================================================================
+      【なぜこの位置（csp_meta_tag の直後・importmap より前）に置くのか】
+        Stimulus コントローラや Turbo などアプリのJSが動き出す前に、最優先で
+        Sentry のエラー捕捉網（window.onerror / unhandledrejection フック）を
+        張るため。これにより読み込み初期のJSエラーも取りこぼさない。
+
+      【なぜ self-host した classic script を使うのか】
+        /sentry/bundle.min.js は Step 1 で public/ 配下に置いた自前ファイル。
+        外部CDNに実行時依存しないため、CDN障害でアプリが巻き添えにならず安定。
+        classic script（module ではない）なので importmap の読み込み順に
+        左右されず、確実に最初に初期化できる。
+
+      【なぜ本番(production)かつ SENTRY_DSN がある時だけ出力するのか】
+        開発・テスト環境では余計な送信を完全に防ぎ、無料枠(月5,000件)を
+        本番のためだけに温存するため。バックエンドの sentry.rb と同じ思想。
+    %>
+    <% if Rails.env.production? && ENV["SENTRY_DSN"].present? %>
+      <%# ① self-host した Sentry Browser SDK 本体を同期読み込みする %>
+      <script src="/sentry/bundle.min.js"></script>
+
+      <%# ② SDK を初期化する。window.Sentry の存在を確認してから呼ぶことで、
+             万一 ①の読み込みに失敗しても JS エラーで画面を壊さない安全設計。 %>
+      <script>
+        if (window.Sentry) {
+          Sentry.init({
+            // 送信先DSN（バックエンドと同一プロジェクト。DSNは公開前提で安全）
+            dsn: "<%= ENV['SENTRY_DSN'] %>",
+            // Render が自動提供するコミットSHAをJS側のリリースにも紐付け、
+            // 「どのデプロイのJSで起きたか」をバックエンドと突き合わせられる
+            release: "<%= ENV['RENDER_GIT_COMMIT'] %>",
+            // 環境名を production として明示（Sentry画面のフィルタ用）
+            environment: "production"
+          });
+        }
+      </script>
+    <% end %>
+    <%#
       stylesheet_link_tag の preload 警告対策（E-2 修正）
       
       【問題】
