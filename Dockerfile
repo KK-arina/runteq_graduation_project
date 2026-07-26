@@ -3,7 +3,9 @@
 # ここでは依存関係のインストールとアセットのプリコンパイルを行う
 
 # ARG: ビルド時に指定できる変数（デフォルト値を設定）
-ARG RUBY_VERSION=3.4.7
+# 【理由】3.4 系の最新パッチ（zlib CVE 等のセキュリティ修正込み・言語仕様の変更なし）。
+# FROM は $RUBY_VERSION を参照するので、この ARG を変えるだけで開発・本番のRubyがそろってUP。
+ARG RUBY_VERSION=3.4.10
 # FROM: ベースイメージを指定（Ruby公式のslimイメージ）
 FROM ruby:$RUBY_VERSION-slim AS base
 
