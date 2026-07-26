@@ -1,12 +1,50 @@
+# ==============================================================================
+# GitHub Dependabot 設定
+#   依存パッケージの更新を「自動でプルリクエスト(PR)」として提案する仕組み。
+#   PR を作るだけで、勝手にマージ・デプロイはしない（マージ判断は人間）。
+# ==============================================================================
 version: 2
 updates:
-- package-ecosystem: bundler
-  directory: "/"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 10
-- package-ecosystem: github-actions
-  directory: "/"
-  schedule:
-    interval: daily
-  open-pull-requests-limit: 10
+  # ---- ① Ruby の gem（Bundler）----
+  - package-ecosystem: "bundler"
+    directory: "/"
+    schedule:
+      interval: "weekly"          # 毎週月曜 09:00(JST) にチェック
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 5    # 卒制規模ではレビューしやすい件数に（10→5）
+    commit-message:
+      prefix: "chore(deps)"
+    # 【安定重視①】パッチ／マイナーは1つのPRに集約（レビューが楽）。
+    #   メジャーはこのグループに入らない＝gemごとの個別PRになり1つずつ検証できる。
+    groups:
+      safe-updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    # 【安定重視②】今回“保留”と決めた3つのメジャー更新PRは出さない（週次ノイズを抑制）。
+    #   ※各gemのパッチ/マイナー更新は引き続き受け取れる。
+    #   ※後日メジャーに上げたくなったら、その gem の行を削除するだけでよい。
+    ignore:
+      - dependency-name: "puma"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "solid_cable"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "minitest"
+        update-types: ["version-update:semver-major"]
+
+  # ---- ② Docker ベースイメージ ----
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Tokyo"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(docker)"

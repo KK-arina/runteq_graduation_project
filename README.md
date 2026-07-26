@@ -45,8 +45,8 @@ flowchart LR
 
 <br>
 
-[![Ruby](https://img.shields.io/badge/Ruby-3.4.7-CC342D?style=flat-square&logo=ruby)](https://www.ruby-lang.org/)
-[![Rails](https://img.shields.io/badge/Rails-7.2.3-CC0000?style=flat-square&logo=ruby-on-rails)](https://rubyonrails.org/)
+[![Ruby](https://img.shields.io/badge/Ruby-3.4.10-CC342D?style=flat-square&logo=ruby)](https://www.ruby-lang.org/)
+[![Rails](https://img.shields.io/badge/Rails-8.1.3-CC0000?style=flat-square&logo=ruby-on-rails)](https://rubyonrails.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/Docker-対応済み-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
 [![DB Migration](https://img.shields.io/badge/A--1_DBマイグレーション-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-1-db-migrations)
@@ -114,7 +114,9 @@ flowchart LR
 [![I-1 統合・モデルテスト](https://img.shields.io/badge/I--1_統合・モデルテスト-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-1-integration-model-tests)
 [![I-6 Solid Cacheキャッシュ戦略](https://img.shields.io/badge/I--6_Solid_Cacheキャッシュ戦略-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-6-solid-cache)
 [![I-5 エラー監視](https://img.shields.io/badge/I--5_エラー監視(Sentry)-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-5-sentry)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-68%2F70_ISSUE-f59e0b?style=flat-square)]()
+[![I-2 セキュリティ最終確認](https://img.shields.io/badge/I--2_セキュリティ最終確認-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-2-security-final-check)
+[![Rails 8.1・Ruby 3.4.10 最新化](https://img.shields.io/badge/Rails_8.1_%2F_Ruby_3.4.10-最新化・Dependabot導入-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-2-security-final-check)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-69%2F70_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -170,7 +172,7 @@ flowchart LR
 | Week F | 認証拡張 | #F-1〜#F-6 | 21 | ✅ 完了 |
 | Week G | 通知・設定拡張 | #G-1〜#G-9 | 34 | ✅ 完了 |
 | Week H | フロントエンド強化 | #H-1〜#H-10 | 37 | ✅ 完了 |
-| Week I | 品質・テスト・デプロイ | #I-1〜#I-6 | 22 | 🟡 進行中（#I-1・#I-6・#I-5 完了） |
+| Week I | 品質・テスト・デプロイ | #I-1〜#I-6 | 22 | 🟡 進行中（#I-1・#I-2・#I-5・#I-6 完了） |
 | **合計** | | **70** | **233** | |
 
 <br>
@@ -246,6 +248,7 @@ flowchart LR
 | #I-1 | 統合・モデルテスト（本リリース分）＋ `db:migrate:status` の `NO FILE` 棚卸し＋危機監査レコード保存バグ修正 | 2026-07-14 | feature/i-1-integration-model-tests |
 | #I-6 | キャッシュ戦略設計（Solid Cache 導入・ダッシュボード/グラフ/AI分析結果ページのキャッシュ・`after_commit` 無効化）＋ Redis不要の単一DB構成 | 2026-07-18 | feature/i-6-solid-cache |
 | #I-5 | エラー監視・本番ログ基盤構築（Sentry） | 2026-07-21 | feature/i-5-sentry |
+| #I-2 | セキュリティ最終確認（Brakeman 0件 / 認可 / Strong Parameters / OmniAuth CSRF / CSV署名トークン / ai_context） | 2026-07-26 | feature/i-2-security-final-check |
 
 <br>
 
@@ -7047,6 +7050,76 @@ ISSUE原文は `Date.today.cweek` だったが、これは本アプリの2つの
 
 <br>
 
+### #I-2: セキュリティ最終確認（Brakeman / 手動監査）
+
+<br>
+
+**ブランチ:** `feature/i-2-security-final-check`<br>
+**完了日:** 2026-07-26<br>
+**対象:** 本リリース全機能に対する脆弱性スキャンと手動セキュリティ監査（認可・Strong Parameters・CSRF・トークン設計）を実施し、リリース可能なセキュリティ水準を機械的・網羅的に確認
+
+<br>
+
+#### 手動チェック6項目の結果
+
+<br>
+
+| チェック項目 | 結果 | 根拠 |
+|:---|:---|:---|
+| Brakeman 警告 0 件 | ✅ | `brakeman -A`（追加チェック込み）でコード脆弱性 0 件。`CheckUnscopedFind` も 0 |
+| Strong Parameters 全確認 | ✅ | 全 20 コントローラが `require().permit()` のホワイトリスト。`permit!` は皆無 |
+| 認可（他ユーザーアクセス防止） | ✅ | 全 DB アクセスが `current_user` スコープ経由。未スコープ `find` はゼロ（IDOR 無し） |
+| OmniAuth CSRF 対策 | ✅ | `omniauth-rails_csrf_protection` 導入＋認証ボタンは `form_tag` の POST |
+| AI提案モーダルの ai_context 検証 | ✅ | `session[:ai_context_*]`（暗号化 Cookie）に対象 ID を保存し `verify_ai_context` で一致検証 |
+| CSV エクスポートの署名・期限・認可 | ✅ | `MessageVerifier` 署名＋`expires_at`（即時5分/非同期24時間）＋`user_id` 照合の三重防御 |
+
+<br>
+
+#### 設計上の要点
+
+<br>
+
+- **Brakeman を CI ゲート化**: `brakeman -w2 -z` を採用し、警告があれば終了コード 1 で検知できる運用に統一。<br>
+- **EOLRails 警告の扱い**: 唯一検出された `EOLRails`（Rails 7.2 のサポート期限告知）はコードの脆弱性ではなく依存の寿命告知のため、`config/brakeman.yml` の `skip_checks` に理由コメント付きで登録（その後の Rails 8.1 化により除外を解除）。<br>
+- **認可は「grep + Brakeman + テスト」の三重で証明**: `find` 全数検索・`CheckUnscopedFind` 0 件・全自動テスト緑（861件）で他ユーザーデータへのアクセス不可を裏付け。
+
+<br>
+
+### フレームワーク・依存関係の最新化（Rails 8.1 / Ruby 3.4.10 / Dependabot）
+
+<br>
+
+**ブランチ:** `feature/i-2-security-final-check`（#I-2 と同ブランチ）<br>
+**完了日:** 2026-07-26<br>
+**対象:** セキュリティ・保守性の観点から、フレームワークと依存ライブラリを安全な範囲で最新化し、以後の更新を自動化する体制を構築
+
+<br>
+
+#### 実施内容
+
+<br>
+
+| 対象 | 変更 | 要点 |
+|:---|:---|:---|
+| Ruby on Rails | 7.2.3 → **8.1.3** | サポート期限（2027-10まで）と Ruby 3.4 親和性。`load_defaults` は段階移行 |
+| Ruby | 3.4.7 → **3.4.10** | 3.4 系最新パッチ（zlib CVE 等のセキュリティ修正） |
+| 依存 gem（第1波） | 基盤・セキュリティ系を最新化 | `nokogiri` / `rack` / `bcrypt` / `pg` / `faraday` / `turbo-rails` / `importmap-rails` / `tailwindcss-rails` 等 |
+| 依存 gem（第2波） | 影響の大きい2件を単独更新 | `good_job` / `resend`（AI分析・メール送信を個別に動作確認） |
+| Brakeman | 7.1.1 → **8.0.5** | 静的解析ツールを最新化（新チェック込みで警告 0 件を再確認） |
+
+<br>
+
+#### 継続的な更新体制（Dependabot）
+
+<br>
+
+- **GitHub Dependabot** を導入（`.github/dependabot.yml`）。gem・Docker ベースイメージを毎週監視し、更新を **Pull Request** として自動作成。<br>
+- **安定重視の設定**: パッチ／マイナー更新は 1 つの PR に集約し、メジャー更新は gem ごとの個別 PR として切り出し（CI を確認しながら 1 件ずつ検証可能）。<br>
+- **保留したメジャー**（`puma` 8 / `solid_cable` 4 / `minitest` 6）は Web サーバー・リアルタイム基盤・テスト基盤に関わるため、安定性を優先して本リリース後に個別対応する方針とし、Dependabot の `ignore` で不要な PR を抑制。<br>
+- **脆弱性対応**: `Dependabot alerts` / `security updates`（無料）を有効化し、CVE を検知・修正 PR ベースで適用。
+
+<br>
+
 ---
 
 <br>
@@ -10753,7 +10826,7 @@ Empty Stateの余白設計は「どこに配置されるか」を考慮してデ
 
 <br>
 
-### 149. `t.references` に `index: false` を明示して重複インデックスを防ぐ（#H-8）
+### 150. `t.references` に `index: false` を明示して重複インデックスを防ぐ（#H-8）
 
 <br>
 
@@ -10777,7 +10850,7 @@ add_index :ai_user_profiles, :user_id, unique: true, name: "index_ai_user_profil
 
 <br>
 
-### 150. jsonb カラムには必ず `default: {}, null: false` を付与する（#H-8）
+### 151. jsonb カラムには必ず `default: {}, null: false` を付与する（#H-8）
 
 <br>
 
@@ -10789,7 +10862,7 @@ nil チェックなしに安全にアクセスできる。
 
 <br>
 
-### 151. モデルの `stale?` が参照する定数はサービス側の定数に一元化する（#H-8）
+### 152. モデルの `stale?` が参照する定数はサービス側の定数に一元化する（#H-8）
 
 <br>
 
@@ -10801,7 +10874,7 @@ nil チェックなしに安全にアクセスできる。
 
 <br>
 
-### 152. rescue はエラー種別ごとに分類してログ解析を容易にする（#H-8）
+### 153. rescue はエラー種別ごとに分類してログ解析を容易にする（#H-8）
 
 <br>
 
@@ -10819,7 +10892,7 @@ nil チェックなしに安全にアクセスできる。
 
 <br>
 
-### 153. `.pluck` は preload を無視して常にSQLを発行する（#H-9）
+### 154. `.pluck` は preload を無視して常にSQLを発行する（#H-9）
 
 <br>
 
@@ -10846,7 +10919,7 @@ end
 
 <br>
 
-### 154. Issueのチェックリストより「実コード」を優先する（#H-9）
+### 155. Issueのチェックリストより「実コード」を優先する（#H-9）
 
 <br>
 
@@ -10859,7 +10932,7 @@ AI提案モーダルのように `actions_json`（JSONB）から描画してい�
 
 <br>
 
-### 155. リアルタイム通知バナーを「✖まで残す」には閉じた状態をサーバーに保存する（#H-9）
+### 156. リアルタイム通知バナーを「✖まで残す」には閉じた状態をサーバーに保存する（#H-9）
 
 <br>
 
@@ -10872,7 +10945,7 @@ Turbo Stream の broadcast 専用バナー（プレースホルダは空div）�
 
 <br>
 
-### 156. 「actions_json の有無」だけで分析完了を判定すると危機介入スキップを誤判定する（#H-10）
+### 157. 「actions_json の有無」だけで分析完了を判定すると危機介入スキップを誤判定する（#H-10）
 
 <br>
 
@@ -10893,7 +10966,7 @@ Turbo Stream の broadcast 専用バナー（プレースホルダは空div）�
 
 <br>
 
-### 157. ヘッダーナビが狭いPC幅で語中改行して読みづらい問題のレスポンシブ対応（ヘッダー改善）
+### 158. ヘッダーナビが狭いPC幅で語中改行して読みづらい問題のレスポンシブ対応（ヘッダー改善）
 
 <br>
 
@@ -10909,7 +10982,7 @@ lg 以上でのみ表示して横幅を確保する（氏名はログアウト�
 `whitespace-nowrap` で改行を止め、サイズ自体をブレークポイントで可変にするのが定石。<br>
 また `aria-hidden` な装飾要素は、狭い画面で優先的に隠して情報密度を下げてよい。
 
-### 158. 統合テストは「実装に完全一致」させ、存在しないメソッド名で書かない（#I-1）
+### 159. 統合テストは「実装に完全一致」させ、存在しないメソッド名で書かない（#I-1）
 
 <br>
 
@@ -10920,7 +10993,7 @@ enum（`pending`/`analyzing`/`completed`/`failed`）・ルート（`get "/auth/:
 
 <br>
 
-### 159. `db:migrate:status` の `NO FILE` は多重DB構成の正常表示（#I-1）
+### 160. `db:migrate:status` の `NO FILE` は多重DB構成の正常表示（#I-1）
 
 <br>
 
@@ -10931,7 +11004,7 @@ enum（`pending`/`analyzing`/`completed`/`failed`）・ルート（`get "/auth/:
 
 <br>
 
-### 160. メールのマルチパート本文検証は `decoded` してから照合する（#I-1）
+### 161. メールのマルチパート本文検証は `decoded` してから照合する（#I-1）
 
 <br>
 
@@ -10941,7 +11014,7 @@ enum（`pending`/`analyzing`/`completed`/`failed`）・ルート（`get "/auth/:
 
 <br>
 
-### 161. 統合テストが `AiAnalysis` の D-9 検証をすり抜けた本番バグを検出（#I-1）
+### 162. 統合テストが `AiAnalysis` の D-9 検証をすり抜けた本番バグを検出（#I-1）
 
 <br>
 
@@ -10952,7 +11025,7 @@ PMVV危機検出時の監査 `AiAnalysis`（`purpose_breakdown`）が、`input_s
 
 <br>
 
-### 162. 達成率は計算経路で丸めが違う（`floor` vs `round(2)`）ので境界値を経路ごとに検証する（#I-1）
+### 163. 達成率は計算経路で丸めが違う（`floor` vs `round(2)`）ので境界値を経路ごとに検証する（#I-1）
 
 <br>
 
@@ -10962,7 +11035,7 @@ PMVV危機検出時の監査 `AiAnalysis`（`purpose_breakdown`）が、`input_s
 
 <br>
 
-### 163. Solid Cache は Redis を足さずに PostgreSQL だけでキャッシュを実現する（#I-6）
+### 164. Solid Cache は Redis を足さずに PostgreSQL だけでキャッシュを実現する（#I-6）
 
 <br>
 
@@ -10974,7 +11047,7 @@ GoodJob・solid_cable と合わせて「Redis を足さず PostgreSQL だけで�
 
 <br>
 
-### 164. `SolidCache::Store` は `delete_matched` を実装していない（#I-6）
+### 165. `SolidCache::Store` は `delete_matched` を実装していない（#I-6）
 
 <br>
 
@@ -10986,7 +11059,7 @@ Solid Cache でこれを呼ぶと `NotImplementedError` で500エラーになる
 
 <br>
 
-### 165. キャッシュ対象は「重いDBアクセス」だけにし、CPUで済む計算はキャッシュしない（#I-6）
+### 166. キャッシュ対象は「重いDBアクセス」だけにし、CPUで済む計算はキャッシュしない（#I-6）
 
 <br>
 
@@ -10998,7 +11071,7 @@ Solid Cache でこれを呼ぶと `NotImplementedError` で500エラーになる
 
 <br>
 
-### 166. フォーム（authenticity_token）は絶対にフラグメントキャッシュに入れない（#I-6）
+### 167. フォーム（authenticity_token）は絶対にフラグメントキャッシュに入れない（#I-6）
 
 <br>
 
@@ -11010,7 +11083,7 @@ Solid Cache でこれを呼ぶと `NotImplementedError` で500エラーになる
 
 <br>
 
-### 167. immutable なレコードは「新レコード＝新ID」でキャッシュが自動失効する（#I-6）
+### 168. immutable なレコードは「新レコード＝新ID」でキャッシュが自動失効する（#I-6）
 
 <br>
 
@@ -11022,7 +11095,7 @@ IDが変わるだけでキャッシュキーが変わり、古いキャッシュ
 
 <br>
 
-### 168. Sentry エラー監視基盤の設計ポイント（#I-5）
+### 169. Sentry エラー監視基盤の設計ポイント（#I-5）
 
 <br>
 
@@ -11063,6 +11136,65 @@ Sentry Browser SDK を `public/sentry/bundle.min.js` として自己ホストし
 
 <br>
 
+### 170. Brakeman の EOLRails は「依存の寿命告知」であり CheckEOLRails 名で skip する（#I-2）
+
+<br>
+
+`brakeman -A` の唯一の警告 `EOLRails` は、Rails のサポート期限が近いことを知らせるもので、コードの脆弱性ではない。<br>
+`config/brakeman.yml` の `skip_checks` で除外するが、CLI の `--except EOLRails` と異なり **YAML はクラス名 `CheckEOLRails`（Check 付き）** を要求する点に注意。<br>
+（本アプリはその後 Rails 8.1 化で 7.2 の EOL が解消したため、この skip は解除した。）
+
+<br>
+
+### 171. AI編集のアクセス制御は URL パラメータではなくセッションで検証する（#I-2 再確認）
+
+<br>
+
+AI提案経由の習慣・タスク編集は、対象 ID を `session[:ai_context_habit_id]` / `session[:ai_context_task_id]`（Rails が暗号化する Cookie）に保存し、<br>
+`verify_ai_context` で `@habit.id` / `@task.id` と一致検証する。URL パラメータのフラグではなくサーバー側セッションで完結するため改ざんできない。
+
+<br>
+
+### 172. CSV ダウンロードは MessageVerifier 署名トークンで「期限＋改ざん検知＋所有者照合」を実現する（#I-2 再確認）
+
+<br>
+
+`CsvDownloadTokenService` は `Rails.application.message_verifier("csv_download")`（HMAC・purpose 分離）でトークンを署名し、<br>
+`expires_at`（即時5分／非同期24時間）を検証、さらにコントローラで `payload["user_id"] == current_user.id` を照合する三重防御。<br>
+Rails 標準の `signed_id` を使わずとも、複数値ペイロードを安全に受け渡せる。
+
+<br>
+
+### 173. Rails 8 では enum のキーワード形式が ArgumentError になる（Rails 8.1 アップグレード）
+
+<br>
+
+Rails 7 の `enum status: { ... }`（キーワード形式）は Rails 8 で **削除**され、`ArgumentError` でモデルが読み込めずアプリが起動しない。<br>
+`enum :status, { ... }`（位置引数形式）へ全件変換が必須。`_prefix:` / `_suffix:` も非アンダースコアの `prefix:` / `suffix:` に変わる。<br>
+（本アプリは既に位置引数形式だったため変更ゼロで済んだが、アップグレード前に `grep -rn 'enum ' app/models` で全数確認するのが定石。）
+
+<br>
+
+### 174. gem をイメージに焼き込む Docker 構成では Gemfile.lock 変更時に再ビルドが必要（Rails 8.1 アップグレード）
+
+<br>
+
+`Dockerfile` が `COPY Gemfile Gemfile.lock` → `RUN bundle install` で gem をイメージに焼き込み、かつ `docker-compose.yml` に `/usr/local/bundle` のボリュームが無い構成では、<br>
+`bundle update` はコンテナの一時レイヤーに入るだけで、`docker compose down`→`up` で旧バージョンへ逆戻りする。<br>
+Gemfile.lock を変えたら **`docker compose build` で焼き直す**のが確実（`restart` はそのセッション内でのみ有効）。
+
+<br>
+
+### 175. app:update は差分確認（d）で手動統合し、load_defaults は段階移行する（Rails 8.1 アップグレード）
+
+<br>
+
+`bin/rails app:update` の上書き確認で `a`（全上書き）を選ぶと、CSP・filter_parameter・本番設定などのカスタム初期化ファイルが Rails 標準版で消える。<br>
+`d`（diff）で差分を確認して手動統合し、`config.load_defaults` は一旦現行のまま維持 → `new_framework_defaults` を 1 つずつ有効化して段階移行するのが安全。<br>
+（万一上書きしても、コミット前なら `git restore` で復旧できる。）
+
+<br>
+
 ---
 
 <br>
@@ -11077,10 +11209,10 @@ Sentry Browser SDK を `public/sentry/bundle.min.js` として自己ホストし
 
 | 技術 | バージョン | 用途 |
 |:---|:---|:---|
-| Ruby | 3.4.7 | プログラミング言語 |
-| Ruby on Rails | 7.2.3 | Web フレームワーク |
+| Ruby | 3.4.10 | プログラミング言語（3.4 系最新パッチ・zlib CVE 対応） |
+| Ruby on Rails | 8.1.3 | Web フレームワーク（7.2.3 からアップグレード） |
 | PostgreSQL | 16 | データベース |
-| bcrypt | 3.1.7 | パスワードハッシュ化 |
+| bcrypt | 3.1.7 系 | パスワードハッシュ化 |
 | Puma | 7.1.0（~> 7.0） | Web サーバー |
 
 <br>
@@ -11147,6 +11279,7 @@ Sentry Browser SDK を `public/sentry/bundle.min.js` として自己ホストし
 | RuboCop | コーディング規約チェック |
 | Capybara / Selenium | E2E テスト |
 | rack-mini-profiler | ページのSQL数・実行時間をリアルタイム表示（development 環境のみ） |
+| Dependabot | gem・Docker の依存を毎週監視し更新 PR を自動作成（GitHub 純正・無料） |
 
 <br>
 
@@ -11567,6 +11700,11 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 | 認可制御 | `current_user.habits.find` で他ユーザーのデータへのアクセスを遮断 |
 | エラーメッセージ設計 | I18n（`ja.yml`）でメッセージを管理。重複メール時は存在を推測されにくい文言に変更 |
 | メールバリデーション | 最大255文字制限・DB レベルの UNIQUE 制約で二重防御 |
+| 静的解析（Brakeman） | `brakeman -w2 -z` で脆弱性を CI ゲート化し、警告 0 件を維持（#I-2） |
+| OmniAuth CSRF 対策 | `omniauth-rails_csrf_protection` により認証開始（`/auth/:provider`）を POST + トークン必須に |
+| AI編集のアクセス制御 | `session[:ai_context_*]`（暗号化 Cookie）で対象を検証し URL 改ざんを防止 |
+| CSV ダウンロードの署名 | `MessageVerifier` 署名 + 有効期限 + 所有者照合の三重防御 |
+| 依存関係の継続監視 | GitHub Dependabot による自動更新 PR＋`Dependabot alerts` / `security updates` |
 
 <br>
 
@@ -11580,6 +11718,8 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 
 ```
 habitflow/
+├── .github/
+│   └── dependabot.yml                      # gem・Docker の依存を毎週監視し更新 PR を自動作成
 ├── app/
 │   ├── controllers/
 │   │   ├── application_controller.rb      # #I-5: render_500 で Sentry へ明示通知
@@ -11808,6 +11948,7 @@ habitflow/
 │   ├── cable.yml                          # #D-3 修正: development adapter を async → solid_cable に変更（Turbo Stream 有効化）
 │   ├── database.yml                       # #D-3 修正: 各環境に cable: 接続を追加（solid_cable 用）
 │   ├── cache.yml                          # #I-6: Solid Cache 設定（max_age/max_entries・database:未指定でprimary共有）
+│   ├── brakeman.yml                    # #I-2: Brakeman 設定（EOLRails 除外は Rails 8.1 化で解除済み）
 │   ├── initializers/
 │   │   ├── sentry.rb                      # #I-5: Sentry 初期化（本番のみ有効）
 │   │   ├── good_job.rb                    # #I-5: on_thread_error で Sentry 通知（追記）
@@ -14672,6 +14813,37 @@ importmap 構成（バンドラなし）では npm 導入が大改修になる�
 Sentry はイベントを捨てても「破棄統計（client reports）」を溜め、シャットダウン時に送信を試みる。<br>
 テストでダミーDSNを使うとこの送信が接続エラーになる。`send_client_reports = false` で統計送信を止め、<br>
 外部通信を完全に断つことでテストを安定させた（実装ロジックではなくテストインフラ側の落とし穴）。
+
+<br>
+
+### セキュリティ監査は「grep・静的解析・テスト」を突き合わせて証明する（#I-2）
+
+<br>
+
+「他ユーザーのデータにアクセスできない」ことは、`current_user` スコープの目視だけでなく、<br>
+`find` 全数の grep・Brakeman の `CheckUnscopedFind`（未スコープ検索の検出）・全自動テストの三方向で裏付けると、<br>
+主観に頼らず機械的に証明できる。Brakeman の `EOLRails` のような「依存の寿命告知」は脆弱性と区別し、理由を残して除外する。
+
+<br>
+
+### メジャーアップグレードは「1 変数ずつ」検証し、Docker は焼き込み構成を理解する（Rails 8.1 / Ruby 3.4.10）
+
+<br>
+
+Rails・Ruby・依存 gem を一度にまとめて上げると、問題発生時の原因切り分けが困難になる。<br>
+「Rails → Ruby → 依存 gem（基盤 → 影響大）」の順で 1 つずつ更新し、都度テストを挟むと安全。<br>
+また gem をイメージに焼き込む Docker 構成では、`bundle update` 後に `docker compose build` で焼き直さないと、<br>
+コンテナ再生成時に旧バージョンへ逆戻りする（`restart` はセッション内でのみ有効）点を理解しておく。
+
+<br>
+
+### 依存の最新化は「自動 PR × 段階マージ」で継続可能にする（Dependabot）
+
+<br>
+
+手動での `bundle update` は後回しになりがちなので、Dependabot で更新を PR 化して仕組みに落とす。<br>
+パッチ／マイナーは集約 PR で手軽に、メジャーは個別 PR で慎重に、と分けることで「最新化」と「安定性」を両立できる。<br>
+保留したいメジャーは `ignore` で PR を抑制し、対応する時に `ignore` を外す運用にすると、通知ノイズを抑えられる。
 
 <br>
 
