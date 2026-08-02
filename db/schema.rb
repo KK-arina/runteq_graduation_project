@@ -10,27 +10,27 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2026_07_18_091059) do
+ActiveRecord::Schema[8.1].define(version: 2026_07_18_091059) do
   # These are extensions that must be enabled in order to support this database
-  enable_extension "plpgsql"
+  enable_extension "pg_catalog.plpgsql"
 
   create_table "ai_analyses", force: :cascade do |t|
-    t.bigint "weekly_reflection_id"
-    t.bigint "user_purpose_id"
-    t.integer "analysis_type", default: 0, null: false
-    t.jsonb "input_snapshot"
-    t.text "analysis_comment"
-    t.text "improvement_suggestions"
-    t.text "root_cause"
-    t.text "coaching_message"
     t.jsonb "actions_json"
-    t.boolean "crisis_detected", default: false, null: false
-    t.string "prompt_version"
     t.string "ai_model_name"
-    t.jsonb "metadata"
+    t.text "analysis_comment"
+    t.integer "analysis_type", default: 0, null: false
+    t.text "coaching_message"
     t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.boolean "crisis_detected", default: false, null: false
+    t.text "improvement_suggestions"
+    t.jsonb "input_snapshot"
     t.boolean "is_latest", default: true, null: false
+    t.jsonb "metadata"
+    t.string "prompt_version"
+    t.text "root_cause"
+    t.datetime "updated_at", null: false
+    t.bigint "user_purpose_id"
+    t.bigint "weekly_reflection_id"
     t.index ["analysis_type"], name: "index_ai_analyses_on_analysis_type"
     t.index ["is_latest"], name: "index_ai_analyses_on_is_latest_true", where: "(is_latest = true)"
     t.index ["user_purpose_id", "analysis_type"], name: "index_ai_analyses_latest_purpose_type_unique", unique: true, where: "((user_purpose_id IS NOT NULL) AND (is_latest = true))"
@@ -41,92 +41,92 @@ ActiveRecord::Schema[7.2].define(version: 2026_07_18_091059) do
   end
 
   create_table "ai_user_profiles", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.jsonb "habit_patterns"
-    t.jsonb "reflection_trends"
-    t.jsonb "proposal_adoption"
-    t.text "context_summary"
     t.datetime "analyzed_at"
+    t.text "context_summary"
     t.datetime "created_at", null: false
+    t.jsonb "habit_patterns"
+    t.jsonb "proposal_adoption"
+    t.jsonb "reflection_trends"
     t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
     t.index ["analyzed_at"], name: "index_ai_user_profiles_on_analyzed_at"
     t.index ["user_id"], name: "index_ai_user_profiles_on_user_id"
     t.index ["user_id"], name: "index_ai_user_profiles_on_user_id_unique", unique: true
   end
 
   create_table "good_job_batches", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.text "description"
-    t.jsonb "serialized_properties"
-    t.text "on_finish"
-    t.text "on_success"
-    t.text "on_discard"
-    t.text "callback_queue_name"
     t.integer "callback_priority"
-    t.datetime "enqueued_at"
+    t.text "callback_queue_name"
+    t.datetime "created_at", null: false
+    t.text "description"
     t.datetime "discarded_at"
+    t.datetime "enqueued_at"
     t.datetime "finished_at"
     t.datetime "jobs_finished_at"
+    t.text "on_discard"
+    t.text "on_finish"
+    t.text "on_success"
+    t.jsonb "serialized_properties"
+    t.datetime "updated_at", null: false
   end
 
   create_table "good_job_executions", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
     t.uuid "active_job_id", null: false
-    t.text "job_class"
-    t.text "queue_name"
-    t.jsonb "serialized_params"
-    t.datetime "scheduled_at"
-    t.datetime "finished_at"
-    t.text "error"
-    t.integer "error_event", limit: 2
-    t.text "error_backtrace", array: true
-    t.uuid "process_id"
+    t.datetime "created_at", null: false
     t.interval "duration"
+    t.text "error"
+    t.text "error_backtrace", array: true
+    t.integer "error_event", limit: 2
+    t.datetime "finished_at"
+    t.text "job_class"
+    t.uuid "process_id"
+    t.text "queue_name"
+    t.datetime "scheduled_at"
+    t.jsonb "serialized_params"
+    t.datetime "updated_at", null: false
     t.index ["active_job_id", "created_at"], name: "index_good_job_executions_on_active_job_id_and_created_at"
     t.index ["process_id", "created_at"], name: "index_good_job_executions_on_process_id_and_created_at"
   end
 
   create_table "good_job_processes", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.jsonb "state"
     t.integer "lock_type", limit: 2
+    t.jsonb "state"
+    t.datetime "updated_at", null: false
   end
 
   create_table "good_job_settings", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
     t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
     t.text "key"
+    t.datetime "updated_at", null: false
     t.jsonb "value"
     t.index ["key"], name: "index_good_job_settings_on_key", unique: true
   end
 
   create_table "good_jobs", id: :uuid, default: -> { "gen_random_uuid()" }, force: :cascade do |t|
-    t.text "queue_name"
-    t.integer "priority"
-    t.jsonb "serialized_params"
-    t.datetime "scheduled_at"
-    t.datetime "performed_at"
-    t.datetime "finished_at"
-    t.text "error"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
     t.uuid "active_job_id"
-    t.text "concurrency_key"
-    t.text "cron_key"
-    t.uuid "retried_good_job_id"
-    t.datetime "cron_at"
-    t.uuid "batch_id"
     t.uuid "batch_callback_id"
-    t.boolean "is_discrete"
-    t.integer "executions_count"
-    t.text "job_class"
+    t.uuid "batch_id"
+    t.text "concurrency_key"
+    t.datetime "created_at", null: false
+    t.datetime "cron_at"
+    t.text "cron_key"
+    t.text "error"
     t.integer "error_event", limit: 2
+    t.integer "executions_count"
+    t.datetime "finished_at"
+    t.boolean "is_discrete"
+    t.text "job_class"
     t.text "labels", array: true
-    t.uuid "locked_by_id"
     t.datetime "locked_at"
+    t.uuid "locked_by_id"
+    t.datetime "performed_at"
+    t.integer "priority"
+    t.text "queue_name"
+    t.uuid "retried_good_job_id"
+    t.datetime "scheduled_at"
+    t.jsonb "serialized_params"
+    t.datetime "updated_at", null: false
     t.index ["active_job_id", "created_at"], name: "index_good_jobs_on_active_job_id_and_created_at"
     t.index ["batch_callback_id"], name: "index_good_jobs_on_batch_callback_id", where: "(batch_callback_id IS NOT NULL)"
     t.index ["batch_id"], name: "index_good_jobs_on_batch_id", where: "(batch_id IS NOT NULL)"
@@ -146,25 +146,25 @@ ActiveRecord::Schema[7.2].define(version: 2026_07_18_091059) do
   end
 
   create_table "habit_excluded_days", force: :cascade do |t|
-    t.bigint "habit_id", null: false
-    t.integer "day_of_week", null: false
     t.datetime "created_at", null: false
+    t.integer "day_of_week", null: false
+    t.bigint "habit_id", null: false
     t.datetime "updated_at", null: false
     t.index ["habit_id", "day_of_week"], name: "index_habit_excluded_days_on_habit_id_and_day_of_week", unique: true
     t.index ["habit_id"], name: "index_habit_excluded_days_on_habit_id"
   end
 
   create_table "habit_records", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.bigint "habit_id", null: false
-    t.date "record_date", null: false
     t.boolean "completed", default: false, null: false
     t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.decimal "numeric_value", precision: 10, scale: 2
-    t.text "memo"
-    t.boolean "is_manual_input", default: false
     t.datetime "deleted_at"
+    t.bigint "habit_id", null: false
+    t.boolean "is_manual_input", default: false
+    t.text "memo"
+    t.decimal "numeric_value", precision: 10, scale: 2
+    t.date "record_date", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
     t.index ["habit_id", "deleted_at", "record_date"], name: "index_habit_records_on_habit_deleted_date"
     t.index ["habit_id"], name: "index_habit_records_on_habit_id"
     t.index ["user_id", "habit_id", "record_date"], name: "index_habit_records_on_user_habit_date", unique: true
@@ -173,36 +173,36 @@ ActiveRecord::Schema[7.2].define(version: 2026_07_18_091059) do
   end
 
   create_table "habit_templates", force: :cascade do |t|
-    t.string "name", null: false
-    t.integer "measurement_type", default: 0, null: false
+    t.integer "category", default: 4, null: false
+    t.datetime "created_at", null: false
     t.string "default_unit"
     t.integer "default_weekly_target", default: 5, null: false
-    t.integer "category", default: 4, null: false
     t.text "description"
-    t.integer "sort_order"
     t.boolean "is_active", default: true, null: false
-    t.datetime "created_at", null: false
+    t.integer "measurement_type", default: 0, null: false
+    t.string "name", null: false
+    t.integer "sort_order"
     t.datetime "updated_at", null: false
     t.index ["is_active", "sort_order"], name: "index_habit_templates_on_is_active_and_sort_order"
   end
 
   create_table "habits", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.string "name", limit: 50, null: false
-    t.integer "weekly_target", default: 7, null: false
-    t.datetime "deleted_at"
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.string "unit"
-    t.integer "measurement_type", default: 0, null: false
-    t.integer "current_streak", default: 0, null: false
-    t.integer "longest_streak", default: 0, null: false
-    t.datetime "last_streak_calculated_at"
     t.boolean "allow_rest_mode", default: true, null: false
     t.datetime "archived_at"
     t.string "color"
+    t.datetime "created_at", null: false
+    t.integer "current_streak", default: 0, null: false
+    t.datetime "deleted_at"
     t.string "icon"
+    t.datetime "last_streak_calculated_at"
+    t.integer "longest_streak", default: 0, null: false
+    t.integer "measurement_type", default: 0, null: false
+    t.string "name", limit: 50, null: false
     t.integer "position"
+    t.string "unit"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.integer "weekly_target", default: 7, null: false
     t.index ["deleted_at"], name: "index_habits_on_deleted_at"
     t.index ["user_id", "archived_at"], name: "index_habits_on_user_id_and_archived_at"
     t.index ["user_id", "deleted_at"], name: "index_habits_on_user_id_and_deleted_at"
@@ -211,19 +211,19 @@ ActiveRecord::Schema[7.2].define(version: 2026_07_18_091059) do
   end
 
   create_table "notification_logs", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.integer "notification_type", null: false
     t.integer "channel", null: false
-    t.string "target_type"
-    t.bigint "target_id"
-    t.string "deep_link_url"
-    t.integer "status", default: 0, null: false
-    t.text "error_message"
-    t.integer "retry_count", default: 0, null: false
-    t.jsonb "metadata"
-    t.datetime "delivered_at"
     t.datetime "created_at", null: false
+    t.string "deep_link_url"
+    t.datetime "delivered_at"
+    t.text "error_message"
+    t.jsonb "metadata"
+    t.integer "notification_type", null: false
+    t.integer "retry_count", default: 0, null: false
+    t.integer "status", default: 0, null: false
+    t.bigint "target_id"
+    t.string "target_type"
     t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
     t.index ["channel"], name: "index_notification_logs_on_channel"
     t.index ["deep_link_url"], name: "index_notification_logs_on_deep_link_url"
     t.index ["notification_type"], name: "index_notification_logs_on_notification_type"
@@ -234,66 +234,66 @@ ActiveRecord::Schema[7.2].define(version: 2026_07_18_091059) do
   end
 
   create_table "password_reset_tokens", force: :cascade do |t|
-    t.bigint "user_id", null: false
+    t.datetime "created_at", null: false
     t.datetime "expires_at", null: false
     t.boolean "is_used", default: false, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
     t.string "token_digest", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
     t.index ["token_digest"], name: "index_password_reset_tokens_on_token_digest_unique", unique: true
     t.index ["user_id"], name: "index_password_reset_tokens_on_user_id"
     t.index ["user_id"], name: "index_password_reset_tokens_on_user_id_unique", unique: true
   end
 
   create_table "push_subscriptions", force: :cascade do |t|
-    t.bigint "user_id", null: false
+    t.string "auth"
+    t.datetime "created_at", null: false
+    t.string "device_name"
     t.text "endpoint"
     t.string "p256dh"
-    t.string "auth"
-    t.string "device_name"
-    t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
     t.index ["user_id"], name: "index_push_subscriptions_on_user_id"
   end
 
   create_table "solid_cable_messages", force: :cascade do |t|
     t.text "channel", null: false
-    t.text "payload", null: false
-    t.datetime "created_at", null: false
     t.bigint "channel_hash", default: 0, null: false
+    t.datetime "created_at", null: false
+    t.text "payload", null: false
     t.index ["channel"], name: "index_solid_cable_messages_on_channel"
     t.index ["channel_hash"], name: "index_solid_cable_messages_on_channel_hash"
     t.index ["created_at"], name: "index_solid_cable_messages_on_created_at"
   end
 
   create_table "solid_cache_entries", force: :cascade do |t|
-    t.binary "key", null: false
-    t.binary "value", null: false
-    t.datetime "created_at", null: false
-    t.bigint "key_hash", null: false
     t.integer "byte_size", null: false
+    t.datetime "created_at", null: false
+    t.binary "key", null: false
+    t.bigint "key_hash", null: false
+    t.binary "value", null: false
     t.index ["byte_size"], name: "index_solid_cache_entries_on_byte_size"
     t.index ["key_hash", "byte_size"], name: "index_solid_cache_entries_on_key_hash_and_byte_size"
     t.index ["key_hash"], name: "index_solid_cache_entries_on_key_hash", unique: true
   end
 
   create_table "tasks", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.bigint "habit_id"
-    t.string "title", null: false
-    t.integer "priority", default: 1, null: false
-    t.integer "task_type", default: 0, null: false
-    t.integer "status", default: 0, null: false
-    t.date "due_date"
-    t.decimal "estimated_hours", precision: 5, scale: 1
-    t.datetime "scheduled_at"
+    t.boolean "ai_generated", default: false, null: false
     t.boolean "alarm_enabled", default: false, null: false
     t.integer "alarm_minutes_before"
     t.datetime "completed_at"
-    t.boolean "ai_generated", default: false, null: false
-    t.datetime "deleted_at"
     t.datetime "created_at", null: false
+    t.datetime "deleted_at"
+    t.date "due_date"
+    t.decimal "estimated_hours", precision: 5, scale: 1
+    t.bigint "habit_id"
+    t.integer "priority", default: 1, null: false
+    t.datetime "scheduled_at"
+    t.integer "status", default: 0, null: false
+    t.integer "task_type", default: 0, null: false
+    t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
     t.index ["alarm_enabled", "scheduled_at"], name: "index_tasks_on_alarm_enabled_and_scheduled_at"
     t.index ["user_id", "alarm_enabled"], name: "index_tasks_on_user_id_and_alarm_enabled"
     t.index ["user_id", "scheduled_at"], name: "index_tasks_on_user_id_and_scheduled_at"
@@ -303,59 +303,59 @@ ActiveRecord::Schema[7.2].define(version: 2026_07_18_091059) do
   end
 
   create_table "user_purposes", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.text "purpose"
-    t.text "mission"
-    t.text "vision"
-    t.text "value"
-    t.text "current_situation"
-    t.integer "version", default: 1, null: false
-    t.boolean "is_active", default: true, null: false
     t.integer "analysis_state", default: 0, null: false
-    t.text "last_error_message"
     t.datetime "created_at", null: false
+    t.text "current_situation"
+    t.boolean "is_active", default: true, null: false
+    t.text "last_error_message"
+    t.text "mission"
+    t.text "purpose"
     t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.text "value"
+    t.integer "version", default: 1, null: false
+    t.text "vision"
     t.index ["user_id", "is_active"], name: "index_user_purposes_on_user_id_and_is_active"
     t.index ["user_id"], name: "index_user_purposes_on_user_id"
   end
 
   create_table "user_settings", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.string "time_zone", default: "Asia/Tokyo"
-    t.boolean "notification_enabled", default: true, null: false
-    t.boolean "line_notification_enabled", default: false, null: false
-    t.boolean "email_notification_enabled", default: true, null: false
-    t.integer "daily_notification_limit", default: 5, null: false
-    t.integer "daily_notification_count", default: 0, null: false
-    t.datetime "notification_count_reset_at"
-    t.datetime "last_notification_sent_at"
-    t.boolean "weekly_report_enabled", default: true, null: false
-    t.datetime "rest_mode_until"
-    t.string "rest_mode_reason"
     t.integer "ai_analysis_count", default: 0, null: false
     t.integer "ai_analysis_monthly_limit", default: 10, null: false
     t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
+    t.integer "daily_notification_count", default: 0, null: false
+    t.integer "daily_notification_limit", default: 5, null: false
+    t.boolean "email_notification_enabled", default: true, null: false
     t.datetime "last_ai_requested_at", comment: "最後にAI分析リクエストを受け付けた日時。D-10レート制限で使用。"
     t.datetime "last_analytics_viewed_at", comment: "グラフ・進捗分析ページ(H-4)を最後に開いた日時。Bottom Navigationの未確認AI分析バッジのリセット判定に使用。"
+    t.datetime "last_notification_sent_at"
+    t.boolean "line_notification_enabled", default: false, null: false
+    t.datetime "notification_count_reset_at"
+    t.boolean "notification_enabled", default: true, null: false
     t.datetime "pmvv_banner_dismissed_at", comment: "ダッシュボードのPMVV完了バナーを✖で閉じた日時。最新PMVV分析のcreated_atがこれより新しければバナーを表示する。"
     t.datetime "reflection_banner_dismissed_at", comment: "ダッシュボードの振り返り完了バナーを✖で閉じた日時。最新の振り返りAI分析のcreated_atがこれより新しければバナーを表示する。"
+    t.string "rest_mode_reason"
+    t.datetime "rest_mode_until"
+    t.string "time_zone", default: "Asia/Tokyo"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.boolean "weekly_report_enabled", default: true, null: false
     t.index ["user_id"], name: "index_user_settings_on_user_id"
     t.index ["user_id"], name: "index_user_settings_on_user_id_unique", unique: true
   end
 
   create_table "users", force: :cascade do |t|
-    t.string "name", null: false
-    t.string "email"
-    t.string "password_digest"
     t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.string "provider", default: "email"
-    t.string "uid"
-    t.string "line_user_id"
-    t.datetime "first_login_at"
-    t.datetime "terms_agreed_at"
     t.datetime "deleted_at"
+    t.string "email"
+    t.datetime "first_login_at"
+    t.string "line_user_id"
+    t.string "name", null: false
+    t.string "password_digest"
+    t.string "provider", default: "email"
+    t.datetime "terms_agreed_at"
+    t.string "uid"
+    t.datetime "updated_at", null: false
     t.index ["deleted_at"], name: "index_users_on_deleted_at", where: "(deleted_at IS NULL)"
     t.index ["email"], name: "index_users_on_email_active", unique: true, where: "(deleted_at IS NULL)"
     t.index ["provider", "uid"], name: "index_users_on_provider_and_uid_active", unique: true, where: "(deleted_at IS NULL)"
@@ -363,52 +363,52 @@ ActiveRecord::Schema[7.2].define(version: 2026_07_18_091059) do
   end
 
   create_table "weekly_reflection_habit_summaries", force: :cascade do |t|
-    t.bigint "weekly_reflection_id", null: false
+    t.decimal "achievement_rate", precision: 5, scale: 2, default: "0.0", null: false
+    t.integer "actual_count", default: 0, null: false
+    t.decimal "actual_value", precision: 10, scale: 2, comment: "数値型習慣の週次実績値合計（SUM）。チェック型はNULL。"
+    t.datetime "created_at", null: false
     t.bigint "habit_id"
     t.string "habit_name", null: false
-    t.integer "weekly_target", null: false
-    t.integer "actual_count", default: 0, null: false
-    t.decimal "achievement_rate", precision: 5, scale: 2, default: "0.0", null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.decimal "actual_value", precision: 10, scale: 2, comment: "数値型習慣の週次実績値合計（SUM）。チェック型はNULL。"
     t.string "unit", comment: "数値型習慣の単位スナップショット（例: 分, 冊）。チェック型はNULL。"
+    t.datetime "updated_at", null: false
+    t.bigint "weekly_reflection_id", null: false
+    t.integer "weekly_target", null: false
     t.index ["habit_id"], name: "index_weekly_reflection_habit_summaries_on_habit_id"
     t.index ["weekly_reflection_id", "habit_id"], name: "idx_wr_habit_summaries_on_wr_id_and_habit_id", unique: true
     t.index ["weekly_reflection_id"], name: "idx_on_weekly_reflection_id_641bf747c5"
   end
 
   create_table "weekly_reflection_task_summaries", force: :cascade do |t|
-    t.bigint "weekly_reflection_id", null: false
-    t.bigint "task_id"
-    t.string "title", null: false
-    t.integer "priority", default: 1, null: false
-    t.integer "task_type", default: 0, null: false
-    t.boolean "was_completed", default: false, null: false
     t.datetime "completed_at"
-    t.date "due_date"
     t.datetime "created_at", null: false
+    t.date "due_date"
+    t.integer "priority", default: 1, null: false
+    t.bigint "task_id"
+    t.integer "task_type", default: 0, null: false
+    t.string "title", null: false
     t.datetime "updated_at", null: false
+    t.boolean "was_completed", default: false, null: false
+    t.bigint "weekly_reflection_id", null: false
     t.index ["task_id"], name: "index_weekly_reflection_task_summaries_on_task_id"
     t.index ["weekly_reflection_id", "task_id"], name: "idx_wr_task_summaries_on_wr_id_and_task_id", unique: true, where: "(task_id IS NOT NULL)"
     t.index ["weekly_reflection_id"], name: "index_weekly_reflection_task_summaries_on_weekly_reflection_id"
   end
 
   create_table "weekly_reflections", force: :cascade do |t|
-    t.bigint "user_id", null: false
-    t.date "week_start_date", null: false
-    t.date "week_end_date", null: false
-    t.text "reflection_comment"
-    t.boolean "is_locked", default: false, null: false
-    t.datetime "created_at", null: false
-    t.datetime "updated_at", null: false
-    t.datetime "completed_at"
-    t.integer "year"
-    t.integer "week_number"
-    t.integer "mood"
-    t.text "direct_reason"
     t.text "background_situation"
+    t.datetime "completed_at"
+    t.datetime "created_at", null: false
+    t.text "direct_reason"
+    t.boolean "is_locked", default: false, null: false
+    t.integer "mood"
     t.text "next_action"
+    t.text "reflection_comment"
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.date "week_end_date", null: false
+    t.integer "week_number"
+    t.date "week_start_date", null: false
+    t.integer "year"
     t.index ["user_id", "week_start_date", "completed_at"], name: "idx_weekly_reflections_user_week_completed", where: "(completed_at IS NOT NULL)"
     t.index ["user_id", "week_start_date"], name: "index_weekly_reflections_on_user_id_and_week_start_date", unique: true
     t.index ["user_id", "year", "week_number"], name: "index_weekly_reflections_on_user_year_week", unique: true

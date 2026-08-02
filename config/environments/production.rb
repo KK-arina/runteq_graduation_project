@@ -288,78 +288,53 @@ Rails.application.configure do
   config.action_controller.perform_caching = true
 
   # ============================================================
-  # Issue #A-4: Action Mailer 本番環境設定（Resend）
+  # Issue #A-4 / #I-3: Action Mailer 本番環境設定（Resend）
   # ============================================================
-  #
-  # 【なぜ本番環境だけに書くのか】
-  # Railsは環境ごとに設定を分けられる。
-  #   development.rb → letter_openerでブラウザプレビュー
-  #   production.rb  → Resendで実際にメール送信
-  # ここに書くことで「本番だけResendを使う」構成が明確になる。
 
-  # ------------------------------------------------------------
-  # 送信エンジンの指定
-  # ------------------------------------------------------------
-  # delivery_method: :resend
-  #   Resend gemが提供する送信方式を使用する。
-  #   SMTPの代わりにResendのHTTP APIを使ってメールを送信する。
-  #   SMTPより高速で、送信結果のトラッキングも容易。
+  # 送信エンジン: Resend の HTTP API を使う（SMTP より高速・トラッキング可）
   config.action_mailer.delivery_method = :resend
 
-  # ------------------------------------------------------------
-  # エラー検知設定
-  # ------------------------------------------------------------
-  # raise_delivery_errors: true
-  #   メール送信に失敗したとき例外（エラー）を発生させる。
-  #
-  #   trueにする理由:
-  #     - 送信失敗をSentryなどのエラー監視ツールで検知できる
-  #     - 「送ったつもりが届いていない」という事故を防げる
-  #     - ユーザーへ「送信に失敗しました」と正しくフィードバックできる
-  #
-  #   falseにするとどうなるか:
-  #     - 送信失敗しても例外が出ないためエラーに気づけない
-  #     - ユーザーがパスワードリセットメールを受け取れず問い合わせが来る
+  # 送信失敗時に例外を出す（Sentry で検知できる／「送ったつもり」事故を防ぐ）
   config.action_mailer.raise_delivery_errors = true
 
   # ------------------------------------------------------------
-  # メール内URLのドメイン設定
+  # メール内URL・画像のホスト（#I-3: 環境変数化）
   # ------------------------------------------------------------
-  # default_url_options
-  #   パスワードリセットメールなどに含まれるリンクURLを生成する際に使用。
+  # 【なぜ環境変数（APP_HOST）にするのか】
+  #   パスワードリセット・週次レポート・タスクアラーム・CSV完了メールの
+  #   リンクや画像URLは絶対URL（https://ホスト/...）で生成する必要がある。
+  #   このホストをコードに直書きすると、将来 独自ドメイン（例: habitflow.jp）へ
+  #   移行したときに production.rb を書き換える必要が出てしまう。
+  #   APP_HOST という環境変数に逃がしておけば、移行時は Render の環境変数を
+  #   変えるだけで済み、コードは一切修正不要になる。
   #
-  #   【なぜ必要か】
-  #   Railsのメイラーはリクエストのドメインを自動判定できない。
-  #   （メール送信はHTTPリクエストと紐付いていないため）
-  #   このため「どのドメインでURLを組み立てるか」を明示的に指定する必要がある。
+  # 【なぜ ENV.fetch に第2引数（既定値）を付けるのか】
+  #   ENV.fetch("APP_HOST") のように既定値なしにすると、APP_HOST が未設定のとき
+  #   KeyError で【アプリが起動できなくなる】。この設定は起動時に読まれるため、
+  #   Render に APP_HOST を入れ忘れただけでデプロイが落ちてしまう。
+  #   第2引数に現在の本番URL "habitflow-web.onrender.com" を既定値として持たせる
+  #   ことで、未設定でも安全に現行URLで動き、必要なときだけ上書きできる。
   #
-  #   設定しないとどうなるか:
-  #     例） password_reset_url(token: "abc")
-  #     → "http://localhost/password_reset?token=abc" というURLが生成される（間違い）
-  #     → "https://habitflow.onrender.com/password_reset?token=abc" が正しい
+  # 【現在の本番URL】
+  #   Render のサービス名が "habitflow-web" のため、既定の公開URLは
+  #   https://habitflow-web.onrender.com。旧設定 "habitflow.onrender.com" は
+  #   存在しない別ホストで、メール内リンクが全滅していたため実URLに一致させる。
+  app_host = ENV.fetch("APP_HOST", "habitflow-web.onrender.com")
+
+  # default_url_options:
+  #   edit_password_reset_url などの URL ヘルパーがメール内で使われたとき、
+  #   自動的に付与するドメインとプロトコル。protocol は本番なので常に https。
   config.action_mailer.default_url_options = {
-    host:     "habitflow.onrender.com",
+    host:     app_host,
     protocol: "https"
   }
 
-  # ------------------------------------------------------------
-  # メール内画像・CSSのアセットホスト設定
-  # ------------------------------------------------------------
-  # asset_host
-  #   メールのHTMLテンプレート内で image_url や stylesheet_url を使うとき、
-  #   絶対URLを生成するためのホストを指定する。
-  #
-  #   【なぜ必要か】
-  #   メールクライアント（Gmail等）はサーバーの相対パス（/assets/logo.png）を
-  #   解決できない。絶対URL（https://habitflow.onrender.com/assets/logo.png）
-  #   が必要なため、ここでホストを指定する。
-  config.action_mailer.asset_host = "https://habitflow.onrender.com"
+  # asset_host:
+  #   メールHTML内の image_url / stylesheet_url を絶対URLにするためのホスト。
+  #   メールクライアントは相対パスを解決できないため絶対URLが必須。
+  #   default_url_options と同じ app_host を使い、食い違いによる画像リンク切れを防ぐ。
+  config.action_mailer.asset_host = "https://#{app_host}"
 
-  # ------------------------------------------------------------
-  # メールのキャッシュ設定
-  # ------------------------------------------------------------
-  # perform_caching: false
-  #   メールのテンプレートはキャッシュしない。
-  #   メールは毎回最新の内容で生成する必要があるため。
+  # メールのテンプレートはキャッシュしない（毎回最新内容で生成する）
   config.action_mailer.perform_caching = false
 end

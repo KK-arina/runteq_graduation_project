@@ -1,59 +1,78 @@
 # config/database.yml
 #
 # ==============================================================================
-# データベース接続設定
+# データベース接続設定（#I-3: 開発/テストと本番を分離）
 # ==============================================================================
 #
-# 【D-3 修正】
-#   solid_cable が使う cable: 接続を各環境に追加する。
+# 【今回の修正の理由（重要）】
+#   これまで default ブロックに `url: <%= ENV['DATABASE_URL'] %>` を置いていたため、
+#   docker-compose.yml で設定した DATABASE_URL（habitflow_development を指す）が
+#   development だけでなく test にも継承されていた。
+#   Rails は「url: にDB名が含まれる場合、そのDB名が各環境の database: 指定より
+#   優先される」ため、test 環境の実際の接続先が habitflow_test ではなく
+#   habitflow_development になっていた。
+#   その結果 `db:test:prepare` が開発DBを初期化（全テーブル作り直し）してしまい、
+#   seed したデータ（テンプレート等）が毎回消えていた。
 #
-# 【なぜ cable: 接続が必要か】
-#   solid_cable は cable.yml の connects_to: database: writing: cable で
-#   指定した接続名（cable）を使って DB にアクセスする。
-#   database.yml に cable: が定義されていないと
-#   "database configuration does not specify adapter" エラーが発生する。
+#   これを防ぐため、url:（＝DATABASE_URL）は【本番（production）だけ】が使い、
+#   development / test は各自の database: 名で接続する構成に分離する。
 #
-# 【primary と cable で同じ DB を使う理由】
-#   solid_cable 専用の DB を別途用意する必要はない。
-#   同じ PostgreSQL の DB 内に solid_cable_messages テーブルが作られる。
-#   migrations_paths: db/cable_migrate で
-#   solid_cable のマイグレーションを通常のマイグレーションと分けて管理する。
+# 【接続情報の考え方】
+#   development / test … Docker Compose の db サービスへ host: db で接続する。
+#                        ユーザー/パスワードは compose の postgres の既定値。
+#   production         … Render の DATABASE_URL（Neon）を使う。
+#
+# 【cable 接続について（solid_cable 用）】
+#   solid_cable は cable.yml の connects_to database: writing: cable で
+#   cable 接続を使う。primary と同じ DB を使い、
+#   migrations_paths: db/cable_migrate で solid_cable のマイグレーションを
+#   通常のマイグレーションと分けて管理する。
 # ==============================================================================
 
 default: &default
   adapter: postgresql
   encoding: unicode
   pool: <%= ENV.fetch("RAILS_MAX_THREADS") { 5 } %>
-  url: <%= ENV['DATABASE_URL'] %>
+  # 開発・テスト用の接続情報（Docker Compose の db サービス）。
+  # ※ 本番は下の production で url: を使い、これらは URL の値で上書きされるため、
+  #    本番の接続には影響しない（開発・テスト専用の既定値）。
+  # ※ 値は環境変数で上書きできるようにしておく（無ければ compose の既定値を使う）。
+  host:     <%= ENV.fetch("DB_HOST", "db") %>
+  username: <%= ENV.fetch("DB_USERNAME", "postgres") %>
+  password: <%= ENV.fetch("DB_PASSWORD", "postgres") %>
 
 development:
   # primary: 通常のアプリデータ用接続
   primary:
     <<: *default
     database: habitflow_development
-  # cable: solid_cable 用接続（D-3 追加）
-  # primary と同じ DB・同じ URL を使う。
+  # cable: solid_cable 用接続（primary と同じ DB を使う）
   cable:
     <<: *default
     database: habitflow_development
     migrations_paths: db/cable_migrate
 
 test:
-  # primary: テスト用接続
+  # primary: テスト用接続（★ ここが habitflow_development に化けていた不具合を解消）
   primary:
     <<: *default
     database: habitflow_test
-  # cable: テスト環境でも cable 接続を定義する（D-3 追加）
+  # cable: テスト環境の solid_cable 用接続
   cable:
     <<: *default
     database: habitflow_test
     migrations_paths: db/cable_migrate
 
 production:
-  # primary: 本番用接続（DATABASE_URL が url: に入るため database: 指定不要）
+  # primary: 本番用接続。Render の DATABASE_URL（Neon）を使う。
+  # 【url: を指定する理由】
+  #   url: があると、host/username/password/database は URL に含まれる値で
+  #   上書きされる。本番は Neon の接続情報を URL 一本で受け取りたいのでこれを使う。
   primary:
     <<: *default
-  # cable: 本番 solid_cable 用接続（D-3 追加）
+    url: <%= ENV["DATABASE_URL"] %>
+  # cable: 本番の solid_cable 用接続（primary と同じ Neon DB を使う）
   cable:
     <<: *default
+    url: <%= ENV["DATABASE_URL"] %>
     migrations_paths: db/cable_migrate
