@@ -238,20 +238,45 @@ export default class extends Controller {
     const url    = this.recordIdValue === 0 ? this.createUrlValue : this.updateUrlValue
     const method = this.recordIdValue === 0 ? "POST" : "PATCH"
 
-    const response = await Promise.race([
-      fetch(url, {
+    // ───────────────────────────────────────────────────────────
+    // タイムアウト処理（#I-3 修正）
+    // ───────────────────────────────────────────────────────────
+    // 【変更点1】Promise.race → AbortController に変更した理由:
+    //   旧実装（Promise.race + setTimeout）は「時間切れ」を検知できても、
+    //   裏で走っている fetch 自体は止められない。そのため、サーバー側では
+    //   保存が成功しているのに画面だけ「タイムアウト」になる不整合が起きうる。
+    //   AbortController なら fetch を確実に中断でき、状態のズレを防げる。
+    //
+    // 【変更点2】タイムアウトを 8 秒 → 30 秒に延長した理由:
+    //   Render の無料プランは 15 分アクセスが無いとスリープし、復帰
+    //   （コールドスタート）に 30〜60 秒かかることがある。8 秒だとスリープ
+    //   復帰後の最初の1回がほぼ確実に失敗するため、余裕を持たせる。
+    //   ウォーム状態では通常 1 秒未満で完了するので、体感速度は変わらない。
+    const controller = new AbortController()
+    const timeoutId  = setTimeout(() => controller.abort(), 30000)
+
+    let response
+    try {
+      response = await fetch(url, {
         method,
         headers: {
           "X-CSRF-Token": document.querySelector('meta[name="csrf-token"]').content,
           "Accept":       "text/vnd.turbo-stream.html",
           "Content-Type": "application/x-www-form-urlencoded"
         },
-        body
-      }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("タイムアウト")), 8000)
-      )
-    ])
+        body,
+        signal: controller.signal
+      })
+    } catch (error) {
+      // AbortController による中断（＝タイムアウト）を、分かりやすい文言に変換する。
+      if (error.name === "AbortError") {
+        throw new Error("サーバーの応答に時間がかかっています。少し待ってからもう一度お試しください。")
+      }
+      throw error
+    } finally {
+      // 成否にかかわらずタイマーを必ず解除する（不要な setTimeout を残さない）。
+      clearTimeout(timeoutId)
+    }
 
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
 
