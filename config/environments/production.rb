@@ -337,4 +337,7 @@ Rails.application.configure do
 
   # メールのテンプレートはキャッシュしない（毎回最新内容で生成する）
   config.action_mailer.perform_caching = false
+
+  # 自動の preload リンクヘッダを無効化（コンソールの preload 警告を止める）
+  config.action_view.preload_links_header = false
 end
