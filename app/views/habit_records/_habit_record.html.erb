@@ -48,7 +48,7 @@
      data-habit-record-update-url-value="<%= update_url %>"
      data-habit-record-record-id-value="<%= record_id %>">
 
-  <div class="flex items-center gap-3 w-full">
+  <div class="flex items-center gap-2 w-full">
 
     <% if habit.check_type? %>
       <input type="checkbox"
@@ -61,10 +61,10 @@
              <%= record.completed ? "checked" : "" %>>
 
       <label for="habit_checkbox_<%= habit.id %>"
-             class="text-sm flex-1 cursor-pointer flex items-center gap-1.5
+             class="text-sm flex-1 min-w-0 cursor-pointer flex items-center gap-1.5
                     <%= record.completed ? 'line-through text-gray-400' : 'text-gray-700' %>">
-        <span aria-hidden="true"><%= habit.icon.presence || "📋" %></span>
-        <%= habit.name %>
+        <span aria-hidden="true" class="flex-shrink-0"><%= habit.icon.presence || "📋" %></span>
+        <span class="min-w-0 break-words"><%= habit.name %></span>
       </label>
 
     <% else %>
@@ -72,7 +72,7 @@
 
       <input type="number"
              id="habit_numeric_input_<%= habit.id %>"
-             class="w-20 px-2 py-1.5 text-sm border border-gray-300 rounded-lg
+             class="w-14 px-2 py-1.5 text-sm border border-gray-300 rounded-lg
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500
                     text-center flex-shrink-0"
              min="0"
@@ -89,14 +89,15 @@
       </span>
 
       <label for="habit_numeric_input_<%= habit.id %>"
-             class="text-sm text-gray-700 flex-1 cursor-pointer flex items-center gap-1.5">
-        <span aria-hidden="true"><%= habit.icon.presence || "📋" %></span>
-        <%= habit.name %>
+             class="text-sm text-gray-700 flex-1 min-w-0 cursor-pointer flex items-center gap-1.5">
+        <span aria-hidden="true" class="flex-shrink-0"><%= habit.icon.presence || "📋" %></span>
+        <span class="min-w-0 break-words"><%= habit.name %></span>
       </label>
     <% end %>
 
     <span id="habit_status_<%= habit.id %>"
-          class="text-xs font-medium px-2 py-0.5 rounded-full flex-shrink-0
+          class="text-xs font-medium px-1.5 py-0.5 rounded-md flex-shrink-0
+                 max-w-[4rem] text-center leading-tight whitespace-normal
                  <%= case record_status
                      when :recorded_today      then 'text-green-600 bg-green-50'
                      when :updated_today       then 'text-blue-600 bg-blue-50'
