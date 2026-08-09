@@ -149,10 +149,10 @@
               <%#
                 whitespace-pre-wrap: テキスト内の改行を HTML で保持する。
                 ユーザーが複数行で入力したテキストがそのまま表示される。
+                【重要】開始タグと内容を同じ行に置く。改行+インデントを挟むと、
+                その空白が whitespace-pre-wrap で先頭に描画され、折り返しがずれるため。
               %>
-              <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-                <%= field[:value] %>
-              </p>
+              <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"><%= field[:value].to_s.strip %></p>
             <% else %>
               <p class="text-sm text-gray-400 italic">未入力</p>
             <% end %>

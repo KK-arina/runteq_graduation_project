@@ -159,9 +159,7 @@
             </span>
           </div>
           <% if field[:value].present? %>
-            <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-              <%= field[:value] %>
-            </p>
+            <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"><%= field[:value].to_s.strip %></p>
           <% else %>
             <p class="text-sm text-gray-400 italic">未入力</p>
           <% end %>
