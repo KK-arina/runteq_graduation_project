@@ -77,6 +77,8 @@ class HabitRecordSaveService
   #   成功: { success: true,  habit_record: HabitRecord, errors: [] }
   #   失敗: { success: false, habit_record: nil,         errors: [エラー文字列] }
   def call
+    habit_record = nil
+
     ApplicationRecord.with_transaction do
       habit_record = HabitRecord.find_or_create_for(@user, @habit)
 
@@ -127,9 +129,37 @@ class HabitRecordSaveService
       # update_params が空の場合は更新しない
       # （チェック型の新規作成直後など、何も送らないケースへの安全策）
       habit_record.update!(update_params) unless update_params.empty?
-
-      { success: true, habit_record: habit_record, errors: [] }
     end
+
+    # ── 記録保存後にストリークを即時再計算する（#I-3）────────────────────────
+    #
+    # 【なぜここで再計算するのか】
+    #   current_streak / longest_streak は本来 StreakCalculationJob（日次 cron）
+    #   が更新する。しかし Render の無料 Web サービスは15分アクセスが無いと
+    #   停止するため、深夜の cron が発火せず、記録してもストリークが更新されない
+    #   ことがある。そこでアプリ内の定期処理に依存せず、記録の保存が成功した直後に
+    #   その習慣のストリークを再計算して即時反映する。
+    #   （日次の StreakCalculationJob は整合性のためのバックアップとして残すが、
+    #    無料枠では発火が保証されない点に注意。「記録しなかった日のストリーク
+    #    切れ」など、保存が発生しないケースはこの保存時再計算では補えない。）
+    #
+    # 【なぜトランザクションの外で呼ぶのか】
+    #   HabitRecord の保存を先に確定させ、DB 変更がコミットされた後で計算する。
+    #   ストリーク計算が失敗しても、保存済みの記録まで失敗扱いにしないため。
+    #   （calculate_streak! は update_columns で書き込み、コールバックを発火しない）
+    #
+    # 【例外の握り方】
+    #   rescue StandardError とし、通常のアプリ例外のみ捕捉する（Exception 系は
+    #   捕まえない）。ストリーク計算の失敗で記録保存まで失敗させないが、原因調査の
+    #   ためログとバックトレース先頭を必ず残す。
+    begin
+      @habit.calculate_streak!
+    rescue StandardError => e
+      Rails.logger.error "[HabitRecordSaveService] ストリーク再計算に失敗しました: habit_id=#{@habit.id}, error=#{e.class}: #{e.message}"
+      Rails.logger.error e.backtrace&.first(5)&.join("\n")
+    end
+
+    { success: true, habit_record: habit_record, errors: [] }
 
   rescue ActiveRecord::RecordInvalid => e
     errors = e.record&.errors&.full_messages || [ e.message ]
