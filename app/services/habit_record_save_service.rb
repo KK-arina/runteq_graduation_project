@@ -150,13 +150,19 @@ class HabitRecordSaveService
     #
     # 【例外の握り方】
     #   rescue StandardError とし、通常のアプリ例外のみ捕捉する（Exception 系は
-    #   捕まえない）。ストリーク計算の失敗で記録保存まで失敗させないが、原因調査の
-    #   ためログとバックトレース先頭を必ず残す。
+    #   捕まえない）。ストリーク計算の失敗で記録保存まで失敗させないが、
+    #   「達成率>0 なのにストリーク未更新」の不整合を“黙って”作らないよう、
+    #   ログに加えて Sentry へも通知し、監視で必ず気づけるようにする。
+    #   （記録保存とストリーク更新を同一トランザクションにする案もあるが、
+    #    ストリーク計算の失敗で主機能である記録保存まで巻き添えにしたくないため、
+    #    保存は確定させ、ストリークの失敗は通知して後続で補正する方針をとる）
     begin
       @habit.calculate_streak!
     rescue StandardError => e
       Rails.logger.error "[HabitRecordSaveService] ストリーク再計算に失敗しました: habit_id=#{@habit.id}, error=#{e.class}: #{e.message}"
       Rails.logger.error e.backtrace&.first(5)&.join("\n")
+      # 握りつぶしにせず監視へ通知する（Sentry 未ロードの環境=テスト等では skip）
+      Sentry.capture_exception(e) if defined?(Sentry)
     end
 
     { success: true, habit_record: habit_record, errors: [] }

@@ -18,13 +18,28 @@
 #   ブロックされてしまう。
 #
 #   → form_action に :self と Google/LINE 認証 URL のドメインを追加する。
-
 Rails.application.config.content_security_policy do |policy|
   policy.default_src :self
   policy.font_src    :self, :https, :data
   policy.img_src     :self, :https, :data
   policy.object_src  :none
-  policy.script_src  :self, :https, :unsafe_inline
+
+  # ── #I-3 追加: :blob を許可する理由 ──────────────────────────────
+  #
+  # importmap-rails は古いブラウザ互換のために polyfill「es_module_shims」を
+  # 読み込む。es_module_shims はモジュールを変換して実行する際に
+  # `blob:` スキームの一時スクリプトを生成することがある。
+  #
+  # これまでの script_src（:self :https :unsafe_inline）には blob: が
+  # 含まれていなかったため、本番コンソールで
+  #   Loading the script 'blob:https://.../...' violates the following
+  #   Content Security Policy directive: "script-src 'self' https: 'unsafe-inline'"
+  # というエラーが出て、その blob スクリプトがブロックされていた。
+  # （script-src-elem は未設定のため script-src がフォールバックとして使われる）
+  #
+  # すでに :unsafe_inline と :https を許可している十分ゆるい設定なので、
+  # :blob の追加は整合的で、es_module_shims を正しく動かせるようになる。
+  policy.script_src  :self, :https, :unsafe_inline, :blob
   policy.style_src   :self, :https, :unsafe_inline
 
   # ── Issue #I-5 追加: Sentry(ブラウザSDK) のエラー送信先への通信を許可 ──
@@ -46,7 +61,6 @@ Rails.application.config.content_security_policy do |policy|
   #   同一オリジンへの通信（Turbo の fetch や ActionCable の WebSocket 等）を
   #   引き続き許可するため。これを外すと既存のリアルタイム機能が壊れる。
   policy.connect_src :self, "https://*.sentry.io"
-
   # ── F-1/F-2 追加: フォーム送信先の許可設定 ────────────────────────────
   #
   # form_action:
@@ -71,8 +85,6 @@ Rails.application.config.content_security_policy do |policy|
                      "https://accounts.google.com",
                      "https://access.line.me"
 end
-
 Rails.application.config.content_security_policy_nonce_generator =
   ->(_request) { SecureRandom.base64(16) }
-
 Rails.application.config.content_security_policy_nonce_directives = []
