@@ -61,29 +61,35 @@ Rails.application.config.content_security_policy do |policy|
   #   同一オリジンへの通信（Turbo の fetch や ActionCable の WebSocket 等）を
   #   引き続き許可するため。これを外すと既存のリアルタイム機能が壊れる。
   policy.connect_src :self, "https://*.sentry.io"
-  # ── F-1/F-2 追加: フォーム送信先の許可設定 ────────────────────────────
+  # ── F-1/F-2/#I-3: フォーム送信先（OAuth リダイレクト連鎖）の許可設定 ──────
   #
   # form_action:
-  #   フォームの action 属性として許可する送信先を制限する CSP ディレクティブ。
+  #   フォームの action 属性・およびフォーム送信後の「リダイレクト先」を
+  #   制御する CSP ディレクティブ。
+  #   Chrome / Safari は、フォーム送信 → サーバーの 302 リダイレクトが起きたとき
+  #   その【リダイレクト先】も form-action と照合する（Firefox は照合しない）。
   #
-  # :self:
-  #   同じオリジン（自アプリ）へのフォーム送信を許可する。
-  #   通常のフォーム（ログイン・習慣登録等）のため必須。
+  # 【方針: :https ではなく LINE / Google のドメインだけを許可する】
+  #   :https（=任意の https 送信先を許可）は範囲が広すぎるため使わない。
+  #   ただし LINE Login の認可フローは access.line.me だけでなく LINE の
+  #   複数サブドメインを 302 で経由しうる（ログ上 request phase は正常に開始し、
+  #   サーバーは LINE へリダイレクトしているが、Chrome が form-action で
+  #   リダイレクト連鎖を検査してブロックしていた）。
+  #   そこで access.line.me 単体ではなく LINE 全ドメイン（*.line.me と line.me）を
+  #   許可して連鎖を通す。Google は accounts.google.com のみ。
   #
-  # "https://accounts.google.com":
-  #   Google OAuth2 の認証開始エンドポイント。
-  #   OmniAuth が /auth/google_oauth2 への POST 後、
-  #   内部で Google 認証 URL へリダイレクトする際に必要。
+  #   :self  … 自アプリへのフォーム送信（OmniAuth の /auth/xxx POST 等）
+  #   Google … accounts.google.com（OAuth2 認可）
+  #   LINE   … *.line.me / line.me（LINE Login の認可・ログイン画面の連鎖）
   #
-  # "https://access.line.me":
-  #   LINE Login の認証開始エンドポイント。
-  #   OmniAuth が /auth/line への POST 後、
-  #   内部で LINE 認証 URL（access.line.me/oauth2/v2.1/authorize）へ
-  #   リダイレクトする際に必要。
-  #   LINE の OAuth エンドポイントはすべて access.line.me ドメインを使用する。
+  # 【それでもブロックが残る場合】
+  #   実際のリダイレクト先が line.me 以外（CDN 等）の可能性がある。
+  #   DevTools → Network → line_v2_1 リクエスト → Response Headers の
+  #   「location」で実ドメインを確認し、そのドメインをここに追加する。
   policy.form_action :self,
                      "https://accounts.google.com",
-                     "https://access.line.me"
+                     "https://*.line.me",
+                     "https://line.me"
 end
 Rails.application.config.content_security_policy_nonce_generator =
   ->(_request) { SecureRandom.base64(16) }
