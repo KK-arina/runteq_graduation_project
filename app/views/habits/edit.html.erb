@@ -132,7 +132,7 @@
       <label class="block text-sm font-semibold text-gray-700 mb-1">記録タイプ</label>
       <div class="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm text-gray-500">
         <%= @habit.check_type? ? "☑️ チェック型（やった/やらない）" : "🔢 数値型（#{@habit.unit}で記録）" %>
-        <span class="ml-2 text-xs text-gray-400">※ 過去データの整合性のため変更できません</span>
+        <span class="ml-2 text-xs text-gray-500">※ 過去データの整合性のため変更できません</span>
       </div>
       <%= f.hidden_field :measurement_type %>
     </div>
@@ -211,7 +211,7 @@
           </label>
         <% end %>
       </div>
-      <p class="text-xs text-gray-400 mt-2">※ 例: 土日を除外すると週5日が最大達成日数になります</p>
+      <p class="text-xs text-gray-500 mt-2">※ 例: 土日を除外すると週5日が最大達成日数になります</p>
     </div>
 
     <%# ボタンエリア %>

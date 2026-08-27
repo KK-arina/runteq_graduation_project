@@ -151,7 +151,7 @@
           <label for="rest_mode_reason"
                  class="block text-sm font-semibold text-gray-700 mb-2">
             お休みの理由
-            <span class="text-gray-400 font-normal text-xs ml-1">（任意）</span>
+            <span class="text-gray-500 font-normal text-xs ml-1">（任意）</span>
           </label>
           <div class="relative"
                data-controller="voice-input">
@@ -198,7 +198,7 @@
             <span class="min-w-0">「お休みモード適用」が ON の習慣のみ対象です</span>
           </p>
           <% if @habits.empty? %>
-            <p class="text-sm text-gray-400">習慣がまだ登録されていません。</p>
+            <p class="text-sm text-gray-500">習慣がまだ登録されていません。</p>
           <% else %>
             <div class="space-y-2">
               <% @habits.each do |habit| %>
@@ -222,7 +222,7 @@
                 </div>
               <% end %>
             </div>
-            <p class="mt-2 text-xs text-gray-400 flex gap-1">
+            <p class="mt-2 text-xs text-gray-500 flex gap-1">
               <span class="flex-shrink-0" aria-hidden="true">※</span>
               <span class="min-w-0">習慣の「お休みモード適用」設定は習慣編集ページから変更できます</span>
             </p>
@@ -278,7 +278,7 @@
             </h3>
             <button type="button"
                     id="rest-mode-close-btn"
-                    class="p-1 rounded text-gray-400 hover:text-gray-600
+                    class="p-1 rounded text-gray-500 hover:text-gray-600
                            focus:outline-none focus:ring-2 focus:ring-gray-400"
                     aria-label="モーダルを閉じる">
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"

@@ -40,7 +40,7 @@
             🔥 <%= habit.current_streak %>日 継続中
           </span>
           <% if habit.longest_streak > habit.current_streak %>
-            <span class="text-xs text-gray-400">最高: <%= habit.longest_streak %>日</span>
+            <span class="text-xs text-gray-500">最高: <%= habit.longest_streak %>日</span>
           <% end %>
         </div>
       <% end %>
@@ -78,9 +78,9 @@
   <%# 週次目標と除外日 %>
   <div class="px-4 pb-2">
     <% if habit.check_type? %>
-      <span class="text-xs text-gray-400">週次目標: <%= habit.effective_weekly_target %>日</span>
+      <span class="text-xs text-gray-500">週次目標: <%= habit.effective_weekly_target %>日</span>
     <% else %>
-      <span class="text-xs text-gray-400">週次目標: <%= habit.weekly_target %><%= habit.unit.presence || "回" %>/週</span>
+      <span class="text-xs text-gray-500">週次目標: <%= habit.weekly_target %><%= habit.unit.presence || "回" %>/週</span>
     <% end %>
     <% excluded_numbers = habit.excluded_day_numbers %>
     <% if excluded_numbers.any? %>

@@ -48,7 +48,7 @@
   <div class="flex items-center gap-3 mb-6">
     <%# 「← タスク一覧」戻るリンク %>
     <%= link_to tasks_path,
-          class: "text-gray-400 hover:text-gray-600 transition-colors",
+          class: "text-gray-500 hover:text-gray-600 transition-colors",
           aria: { label: "タスク一覧に戻る" } do %>
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -110,7 +110,7 @@
                     #{ @task.errors[:title].any? ? 'border-red-400 bg-red-50' : '' }",
             maxlength: 100,
             aria: { required: true, describedby: "title-hint" } %>
-      <p id="title-hint" class="mt-1 text-xs text-gray-400">100文字以内</p>
+      <p id="title-hint" class="mt-1 text-xs text-gray-500">100文字以内</p>
     </div>
 
     <%# ── ② 優先度（Must/Should/Could）──────────────────────────────── %>
@@ -163,7 +163,7 @@
                data-inactive-class="border-gray-200">
             <div class="text-lg mb-1" aria-hidden="true">🔴</div>
             <div class="text-sm font-bold text-gray-700">Must</div>
-            <div class="text-xs text-gray-400 mt-0.5">絶対にやる</div>
+            <div class="text-xs text-gray-500 mt-0.5">絶対にやる</div>
           </div>
         </label>
 
@@ -181,7 +181,7 @@
                data-inactive-class="border-gray-200">
             <div class="text-lg mb-1" aria-hidden="true">🔵</div>
             <div class="text-sm font-bold text-gray-700">Should</div>
-            <div class="text-xs text-gray-400 mt-0.5">できればやる</div>
+            <div class="text-xs text-gray-500 mt-0.5">できればやる</div>
           </div>
         </label>
 
@@ -199,7 +199,7 @@
                data-inactive-class="border-gray-200">
             <div class="text-lg mb-1" aria-hidden="true">🟢</div>
             <div class="text-sm font-bold text-gray-700">Could</div>
-            <div class="text-xs text-gray-400 mt-0.5">余裕があれば</div>
+            <div class="text-xs text-gray-500 mt-0.5">余裕があれば</div>
           </div>
         </label>
       </div>
@@ -209,7 +209,7 @@
     <div class="mb-5">
       <%= f.label :due_date, "期限日",
             class: "block text-sm font-bold text-gray-700 mb-1" %>
-      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <span class="text-xs text-gray-500 ml-1">任意</span>
       <%#
         text-base（16px）を追加する理由（H-6）:
           date input も 16px 未満だと iOS で自動ズームが発生する。
@@ -226,7 +226,7 @@
     <div class="mb-5">
       <%= f.label :estimated_hours, "見積時間（時間）",
             class: "block text-sm font-bold text-gray-700 mb-1" %>
-      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <span class="text-xs text-gray-500 ml-1">任意</span>
       <%#
         text-base（16px）を追加する理由（H-6）:
           number input も 16px 未満だと iOS で自動ズームが発生する。
@@ -245,7 +245,7 @@
     <div class="mb-6">
       <%= f.label :task_type, "タスク種別",
             class: "block text-sm font-bold text-gray-700 mb-1" %>
-      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <span class="text-xs text-gray-500 ml-1">任意</span>
       <%#
         text-base（16px）を追加する理由（H-6）:
           select 要素も 16px 未満だと iOS で自動ズームが発生する。

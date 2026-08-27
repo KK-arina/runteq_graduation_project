@@ -193,7 +193,7 @@
         <div class="flex justify-between items-center mb-1">
           <span class="text-sm text-gray-600">全体達成率</span>
           <span class="text-sm font-bold"
-                style="color: <%= rate_hex_color(@overall_rate) %>">
+                style="color: <%= rate_text_color(@overall_rate) %>">
             <%= @overall_rate %>%
           </span>
         </div>
@@ -253,7 +253,7 @@
               <%= stats[:done] %>/<%= stats[:total] %>件 完了
             </span>
             <span class="text-sm font-bold flex-shrink-0"
-                  style="color: <%= rate_hex_color(stats[:rate]) %>"
+                  style="color: <%= rate_text_color(stats[:rate]) %>"
                   data-testid="priority-rate-<%= display[:testid] %>">
               <%= stats[:rate] %>%
             </span>
@@ -342,7 +342,7 @@
     </div>
 
     <% if @today_tasks.empty? %>
-      <p class="text-sm text-gray-400">今日が期限のタスクはありません。</p>
+      <p class="text-sm text-gray-500">今日が期限のタスクはありません。</p>
     <% else %>
       <div class="space-y-2">
         <% @today_tasks.each do |task| %>
@@ -357,7 +357,7 @@
               <%= task.must? ? "Must" : task.should? ? "Should" : "Could" %>
             </span>
             <span class="flex-1 text-sm text-gray-700 truncate
-                         <%= task.done? || task.archived? ? 'line-through text-gray-400' : '' %>">
+                         <%= task.done? || task.archived? ? 'line-through text-gray-500' : '' %>">
               <%= task.title %>
             </span>
             <% if task.overdue? %>

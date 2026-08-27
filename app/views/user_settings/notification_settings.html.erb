@@ -188,7 +188,7 @@
               LINE 通知
             </label>
             <p class="text-sm mt-0.5
-                      <%= @line_connected ? 'text-green-600' : 'text-gray-400' %>">
+                      <%= @line_connected ? 'text-green-600' : 'text-gray-500' %>">
               <% if @line_connected %>
                 ✅ 連携済み（LINE に通知が届きます）
               <% else %>
@@ -296,6 +296,16 @@
       </p>
 
       <div class="flex items-center gap-4">
+        <%#
+          a11y: スライダー（range 入力）に対応するラベルが無いと
+          「No label associated with a form field」の警告が出る。
+          見出しの h2「通知制限」はラベルではないため、range 入力の id
+          （user_setting_daily_notification_limit）に対応する sr-only ラベルを
+          関連付ける。sr-only なので見た目は変えず、支援技術にだけ読まれる。
+        %>
+        <label for="user_setting_daily_notification_limit" class="sr-only">
+          1日に受け取る通知の上限数
+        </label>
         <%= f.range_field :daily_notification_limit,
             min: 1,
             max: 10,
@@ -320,7 +330,7 @@
         </span>
       </div>
 
-      <p class="text-xs text-gray-400 mt-2">
+      <p class="text-xs text-gray-500 mt-2">
         推奨: 5件以下（LINE API の無料枠を考慮）
       </p>
     </section>

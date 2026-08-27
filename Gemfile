@@ -270,6 +270,8 @@ group :development, :test do
   # 「wrong number of arguments (given 3, expected 1..2)」エラーが発生する。
   # ~> 5.1 で 5.x 系の最新版に固定してバージョン競合を防ぐ。
   gem "minitest", "~> 5.1"
+
+  gem "bundler-audit", require: false
 end
 
 # ============================================================

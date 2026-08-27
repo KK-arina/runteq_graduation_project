@@ -72,7 +72,7 @@
       <div class="flex items-center gap-3 mt-1.5 flex-wrap">
         <% if task.due_date.present? %>
           <span class="text-xs flex items-center gap-1
-                       <%= task.overdue? ? 'text-red-600 font-bold' : task.due_today? ? 'text-orange-600 font-semibold' : 'text-gray-400' %>">
+                       <%= task.overdue? ? 'text-red-600 font-bold' : task.due_today? ? 'text-orange-600 font-semibold' : 'text-gray-500' %>">
             <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -99,7 +99,7 @@
         <% end %>
 
         <% if task.estimated_hours.present? %>
-          <span class="text-xs text-gray-400 flex items-center gap-1">
+          <span class="text-xs text-gray-500 flex items-center gap-1">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -144,7 +144,7 @@
         %>
         <button type="button"
                 data-action="click->task-menu#openMenu"
-                class="p-1.5 rounded-lg text-gray-400 hover:text-gray-600
+                class="p-1.5 rounded-lg text-gray-500 hover:text-gray-600
                        hover:bg-gray-100 transition-colors flex-shrink-0"
                 aria-label="<%= task.title %>のメニューを開く"
                 aria-haspopup="dialog">
