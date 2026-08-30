@@ -27,6 +27,18 @@ Rails.application.configure do
   #   Render では Nginx などのリバースプロキシがないため、この設定が必要。
   config.public_file_server.enabled = ENV["RAILS_SERVE_STATIC_FILES"].present?
 
+  # public_file_server.headers:
+  #   Render では Rails 自身が静的ファイルを配信するため、Cache-Control を
+  #   付けないと再訪問時も毎回ダウンロードされ、Lighthouse の
+  #   「効率的なキャッシュ保存期間」で TTL:None として指摘される。
+  #   /assets 配下はファイル名にダイジェスト（フィンガープリント）が付き、
+  #   内容が変わればファイル名も変わるため、1年 immutable でも安全に配信できる。
+  #   （※ /sentry/bundle.min.js だけはフィンガープリント無しなので、更新した際は
+  #     ファイル名を変えるかキャッシュ期限切れを待つ必要がある点に留意）
+  config.public_file_server.headers = {
+    "Cache-Control" => "public, max-age=#{1.year.to_i}, immutable"
+  }
+
   # ============================================================
   # SSL / HTTPS 設定
   # ============================================================
