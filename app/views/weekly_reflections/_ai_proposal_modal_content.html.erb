@@ -56,7 +56,7 @@
     </div>
     <button type="button"
             data-action="click->ai-proposal-modal#close"
-            class="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600 transition-colors
+            class="flex-shrink-0 p-1.5 text-gray-500 hover:text-gray-600 transition-colors
                    rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-400"
             aria-label="モーダルを閉じる">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -213,7 +213,7 @@
         <div class="mt-4">
           <h3 class="text-sm font-bold text-gray-800 mb-3">
             📋 新しく追加する習慣の提案
-            <span class="ml-1 text-xs font-normal text-gray-400">追加したい習慣を選んでください</span>
+            <span class="ml-1 text-xs font-normal text-gray-500">追加したい習慣を選んでください</span>
           </h3>
           <div class="space-y-2">
             <% habit_actions.each_with_index do |proposal, idx| %>
@@ -243,12 +243,12 @@
                       <p class="text-xs text-gray-500 leading-relaxed"><%= proposal[:description] %></p>
                     <% end %>
                     <% if proposal[:frequency].present? %>
-                      <p class="text-xs text-gray-400 mt-1">頻度: <%= proposal[:frequency] %></p>
+                      <p class="text-xs text-gray-500 mt-1">頻度: <%= proposal[:frequency] %></p>
                     <% end %>
                   </div>
                 </label>
                 <div class="px-3 pb-3 -mt-1">
-                  <p class="text-xs text-gray-400">✏️ チェックして確定後、習慣一覧から詳細を編集できます</p>
+                  <p class="text-xs text-gray-500">✏️ チェックして確定後、習慣一覧から詳細を編集できます</p>
                 </div>
               </div>
             <% end %>
@@ -261,7 +261,7 @@
         <div class="mt-4">
           <h3 class="text-sm font-bold text-gray-800 mb-3">
             ✅ 新しく追加するタスクの提案
-            <span class="ml-1 text-xs font-normal text-gray-400">追加したいタスクを選んでください</span>
+            <span class="ml-1 text-xs font-normal text-gray-500">追加したいタスクを選んでください</span>
           </h3>
           <div class="space-y-2">
             <% task_actions.each_with_index do |proposal, idx| %>
@@ -301,7 +301,7 @@
                                  transition-colors focus:outline-none focus:ring-1 focus:ring-red-400 rounded">
                     この提案を除外する
                   </button>
-                  <span class="text-xs text-gray-400">✏️ 確定後、タスク一覧から詳細を編集できます</span>
+                  <span class="text-xs text-gray-500">✏️ 確定後、タスク一覧から詳細を編集できます</span>
                 </div>
               </div>
             <% end %>
@@ -563,7 +563,7 @@
                   確定後に目標管理ページで見直す
                 </span>
               </label>
-              <p class="text-xs text-gray-400 mt-1 ml-6">
+              <p class="text-xs text-gray-500 mt-1 ml-6">
                 ※ チェックすると確定後に目標管理ページに移動します
               </p>
             </div>

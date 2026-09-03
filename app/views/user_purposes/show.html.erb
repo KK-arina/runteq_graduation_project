@@ -112,7 +112,7 @@
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-base font-bold text-gray-800">
           現在の目標
-          <span class="ml-2 text-xs font-normal text-gray-400">
+          <span class="ml-2 text-xs font-normal text-gray-500">
             Version <%= @current_purpose.version %>
           </span>
         </h2>
@@ -141,7 +141,7 @@
               <span class="text-xs font-bold text-violet-600">
                 <%= field[:label] %>
               </span>
-              <span class="text-xs text-gray-400">
+              <span class="text-xs text-gray-500">
                 <%= field[:desc] %>
               </span>
             </div>
@@ -154,7 +154,7 @@
               %>
               <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"><%= field[:value].to_s.strip %></p>
             <% else %>
-              <p class="text-sm text-gray-400 italic">未入力</p>
+              <p class="text-sm text-gray-500 italic">未入力</p>
             <% end %>
           </div>
         <% end %>
@@ -172,7 +172,7 @@
                 <p class="text-sm font-semibold text-gray-600">
                   Version <%= past.version %>
                 </p>
-                <p class="text-xs text-gray-400">
+                <p class="text-xs text-gray-500">
                   <%= l past.created_at, format: :long %> 作成
                 </p>
               </div>

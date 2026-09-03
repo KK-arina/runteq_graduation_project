@@ -62,7 +62,7 @@
 
       <label for="habit_checkbox_<%= habit.id %>"
              class="text-sm flex-1 min-w-0 cursor-pointer flex items-center gap-1.5
-                    <%= record.completed ? 'line-through text-gray-400' : 'text-gray-700' %>">
+                    <%= record.completed ? 'line-through text-gray-500' : 'text-gray-700' %>">
         <span aria-hidden="true" class="flex-shrink-0"><%= habit.icon.presence || "📋" %></span>
         <span class="min-w-0 break-words"><%= habit.name %></span>
       </label>
@@ -99,9 +99,9 @@
           class="text-xs font-medium px-1.5 py-0.5 rounded-md flex-shrink-0
                  max-w-[4rem] text-center leading-tight whitespace-normal
                  <%= case record_status
-                     when :recorded_today      then 'text-green-600 bg-green-50'
+                     when :recorded_today      then 'text-green-700 bg-green-50'
                      when :updated_today       then 'text-blue-600 bg-blue-50'
-                     when :previously_recorded then 'text-green-600 bg-green-50'
+                     when :previously_recorded then 'text-green-700 bg-green-50'
                      else                           'sr-only'
                      end %>">
       <%= case record_status
@@ -140,7 +140,7 @@
             aria-label="メモを<%= current_memo.present? ? '編集' : '追加' %>する"
             class="flex-shrink-0 p-1 rounded transition-colors
                    hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-400
-                   <%= current_memo.present? ? 'text-blue-500' : 'text-gray-400' %>">
+                   <%= current_memo.present? ? 'text-blue-500' : 'text-gray-500' %>">
       💬
     </button>
 
@@ -186,7 +186,7 @@
 
       <div class="flex items-center justify-between">
         <span data-habit-record-target="memoCount"
-              class="text-xs text-gray-400">
+              class="text-xs text-gray-500">
           <%= current_memo.length %>/200
         </span>
 

@@ -163,7 +163,7 @@
                     data-action="click->voice-input#toggle"
                     data-voice-input-target="button"
                     class="absolute inset-y-0 right-0 flex items-center pr-3
-                           text-gray-400 hover:text-gray-600 transition-colors"
+                           text-gray-500 hover:text-gray-600 transition-colors"
                     aria-label="音声入力を開始する"
                     title="音声入力">
               🎤
@@ -244,7 +244,7 @@
         <div>
           <p class="text-sm font-semibold text-gray-900">Google</p>
           <% if @user.provider == "google_oauth2" %>
-            <p class="text-xs text-green-600">✅ 連携済み（ログイン方法として使用中）</p>
+            <p class="text-xs text-green-700">✅ 連携済み（ログイン方法として使用中）</p>
           <% else %>
             <p class="text-xs text-gray-500">未連携</p>
           <% end %>
@@ -257,7 +257,7 @@
           理由: Googleがログイン手段のユーザーが解除すると
           ログインできなくなるロックアウトリスクがあるため。
         %>
-        <span class="text-xs text-gray-400">ログイン方法として使用中</span>
+        <span class="text-xs text-gray-500">ログイン方法として使用中</span>
       <% else %>
         <%#
           Google 未連携のときは連携ボタンを表示する。
@@ -285,7 +285,7 @@
         <div>
           <p class="text-sm font-semibold text-gray-900">LINE</p>
           <% if @user.provider == "line_v2_1" %>
-            <p class="text-xs text-green-600">✅ 連携済み（ログイン方法として使用中）</p>
+            <p class="text-xs text-green-700">✅ 連携済み（ログイン方法として使用中）</p>
           <% else %>
             <p class="text-xs text-gray-500">未連携</p>
           <% end %>
@@ -297,7 +297,7 @@
           LINE がログイン手段の場合は解除ボタンを表示しない。
           解除するとログインできなくなるロックアウトリスクがあるため。
         %>
-        <span class="text-xs text-gray-400">ログイン方法として使用中</span>
+        <span class="text-xs text-gray-500">ログイン方法として使用中</span>
       <% else %>
         <%#
           LINE 未連携の場合は連携ボタンを表示する。
@@ -348,7 +348,7 @@
           </p>
         </div>
       </div>
-      <svg class="w-5 h-5 text-gray-400 group-hover:text-blue-500 transition-colors"
+      <svg class="w-5 h-5 text-gray-500 group-hover:text-blue-500 transition-colors"
            fill="none" stroke="currentColor" viewBox="0 0 24 24"
            aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -394,7 +394,7 @@
           </p>
         </div>
       </div>
-      <svg class="w-5 h-5 text-gray-400 group-hover:text-green-500 transition-colors"
+      <svg class="w-5 h-5 text-gray-500 group-hover:text-green-500 transition-colors"
            fill="none" stroke="currentColor" viewBox="0 0 24 24"
            aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -736,7 +736,7 @@
               <%# × 閉じるボタン %>
               <button type="button"
                       data-action="click->deactivate-modal#close"
-                      class="p-1 rounded text-gray-400 hover:text-gray-600
+                      class="p-1 rounded text-gray-500 hover:text-gray-600
                              focus:outline-none focus:ring-2 focus:ring-gray-400"
                       aria-label="モーダルを閉じる">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -895,7 +895,7 @@
               <%# × 閉じるボタン %>
               <button type="button"
                       data-action="click->deactivate-modal#close"
-                      class="p-1 rounded text-gray-400 hover:text-gray-600
+                      class="p-1 rounded text-gray-500 hover:text-gray-600
                              focus:outline-none focus:ring-2 focus:ring-gray-400"
                       aria-label="モーダルを閉じる">
                 <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
