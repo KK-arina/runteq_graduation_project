@@ -66,9 +66,9 @@
 
     <div class="flex items-end gap-3 mb-4">
       <span class="text-5xl font-bold
-        <%= @overall_achievement_rate >= 100 ? 'text-green-600' :
-            @overall_achievement_rate >= 70  ? 'text-blue-600' :
-            @overall_achievement_rate >= 40  ? 'text-yellow-600' : 'text-red-500' %>">
+        <%= @overall_achievement_rate >= 100 ? 'text-green-700' :
+            @overall_achievement_rate >= 70  ? 'text-blue-700' :
+            @overall_achievement_rate >= 40  ? 'text-yellow-700' : 'text-red-700' %>">
         <%= @overall_achievement_rate %>%
       </span>
       <span class="text-gray-500 mb-1 text-sm">(<%= @habit_summaries.size %>個の習慣)</span>
@@ -97,7 +97,7 @@
     <h2 class="text-lg font-semibold text-gray-800 mb-5">📋 習慣別 実績サマリー</h2>
 
     <% if @habit_summaries.empty? %>
-      <div class="text-center py-8 text-gray-400">
+      <div class="text-center py-8 text-gray-500">
         <p class="text-sm">この振り返り期間に登録されていた習慣はありませんでした。</p>
       </div>
     <% else %>
@@ -151,7 +151,7 @@
     <h2 class="text-lg font-semibold text-gray-800 mb-5">✅ タスク実績</h2>
 
     <% if @task_summaries.empty? %>
-      <div class="text-center py-8 text-gray-400">
+      <div class="text-center py-8 text-gray-500">
         <p class="text-sm">この振り返り期間に記録されたタスクはありませんでした。</p>
       </div>
     <% else %>
@@ -209,7 +209,7 @@
                 <%= summary.was_completed ? '<span class="text-green-500 text-lg">✅</span>'.html_safe : '<span class="text-gray-300 text-lg">⬜</span>'.html_safe %>
               </div>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-medium <%= summary.was_completed ? 'text-gray-400 line-through' : 'text-gray-800' %>">
+                <p class="text-sm font-medium <%= summary.was_completed ? 'text-gray-500 line-through' : 'text-gray-800' %>">
                   <%= summary.title %>
                 </p>
                 <div class="flex items-center gap-2 mt-1 flex-wrap">
@@ -217,10 +217,10 @@
                     <%= summary.priority_label %>
                   </span>
                   <% if summary.due_date.present? %>
-                    <span class="text-xs text-gray-400">期限: <%= summary.due_date.strftime("%m/%d") %></span>
+                    <span class="text-xs text-gray-500">期限: <%= summary.due_date.strftime("%m/%d") %></span>
                   <% end %>
                   <% if summary.was_completed && summary.completed_at.present? %>
-                    <span class="text-xs text-gray-400">完了: <%= summary.completed_at.strftime("%m/%d %H:%M") %></span>
+                    <span class="text-xs text-gray-500">完了: <%= summary.completed_at.strftime("%m/%d %H:%M") %></span>
                   <% end %>
                 </div>
               </div>
@@ -279,7 +279,7 @@
           </span>
         </div>
       <% else %>
-        <p class="text-gray-400 text-sm italic px-1">入力されていませんでした。</p>
+        <p class="text-gray-500 text-sm italic px-1">入力されていませんでした。</p>
       <% end %>
     </div>
 
@@ -287,14 +287,14 @@
     <div class="mb-5">
       <div class="flex items-center gap-2 mb-2">
         <span class="text-sm font-bold text-gray-700">なぜ？</span>
-        <span class="text-xs text-gray-400">（直接の原因）</span>
+        <span class="text-xs text-gray-500">（直接の原因）</span>
       </div>
       <% if @weekly_reflection.direct_reason.present? %>
         <div class="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-xl p-4">
           <%= simple_format(@weekly_reflection.direct_reason) %>
         </div>
       <% else %>
-        <p class="text-gray-400 text-sm italic px-1">記入されていませんでした。</p>
+        <p class="text-gray-500 text-sm italic px-1">記入されていませんでした。</p>
       <% end %>
     </div>
 
@@ -302,14 +302,14 @@
     <div class="mb-5">
       <div class="flex items-center gap-2 mb-2">
         <span class="text-sm font-bold text-gray-700">どう？</span>
-        <span class="text-xs text-gray-400">（改善策）</span>
+        <span class="text-xs text-gray-500">（改善策）</span>
       </div>
       <% if @weekly_reflection.background_situation.present? %>
         <div class="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-xl p-4">
           <%= simple_format(@weekly_reflection.background_situation) %>
         </div>
       <% else %>
-        <p class="text-gray-400 text-sm italic px-1">記入されていませんでした。</p>
+        <p class="text-gray-500 text-sm italic px-1">記入されていませんでした。</p>
       <% end %>
     </div>
 
@@ -317,14 +317,14 @@
     <div class="mb-5">
       <div class="flex items-center gap-2 mb-2">
         <span class="text-sm font-bold text-gray-700">からの？</span>
-        <span class="text-xs text-gray-400">（次への展開）</span>
+        <span class="text-xs text-gray-500">（次への展開）</span>
       </div>
       <% if @weekly_reflection.next_action.present? %>
         <div class="text-gray-700 text-sm leading-relaxed bg-gray-50 rounded-xl p-4">
           <%= simple_format(@weekly_reflection.next_action) %>
         </div>
       <% else %>
-        <p class="text-gray-400 text-sm italic px-1">記入されていませんでした。</p>
+        <p class="text-gray-500 text-sm italic px-1">記入されていませんでした。</p>
       <% end %>
     </div>
 
@@ -426,7 +426,7 @@
           <p class="text-sm font-medium text-gray-600">
             🤖 AIが今週を分析しています...
           </p>
-          <p class="text-xs text-gray-400 mt-1">
+          <p class="text-xs text-gray-500 mt-1">
             完了すると自動で表示が切り替わります
           </p>
         </div>

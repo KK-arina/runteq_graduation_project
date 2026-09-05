@@ -51,7 +51,7 @@
       <% else %>
         <%# archived タスクのチェックボックス: 操作不可 %>
         <input type="checkbox"
-               class="w-5 h-5 rounded border-gray-300 text-gray-400 cursor-not-allowed"
+               class="w-5 h-5 rounded border-gray-300 text-gray-500 cursor-not-allowed"
                checked
                disabled
                aria-label="<%= task.title %>（アーカイブ済み）">
@@ -67,7 +67,7 @@
         </span>
 
         <%# タイトル（取り消し線・グレー） %>
-        <h3 class="text-sm font-semibold text-gray-400 leading-snug flex-1 line-through">
+        <h3 class="text-sm font-semibold text-gray-500 leading-snug flex-1 line-through">
           <%= task.title %>
         </h3>
       </div>
@@ -75,7 +75,7 @@
       <%# 完了日時とアーカイブ状態 %>
       <div class="flex items-center gap-3 mt-1.5 flex-wrap">
         <% if task.completed_at.present? %>
-          <span class="text-xs text-gray-400">
+          <span class="text-xs text-gray-500">
             <%#
               completed_at の表示フォーマット:
               strftime("%-m/%-d %H:%M") → "3/15 14:30" のような形式
@@ -86,7 +86,7 @@
         <% end %>
 
         <% if task.archived? %>
-          <span class="text-xs text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+          <span class="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
             アーカイブ済み
           </span>
         <% end %>

@@ -46,7 +46,7 @@
   <%= f.label field,
         class: "block text-sm font-semibold text-gray-700 mb-1" do %>
     <%= label_text %>
-    <span class="font-normal text-xs text-gray-400 ml-1">— <%= hint_text %></span>
+    <span class="font-normal text-xs text-gray-500 ml-1">— <%= hint_text %></span>
   <% end %>
 
   <div class="relative">
@@ -89,7 +89,7 @@
 
   <%# 入力例の表示 %>
   <% if local_assigns[:example].present? %>
-    <p class="mt-1.5 text-xs text-gray-400 leading-relaxed">
+    <p class="mt-1.5 text-xs text-gray-500 leading-relaxed">
       <%= example %>
     </p>
   <% end %>

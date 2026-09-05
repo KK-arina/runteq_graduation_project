@@ -246,6 +246,33 @@ class PurposeAnalysisJob < ApplicationJob
     handle_failure(user_purpose, "AIサービスに接続できません。管理者にお問い合わせください。") if defined?(user_purpose) && user_purpose
     raise  # discard_on AiClient::AuthError に伝播させる
 
+  # ── #I-3 追加: 並行実行による分析の重複を安全に処理する ──────────────────
+  #
+  # 【いつ起きるか】
+  #   同じ UserPurpose に対して分析ジョブが二重に走ったとき、
+  #   すでに is_latest=true の AiAnalysis があるのに、もう1件 create! しようとして
+  #   一意制約に違反する（PG::UniqueViolation → ActiveRecord::RecordNotUnique）。
+  #
+  # 【なぜ failed にせず completed にするのか（重要）】
+  #   下の汎用 rescue => e は handle_failure を呼んで analysis_state を failed にする。
+  #   しかし一意違反が起きた時点で、もう片方のジョブが有効な分析を作成済み
+  #   ＝分析は成功している。ここで failed にすると、勝った側が付けた completed を
+  #   上書きして「成功したのに失敗表示」になってしまう。
+  #   さらに、このジョブは Step2 で state を analyzing に更新済みで、create! の
+  #   トランザクションはロールバックされるため、何もしないと analyzing のまま止まる。
+  #   よって「分析は既に存在する」事実に合わせて completed に確定し、バナーを更新する。
+  #
+  # 【なぜ親クラスの discard_on ではなく、このジョブ内で個別対処するのか】
+  #   RecordNotUnique を ApplicationJob で一律 discard すると、他ジョブで起きた
+  #   本来調査すべき重複まで握りつぶしてしまう。安全に握りつぶせるのはこの文脈だけ。
+  rescue ActiveRecord::RecordNotUnique => e
+    Rails.logger.info "[PurposeAnalysisJob] 分析は既に作成済みのためスキップ（並行実行の競合）: user_purpose_id=#{user_purpose_id} / #{e.message}"
+    if defined?(user_purpose) && user_purpose
+      user_purpose.update!(analysis_state: :completed, last_error_message: nil)
+      broadcast_state_update(user_purpose.reload)
+      broadcast_dashboard_completion(user_purpose.reload)
+    end
+
   rescue => e
     Rails.logger.error "[PurposeAnalysisJob] 予期しないエラー: #{e.class} - #{e.message}"
     Rails.logger.error e.backtrace.first(5).join("\n")

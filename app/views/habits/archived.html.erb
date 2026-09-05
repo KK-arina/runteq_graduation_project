@@ -50,7 +50,7 @@
         <span class="text-3xl">📦</span>
       </div>
       <p class="text-gray-500 mb-2 font-medium">アーカイブ済みの習慣はありません</p>
-      <p class="text-gray-400 text-sm mb-6">習慣一覧の「📦 卒業」ボタンでアーカイブできます</p>
+      <p class="text-gray-500 text-sm mb-6">習慣一覧の「📦 卒業」ボタンでアーカイブできます</p>
       <%= link_to "習慣一覧へ戻る", habits_path,
             class: "px-6 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors" %>
     </div>
@@ -77,10 +77,10 @@
               <div class="flex-1 min-w-0 mr-2">
                 <%# 習慣名 %>
                 <h3 class="text-base font-bold text-gray-600 leading-snug flex items-center gap-2 flex-wrap">
-                  <span class="text-gray-400">📦</span>
+                  <span class="text-gray-500">📦</span>
                   <%= habit.name %>
                   <% if habit.numeric_type? %>
-                    <span class="text-xs font-normal text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded">
+                    <span class="text-xs font-normal text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded">
                       数値型
                     </span>
                   <% end %>
@@ -95,14 +95,14 @@
                     （config/locales/ja.yml の設定に依存する）
                     設定がない場合は strftime で直接フォーマットする方が確実。
                 %>
-                <p class="text-xs text-gray-400 mt-1">
+                <p class="text-xs text-gray-500 mt-1">
                   アーカイブ日:
                   <%= habit.archived_at.strftime("%Y年%m月%d日") %>
                 </p>
 
                 <%# 最高ストリークが記録されていれば表示 %>
                 <% if habit.longest_streak > 0 %>
-                  <p class="text-xs text-gray-400 mt-0.5">
+                  <p class="text-xs text-gray-500 mt-0.5">
                     最高ストリーク: 🔥 <%= habit.longest_streak %>日
                   </p>
                 <% end %>
@@ -137,11 +137,11 @@
           <%# 週次目標と除外日の表示 %>
           <div class="px-4 pb-3">
             <% if habit.check_type? %>
-              <span class="text-xs text-gray-400">
+              <span class="text-xs text-gray-500">
                 目標: <%= habit.effective_weekly_target %>回/週
               </span>
             <% else %>
-              <span class="text-xs text-gray-400">
+              <span class="text-xs text-gray-500">
                 目標: <%= habit.weekly_target %><%= habit.unit.presence || "回" %>/週
               </span>
             <% end %>
@@ -152,7 +152,7 @@
             %>
             <% excluded_numbers = habit.excluded_day_numbers %>
             <% if excluded_numbers.any? %>
-              <span class="ml-2 text-xs text-gray-400">
+              <span class="ml-2 text-xs text-gray-500">
                 除外: <%= excluded_numbers.map { |n| HabitExcludedDay::DAY_NAMES[n] }.join("・") %>
               </span>
             <% end %>
@@ -163,7 +163,7 @@
             border-t border-gray-200 で薄いグレーの区切り線を表示する。
           %>
           <div class="border-t border-gray-200 px-4 py-3 mt-auto">
-            <p class="text-xs text-gray-400 text-center">
+            <p class="text-xs text-gray-500 text-center">
               過去の記録は振り返りで確認できます
             </p>
           </div>

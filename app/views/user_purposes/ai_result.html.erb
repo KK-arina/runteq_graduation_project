@@ -130,7 +130,7 @@
   <div class="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm mb-6">
     <h2 class="text-base font-bold text-gray-800 mb-4">
       分析対象のPMVV
-      <span class="ml-2 text-xs font-normal text-gray-400">
+      <span class="ml-2 text-xs font-normal text-gray-500">
         Version <%= @snapshot_version %> 時点のデータ
       </span>
     </h2>
@@ -154,16 +154,14 @@
             <span class="text-xs font-bold text-violet-600">
               <%= field[:label] %>
             </span>
-            <span class="text-xs text-gray-400">
+            <span class="text-xs text-gray-500">
               <%= field[:desc] %>
             </span>
           </div>
           <% if field[:value].present? %>
-            <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-              <%= field[:value] %>
-            </p>
+            <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"><%= field[:value].to_s.strip %></p>
           <% else %>
-            <p class="text-sm text-gray-400 italic">未入力</p>
+            <p class="text-sm text-gray-500 italic">未入力</p>
           <% end %>
         </div>
       <% end %>
@@ -307,7 +305,7 @@
                     </p>
                   <% end %>
                   <% if proposal[:frequency].present? %>
-                    <p class="text-xs text-gray-400 mt-1">
+                    <p class="text-xs text-gray-500 mt-1">
                       頻度: <%= proposal[:frequency] %>
                     </p>
                   <% end %>

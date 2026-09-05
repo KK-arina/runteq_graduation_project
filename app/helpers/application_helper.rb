@@ -34,6 +34,25 @@ module ApplicationHelper
     end
   end
 
+  # ── #I-3 a11y: 達成率「テキスト」用の色（白背景でコントラスト比 AA 4.5:1 以上）──
+  #   rate_hex_color は進捗バー（塗り）用の鮮やかな色。これを白背景の「文字」に
+  #   使うとコントラスト不足（green-500 約2.2:1 / yellow-400 約1.4:1 等）になり、
+  #   Lighthouse のユーザー補助で不合格になる。
+  #   そこで文字にはこの濃い版（各色 700 相当）を使い AA を満たす。
+  #   バーの色（rate_hex_color）は鮮やかさを保つため変更しない。段階の閾値は
+  #   rate_hex_color と揃える（100/70/40）。
+  def rate_text_color(rate)
+    if rate >= 100
+      "#15803d"   # green-700:  目標達成（白背景 約5.0:1）
+    elsif rate >= 70
+      "#1d4ed8"   # blue-700:   順調（約5.9:1）
+    elsif rate >= 40
+      "#a16207"   # yellow-700: 要改善（約5.0:1）
+    else
+      "#b91c1c"   # red-700:    未達成（約5.9:1）
+    end
+  end
+
   # habit_progress_text（C-6 追加）
   # 習慣の進捗テキストを返す。
   # ダッシュボード・週次振り返り・習慣管理で同じ表記を使うためのヘルパー。

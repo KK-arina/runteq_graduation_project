@@ -20,7 +20,7 @@
   <%# ページヘッダー %>
   <div class="flex items-center gap-3 mb-6">
     <%= link_to tasks_path,
-          class: "text-gray-400 hover:text-gray-600 transition-colors",
+          class: "text-gray-500 hover:text-gray-600 transition-colors",
           aria: { label: "タスク一覧に戻る" } do %>
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -70,10 +70,10 @@
           <span class="text-sm font-bold text-gray-700">
             <%= @task.must? ? "Must" : @task.should? ? "Should" : "Could" %>
           </span>
-          <span class="text-xs text-gray-400 ml-2">（AI が決定した値のため変更不可）</span>
+          <span class="text-xs text-gray-500 ml-2">（AI が決定した値のため変更不可）</span>
         </div>
       </div>
-      <p class="mt-1 text-xs text-gray-400">※ 優先度はAI提案モーダルで確認・変更してください</p>
+      <p class="mt-1 text-xs text-gray-500">※ 優先度はAI提案モーダルで確認・変更してください</p>
     </div>
 
     <%# ② タスク名 %>
@@ -97,7 +97,7 @@
     <%# ③ 期限日 %>
     <div class="mb-5">
       <%= f.label :due_date, "期限日", class: "block text-sm font-bold text-gray-700 mb-1" %>
-      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <span class="text-xs text-gray-500 ml-1">任意</span>
       <%= f.date_field :due_date,
             class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm
                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" %>
@@ -106,7 +106,7 @@
     <%# ④ 見積時間 %>
     <div class="mb-6">
       <%= f.label :estimated_hours, "見積時間（時間）", class: "block text-sm font-bold text-gray-700 mb-1" %>
-      <span class="text-xs text-gray-400 ml-1">任意</span>
+      <span class="text-xs text-gray-500 ml-1">任意</span>
       <%= f.number_field :estimated_hours,
             placeholder: "例: 1.5",
             class: "w-full px-4 py-2.5 border border-gray-300 rounded-lg text-sm

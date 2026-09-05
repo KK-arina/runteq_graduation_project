@@ -4,6 +4,13 @@
 # ルーティング設定（G-6 更新: プロフィール編集・タイムゾーン・LINE連携解除を追加）
 # ==============================================================================
 Rails.application.routes.draw do
+  # ── Render ヘルスチェック用エンドポイント ──────────────────────────────
+  #   Render は /up などのパスにアクセスして稼働状態を確認する。
+  #   本来 200 を返すべきだが、このルートが無いと、末尾の catch-all
+  #   （match "*path" → errors#not_found）に拾われて 404 になる。
+  #   そのため必ず catch-all より前（ルート先頭）で定義する。
+  get "up" => "rails/health#show", as: :rails_health_check
+
   root "pages#index"
 
   if Rails.env.development?

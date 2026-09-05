@@ -116,7 +116,8 @@ flowchart LR
 [![I-5 エラー監視](https://img.shields.io/badge/I--5_エラー監視(Sentry)-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-5-sentry)
 [![I-2 セキュリティ最終確認](https://img.shields.io/badge/I--2_セキュリティ最終確認-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-2-security-final-check)
 [![Rails 8.1・Ruby 3.4.10 最新化](https://img.shields.io/badge/Rails_8.1_%2F_Ruby_3.4.10-最新化・Dependabot導入-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-2-security-final-check)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-69%2F70_ISSUE-f59e0b?style=flat-square)]()
+[![I-3 本番動作確認](https://img.shields.io/badge/I--3_本番動作確認-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-3-production-check)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-70%2F70_ISSUE-f59e0b?style=flat-square)]()
 
 <br>
 
@@ -172,7 +173,7 @@ flowchart LR
 | Week F | 認証拡張 | #F-1〜#F-6 | 21 | ✅ 完了 |
 | Week G | 通知・設定拡張 | #G-1〜#G-9 | 34 | ✅ 完了 |
 | Week H | フロントエンド強化 | #H-1〜#H-10 | 37 | ✅ 完了 |
-| Week I | 品質・テスト・デプロイ | #I-1〜#I-6 | 22 | 🟡 進行中（#I-1・#I-2・#I-5・#I-6 完了） |
+| Week I | 品質・テスト・デプロイ | #I-1〜#I-6 | 22 | 🟡 進行中（#I-1・#I-2・#I-3・#I-5・#I-6 完了 / #I-4 進行中） |
 | **合計** | | **70** | **233** | |
 
 <br>
@@ -249,6 +250,7 @@ flowchart LR
 | #I-6 | キャッシュ戦略設計（Solid Cache 導入・ダッシュボード/グラフ/AI分析結果ページのキャッシュ・`after_commit` 無効化）＋ Redis不要の単一DB構成 | 2026-07-18 | feature/i-6-solid-cache |
 | #I-5 | エラー監視・本番ログ基盤構築（Sentry） | 2026-07-21 | feature/i-5-sentry |
 | #I-2 | セキュリティ最終確認（Brakeman 0件 / 認可 / Strong Parameters / OmniAuth CSRF / CSV署名トークン / ai_context） | 2026-07-26 | feature/i-2-security-final-check |
+| #I-3 | 本番動作確認（Render 本番の最終スモーク：本番設定/ENV 監査・Sentry 本番エラー修正・ストリークの cron 非依存化・CSP(blob/LINE)・/up ヘルスチェック・Lighthouse 対応・gem 脆弱性一括更新） | 2026-08-30 | feature/i-3-production-check |
 
 <br>
 
@@ -7120,6 +7122,120 @@ ISSUE原文は `Date.today.cweek` だったが、これは本アプリの2つの
 
 <br>
 
+### #I-3: 本番動作確認（Render 本番の最終スモーク）
+
+<br>
+
+**ブランチ:** `feature/i-3-production-check`<br>
+**完了日:** 2026-08-30<br>
+**対象:** 実コードに基づく本番チェックリストの実行と、本番のみで表面化する設定/ENV ギャップの監査・修正。全テスト **867 runs / 0 failures / 0 errors** 緑、`bundle audit` **脆弱性 0 件**を達成。
+
+<br>
+
+#### 1. 本番設定・ENV 監査
+
+<br>
+
+| 対象 | 修正内容 | 目的 |
+|:---|:---|:---|
+| `production.rb` | `action_mailer` / `asset_host` を `ENV.fetch("APP_HOST", …)` 化 | メール内リンクのドメインを本番ホストに統一 |
+| `production.rb` | `public_file_server.headers` に 1 年 `immutable` の `Cache-Control` を追加 | 静的アセットの長期キャッシュ（Lighthouse「キャッシュ TTL: None」対策） |
+| `database.yml` / `docker-compose.yml` | test/development の DB を分離（`DATABASE_URL` の継承を停止） | `db:test:prepare` が開発 DB を初期化する事故を防止 |
+| `db/seeds.rb` ＋ `db/seeds/` | 司令塔＋テンプレート＋デモの 3 分割。破壊的シードは `development` 限定＋二重ガード | 本番 DB の誤消去を構造的に不可能化（`SEED_IN_PRODUCTION=true` を恒久安全化） |
+
+<br>
+
+#### 2. Sentry が検出した本番エラーの修正
+
+<br>
+
+| エラー | 原因 | 修正 |
+|:---|:---|:---|
+| `Couldn't determine a delay based on :exponentially_longer` | Rails 7.2 で `:exponentially_longer` が削除 | `application_job.rb` の `retry_on` を **`:polynomially_longer`** に変更 |
+| `PG::UniqueViolation`（AiAnalysis 二重作成） | `is_latest` 部分ユニークへの並行重複 | AI 分析ジョブに `rescue ActiveRecord::RecordNotUnique` を追加（静かに破棄し完了扱い） |
+
+<br>
+
+#### 3. ストリークの cron 非依存化（recalc-on-save）
+
+<br>
+
+Render 無料プランは 15 分アクセスがないとスリープするため、深夜 4:05 の `StreakCalculationJob`（cron）が発火せず、記録してもストリークが 0 のままになる問題を発見。<br>
+`HabitRecordSaveService` に「保存コミット後（トランザクション外）にその習慣の `calculate_streak!` を実行」する処理を追加し、cron に依存せず記録時にリアルタイム反映するように変更。<br>
+再計算の失敗が記録保存を巻き添えにしないよう `rescue StandardError` で分離し、失敗は `Sentry.capture_exception` で可視化。日次 cron はバックアップとして残置。
+
+<br>
+
+#### 4. CSP（Content Security Policy）の本番対応
+
+<br>
+
+**① `script-src` に `:blob` を追加**<br>
+importmap の polyfill（es_module_shims）が生成する `blob:` スクリプトのブロックを解消。
+
+<br>
+
+**② `form-action` を LINE 全ドメインに対応**<br>
+Chrome / Safari は「フォーム送信後のリダイレクト先」まで `form-action` で検査するため、LINE Login の認可フロー（複数サブドメインを経由）がブロックされていた。<br>
+`:https`（過度に広い）ではなく `"https://*.line.me"` / `"https://line.me"` を許可し、必要範囲だけを通す設計にした。
+
+<br>
+
+#### 5. Render ヘルスチェック `/up` の 404 修正
+
+<br>
+
+ルートに `/up`（Rails 標準ヘルスチェック）が未定義で、末尾の catch-all（`match "*path" → errors#not_found`）に飲み込まれ 404 を返していた。<br>
+`get "up" => "rails/health#show"` を **catch-all より前（ルート先頭）** に追加し、200 を返すよう修正。
+
+<br>
+
+#### 6. Lighthouse 対応（本番計測）
+
+<br>
+
+| 項目 | 対応 |
+|:---|:---|
+| SEO | `<head>` に `content_for(:description)` で上書き可能な `<meta name="description">` を追加 |
+| Accessibility | 本文の薄字 `text-gray-400 → text-gray-500`、緑文字 `text-green-600 → text-green-700`、達成率カラー三項を 700 系に統一（進捗バーの鮮やかな色・`aria-hidden` のブランドマークは意図的に保持） |
+| Performance | 静的アセットの `Cache-Control` を設定。Performance スコア自体は Render 無料枠の **TTFB（サーバー応答）** が支配的で、コード側は最適化済み（FCP/LCP/CLS/TBT 良好） |
+
+<br>
+
+**本番 Lighthouse スコア:** Performance 81 / **Accessibility 96（コントラスト対応で更に改善）** / **Best Practices 100** / SEO 91（meta 追加で更に改善）
+
+<br>
+
+#### 7. gem 脆弱性の一括更新（`bundle audit`）
+
+<br>
+
+`bundler-audit` を導入し、既知脆弱性を検出・修正。**結果は `No vulnerabilities found`**。
+
+<br>
+
+| gem | 更新 | 深刻度 |
+|:---|:---|:---|
+| `rails`（activestorage） | 8.1.3 → **8.1.3.1** | 任意ファイル読み取り / RCE |
+| `oauth2` | 2.0.19 → **2.0.25** | High（bearer トークン漏洩・OmniAuth 関連） |
+| `puma` | 7.1.0 → **7.2.1** | High（PROXY プロトコル） |
+| `net-imap` | 0.5.12 → **0.6.6** | High 他複数（コマンドインジェクション等） |
+| `addressable` | 2.8.8 → **2.9.0** | High（ReDoS） |
+| `websocket-driver` | 0.8.0 → **0.8.2** | メモリ枯渇 |
+| `json` / `mail` | 2.21.2 / 2.9.1 | 各種 |
+
+<br>
+
+#### 8. テスト
+
+<br>
+
+- `HabitRecordSaveService` に recalc-on-save の検証を **9 テスト**追加（チェック型：記録→ストリーク 1／3 連続→3／解除→0、数値型：>0→達成・=0→未達成、メモのみ更新で `completed` 維持）。<br>
+- 本番確認中に発見した `tasks/ai_edit.html.erb` の**ファイル取り違え**（habits 用の `@habit` 版が誤配置されていた）を修正。<br>
+- 最終テスト：**867 runs / 2303 assertions / 0 failures / 0 errors**。
+
+<br>
+
 ---
 
 <br>
@@ -11193,6 +11309,62 @@ Gemfile.lock を変えたら **`docker compose build` で焼き直す**のが確
 `d`（diff）で差分を確認して手動統合し、`config.load_defaults` は一旦現行のまま維持 → `new_framework_defaults` を 1 つずつ有効化して段階移行するのが安全。<br>
 （万一上書きしても、コミット前なら `git restore` で復旧できる。）
 
+### 176. 無料 PaaS では「深夜 cron」は発火しない前提で設計する（#I-3）
+
+<br>
+
+Render 無料 Web サービスは 15 分アクセスがないとスリープするため、深夜のアプリ内 cron（GoodJob の定時ジョブ）は発火しない。<br>
+ストリークのように「毎日更新される保存値」を cron だけに依存させると、記録しても 0 のままになる。<br>
+`HabitRecordSaveService` に保存後の `calculate_streak!` を足して cron 非依存でリアルタイム反映しつつ、日次ジョブはバックアップとして残す二重化にした。
+
+<br>
+
+### 177. 付随処理の失敗を主機能（保存）の巻き添えにしない（#I-3）
+
+<br>
+
+ストリーク再計算は「記録保存」に対する付随処理。トランザクション内で失敗させると PostgreSQL がトランザクションを汚染し、記録保存まで巻き添えでロールバックされる。<br>
+再計算は **トランザクションの外**で実行し、`rescue StandardError` で分離。失敗しても記録は保存済みのまま返し、失敗は `Sentry.capture_exception` で可視化する（握りつぶさない）。
+
+<br>
+
+### 178. CSP `form-action` はリダイレクト先まで検査される（#I-3）
+
+<br>
+
+Chrome / Safari はフォーム送信後の 302 リダイレクト先も `form-action` で検査する（Firefox は検査しない）。<br>
+OmniAuth の「/auth/xxx へ POST → 認可サーバーへリダイレクト」で、リダイレクト先が許可リストに無いとブロックされる。<br>
+`:https`（過度に広い）ではなく `https://*.line.me` のように **必要なドメインだけ**を許可するのが安全。
+
+<br>
+
+### 179. Rails 標準ヘルスチェック `/up` は catch-all より前に置く（#I-3）
+
+<br>
+
+`match "*path"` の catch-all を末尾に置くルーティングでは、`/up`（`rails/health#show`）を明示的に、かつ **catch-all より前**に定義しないと 404 に飲み込まれる。<br>
+Render のヘルスチェックが 200 を受け取れず不健全判定になり得るため、ルート先頭で定義する。
+
+<br>
+
+### 180. Performance スコアの頭打ちは TTFB（ホスティング）で切り分ける（#I-3）
+
+<br>
+
+Lighthouse の Performance が上がらないとき、まず LCP の内訳で **TTFB（サーバー応答）** の割合を見る。<br>
+TTFB が支配的なら未使用 JS 削減や minify を頑張ってもスコアは動かない（無料 PaaS のサーバー速度が要因）。<br>
+アプリ側で打てる手（キャッシュ制御・FCP/CLS/TBT の最適化）を尽くしたら、残りは有料プラン / CDN というインフラ判断として切り分ける。
+
+<br>
+
+### 181. `bundle audit` は `bundle exec bundle-audit` で回す（#I-3）
+
+<br>
+
+`bundler-audit` の実行ファイルは Docker の PATH に無いことがあり、`bundle audit`（サブコマンド）も認識されない場合がある。<br>
+`docker compose exec web bundle exec bundle-audit check --update` が確実。<br>
+CI/手元で定期実行し、`No vulnerabilities found` を保つ（Dependabot と併用で二重の監視）。
+
 <br>
 
 ---
@@ -11239,6 +11411,7 @@ Gemfile.lock を変えたら **`docker compose build` で焼き直す**のが確
 | Sentry | エラー監視・本番ログ基盤（Rails/AI/GoodJob/JS） | #I-5 ✅ |
 | acts_as_list | 習慣の並び替え | #B-6 | ✅ 完了 |
 | Chart.js v4（UMDビルド） | グラフ可視化（折れ線・棒グラフ） | #H-4 | ✅ 完了 |
+| bundler-audit | gem の既知脆弱性スキャン（`bundle exec bundle-audit`） | #I-3 | ✅ 完了 |
 
 <br>
 
@@ -11760,7 +11933,7 @@ habitflow/
 │   │       └── crisis_detector.rb         # #D-5 新規: 危機ワード検出モジュール（CRISIS_KEYWORDS 30件・CRISIS_PATTERN・before_validation・crisis_word_detected?）
 │   ├── services/
 │   │   ├── weekly_reflection_complete_service.rb  # 変更: WeeklyReflectionTaskSummary追加（#C-4）・enqueue_analysis_job_if_eligible 追加（#D-4）
-│   │   ├── habit_record_save_service.rb            # #A-7 #B-1: 習慣記録保存フロー（数値型対応・errors:[]配列形式統一）
+│   │   ├── habit_record_save_service.rb            # 変更(#I-3): 保存後に calculate_streak! を実行(cron非依存・トランザクション外・Sentry通知)
 │   │   ├── user_destroy_service.rb                 # #A-7: 退会処理フロー（個人情報匿名化）
 │   │   ├── ai_proposal_confirm_service.rb          # #A-7: AI提案確定フロー骨格（#D-3〜#D-4で本実装）
 │   │   ├── ai_client.rb                   # 変更（G-9）: maxOutputTokens/max_tokens を 8192 に更新
@@ -11937,13 +12110,16 @@ habitflow/
 │   │   └── YYYYMMDDHHMMSS_create_solid_cache_entries.rb  # #I-6: Solid Cache のキャッシュ保存テーブル（key_hash ユニークインデックス）
 │   ├── explain_analyze_audit.sql          # #A-6: インデックス監査用SQLスクリプト（7クエリ）
 │   ├── schema.rb                          # 現在のDBスキーマ（自動生成）
-│   └── seeds.rb                           # デモ用サンプルデータ
+│   ├── seeds.rb                           # 変更(#I-3): 司令塔化(テンプレート+デモを分割呼び出し)
+│   └── seeds/
+│       ├── habit_templates.rb             # #I-3: 習慣テンプレ18件(冪等・全環境)
+│       └── demo_data.rb                   # #I-3: 破壊的デモデータ(development限定・二重ガード)
 ├── vendor/
 │   └── javascript/
 │       └── chart.js.js                    # #H-4: Chart.js v4 UMDビルド（jsdelivr経由・依存関係を完全内包）
 ├── config/
 │   ├── application.rb                     # アプリ設定（タイムゾーン・セッション）
-│   ├── routes.rb                          # ルーティング定義
+│   ├── routes.rb                          # 変更(#I-3): get "up" => "rails/health#show" を catch-all より前に追加
 │   ├── importmap.rb                       # #B-6: Sortable.js を jsdelivr CDN でピン留め追加
 │   ├── cable.yml                          # #D-3 修正: development adapter を async → solid_cable に変更（Turbo Stream 有効化）
 │   ├── database.yml                       # #D-3 修正: 各環境に cable: 接続を追加（solid_cable 用）
@@ -11952,7 +12128,7 @@ habitflow/
 │   ├── initializers/
 │   │   ├── sentry.rb                      # #I-5: Sentry 初期化（本番のみ有効）
 │   │   ├── good_job.rb                    # #I-5: on_thread_error で Sentry 通知（追記）
-│   │   ├── content_security_policy.rb     # #I-5: connect_src に Sentry を許可（追記）
+│   │   ├── content_security_policy.rb     # 変更(#I-3): script_src に :blob 追加・form_action に *.line.me / line.me 追加
 │   │   ├── resend.rb                      # #A-4: Resend APIキー初期化
 │   │   ├── bullet.rb                      # #A-6: N+1検出設定（development環境のみ）
 │   │   ├── rack_mini_profiler.rb          # #A-6: クエリ数・実行時間可視化（development環境のみ）
@@ -11962,7 +12138,7 @@ habitflow/
 │   │   └── ja.yml                         # 変更: Task属性名・エラーメッセージ追加（#C-1）・UserSetting ai_analysis_monthly_limit エラーメッセージ追加（#D-4）
 │   └── environments/
 │       ├── development.rb                 # 変更: letter_opener設定（#A-4）・CSS preload警告抑制（E-5）・#I-6: キャッシュON時のストアを solid_cache_store に統一
-│       ├── production.rb                  # 変更: Action Mailer設定・GoodJob :async化（#A-4）・#I-6: cache_store = :solid_cache_store / perform_caching = true
+│       ├── production.rb                  # 変更(#I-3): APP_HOST化・public_file_server.headers(長期キャッシュ)・preload_links_header=false
 │       └── test.rb                        # #I-6: null_store 維持を明示（既存841テストを保護）
 ├── public/
 │   └── sentry/
@@ -11978,7 +12154,7 @@ habitflow/
     ├── services/
     │   ├── application_record_with_transaction_test.rb  # #A-7: with_transaction の動作確認（5テスト）
     │   ├── weekly_reflection_complete_service_test.rb   # 変更: 補正ロジック・再補正・セキュリティテスト追加（#B-1）
-    │   ├── habit_record_save_service_test.rb            # #A-7: 習慣記録フローのテスト（3テスト）
+    │   ├── habit_record_save_service_test.rb            # #I-3: recalc-on-save 9テスト
     │   ├── weekly_reflection_complete_service_crisis_test.rb  # #D-5 新規（5件：ジョブスキップ・crisis_detected:true返却・AiAnalysis記録・振り返り保存続行・通常ワードはジョブ実行）
     │   ├── user_destroy_service_test.rb   # F-6 新規（6件：個人情報匿名化・統計データ保持・PasswordResetToken削除・同一メール再登録・authenticate失敗・success:true返却）
     │   ├── csv_export_service_test.rb        # G-5 新規（16件）
@@ -14844,6 +15020,36 @@ Rails・Ruby・依存 gem を一度にまとめて上げると、問題発生時
 手動での `bundle update` は後回しになりがちなので、Dependabot で更新を PR 化して仕組みに落とす。<br>
 パッチ／マイナーは集約 PR で手軽に、メジャーは個別 PR で慎重に、と分けることで「最新化」と「安定性」を両立できる。<br>
 保留したいメジャーは `ignore` で PR を抑制し、対応する時に `ignore` を外す運用にすると、通知ノイズを抑えられる。
+
+<br>
+
+### 無料 PaaS の制約は「隠す」のではなく「明記」する（#I-3）
+
+<br>
+
+Render 無料枠では、深夜 cron が発火しない・SSH/Shell や one-off ジョブが使えない・サーバー応答（TTFB）が遅く Lighthouse Performance が頭打ちになる。<br>
+これらは弱点ではなく前提条件であり、README に「既知の制約」として明記した方がポートフォリオとして誠実で評価される。<br>
+コードで打てる手（recalc-on-save・キャッシュ制御・アクセシビリティ）は尽くし、残りはインフラ判断として切り分けた。
+
+<br>
+
+### 「テストが落ちた＝直前の変更が原因」とは限らない（#I-3）
+
+<br>
+
+本番確認中、`tasks/ai_edit` のテストが `@task` nil で落ちたが、直前のコントラスト変更（色クラスのみ）とは無関係だった。<br>
+実ファイルを確認すると、`tasks/ai_edit.html.erb` に **habits 用（`@habit`）の中身が誤って配置**されていた（同名 `ai_edit.html.erb` の取り違え）。<br>
+`git stash` で作業差分を除外して再現するか、`grep -c @task/@habit` で実ファイルを検証すると、変更起因かファイル取り違えかを切り分けられる。<br>
+**同名ファイル（`index.html.erb` / `show.html.erb` 等）は、置き場所を必ず 1 行目のパスコメントで確認する。**
+
+<br>
+
+### `db:test:prepare` はテスト前に必ず回す（#I-3）
+
+<br>
+
+`bin/rails test` 単体で不可解な失敗が出たら、まず `db:environment:set RAILS_ENV=development` → `db:test:prepare` でテスト DB を作り直してから切り分ける。<br>
+今回はテスト DB は原因ではなかったが、環境要因を先に潰すことで「実バグ」に集中できた。
 
 <br>
 

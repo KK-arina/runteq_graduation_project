@@ -72,7 +72,7 @@
       E-3（AI提案モーダル）実装後は、モーダルに戻るリンクに変更する予定。
     %>
     <%= link_to habits_path,
-          class: "text-gray-400 hover:text-gray-600 transition-colors",
+          class: "text-gray-500 hover:text-gray-600 transition-colors",
           aria: { label: "習慣一覧に戻る" } do %>
       <%# 左矢印アイコン（SVG）: テキストより視覚的に分かりやすい %>
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
@@ -159,10 +159,10 @@
           <span class="text-sm font-bold text-gray-700">
             <%= @habit.check_type? ? "チェック型（やった/やらない）" : "数値型（#{@habit.unit}で記録）" %>
           </span>
-          <span class="text-xs text-gray-400 ml-2">（変更不可）</span>
+          <span class="text-xs text-gray-500 ml-2">（変更不可）</span>
         </div>
       </div>
-      <p class="mt-1 text-xs text-gray-400">
+      <p class="mt-1 text-xs text-gray-500">
         ※ 記録タイプは過去データとの整合性のため変更できません
       </p>
     </div>
@@ -304,7 +304,7 @@
           </label>
         <% end %>
       </div>
-      <p class="text-xs text-gray-400 mt-2">
+      <p class="text-xs text-gray-500 mt-2">
         ※ 例: 土日を除外すると週5日が最大達成日数になります
       </p>
     </div>

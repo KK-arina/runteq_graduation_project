@@ -17,9 +17,22 @@ services:
       - .:/rails
     ports:
       - "3000:3000"
-# docker-compose.yml の environment セクションを以下に更新
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/habitflow_development
+      # ------------------------------------------------------------------
+      # 【#I-3 修正】DATABASE_URL は「意図的に削除」しました。
+      # ------------------------------------------------------------------
+      # 以前はここに
+      #   DATABASE_URL: postgresql://postgres:postgres@db:5432/habitflow_development
+      # を設定していましたが、これが原因で test 環境の接続先まで
+      # habitflow_development に固定され、db:test:prepare が開発DBを初期化して
+      # seed データ（テンプレート等）が毎回消えていました。
+      #
+      # 開発・テストの接続先は config/database.yml の
+      #   host: db / database: habitflow_development（開発）
+      #   host: db / database: habitflow_test（テスト）
+      # で管理するようにしたため、ここで DATABASE_URL を渡す必要はありません。
+      # （本番 Render 側は引き続き DATABASE_URL で Neon に接続します）
+      # ------------------------------------------------------------------
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GROQ_API_KEY: ${GROQ_API_KEY}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}

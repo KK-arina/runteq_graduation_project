@@ -135,7 +135,7 @@
           習慣別達成率の推移
         </h2>
         <% if @habit_chart_data[:datasets].empty? %>
-          <p class="text-sm text-gray-400">まだ習慣が登録されていません。</p>
+          <p class="text-sm text-gray-500">まだ習慣が登録されていません。</p>
         <% else %>
           <%#
             h-64（256px）の高さを明示的に指定する。
@@ -157,7 +157,7 @@
           気分スコアの推移（週次振り返り）
         </h2>
         <% if @mood_chart_data[:labels].empty? %>
-          <p class="text-sm text-gray-400">まだ気分スコア付きの振り返りがありません。</p>
+          <p class="text-sm text-gray-500">まだ気分スコア付きの振り返りがありません。</p>
         <% else %>
           <div class="h-56">
             <canvas data-analytics-chart-target="moodCanvas"
@@ -175,7 +175,7 @@
         🔥 ストリーク記録
       </h2>
       <% if @habits.empty? %>
-        <p class="text-sm text-gray-400">まだ習慣が登録されていません。</p>
+        <p class="text-sm text-gray-500">まだ習慣が登録されていません。</p>
       <% else %>
         <%#
           overflow-x-auto: テーブルがスマホ画面（375px）でも横スクロールで
@@ -195,10 +195,13 @@
               <% @habits.sort_by { |habit| -habit.current_streak }.each do |habit| %>
                 <tr class="border-b border-gray-100 last:border-b-0">
                   <td class="py-2 pr-4 font-medium text-gray-700">
-                    <%= habit.icon.presence || "📋" %> <%= habit.name %>
+                    <span class="flex items-start gap-1">
+                      <span class="flex-shrink-0" aria-hidden="true"><%= habit.icon.presence || "📋" %></span>
+                      <span class="min-w-0 break-words"><%= habit.name %></span>
+                    </span>
                   </td>
                   <td class="py-2 pr-4">
-                    <span class="<%= habit.current_streak > 0 ? 'text-orange-600 font-bold' : 'text-gray-400' %>">
+                    <span class="<%= habit.current_streak > 0 ? 'text-orange-600 font-bold' : 'text-gray-500' %>">
                       🔥 <%= habit.current_streak %>日
                     </span>
                   </td>

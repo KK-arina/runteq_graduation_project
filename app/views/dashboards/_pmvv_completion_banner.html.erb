@@ -93,7 +93,7 @@
             AiAnalysis は create! で毎回新規作成される設計（find_or_initialize_by ではない）
             のため、created_at が「AI分析が完了した正確な時刻」を表す。
           %>
-          <p class="text-xs text-green-600 truncate">
+          <p class="text-xs text-green-700 truncate">
             <% completed_at = ai_analysis&.created_at || user_purpose.updated_at %>
             <%= l completed_at, format: :long %> 完了 ·
             PMVVに基づいた習慣・タスクの提案が準備できました
@@ -119,14 +119,14 @@
         <% if ai_analysis.present? %>
           <%= link_to "結果を見る →",
                       ai_result_user_purpose_path,
-                      class: "px-3 py-1.5 text-xs font-bold text-white bg-green-600
-                              rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap
+                      class: "px-3 py-1.5 text-xs font-bold text-white bg-green-700
+                              rounded-lg hover:bg-green-800 transition-colors whitespace-nowrap
                               focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2" %>
         <% else %>
           <%= link_to "目標を確認する →",
                       user_purpose_path,
-                      class: "px-3 py-1.5 text-xs font-bold text-white bg-green-600
-                              rounded-lg hover:bg-green-700 transition-colors whitespace-nowrap
+                      class: "px-3 py-1.5 text-xs font-bold text-white bg-green-700
+                              rounded-lg hover:bg-green-800 transition-colors whitespace-nowrap
                               focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2" %>
         <% end %>
 

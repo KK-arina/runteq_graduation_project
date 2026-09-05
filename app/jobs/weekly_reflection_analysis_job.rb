@@ -134,6 +134,29 @@ class WeeklyReflectionAnalysisJob < ApplicationJob
     Rails.logger.error "[WeeklyReflectionAnalysisJob] 認証エラー（401）: #{e.message}"
     raise
 
+  # ── #I-3 追加: 並行実行による分析の重複を安全に処理する ──────────────────
+  #
+  # 【いつ起きるか】
+  #   同じ週次振り返りに対して分析ジョブが二重に走ったとき、
+  #   すでに is_latest=true の AiAnalysis があるのに、もう1件 create! しようとして
+  #   部分ユニークインデックス index_ai_analyses_latest_weekly_reflection_unique に
+  #   違反する（DB例外 PG::UniqueViolation → ActiveRecord::RecordNotUnique）。
+  #
+  # 【なぜ「正常終了」でよいのか】
+  #   一意違反が起きた時点で、もう片方のジョブが有効な分析を作成済み。
+  #   ＝分析結果はすでに1件存在する。この重複した側はリトライも失敗扱いも不要。
+  #   create! はトランザクション内なので、失敗したこの側の変更（分析件数の加算含む）は
+  #   すべてロールバック済み。ログだけ残して静かに終了する。
+  #   画面更新は勝った側のジョブが既にブロードキャスト済みで、ダッシュボードは
+  #   再描画フォールバックも持つため、ここで再ブロードキャストしなくても整合する。
+  #
+  # 【なぜ親クラスの discard_on ではなく、このジョブ内で個別対処するのか】
+  #   RecordNotUnique を ApplicationJob で一律 discard すると、他ジョブで起きた
+  #   本来調査すべき重複まで握りつぶしてしまう。重複が「想定内で安全」と言えるのは
+  #   このAI分析ジョブの文脈だけなので、ここに限定して処理する。
+  rescue ActiveRecord::RecordNotUnique => e
+    Rails.logger.info "[WeeklyReflectionAnalysisJob] 分析は既に作成済みのためスキップ（並行実行の競合）: weekly_reflection_id=#{weekly_reflection_id} / #{e.message}"
+
   rescue => e
     Rails.logger.error "[WeeklyReflectionAnalysisJob] 予期しないエラー: #{e.class} - #{e.message}"
     Rails.logger.error e.backtrace.first(5).join("\n")

@@ -70,7 +70,7 @@
       <p class="text-gray-500 text-sm">
         週次振り返りは毎週日曜日の午前4時以降に記録できます。
         <br>
-        <span class="text-xs text-gray-400">
+        <span class="text-xs text-gray-500">
           今週の期間：
           <%= WeeklyReflection.current_week_start_date.strftime("%Y/%m/%d") %>
           〜
@@ -186,13 +186,13 @@
                 </span>
 
                 <span class="text-sm font-bold
-                  <%= avg_rate >= 100 ? 'text-green-600' :
-                      avg_rate >= 70  ? 'text-blue-600' :
-                      avg_rate >= 40  ? 'text-yellow-600' : 'text-red-500' %>">
+                  <%= avg_rate >= 100 ? 'text-green-700' :
+                      avg_rate >= 70  ? 'text-blue-700' :
+                      avg_rate >= 40  ? 'text-yellow-700' : 'text-red-700' %>">
                   <%= avg_rate %>%
                 </span>
 
-                <svg class="w-4 h-4 text-gray-400 group-hover:text-indigo-500 transition-colors"
+                <svg class="w-4 h-4 text-gray-500 group-hover:text-indigo-500 transition-colors"
                      fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
                 </svg>

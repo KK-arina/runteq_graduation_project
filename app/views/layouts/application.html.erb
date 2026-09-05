@@ -87,6 +87,13 @@
     <title><%= content_for(:title) || "HabitFlow" %></title>
     <%= yield :head %>
     <meta name="viewport" content="width=device-width,initial-scale=1">
+    <%#
+      SEO: メタディスクリプション（Lighthouse の「メタ ディスクリプション未指定」対策）
+      各ページで content_for(:description, "...") を指定すればページ個別に上書きでき、
+      未指定ならアプリ共通の説明文を出す。
+    %>
+    <meta name="description"
+          content="<%= content_for(:description) || "HabitFlow は、習慣の記録・振り返り（PDCA）・目標管理を、AI のサポートとともに無理なく続けられる習慣化アプリです。" %>">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
     <%#
