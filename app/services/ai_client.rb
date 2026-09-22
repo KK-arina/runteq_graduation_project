@@ -69,17 +69,21 @@ class AiClient
   # GROQ_MODEL: フォールバック時に使用する Groq のモデル名
   #
   # 【2026-08 修正】Groq が旧モデル "llama-3.3-70b-versatile" を
-  #   2026年8月16日に廃止（decommission）した。呼び出すと HTTP 404
-  #   （model_not_found）が返り、Gemini フォールバック時に分析が失敗していた。
-  #   Groq 公式の推奨後継 "openai/gpt-oss-120b" を既定値にする。
-  #   （console.groq.com/docs/deprecations の移行表に基づく）
+  #   2026年8月16日に廃止（free/developer tier で decommission）した。
+  #   呼ぶと HTTP 404（model_not_found）が返り、Gemini フォールバック時に
+  #   分析が失敗していた。公式推奨後継 "openai/gpt-oss-120b"（Groq が現在
+  #   Production Model として提供中）を既定値にする。
   #
   # 【ENV.fetch にした理由】
-  #   Groq はモデルを定期的に入れ替える。モデル名をコードに直書きすると
-  #   廃止のたびにコード修正＋再デプロイが必要になる。
-  #   環境変数 GROQ_MODEL で上書きできるようにしておけば、
-  #   次に廃止されても Render の環境変数を変えるだけで対応できる（再発防止）。
-  #   環境変数が無ければ下の既定値（現時点で有効なモデル）を使う。
+  #   Groq はモデルを定期的に入れ替える。環境変数 GROQ_MODEL で上書きできる
+  #   ようにしておけば、次に廃止されても Render の環境変数を変えるだけで
+  #   対応でき、コード修正・再デプロイが不要になる。
+  #   ⚠️ ただし Render 側に古い GROQ_MODEL が残っているとそちらが優先される。
+  #      デプロイ後に Render の環境変数を必ず確認すること。
+  #
+  # 【.freeze の意味】
+  #   文字列を「変更不可（イミュータブル）」にして、実行中に定数の中身が
+  #   誤って書き換えられる事故を防ぐ。（「メモリ最適化」ではない）
   GROQ_MODEL = ENV.fetch("GROQ_MODEL", "openai/gpt-oss-120b").freeze
 
   # GROQ_API_BASE: Groq API のベース URL
