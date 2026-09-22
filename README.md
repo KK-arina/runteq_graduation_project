@@ -97,7 +97,7 @@ flowchart LR
 [![G-3 通知設定ページ](https://img.shields.io/badge/G--3_通知設定ページ-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/g3-notification-settings)
 [![G-4 お休みモード設定](https://img.shields.io/badge/G--4_お休みモード設定-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/g4-rest-mode)
 [![G-5 CSVエクスポート](https://img.shields.io/badge/G--5_CSVエクスポート-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/G-5-csv-export)
-[![G-6 設定ページ拡張](https://img.shields.io/badge/G--6_設定ページ拡張-完了-10b981?style=flat-square)](https://github.com/KK-arina/runteq_graduation_project/tree/feature/g6-settings-page-expansion)
+[![G-6 設定ページ拡張](https://img.shields.io/badge/G--6_設定ページ拡張-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/g6-settings-page-expansion)
 [![G-7 ダッシュボードバナー通知](https://img.shields.io/badge/G--7_ダッシュボードバナー通知-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/g7-dashboard-completion-banner)
 [![G-8 AI分析カウント月次リセット](https://img.shields.io/badge/G--8_AI分析カウント月次リセット-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/G-8-monthly-ai-count-reset-test)
 [![G-9 週次振り返りAI提案拡張](https://img.shields.io/badge/G--9_週次振り返りAI提案拡張-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/g-9-weekly-reflection-ai-proposal-extension)
@@ -117,7 +117,8 @@ flowchart LR
 [![I-2 セキュリティ最終確認](https://img.shields.io/badge/I--2_セキュリティ最終確認-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-2-security-final-check)
 [![Rails 8.1・Ruby 3.4.10 最新化](https://img.shields.io/badge/Rails_8.1_%2F_Ruby_3.4.10-最新化・Dependabot導入-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-2-security-final-check)
 [![I-3 本番動作確認](https://img.shields.io/badge/I--3_本番動作確認-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-3-production-check)
-[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-70%2F70_ISSUE-f59e0b?style=flat-square)]()
+[![I-4 README・ドキュメント最終更新](https://img.shields.io/badge/I--4_READMEドキュメント最終更新-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-4-readme-docs-final-update)
+[![本リリース進捗](https://img.shields.io/badge/本リリース進捗-70%2F70_ISSUE完了-10b981?style=flat-square)]()
 
 <br>
 
@@ -173,7 +174,7 @@ flowchart LR
 | Week F | 認証拡張 | #F-1〜#F-6 | 21 | ✅ 完了 |
 | Week G | 通知・設定拡張 | #G-1〜#G-9 | 34 | ✅ 完了 |
 | Week H | フロントエンド強化 | #H-1〜#H-10 | 37 | ✅ 完了 |
-| Week I | 品質・テスト・デプロイ | #I-1〜#I-6 | 22 | 🟡 進行中（#I-1・#I-2・#I-3・#I-5・#I-6 完了 / #I-4 進行中） |
+| Week I | 品質・テスト・デプロイ | #I-1〜#I-6 | 22 | ✅ 完了 |
 | **合計** | | **70** | **233** | |
 
 <br>
@@ -251,6 +252,7 @@ flowchart LR
 | #I-5 | エラー監視・本番ログ基盤構築（Sentry） | 2026-07-21 | feature/i-5-sentry |
 | #I-2 | セキュリティ最終確認（Brakeman 0件 / 認可 / Strong Parameters / OmniAuth CSRF / CSV署名トークン / ai_context） | 2026-07-26 | feature/i-2-security-final-check |
 | #I-3 | 本番動作確認（Render 本番の最終スモーク：本番設定/ENV 監査・Sentry 本番エラー修正・ストリークの cron 非依存化・CSP(blob/LINE)・/up ヘルスチェック・Lighthouse 対応・gem 脆弱性一括更新） | 2026-08-30 | feature/i-3-production-check |
+| #I-4 | README・ドキュメント最終更新（本リリース機能反映・技術スタック実バージョン化・既知の制限事項の刷新・スクリーンショット更新・.env.example の DB_* 参照追記） | 2026-09-05 | feature/i-4-readme-docs-final-update |
 
 <br>
 
@@ -11382,21 +11384,21 @@ CI/手元で定期実行し、`No vulnerabilities found` を保つ（Dependabot 
 | 技術 | バージョン | 用途 |
 |:---|:---|:---|
 | Ruby | 3.4.10 | プログラミング言語（3.4 系最新パッチ・zlib CVE 対応） |
-| Ruby on Rails | 8.1.3 | Web フレームワーク（7.2.3 からアップグレード） |
+| Ruby on Rails | 8.1.3.1 | Web フレームワーク（7.2.3 からアップグレード・#I-3 でパッチ更新） |
 | PostgreSQL | 16 | データベース |
 | bcrypt | 3.1.7 系 | パスワードハッシュ化 |
-| Puma | 7.1.0（~> 7.0） | Web サーバー |
+| Puma | 7.2.1 | Web サーバー（#I-3 で 7.0 系 → 7.2.1 に更新） |
 
 <br>
 
-### 本リリース追加予定スタック
+### 本リリース追加スタック（すべて導入済み）
 
 <br>
 
 | 技術 | 用途 | ISSUE | 状態 |
 |:---|:---|:---|:---:|
 | Neon Serverless Postgres | 永続無料 DB（Render 内蔵 DB の90日削除回避） | #A-2 | ✅ 完了 |
-| GoodJob 4.x | バックグラウンドジョブ（AI分析・通知・ストリーク計算） | #A-3 | ✅ 完了 |
+| GoodJob 4.19.2 | バックグラウンドジョブ（AI分析・通知・ストリーク計算・:async モードで Web プロセス内実行） | #A-3 | ✅ 完了 |
 | Resend | メール送信（パスワードリセット・週次レポート） | #A-4 #G-2 | ✅ 完了 |
 | letter_opener_web | 開発環境メールプレビュー（Docker対応） | #A-4 #F-4 | ✅ 完了 |
 | habit_templates マスタデータ | オンボーディング用習慣テンプレート（18件） | #A-5 | ✅ 完了 |
@@ -11408,7 +11410,8 @@ CI/手元で定期実行し、`No vulnerabilities found` を保つ（Dependabot 
 | Gemini API（gemini-2.5-flash） | AI分析デフォルトプロバイダ（PMVV・週次振り返り） | #D-2 / #D-4 | ✅ 完了（#D-2）|
 | Groq API（llama-3.3-70b-versatile） | AI分析フォールバックプロバイダ | #D-2 / #D-4 | ✅ 完了（#D-2）|
 | Solid Cache 1.0.10 | Redis不要のキャッシュ（ダッシュボード/グラフ/AI分析結果・単一DB構成） | #I-6 | ✅ 完了 |
-| Sentry | エラー監視・本番ログ基盤（Rails/AI/GoodJob/JS） | #I-5 ✅ |
+| Solid Cable 3.0.12 | Redis不要の Action Cable アダプタ（DB ベース・cable.yml で primary と同一 DB を使用） | #I-6 | ✅ 完了 |
+| Sentry（sentry-ruby / sentry-rails 6.6.2） | エラー監視・本番ログ基盤（Rails / AI / GoodJob / JS の例外を捕捉） | #I-5 | ✅ 完了 |
 | acts_as_list | 習慣の並び替え | #B-6 | ✅ 完了 |
 | Chart.js v4（UMDビルド） | グラフ可視化（折れ線・棒グラフ） | #H-4 | ✅ 完了 |
 | bundler-audit | gem の既知脆弱性スキャン（`bundle exec bundle-audit`） | #I-3 | ✅ 完了 |
@@ -11807,24 +11810,28 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 
 <br>
 
-### MVP 未実装機能
+### 本リリースで実装した主要機能（MVP からの拡張）
 
 <br>
 
-以下の機能は設計済みですが、MVP 段階では実装していません。
+MVP 段階で「未実装」としていた機能は、本リリースですべて実装完了しました。
 
 <br>
 
-| 機能 | 状態 | 予定 |
+| 機能 | 状態 | 対応 ISSUE |
 |:---|:---|:---|
-| タスク管理（基本CRUD） | ✅ 実装済み（#C-1） | — |
-| AI 分析連携（自動パース） | 未実装 | 本リリースで追加予定 |
-| パスワードリセット | 未実装 | 本リリースで追加予定 |
-| オンボーディング（初回ガイド） | 未実装 | 本リリースで追加予定 |
-| グラフ・チャート表示 | 未実装 | 本リリースで追加予定 |
-| 数値型習慣（冊数・時間・km等） | ✅ 実装済み（#B-1） | — |
-| 除外日設定（習慣ごとに実施しない曜日を設定） | ✅ 実装済み（#B-2） | — |
-| 習慣のアーカイブ | ✅ 実装済み（#B-4） | — |
+| タスク管理（Must/Should/Could・基本CRUD） | ✅ 実装済み | #C-1〜#C-7 |
+| AI 分析連携（PMVV・週次振り返りの自動分析） | ✅ 実装済み | #D-2 / #D-4 |
+| パスワードリセット（Resend メール送信） | ✅ 実装済み | #F-4 |
+| オンボーディング（初回ガイド・習慣テンプレート選択・PMVV入力） | ✅ 実装済み | #D-7 / #H-5 |
+| グラフ・チャート表示（Chart.js 進捗分析） | ✅ 実装済み | #H-4 |
+| 数値型習慣（冊数・時間・km等） | ✅ 実装済み | #B-1 |
+| 除外日設定（習慣ごとに実施しない曜日を設定） | ✅ 実装済み | #B-2 |
+| 習慣のアーカイブ・ストリーク・カラー/アイコン並び替え | ✅ 実装済み | #B-3 / #B-4 / #B-6 |
+| ソーシャルログイン（Google / LINE） | ✅ 実装済み | #F-1 / #F-2 |
+| LINE / メール通知・週次レポート | ✅ 実装済み | #G-1 / #G-2 |
+| CSV エクスポート | ✅ 実装済み | #G-5 |
+| 危機介入（セーフティ）機能 | ✅ 実装済み | #D-5 |
 
 <br>
 
@@ -11838,7 +11845,7 @@ PDCAロックが解除される → 来週も習慣を追加・管理できる
 | Neon 無料プランの制限 | コンピュートリソースに上限あり（通常の用途では十分） | ユーザー増加時は有料プランへ移行 |
 | 自動バックアップなし | Neon 無料プランには自動バックアップがない | 本番移行時は有料プランへ移行する |
 | GoodJob Worker 非対応 | Render Free プランは Background Worker が利用不可（最低$7/月） | :async モードでWebプロセス内でジョブを実行（#A-4で対応済み） |
-| メール送信 | Resend によるメール送信基盤を構築済み（#A-4完了） | パスワードリセット等は #F-4 で実装予定 |
+| メール送信 | Resend によるメール送信基盤を構築済み（#A-4完了） | パスワードリセット（#F-4）・週次レポート（#G-2）・タスクアラーム（#C-5）で実装済み |
 
 <br>
 
@@ -12239,7 +12246,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-861 runs, 2290 assertions, 0 failures, 0 errors, 0 skips
+867 runs, 2303 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -12394,7 +12401,40 @@ docker compose exec web bin/rails tailwindcss:build
 # Sprockets キャッシュをクリアする（Permission denied エラーの場合）
 sudo rm -rf tmp/cache/assets
 
-# テスト用 DB を最新状態に更新する
+# --- テスト用データベースを最新の状態に更新する（正しい手順） ---
+#
+# 【なぜ①が必要か】
+# development DB の「環境ラベル」が test 等にずれていると、
+# マイグレーションやテスト準備で ActiveRecord::EnvironmentMismatchError が出る。
+# 先に環境ラベルを development に固定しておくと、この警告を防げる。
+docker compose exec web bin/rails db:environment:set RAILS_ENV=development
+
+# 【なぜ②が必要か】
+# config/database.yml で development / test の接続先 DB を分離済み（#I-3）。
+# そのため db:test:prepare を実行しても開発 DB（habitflow_development）は消えず、
+# テスト DB（habitflow_test）だけが最新スキーマにリセットされる。
+docker compose exec web bin/rails db:test:prepare
+```
+
+<br>
+
+### ActiveRecord::EnvironmentMismatchError が出る
+
+<br>
+
+```bash
+# 【症状】
+# db:migrate や db:test:prepare 実行時に
+#   ActiveRecord::EnvironmentMismatchError:
+#   You are attempting to modify a database that was last run in `test` environment...
+# のような警告が出て処理が止まる。
+
+# 【原因】
+# development DB に記録されている「最後に使った環境ラベル」が
+# development 以外（test 等）になっているため。
+
+# 【対処】development に戻してから、テスト DB を作り直す。
+docker compose exec web bin/rails db:environment:set RAILS_ENV=development
 docker compose exec web bin/rails db:test:prepare
 ```
 
@@ -12427,6 +12467,7 @@ docker compose exec web bin/rails db:test:prepare
 | [`docs/architecture.md`](docs/architecture.md) | **設計・技術実装ノート**: サービス設計・ER図・技術選定の理由・実装詳細 |
 | [`docs/development.md`](docs/development.md) | **開発進捗ログ**: Week別SP管理・Issue完了記録・テスト推移・教訓まとめ |
 | [`docs/operations.md`](docs/operations.md) | **運用・デプロイ記録**: 本番環境設定・確認チェックリスト・トラブルシューティング |
+| [`docs/logging_and_backup.md`](docs/logging_and_backup.md) | **ログ確認・バックアップ手順**: 本番ログの見方・バックアップ運用 |
 
 <br>
 

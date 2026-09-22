@@ -67,7 +67,20 @@ class AiClient
   GEMINI_API_BASE = "https://generativelanguage.googleapis.com".freeze
 
   # GROQ_MODEL: フォールバック時に使用する Groq のモデル名
-  GROQ_MODEL = "llama-3.3-70b-versatile".freeze
+  #
+  # 【2026-08 修正】Groq が旧モデル "llama-3.3-70b-versatile" を
+  #   2026年8月16日に廃止（decommission）した。呼び出すと HTTP 404
+  #   （model_not_found）が返り、Gemini フォールバック時に分析が失敗していた。
+  #   Groq 公式の推奨後継 "openai/gpt-oss-120b" を既定値にする。
+  #   （console.groq.com/docs/deprecations の移行表に基づく）
+  #
+  # 【ENV.fetch にした理由】
+  #   Groq はモデルを定期的に入れ替える。モデル名をコードに直書きすると
+  #   廃止のたびにコード修正＋再デプロイが必要になる。
+  #   環境変数 GROQ_MODEL で上書きできるようにしておけば、
+  #   次に廃止されても Render の環境変数を変えるだけで対応できる（再発防止）。
+  #   環境変数が無ければ下の既定値（現時点で有効なモデル）を使う。
+  GROQ_MODEL = ENV.fetch("GROQ_MODEL", "openai/gpt-oss-120b").freeze
 
   # GROQ_API_BASE: Groq API のベース URL
   GROQ_API_BASE = "https://api.groq.com".freeze
