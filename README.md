@@ -1186,91 +1186,154 @@ docker compose exec web bin/rails test
 
 <br>
 
-| ファイル | 種別 | 内容 |
-|:---|:---|:---|
-| `test/models/user_test.rb` | モデル | ユーザー認証・バリデーション |
-| `test/models/habit_test.rb` | モデル | 習慣管理・論理削除 |
-| `test/models/habit_record_test.rb` | モデル | 日次記録・AM4:00 境界値 |
-| `test/models/weekly_reflection_test.rb` | モデル | 週次振り返り・complete! |
-| `test/integration/user_auth_flow_test.rb` | E2E | 登録→ログイン→ログアウトのフロー |
-| `test/integration/habit_full_flow_test.rb` | E2E | 習慣作成→記録→進捗確認のフロー |
-| `test/integration/weekly_reflection_flow_test.rb` | E2E | 振り返り作成→詳細確認のフロー |
-| `test/integration/pdca_lock_flow_test.rb` | E2E | ロック発動→解除→習慣作成のフロー |
-| `test/integration/error_cases_test.rb` | E2E | 404・認可エラー・他ユーザーアクセス防止 |
-| `test/integration/production_final_check_test.rb` | E2E | 本番環境最終動作確認（19ケース） |
-| `test/db/index_audit_test.rb` | DBインデックス監査 | インデックス・UNIQUE制約の存在確認（#A-6） |
-| `test/services/application_record_with_transaction_test.rb` | サービス | `with_transaction` のロールバック動作確認 |
-| `test/services/weekly_reflection_complete_service_test.rb` | サービス | 振り返り完了フローのトランザクション・ロールバック検証 |
-| `test/services/habit_record_save_service_test.rb` | サービス | 習慣記録保存フローの動作確認 |
-| `test/models/habit_record_test.rb` | モデル | `numeric_value` バリデーション・Service経由保存（#B-1追記） |
-| `test/integration/numeric_habit_flow_test.rb` | E2E | 数値型習慣の作成→記録→進捗確認→ダッシュボード表示のフロー（#B-1） |
-| `test/services/weekly_reflection_complete_service_test.rb` | サービス | 差分補正・再補正・マイナスクランプ・セキュリティ（#B-1追記） |
-| `test/models/habit_excluded_day_test.rb` | モデル | 除外日バリデーション・UNIQUE制約・effective_weekly_target・達成率計算（#B-2・15件） |
-| `test/models/habit_streak_test.rb` | モデル | ストリーク計算・longest_streak保護・除外日・お休みモード日付単位判定・AM4:00境界値（#B-3・25件） |
-| `test/models/habit_archive_test.rb` | モデル | アーカイブscope・archive!/unarchive!・状態ガード異常系（#B-4・22件） |
-| `test/controllers/habits_archive_controller_test.rb` | コントローラー | archived一覧・archive・unarchive・他ユーザー防止（#B-4・6件） |
-| `test/controllers/habits_menu_controller_test.rb` | コントローラー | ⋯メニュー表示・モーダルID属性・アーカイブ/削除動作・ロック状態・他ユーザー防止（#B-5・14件） |
-| `test/models/habit_excluded_day_test.rb` | モデル | 曜日依存バグ修正のため `travel_to` 追加（金曜固定・#B-5修正） |
-| `test/controllers/habits_controller_test.rb` | コントローラー | 曜日依存バグ修正のため `travel_to` 追加（水曜固定・#B-5修正） |
-| `test/models/habit_sort_test.rb` | モデル | カラー・アイコンバリデーション・acts_as_list 並び順・insert_at 動作確認（#B-6・8件） |
-| `test/controllers/habits_sort_controller_test.rb` | コントローラー | 並び替え保存・未ログイン防止・不正ID混入の安全処理（#B-6・3件） |
-| `test/models/habit_record_memo_test.rb` | モデル | `memo` バリデーション（nil/空文字/200文字/201文字）・`has_memo?` メソッド（nil/空文字/存在/スペースのみ）（#B-7・8件） |
-| `test/integration/memo_flow_test.rb` | 統合 | メモ保存・空文字→nil変換・201文字バリデーションエラー・スペースのみ→nil・部分更新2件（#B-7・6件） |
-| `test/models/task_test.rb` | モデル | Task enum・バリデーション・スコープ・overdue?/due_today?・soft_delete（#C-1・17件） |
-| `test/controllers/tasks_controller_test.rb` | コントローラー | index・new・create・ロックチェック・Strong Parameters拒否・travel_to+teardown方式（#C-1・14件） |
-| `test/models/task_test.rb` | モデル | `toggle_complete!`（todo→done・done→todo・archived操作不可）・`archive!`（done→archived・archived二重防止・todo/doing操作不可）（#C-2・7件追加・計24件） |
-| `test/controllers/tasks_controller_test.rb` | コントローラー | `toggle_complete`（未完了→完了・完了→未完了・ロック中チェック可・未ログイン防止・他ユーザー防止）・`archive`（完了→アーカイブ・未ログイン防止）・`archive_all_done`（一括アーカイブ・他ユーザー非影響）（#C-2・13件追加・計13件） |
-| `test/models/task_test.rb` | モデル | `soft_delete`（deleted_at設定・activeスコープ除外）・`ai_generated?`（true/false判定）（#C-3・4件追加・計28件） |
-| `test/controllers/tasks_controller_test.rb` | コントローラー | `destroy`（手動タスク削除・AI生成403・他ユーザー404・ロック中302・未ログイン302）（#C-3・5件追加・計18件） |
-| `test/fixtures/weekly_reflection_task_summaries.yml` | フィクスチャ | `completed_one × ai_generated_task` のサンプルデータ（#C-4） |
-| `test/models/weekly_reflection_task_summary_test.rb` | モデル | バリデーション・UNIQUE制約（task_id IS NOT NULL部分インデックス対応）・アソシエーション（on_delete: :nullify でタスク削除後もスナップショット保持）・`create_all_for_reflection!`（冪等性・対象タスク選定）・`by_priority` スコープ・`priority_label` / `priority_color_class`（#C-4・21件） |
-| `test/jobs/task_alarm_job_test.rb` | ジョブ | メール送信確認・notification_logs記録・スキップ条件（alarm_disabled/完了済み/上限超過/通知無効）・discard_on 動作確認（8件）（#C-5） |
-| `test/mailers/task_mailer_test.rb` | メイラー | alarm_notification の件名・宛先・送信元確認（自動生成から修正）（#C-5） |
-| `test/controllers/tasks_ai_edit_controller_test.rb` | コントローラー | `ai_edit`（正常アクセス・session設定・他ユーザー404・未ログイン302）`ai_update`（sessionフラグあり保存・直接アクセスリダイレクト・優先度変更不可・バリデーションエラー422・他ユーザー404）（#C-7・9件） |
-| `test/controllers/user_purposes_controller_test.rb` | コントローラー | （D-2以降で追加予定・D-1時点では既存の全テストで473件・0 failures を確認済み） |
-| `test/models/ai_analysis_test.rb` | モデル | （D-2 で追加済み・D-3 では変更なし） |
-| `test/jobs/purpose_analysis_job_test.rb` | ジョブ | （D-2 で追加済み・D-3 では変更なし） |
-| （D-3 は既存テストの 484件 0 failures で完了を確認） | — | `config/locales/ja.yml` の重複解消・`task.title.blank` 修正で既存テストを修正 |
-| `test/jobs/weekly_reflection_analysis_job_test.rb` | ジョブ | 正常系（AiAnalysis作成・ai_analysis_count+1・PMVV有無）・nil返却・上限スキップ・discard_on（8件）（#D-4） |
-| `test/services/weekly_reflection_complete_service_test.rb` | サービス | エンキュー確認・上限時スキップ確認（2件追加、`include ActiveJob::TestHelper` 追加）（#D-4） |
-| `test/controllers/onboardings_controller_test.rb` | コントローラー | step5表示・完了・スキップ・再アクセス防止・初回リダイレクト・完了済みガード（#D-7・7件） |
-| `test/controllers/habits_ai_edit_controller_test.rb` | コントローラー | `ai_edit`（正常アクセス・session設定確認・未ログイン302・他ユーザー302）`ai_update`（sessionフラグあり保存・直接アクセスリダイレクト・measurement_type変更不可・バリデーションエラー422・他ユーザー302・session クリア確認）（#D-8・10件） |
-| `test/models/ai_analysis_test.rb` | モデル | 変更（D-9）: D-9 テスト 11 ケース追加（全5キー揃い・nil スキップ・シンボルキー・weekly_reflection スキップ・各キー個別欠落5件・全キー欠落・purpose 値が nil でも通過）<br>weekly_reflection は `create!` で作成（フィクスチャ依存を排除）<br>`private` ヘルパーをファイル末尾に配置（`test` ブロックの非公開化を防止） |
-| `test/controllers/weekly_reflections_controller_test.rb` | コントローラー | 変更（D-10）: テスト5「create prevents double submission」に `user.user_setting.update_columns(last_ai_requested_at: 2.minutes.ago)` を追加（throttle バイパス対応） |
-| `test/jobs/purpose_analysis_job_test.rb` | ジョブ | 変更（D-11）: 再エンキュー（1回目失敗）・最大回数超過での failed 確定・JSONパース失敗時の metadata 保存・AuthError 時 failed 遷移（4件追加・計9件） |
-| `test/fixtures/weekly_reflections.yml` | フィクスチャ | 全フィクスチャに `direct_reason` / `background_situation` / `next_action` を追加（`complete!` 呼び出し時のバリデーション対応）（#E-1） |
-| `test/models/weekly_reflection_test.rb` | モデル | 変更（E-1）: `travel_to { assert }` ブロック内アサーションを `travel_to / travel_back` 展開形式に修正（Minitest の「missing assertions」警告解消）・3フィールドのテスト追加 |
-| `test/controllers/onboardings_controller_test.rb` | コントローラー | 変更（E-1）: `valid_purpose_params` ヘルパー追加・`complete` 系テストに5フィールドを追加（purpose のみでは UserPurpose のバリデーションエラーで `first_login_at` が更新されずテストが失敗するため） |
-| `test/controllers/weekly_reflections_controller_test.rb` | コントローラー | 変更（E-1）: `valid_reflection_params` ヘルパー追加・フォーム送信に3フィールドを追加 |
-| （pdca_lock_test.rb / pdca_lock_flow_test.rb / weekly_reflection_flow_test.rb 等8ファイル） | 統合・コントローラー | 変更（E-1）: `WeeklyReflection.create!` / フォーム送信パラメータに3フィールドを追加（presence: true 必須化対応） |
-| `test/controllers/sessions_controller_test.rb` | コントローラー | E-4: ディープリンク正常系・外部URL拒否・ダブルスラッシュ（`//evil.com`）拒否・`javascript:` 拒否・空文字拒否・ログイン失敗422・通常ログイン（10ケース） |
-| `test/controllers/onboardings_controller_test.rb` | コントローラー | 変更（F-1）: `User.create!` に `password_confirmation` を追加 |
-| `test/jobs/task_alarm_job_test.rb` | ジョブ | 変更（F-1）: `User.create!` に `password_confirmation` を追加 |
-| `test/mailers/task_mailer_test.rb` | メイラー | 変更（F-1）: `User.create!` に `password_confirmation` を追加 |
-| `test/models/user_test.rb` | モデル | 変更（F-2）: LINE 用テスト4件追加（email なし新規作成・2回目ログインで重複なし・フォールバック名 "LINE User"・パスワード不要バリデーション）・`"line_v21"` → `"line_v2_1"` に修正 |
-| `test/controllers/terms_agreement_controller_test.rb` | コントローラー | 変更（F-3）: 新規作成（6件：未同意ユーザーの同意ページ表示・未ログインはログインページへ・同意済みはダッシュボードへ・同意でダッシュボード遷移・初回ログインはオンボーディングへ・チェックなし422） |
-| `test/fixtures/users.yml` | フィクスチャ | 変更（F-3）: 全ユーザーに `terms_agreed_at` を追加（全画面ガードによる既存テスト崩壊を防止） |
-| `test/test_helper.rb` | ヘルパー | 変更（F-3）: `log_in_as` に `terms_agreed_at` 自動設定を追加（未同意テストだけ `update_column(:terms_agreed_at, nil)` で戻す設計） |
-| `test/models/password_reset_token_test.rb` | モデル | generate_token_for・find_by_raw_token・valid_token?・expire!・N+1対応（includes）・多重発行防止（15 runs） |
-| `test/controllers/password_resets_controller_test.rb` | コントローラー | new/create/edit/update・トークン期限切れ・使用済み・存在しないメール・OAuthユーザー非送信・メール列挙攻撃防止（18 runs） |
-| `test/services/user_destroy_service_test.rb` | サービス | 個人情報匿名化・統計データ保持確認・セキュリティトークン削除・同一メール再登録・パスワード認証失敗（#F-6・6件） |
-| `test/services/line_notification_service_test.rb` | サービス | LINE 送信成功・401エラー・ネットワークエラー・スキップ条件・メッセージ形式（5 runs, 17 assertions）（#G-1） |
-| `test/services/notification_service_test.rb` | サービス | LINE 送信成功ログ記録・LINE 失敗時メールフォールバック・daily_notification_count 上限スキップ（3 runs, 13 assertions）（#G-1） |
-| `test/controllers/user_settings_controller_test.rb` | コントローラー | G-3: `notification_settings`（GET表示・@user_setting取得・@line_connected設定）・`update_notification_settings`（保存後303リダイレクト・flash表示・リロード後設定保持・未ログインリダイレクト・LINE未連携バナー表示）（8 runs, 24 assertions） |
-| `test/controllers/user_settings_rest_mode_test.rb` | コントローラー | G-4: `rest_mode`（GET表示・認証要求）・`start_rest_mode`（POST成功・空日付422・過去日付422）・`stop_rest_mode`（DELETE成功・未ログインリダイレクト）・ダッシュボードバナー表示・バッジ表示（13 runs, 30 assertions） |
-| `test/jobs/rest_mode_expiry_job_test.rb` | ジョブ | G-4: 期限切れユーザーの自動解除・期限前ユーザーは非解除（Job テストを分離） |
-| `test/controllers/settings_controller_g6_test.rb` | コントローラー | G-6: `update_profile`（成功/空/50文字超）・`update_timezone`（有効/無効タイムゾーン）・`disconnect_line`（通知のみ連携/LINEログイン/未連携）（各正常/異常系） |
-| `test/services/notification_service_test.rb` | サービス | 変更（G-3修正）: LINE失敗時はフォールバックせずLINE失敗を記録しメールは独立して送信されることを確認（独立制御設計に合わせて更新） |
-| `test/jobs/monthly_ai_count_reset_job_test.rb` | ジョブ | G-8: 月初（1日）のリセット動作・月初以外スキップ・月末境界値・例外なし完了・GoodJobcron設定確認・全件maximum=0確認・14-Bモーダル表示条件解消（7件・15アサーション） |
-| `test/models/task_test.rb` | モデル | `task_type` enum・`set_default_task_type`・`priority` 必須・`overdue`/`active` スコープ（#I-1追記） |
-| `test/models/user_purpose_test.rb` | モデル | `analysis_state` enum・`version` 検証・5必須・`active_for`/`current_for`（#I-1新規） |
-| `test/models/numeric_habit_achievement_test.rb` | モデル | 数値型達成率の境界値（`floor`／`round(2)` の2経路）（#I-1新規） |
-| `test/models/concerns/crisis_detector_test.rb` | モデル | 全 `CRISIS_KEYWORDS` 網羅・誤検出ガード（#I-1追記） |
-| `test/services/weekly_reflection_complete_service_crisis_test.rb` | サービス | 危機時の `UpdateAiProfileJob` 抑制・危機 `AiAnalysis` の中身検証（#I-1追記） |
-| `test/integration/omniauth_login_flow_test.rb` | E2E | OmniAuth（Google/LINE）コールバック→セッション→遷移先（#I-1新規） |
-| `test/integration/pmvv_analysis_flow_test.rb` | E2E | PMVV `create`/危機/`update`/`apply_proposals` の入力→ジョブ→反映フロー（#I-1新規） |
-| `test/controllers/tasks_controller_test.rb` | コントローラー | 作成→完了→アーカイブの一連フロー（#I-1追記） |
-| `test/jobs/csv_export_job_test.rb` | ジョブ | 非同期CSV→ダウンロードURL入りメール送信・`email` 未設定スキップ（#I-1新規） |
+実在する全テストをカテゴリ別に整理しています（1ファイル1行）。<br>
+各テストの追加・変更履歴は [`docs/features.md`](docs/features.md) の ISSUE 別記録を参照してください。
+
+<br>
+
+#### モデル（`test/models/`）
+
+<br>
+
+| ファイル | 内容 |
+|:---|:---|
+| `user_test.rb` | ユーザー認証・バリデーション・OAuth（Google/LINE）ユーザー対応 |
+| `habit_test.rb` | 習慣管理・論理削除・週次進捗計算 |
+| `habit_record_test.rb` | 日次記録・AM4:00 境界値・numeric_value バリデーション・Service 経由保存 |
+| `habit_progress_test.rb` | 週次進捗・達成率計算 |
+| `habit_excluded_day_test.rb` | 除外日バリデーション・UNIQUE 制約・達成率計算 |
+| `habit_streak_test.rb` | ストリーク計算・longest_streak 保護・除外日・お休みモード・AM4:00 境界 |
+| `habit_archive_test.rb` | アーカイブ scope・archive!/unarchive!・状態ガード |
+| `habit_sort_test.rb` | カラー・アイコンバリデーション・acts_as_list 並び順 |
+| `habit_record_memo_test.rb` | memo バリデーション・has_memo? |
+| `numeric_habit_achievement_test.rb` | 数値型達成率の境界値（floor / round2 の2経路） |
+| `task_test.rb` | Task enum・バリデーション・スコープ・状態遷移（toggle/archive）・soft_delete |
+| `weekly_reflection_test.rb` | 週次振り返り・complete!・必須フィールド・気分スコア |
+| `weekly_reflection_habit_summary_test.rb` | 習慣スナップショット・数値型対応 |
+| `weekly_reflection_task_summary_test.rb` | タスクスナップショット・UNIQUE 制約・by_priority |
+| `ai_analysis_test.rb` | AI 分析結果・input_snapshot JSONB スキーマバリデーション・is_latest |
+| `user_purpose_test.rb` | PMVV・analysis_state enum・version 検証・active_for/current_for |
+| `user_setting_test.rb` | ユーザー設定・AI レート制限・通知設定 |
+| `notification_log_test.rb` | 通知ログ・record_success/record_failure |
+| `password_reset_token_test.rb` | トークン生成・検証・期限切れ・多重発行防止（token_digest） |
+| `concerns/crisis_detector_test.rb` | 危機ワード検出・誤検出ガード・両モデル対応 |
+
+<br>
+
+#### コントローラー（`test/controllers/`）
+
+<br>
+
+| ファイル | 内容 |
+|:---|:---|
+| `dashboards_controller_test.rb` | ダッシュボード表示・Empty State・タスク達成率 |
+| `habits_controller_test.rb` | 習慣 CRUD・ロックチェック |
+| `habits_archive_controller_test.rb` | アーカイブ一覧・archive/unarchive・他ユーザー防止 |
+| `habits_menu_controller_test.rb` | ⋯メニュー・モーダル・削除/アーカイブ・ロック状態 |
+| `habits_sort_controller_test.rb` | 並び替え保存・不正 ID の安全処理 |
+| `habits_ai_edit_controller_test.rb` | AI 経由習慣編集・アクセス制御・measurement_type 変更不可 |
+| `habit_records_controller_test.rb` | 日次記録の即時保存・Turbo Stream 応答 |
+| `tasks_controller_test.rb` | タスク CRUD・完了/アーカイブ・Strong Parameters・Empty State |
+| `tasks_ai_edit_controller_test.rb` | AI 経由タスク編集・アクセス制御・優先度変更不可 |
+| `weekly_reflections_controller_test.rb` | 振り返り作成・AI 提案確定・ディープリンク |
+| `weekly_reflections_ai_limit_test.rb` | AI コスト上限・上限時スキップ・AI なし続行 |
+| `user_purposes_controller_test.rb` は存在しない（PMVV は統合テスト pmvv_analysis_flow_test.rb で検証） | — |
+| `onboardings_controller_test.rb` | オンボーディング各ステップ・完了・スキップ・ガード |
+| `sessions_controller_test.rb` | ログイン・ディープリンク・オープンリダイレクト防止 |
+| `terms_agreement_controller_test.rb` | 利用規約同意ページ・ガード |
+| `password_resets_controller_test.rb` | パスワードリセット・メール列挙攻撃防止・OAuth 非送信 |
+| `settings_controller_g6_test.rb` | プロフィール編集・タイムゾーン・LINE 連携解除 |
+| `user_settings_controller_test.rb` | 通知設定・保存・LINE 未連携バナー |
+| `user_settings_rest_mode_test.rb` | お休みモード開始/停止・バリデーション・バナー |
+| `analytics_controller_test.rb` | グラフページ・Empty State・N+1 対策 |
+| `csv_exports_controller_test.rb` | CSV エクスポート・data-turbo 切替 |
+
+<br>
+
+#### サービス（`test/services/`）
+
+<br>
+
+| ファイル | 内容 |
+|:---|:---|
+| `ai_client_test.rb` | Gemini/Groq フォールバック・全プロバイダ失敗時の Sentry 通知（#I-4） |
+| `application_record_with_transaction_test.rb` | with_transaction のロールバック動作 |
+| `weekly_reflection_complete_service_test.rb` | 振り返り完了フロー・トランザクション・AI ジョブ起動 |
+| `weekly_reflection_complete_service_crisis_test.rb` | 危機時のジョブ抑制・crisis_detected 記録 |
+| `habit_record_save_service_test.rb` | 記録保存・recalc-on-save（ストリーク再計算） |
+| `csv_export_service_test.rb` | CSV 生成（UTF-8 BOM・CRLF） |
+| `csv_download_token_service_test.rb` | 署名付きダウンロードトークン |
+| `line_notification_service_test.rb` | LINE 送信成功/失敗・エラー処理・メッセージ形式 |
+| `notification_service_test.rb` | LINE/メール振り分け・独立制御・上限スキップ |
+| `user_destroy_service_test.rb` | 退会・個人情報匿名化・統計保持・同一メール再登録 |
+| `user_context_builder_service_test.rb` | AI プロファイル生成・stale?・ジョブエンキュー |
+
+<br>
+
+#### ジョブ（`test/jobs/`）
+
+<br>
+
+| ファイル | 内容 |
+|:---|:---|
+| `weekly_reflection_analysis_job_test.rb` | 週次振り返り AI 分析・再エンキュー・上限スキップ・discard_on |
+| `purpose_analysis_job_test.rb` | PMVV AI 分析・再エンキュー・failed 確定・JSON パース失敗処理 |
+| `task_alarm_job_test.rb` | アラーム通知・スキップ条件・ログ記録 |
+| `weekly_report_job_test.rb` | 週次レポート送信・無効/退会ユーザー除外 |
+| `monthly_ai_count_reset_job_test.rb` | 月次 AI カウントリセット・月初判定・境界値 |
+| `rest_mode_expiry_job_test.rb` | お休みモード期限切れ自動解除 |
+| `csv_export_job_test.rb` | 非同期 CSV 生成→メール送信・email 未設定スキップ |
+
+<br>
+
+#### メイラー（`test/mailers/`）
+
+<br>
+
+| ファイル | 内容 |
+|:---|:---|
+| `task_mailer_test.rb` | アラーム通知メールの件名・宛先・送信元 |
+| `weekly_report_mailer_test.rb` | 週次レポートメール（振り返りあり/なし/習慣なし） |
+| `test_mailer_test.rb` | メール送信基盤の動作確認 |
+
+<br>
+
+#### 統合・E2E（`test/integration/`）
+
+<br>
+
+| ファイル | 内容 |
+|:---|:---|
+| `user_auth_flow_test.rb` / `user_registration_test.rb` / `user_login_test.rb` | 登録→ログイン→ログアウトのフロー |
+| `omniauth_login_flow_test.rb` | OmniAuth（Google/LINE）コールバック→セッション→遷移 |
+| `habit_full_flow_test.rb` / `habit_creation_test.rb` / `habit_management_test.rb` / `habit_deletion_test.rb` | 習慣の作成・管理・削除フロー |
+| `habit_daily_record_test.rb` / `habit_record_instant_save_test.rb` | 日次記録・即時保存フロー |
+| `numeric_habit_flow_test.rb` | 数値型習慣の記録→進捗→ダッシュボード表示 |
+| `memo_flow_test.rb` | メモ保存・部分更新・バリデーション |
+| `weekly_reflection_flow_test.rb` / `weekly_reflection_create_test.rb` / `weekly_reflection_index_test.rb` | 振り返り作成・一覧・詳細フロー |
+| `pdca_lock_test.rb` / `pdca_lock_flow_test.rb` | PDCA ロック発動→解除→習慣作成 |
+| `pmvv_analysis_flow_test.rb` | PMVV create/危機/update/apply_proposals フロー |
+| `dashboard_test.rb` | ダッシュボード表示 |
+| `rack_attack_test.rb` | ブルートフォース対策（throttle） |
+| `sentry_initialization_test.rb` / `sentry_browser_test.rb` | Sentry 疎通・404 除外・JS バンドル配置 |
+| `solid_cache_store_test.rb` / `i6_cache_behavior_test.rb` | Solid Cache のキャッシュ動作 |
+| `error_cases_test.rb` | 404・認可エラー・他ユーザーアクセス防止 |
+| `production_final_check_test.rb` / `final_check_additional_test.rb` | 本番環境最終動作確認 |
+
+<br>
+
+#### DB インデックス監査（`test/db/`）
+
+<br>
+
+| ファイル | 内容 |
+|:---|:---|
+| `index_audit_test.rb` | インデックス・UNIQUE 制約の存在確認（#A-6） |
+
+<br>
+
+> 💡 フィクスチャ（`test/fixtures/`）・テストヘルパー（`test/test_helper.rb`）・<br>
+> メールプレビュー（`test/mailers/previews/`）も整備済みです。
 
 <br>
 
