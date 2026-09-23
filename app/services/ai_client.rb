@@ -148,8 +148,28 @@ class AiClient
     nil
 
   rescue => e
-    # 予期しない例外のセーフティネット
-    Rails.logger.error "[AiClient] 全プロバイダで失敗しました: #{e.class} - #{e.message}"
+    # 予期しない例外のセーフティネット（Gemini も Groq も両方失敗した最悪ケース）
+    #
+    # 【なぜ Sentry に通知するのか】
+    #   ここに到達する = AI 分析が完全に止まっている状態。
+    #   過去、Groq のモデル廃止（HTTP 404）でここに到達したが、当時はログのみで
+    #   Sentry 通知が無く、ユーザーの問い合わせで初めて気づいた。
+    #   同じ「気づけない」を防ぐため、全プロバイダ失敗を Sentry に通知する。
+    #
+    # 【prompt 本文・例外メッセージを送らない理由】
+    #   prompt にはユーザーの振り返り・目標などの入力が含まれ、例外メッセージにも
+    #   API レスポンスや入力が混じる可能性がある。エラー監視サービスに個人的な入力を
+    #   複製しないため、診断に必要なメタ情報（例外クラス・使用モデル）だけを extra に載せる。
+    #
+    # 【groq_model を記録する理由】
+    #   次にモデルが廃止されたとき、Sentry 上で「どのモデルで失敗したか」がすぐ分かる。
+    #   例: groq_model が古い名前のままなら「モデル名が古い」と即判定できる。
+    notify_sentry(e, level: :error, extra: {
+      phase:       "all_providers_failed",
+      error_class: e.class.to_s,
+      groq_model:  GROQ_MODEL
+    })
+    Rails.logger.error "[AiClient] 全プロバイダで失敗しました: #{e.class} - #{e.message} → Sentry 通知済み"
     nil
   end
 
