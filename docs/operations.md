@@ -17,7 +17,7 @@
 3. [環境変数一覧](#3-環境変数一覧)
 4. [デプロイ手順](#4-デプロイ手順)
 5. [本番確認チェックリスト](#5-本番確認チェックリスト)
-6. [スリープ対策（Google Apps Script）](#6-スリープ対策google-apps-script)
+6. [スリープ対策を行わない理由（2026年10月 方針変更）](#6-スリープ対策を行わない理由2026年10月-方針変更)
 7. [既知のインフラ制限](#7-既知のインフラ制限)
 8. [トラブルシューティング](#8-トラブルシューティング)
 
@@ -251,37 +251,33 @@ Render Dashboard > habitflow-web > **Manual Deploy** > "Deploy latest commit"
 
 <br>
 
-## 6. スリープ対策（Google Apps Script）
+## 6. スリープ対策を行わない理由（2026年10月 方針変更）
 
 <br>
 
-Render 無料プランは15分間アクセスがないとスリープします。<br>
-以下の Google Apps Script を設定し、10分おきに ping を送信しています。
+MVP 期は Google Apps Script（10分おき）や UptimeRobot（5分おき）で `/up` に ping を送り、Render 無料プランのスリープを防いでいました。<br>
+しかし DB を Neon に移行した後の構成では、**常時起動すると Neon 無料プランの Compute 上限（1プロジェクトあたり月 100 CU-時間 ≒ 0.25 CU で約400時間）を使い切り、DB が停止して全ページが表示できなくなる障害**が発生しました（2026年10月17日〜11月1日）。<br>
+そのため現在は **ping による常時起動を行わず、スリープを仕様として許容**しています。
 
 <br>
 
-```javascript
-function pingHabitFlow() {
-  try {
-    UrlFetchApp.fetch("https://habitflow-web.onrender.com/up");
-    Logger.log("Ping success: " + new Date());
-  } catch (e) {
-    Logger.log("Ping failed: " + e.message);
-  }
-}
-```
+| 原因 | 内容 |
+|:---|:---|
+| GoodJob の定期ポーリング | GoodJob（:async モード）はアプリが起きている間、30秒ごとに DB を確認する。Render を常時起動すると Neon も24時間休めない |
+| `/up` でも DB にアクセス | `/up` 自体は DB を使わないが、rack-attack が Rails.cache（Solid Cache ＝ Neon）を使うため、ping のたびに DB に触れる |
+| Compute の自動拡大 | 「0.25 ↔ 2 CU」の自動拡大設定だと、負荷時に大きなサイズで動き、枠を早く消費する |
 
 <br>
 
-**設定方法:**
-
-1. [Google Apps Script](https://script.google.com/) にアクセス
-2. 上記コードをペースト
-3. トリガー（⏰）→「トリガーを追加」→ 時間ベース → 10分ごと
+**現在の運用**<br>
+・Google Apps Script のトリガー、UptimeRobot の監視は**停止済み**（再開しない）<br>
+・Neon の Compute は **0.25 CU 固定**（Neon コンソール → Branches → production → Computes → Edit）<br>
+・月の半ばに Neon の Usage（Compute の CU-時間）を確認する<br>
+・Render がスリープすると GoodJob も止まり、その5分後に Neon も自動停止するため、実際に使った時間だけ枠を消費する
 
 <br>
 
-> ⚠️ `/up` は Rails のヘルスチェックエンドポイントです（`GET /up` → 200 OK）。
+> ⚠️ 常時起動が必要になった場合は、Neon を有料プランにするか、GoodJob のポーリング間隔の見直しと rack-attack の `/up` 除外を行ったうえで、使用量を試算してから導入すること。
 
 <br>
 
@@ -295,7 +291,8 @@ function pingHabitFlow() {
 
 | 制限 | 内容 | 対策 |
 |:---|:---|:---|
-| Render 無料プランのスリープ | 15分間アクセスがないと起動に30〜60秒かかる | GAS で10分おきに ping を送信（⑥参照） |
+| Render 無料プランのスリープ | 15分間アクセスがないと起動に30〜60秒かかる | スリープを仕様として許容。ping による常時起動は Neon の無料枠を超えるため行わない（⑥参照） |
+| Neon 無料プランの Compute 上限 | 月 100 CU-時間を超えると次の請求期間まで DB が停止する | Compute を 0.25 CU 固定・常時起動しない運用で枠内に収める（⑥参照） |
 | Render 無料 DB の有効期限 | PostgreSQL インスタンスが作成から **90日で自動削除** される | レビュー期間内に確認を完了する |
 | 自動バックアップなし | Render 無料プランには DB 自動バックアップがない | 本番移行時は有料プランへ移行する |
 | メール送信機能なし | パスワードリセットには Action Mailer の設定が必要 | MVP 後に実装予定 |

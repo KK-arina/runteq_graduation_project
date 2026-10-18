@@ -2614,3 +2614,15 @@ Render 無料枠では、深夜 cron が発火しない・SSH/Shell や one-off 
 
 `bin/rails test` 単体で不可解な失敗が出たら、まず `db:environment:set RAILS_ENV=development` → `db:test:prepare` でテスト DB を作り直してから切り分ける。<br>
 今回はテスト DB は原因ではなかったが、環境要因を先に潰すことで「実バグ」に集中できた。
+
+<br>
+
+### 無料枠の「対策」は、他の無料枠への影響まで試算してから入れる（2026年10月 Neon 停止）
+
+<br>
+
+Render のスリープ（コールドスタート）を防ぐため、UptimeRobot で `/up` に5分おきの ping を入れたところ、約3週間後に **Neon 無料プランの Compute 上限（月 100 CU-時間）を使い切り、DB が停止して全ページが表示できなくなった**。<br>
+`/up` 自体は DB を使わないため影響は無いと判断していたが、実際には **GoodJob（:async）が30秒ごとに DB をポーリング**し、さらに **rack-attack が Solid Cache（＝ Neon）を使って ping のたびに DB へアクセス**していた。<br>
+Render を常時起動すると、Neon も24時間休めなくなるという連鎖を見落としていた。<br>
+**ある無料サービスの制限を回避する施策は、連動する他の無料サービスの使用量（CU-時間・リクエスト数・イベント数）まで計算してから導入する。**<br>
+Sentry の `ConnectionNotEstablished` の急増（13時間で4,600件）と、Neon の Usage グラフ（0.25 CU が一日中途切れずに続いていた）が、原因特定の決め手になった。
