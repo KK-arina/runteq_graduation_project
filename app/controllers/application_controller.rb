@@ -41,12 +41,13 @@
 #
 # 【5. セッション管理】
 #   - config/application.rb で Cookie のセキュリティ設定を明示化
-#     (secure, httponly, same_site: :lax, expire_after: 14.days)
-#   - ログイン時: reset_session でセッション固定攻撃を防止
-#   - ログアウト時: reset_session でセッションデータを完全消去
+#     (secure, httponly, same_site: :lax。expire_after なし = ブラウザを閉じると消える)
+#   - ログイン時: reset_session でセッション固定攻撃を防止（concerns/remember_login.rb の log_in）
+#   - ログアウト時: reset_session でセッションデータを完全消去（同 log_out）
 #   - current_user は session[:user_id] から取得（JWT等は使わない）
 #   - ログイン保持（remember me）追加:
-#       セッションがないときだけ、暗号化 Cookie のトークンで自動ログインする。
+#       「ログインしたままにする」でログインした端末だけ、暗号化 Cookie のトークンで
+#       セッションが切れたあとも自動ログインする（30日・使うたびに延長・最長180日）。
 #       DB にはトークンの SHA-256 値だけを保存する（concerns/remember_login.rb）。
 #       自動ログイン時も reset_session でセッション固定攻撃を防止する。
 #   - session[:auth_version] と users.auth_version を比べ、

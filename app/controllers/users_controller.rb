@@ -10,6 +10,11 @@
 # 【F-3 での変更内容】
 #   user_params に :terms_agreed を追加。
 #   チェックボックスの値（"1" または "0"）を Strong Parameters で受け取る。
+#
+# 【ログイン保持（remember me）での変更内容】
+#   登録直後のログインを共通メソッド log_in に置き換えた。
+#   これまで登録時は reset_session を呼んでいなかったため、
+#   ログイン画面と同じセッション固定攻撃対策がかかるようになる。
 
 class UsersController < ApplicationController
   # ==================== 新規登録フォーム表示 ====================
@@ -29,8 +34,15 @@ class UsersController < ApplicationController
     if @user.save
       # ==================== 保存成功時の処理 ====================
 
-      # session[:user_id]: ブラウザの暗号化 Cookie にユーザーIDを保存してログイン状態にする
-      session[:user_id] = @user.id
+      # log_in（concerns/remember_login.rb）: 登録したユーザーでログイン状態にする
+      #   ① reset_session でセッションIDを作り直す（セッション固定攻撃対策）
+      #   ② session[:user_id] と session[:auth_version] を記録する
+      #
+      # 【remember: false にする理由】
+      #   新規登録フォームには「ログインしたままにする」の選択肢がないため。
+      #   ログインを保持したい場合は、設定画面の「この端末でログインを保持する」から
+      #   いつでもオンにできる。
+      log_in(@user, remember: false)
 
       # 登録完了後は直接ダッシュボードへ（オンボーディングは require_login で制御）
       redirect_to dashboard_path, notice: "ユーザー登録が完了しました"

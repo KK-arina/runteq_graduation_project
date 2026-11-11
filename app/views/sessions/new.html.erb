@@ -21,6 +21,22 @@
 
   ③ submitボタンの縦余白を py-2 → py-3 に変更
      【理由】同上（タップ領域 44px 確保のため）
+
+  ============================================================
+  【ログイン保持（remember me）での変更点】
+  ============================================================
+
+  ① パスワード入力欄の下に「ログインしたままにする」チェックボックスを追加
+     チェックありでログインすると、ブラウザを閉じても30日間ログインしたままになる
+     （使うたびに延長・最長180日）。初期状態はオフにして、共用端末での事故を防ぐ。
+
+  ② カード全体に data-controller="remember-me" を追加
+     Google / LINE ボタンはメールログインとは別のフォームのため、
+     チェックボックスの値がそのままでは送られない。
+     Stimulus（remember_me_controller.js）でチェック状態を監視し、
+     Google / LINE フォームの送信先 URL に remember_me=1 または 0 を付ける。
+     OmniAuth は URL のクエリをログイン完了時まで引き継ぐため、
+     コールバックで「保持するかどうか」を判断できる。
 %>
 <% content_for :title, "ログイン | HabitFlow" %>
 
@@ -30,7 +46,15 @@
     ログイン
   </h2>
 
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+  <%#
+    data-controller="remember-me":
+      RememberMeController（remember_me_controller.js）を接続する。
+      この div の中にあるチェックボックス（checkbox ターゲット）と
+      Google / LINE のフォーム（oauthForm ターゲット）をまとめて扱うため、
+      両方を含むカード全体に付ける。
+  %>
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
+       data-controller="remember-me">
 
     <%= form_with url: login_path,
                   scope: :session,
@@ -63,7 +87,7 @@
       </div>
 
       <%# ── パスワード入力エリア ── %>
-      <div class="mb-6">
+      <div class="mb-4">
         <%= f.label :password, "パスワード",
             class: "block text-sm font-medium text-gray-700 mb-2" %>
         <%#
@@ -84,6 +108,51 @@
               new_password_reset_path,
               class: "text-xs text-blue-600 hover:text-blue-700 hover:underline" %>
         </div>
+      </div>
+
+      <%#
+        ── ログイン保持追加: 「ログインしたままにする」チェックボックス ──
+
+        f.check_box :remember_me:
+          scope: :session のフォームなので、name は session[remember_me] になる。
+          Rails はチェックボックスの直前に value="0" の hidden を自動で出力するため、
+          チェックなしでも "0" が送られ、コントローラーで確実に false と判定できる。
+
+        checked: params.dig(:session, :remember_me) == "1":
+          パスワード間違いで画面を再表示したとき、直前のチェック状態を復元する。
+          初回表示では params に値がないため、オフの状態で表示される。
+
+        data-remember-me-target="checkbox":
+          RememberMeController が this.checkboxTarget として参照する。
+        data-action="change->remember-me#sync":
+          チェックを切り替えるたびに sync() を呼び、
+          Google / LINE ボタンの送信先 URL を更新する。
+
+        label で全体を包む理由:
+          チェックボックスだけでなく文字をタップしても切り替えられるようにする。
+          min-h-[44px] でタップ領域を 44px 以上確保する（H-6 の方針と同じ）。
+      %>
+      <div class="mb-6">
+        <label class="flex items-center gap-3 min-h-[44px] cursor-pointer select-none">
+          <%= f.check_box :remember_me,
+              { checked: params.dig(:session, :remember_me) == "1",
+                class: "h-5 w-5 rounded border-gray-300 text-blue-600
+                        focus:ring-2 focus:ring-blue-500",
+                data: {
+                  remember_me_target: "checkbox",
+                  action: "change->remember-me#sync"
+                } } %>
+          <span class="text-sm font-medium text-gray-700">
+            <%= t("remember_login.form.label") %>
+          </span>
+        </label>
+        <%#
+          補足説明: 保持期間と、共用端末では使わないでほしいことを伝える。
+          文言は config/locales/remember_login.ja.yml で管理する。
+        %>
+        <p class="mt-1 text-xs text-gray-500 leading-relaxed">
+          <%= t("remember_login.form.hint") %>
+        </p>
       </div>
 
       <%#
@@ -117,6 +186,11 @@
       </div>
     <% end %>
 
+    <%#
+      Google / LINE ボタンのフォームには data-remember-me-target="oauthForm" が付いている
+      （各パーシャル内で設定）。上の「ログインしたままにする」のチェック状態が
+      これらのフォームの送信先 URL に反映される。
+    %>
     <%= render "shared/google_auth_button", button_text: "Google アカウントでログイン" %>
 
     <div class="mt-3">
