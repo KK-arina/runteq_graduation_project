@@ -22,6 +22,13 @@
 #     同一の LINE Provider 下に作成されていること。
 #     別 Provider だと userId が異なる値になり通知が届かない。
 #
+# 【ログイン保持（remember me）での変更内容】
+#   google / line の通常ログインで、reset_session と session[:user_id] の代わりに
+#   共通メソッド log_in（concerns/remember_login.rb）を使うようにした。
+#   ログイン画面の「ログインしたままにする」の状態は、
+#   URL のクエリ ?remember_me=1 / 0 として認証開始時に送られ、
+#   OmniAuth が request.env["omniauth.params"] としてここまで引き継ぐ。
+#
 # ==============================================================================
 
 class OmniauthCallbacksController < ApplicationController
@@ -36,8 +43,10 @@ class OmniauthCallbacksController < ApplicationController
     @user = User.from_omniauth(auth)
 
     if @user.persisted?
-      reset_session
-      session[:user_id] = @user.id
+      # log_in（concerns/remember_login.rb）:
+      #   reset_session でセッション固定攻撃を防いだうえでログイン状態にする。
+      #   remember: には oauth_remember_option の結果（true / false / :keep）を渡す。
+      log_in(@user, remember: oauth_remember_option)
 
       redirect_to determine_redirect_path_for_omniauth(@user),
                   notice: t("omniauth.google.success")
@@ -87,6 +96,10 @@ class OmniauthCallbacksController < ApplicationController
     #   provider を "line_v2_1" に書き換えると
     #   メールアドレス+パスワードでのログインができなくなる危険がある。
     #   通知のみ連携では provider は元の値（"email" 等）のまま維持する。
+    #
+    # 【ログイン保持への影響】
+    #   この分岐はログインし直さない（log_in を呼ばない）ため、
+    #   この端末のログイン保持の状態はそのまま残る。
     if origin == "notification" && logged_in?
       save_line_user_id(current_user, auth)
 
@@ -107,8 +120,11 @@ class OmniauthCallbacksController < ApplicationController
     # ── 通常の LINE ログイン処理（G-1 由来）─────────────────────────
     @user = User.from_omniauth(auth)
     if @user.persisted?
-      reset_session
-      session[:user_id] = @user.id
+      # log_in（concerns/remember_login.rb）:
+      #   reset_session でセッション固定攻撃を防いだうえでログイン状態にする。
+      #   remember: には oauth_remember_option の結果（true / false / :keep）を渡す。
+      log_in(@user, remember: oauth_remember_option)
+
       # auth["uid"] には LINE Login の sub（= Messaging API の userId）が入っている。
       # 同一プロバイダ内なら LINE Login sub = Messaging API userId のため、
       # これを line_user_id として保存することで通知送信に使える。
@@ -136,6 +152,37 @@ class OmniauthCallbacksController < ApplicationController
   end
 
   private
+
+  # ============================================================
+  # oauth_remember_option（ログイン保持追加）
+  # ============================================================
+  #
+  # 【役割】
+  #   Google / LINE ログインのときに、この端末でログインを保持するかどうかを決める。
+  #
+  # 【request.env["omniauth.params"] とは】
+  #   認証開始時の URL についていたクエリ（例: /auth/google_oauth2?remember_me=1）を、
+  #   OmniAuth がセッション経由でコールバックまで引き継いだもの（ハッシュ）。
+  #   クエリがなかった場合や、テストで値がない場合に備えて || {} で空のハッシュにする。
+  #
+  # 【戻り値】
+  #   true  : ログイン画面で「ログインしたままにする」にチェックあり（remember_me=1）
+  #   false : ログイン画面でチェックなし（remember_me=0）
+  #   :keep : remember_me 自体がない
+  #           → 設定画面からの「Google で連携する」などログイン画面を通らない場合。
+  #             今の保持状態を変えない（勝手にログイン保持が消えないようにする）。
+  #             JavaScript が無効な場合もここになるが、新しく保持が始まることはない。
+  #
+  # 【改ざんされても安全な理由】
+  #   この値でできるのは「自分の端末でログインを保持するかどうか」の選択だけで、
+  #   ほかのユーザーになりすますことはできない。
+  def oauth_remember_option
+    omniauth_params = request.env["omniauth.params"] || {}
+    value = omniauth_params["remember_me"]
+    return :keep if value.nil?
+
+    remember_me_param_checked?(value)
+  end
 
   # ============================================================
   # save_line_user_id（G-1 追加）
