@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_07_18_091059) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_11_122529) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -256,6 +256,17 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_18_091059) do
     t.index ["user_id"], name: "index_push_subscriptions_on_user_id"
   end
 
+  create_table "remember_tokens", force: :cascade do |t|
+    t.datetime "created_at", null: false
+    t.datetime "expires_at", null: false
+    t.datetime "last_used_at", null: false
+    t.string "token_digest", null: false
+    t.datetime "updated_at", null: false
+    t.bigint "user_id", null: false
+    t.index ["token_digest"], name: "index_remember_tokens_on_token_digest", unique: true
+    t.index ["user_id"], name: "index_remember_tokens_on_user_id"
+  end
+
   create_table "solid_cable_messages", force: :cascade do |t|
     t.text "channel", null: false
     t.bigint "channel_hash", default: 0, null: false
@@ -345,6 +356,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_18_091059) do
   end
 
   create_table "users", force: :cascade do |t|
+    t.integer "auth_version", default: 0, null: false
     t.datetime "created_at", null: false
     t.datetime "deleted_at"
     t.string "email"
@@ -425,6 +437,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_07_18_091059) do
   add_foreign_key "notification_logs", "users", on_delete: :cascade
   add_foreign_key "password_reset_tokens", "users", on_delete: :cascade
   add_foreign_key "push_subscriptions", "users", on_delete: :cascade
+  add_foreign_key "remember_tokens", "users", on_delete: :cascade
   add_foreign_key "tasks", "habits", on_delete: :nullify
   add_foreign_key "tasks", "users", on_delete: :cascade
   add_foreign_key "user_purposes", "users", on_delete: :cascade

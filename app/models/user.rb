@@ -23,6 +23,12 @@
 #   2. before_save :set_terms_agreed_at を追加。
 #      同意チェック時に terms_agreed_at へ現在時刻を記録する。
 #
+# 【ログイン保持（remember me）での変更内容】
+#   1. has_many :remember_tokens を追加（端末ごとのログイン保持トークン）。
+#   2. revoke_all_logins! を追加。
+#      すべての端末のログイン保持を解除し、auth_version を1つ増やして
+#      他の端末に残っているセッションもまとめて無効にする。
+#
 # 【provider の値について】
 #   OmniAuth Google OAuth2 gem は auth["provider"] に "google_oauth2" を返す。
 #   OmniAuth LINE gem は auth["provider"] に "line" を返す。
@@ -80,6 +86,15 @@ class User < ApplicationRecord
   # H-8 追加: パーソナライズAIプロファイル（1ユーザー1プロファイル）
   # dependent: :destroy → ユーザーが退会時にプロファイルも削除される
   has_one :ai_user_profile, dependent: :destroy
+
+  # ログイン保持追加: 端末ごとの「ログインしたままにする」トークン
+  #
+  # 【dependent: :delete_all を付ける理由】
+  #   ログイン保持トークンは統計に使わない「鍵」のデータなので、残す必要がない。
+  #   delete_all は1本の DELETE 文でまとめて消す（1件ずつ読み込まないので速い）。
+  #   退会は物理削除しないため、退会時の削除は UserDestroyService で明示的に行う。
+  #   この指定はテストの teardown などで User を物理削除した場合の後始末にも働く。
+  has_many :remember_tokens, dependent: :delete_all
 
   # ============================================================
   # F-6 追加: 論理削除スコープ
@@ -298,6 +313,38 @@ class User < ApplicationRecord
   #   OAuthコントローラーで初回ログイン後の同意チェックに使用する。
   def terms_agreed?
     terms_agreed_at.present?
+  end
+
+  # revoke_all_logins!（ログイン保持追加）
+  #
+  # 【役割】
+  #   このユーザーの「すべての端末」のログイン保持を解除し、
+  #   他の端末に残っているセッションもまとめて無効にする。
+  #
+  # 【使う場面】
+  #   ・設定画面の「すべての端末からログアウトする」（スマホ紛失時など）
+  #   ・パスワードリセット完了時
+  #   ・将来パスワード変更機能を追加したときも、このメソッドを呼ぶだけで対応できる
+  #
+  # 【処理の中身】
+  #   ① remember_tokens を全件削除する
+  #      → どの端末の Cookie でも、もう自動ログインできなくなる
+  #   ② auth_version を1つ増やす
+  #      → 他の端末のセッションに記録された古い番号と一致しなくなり、
+  #        次のアクセスで自動的にログアウトされる
+  #
+  # 【increment! を使う理由】
+  #   「今の値 + 1」を DB 側で計算する UPDATE を発行するため、
+  #   同時に2回呼ばれても番号の更新が失われない。
+  #   バリデーションやコールバックは通らない（パスワード検証などが走らない）。
+  #
+  # 【トランザクションで囲む理由】
+  #   トークン削除と世代番号の更新を一体にし、片方だけ実行された状態を防ぐ。
+  def revoke_all_logins!
+    ApplicationRecord.with_transaction do
+      remember_tokens.delete_all
+      increment!(:auth_version)
+    end
   end
 
   # ============================================================
