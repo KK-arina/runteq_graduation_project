@@ -1,0 +1,198 @@
+<%# app/views/settings/_pwa_install_guide.html.erb %>
+<%#
+  ============================================================
+  ホーム画面に追加（PWA）: 設定ページの案内カード
+  ============================================================
+  【このパーシャルの役割】
+    HabitFlow をホーム画面に追加する方法を、端末ごとに案内する。
+    ・iPhone / iPad（Safari）
+    ・Android（Chrome）
+    ・パソコン（Chrome / Edge / Mac の Safari）
+    ・LINE などのアプリ内ブラウザ（ホーム画面に追加できないため、ブラウザで開き直す方法）
+
+  【data-controller="pwa-guide"】
+    PwaGuideController（app/javascript/controllers/pwa_guide_controller.js）を接続する。
+    使っている端末の手順を開き、ホーム画面から開いているときは表示を切り替え、
+    Chrome / Edge では「この端末にインストールする」ボタンを出す。
+    JavaScript が動かなくても、手順はすべて <details> を開けば読める。
+
+  【id="pwa-install-guide"】
+    LINE から Safari / Chrome で開き直すリンク（#pwa-install-guide 付き）で、
+    このカードの位置まで画面をスクロールさせるために使う。
+
+  【data-settings-profile-target="otherSection"】
+    ほかのセクションと同じく、プロフィール編集中は薄く表示して操作できなくする。
+
+  【DB（Neon）へのアクセス】
+    remembered_on_this_device? は、同じページの「ログインの保持」セクション
+    （settings/_remember_login.html.erb）でも使っている。
+    中で呼ぶ current_remember_token は1リクエストに1回だけ実行される（メモ化）ため、
+    このカードを追加しても SQL は増えない。
+
+  文言はすべて config/locales/pwa_install.ja.yml で管理する。
+  ============================================================
+%>
+<section id="pwa-install-guide"
+         class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
+         data-testid="pwa-install-guide"
+         data-controller="pwa-guide"
+         data-settings-profile-target="otherSection"
+         aria-labelledby="pwa-install-guide-title">
+
+  <h2 id="pwa-install-guide-title" class="text-lg font-semibold text-gray-800 mb-2">
+    <span aria-hidden="true">📲</span>
+    <%= t("pwa_install.guide.title") %>
+  </h2>
+  <p class="text-sm text-gray-600 mb-4 leading-relaxed">
+    <%= t("pwa_install.guide.lead") %>
+  </p>
+
+  <%#
+    ── ホーム画面から開いているときだけ表示する ──
+    hidden: 最初は非表示。PwaGuideController がホーム画面から開いていると判定したときに表示する。
+    remembered_on_this_device?: この端末（このアプリの Cookie）でログイン保持中かどうか。
+      iPhone のホーム画面アプリは Safari と Cookie が別のため、
+      「アプリ側で保持できているか」をここで確かめられるようにする。
+  %>
+  <div hidden
+       data-pwa-guide-target="standaloneOnly"
+       data-testid="pwa-standalone-status"
+       class="p-3 rounded-md border mb-4
+              <%= remembered_on_this_device? ? 'bg-green-50 border-green-200 text-green-900' : 'bg-yellow-50 border-yellow-200 text-yellow-900' %>">
+    <p class="text-sm font-semibold">
+      <span aria-hidden="true">✅</span>
+      <%= t("pwa_install.guide.standalone.title") %>
+    </p>
+    <p class="mt-1 text-xs leading-relaxed">
+      <% if remembered_on_this_device? %>
+        <%= t("pwa_install.guide.standalone.remembered") %>
+      <% else %>
+        <%= t("pwa_install.guide.standalone.not_remembered") %>
+      <% end %>
+    </p>
+  </div>
+
+  <%#
+    ── ブラウザで開いているときだけ表示する（ホーム画面から開いているときは隠す） ──
+    hidden を付けていない理由:
+      JavaScript が動かない環境でも手順を読めるようにするため、最初から表示しておき、
+      ホーム画面から開いていると分かったときだけ PwaGuideController が隠す。
+  %>
+  <div data-pwa-guide-target="browserOnly">
+
+    <%#
+      「この端末にインストールする」ボタン（Chrome / Edge のみ）
+      hidden: 最初は非表示。ブラウザから「インストールできます」の合図
+        （beforeinstallprompt）が届いたときだけ PwaGuideController が表示する。
+        Safari・Firefox・LINE 内ブラウザには合図がないため、表示されない。
+      type="button": フォームの送信ボタンとして扱われないようにする。
+    %>
+    <div hidden data-pwa-guide-target="installArea" class="mb-4">
+      <button type="button"
+              data-action="click->pwa-guide#install"
+              class="w-full px-4 py-3 text-sm font-medium text-white bg-blue-600
+                     rounded-md hover:bg-blue-700 transition-colors
+                     focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+        <%= t("pwa_install.guide.install_button") %>
+      </button>
+      <p class="mt-1 text-xs text-gray-500">
+        <%= t("pwa_install.guide.install_hint") %>
+      </p>
+    </div>
+
+    <%#
+      ホーム画面から初めて開いたときのログインの案内（すべての端末で表示）
+      ログイン保持をしないと、アプリを閉じるたびにログアウトされるため、
+      手順より前の目立つ位置に置く。
+    %>
+    <div class="mb-4 p-3 bg-blue-50 rounded-md border border-blue-200"
+         data-testid="pwa-first-login-hint">
+      <p class="text-sm font-semibold text-blue-900">
+        <span aria-hidden="true">🔐</span>
+        <%= t("pwa_install.guide.first_login.title") %>
+      </p>
+      <p class="mt-1 text-xs text-blue-900 leading-relaxed">
+        <%= t("pwa_install.guide.first_login.body") %>
+      </p>
+    </div>
+
+    <%#
+      端末ごとの手順
+      <details> / <summary>:
+        HTML 標準の「開閉できる箱」。JavaScript なしでもタップで開閉でき、
+        スクリーンリーダーにも「折りたたみ」として伝わる。
+      data-platform:
+        PwaGuideController が、使っている端末と同じ値の手順だけを開くために使う。
+        値は pwa_guide_controller.js の detectEnvironment() の platform と一致させる。
+      data-pwa-guide-badge:
+        「お使いの端末」の目印。該当する手順のときだけ PwaGuideController が表示する。
+    %>
+    <div class="space-y-2">
+      <% %w[ios android desktop inapp].each do |platform| %>
+        <details class="group rounded-md border border-gray-200"
+                 data-pwa-guide-target="panel"
+                 data-platform="<%= platform %>">
+          <summary class="flex items-center justify-between gap-2 px-4 py-3 cursor-pointer
+                          text-sm font-medium text-gray-900 min-h-[44px]
+                          focus:outline-none focus:ring-2 focus:ring-blue-500 rounded-md">
+            <span class="flex items-center gap-2">
+              <%= t("pwa_install.guide.#{platform}.summary") %>
+              <span hidden
+                    data-pwa-guide-badge
+                    class="inline-flex items-center px-2 py-0.5 rounded-full
+                           text-xs font-medium bg-blue-100 text-blue-800">
+                <%= t("pwa_install.guide.your_device") %>
+              </span>
+            </span>
+            <%#
+              開閉の向きを示す矢印。group-open: は <details> が開いているときのスタイル
+              （Tailwind v4 の open 状態のバリアント）。装飾なので読み上げない。
+            %>
+            <svg class="w-4 h-4 text-gray-500 transition-transform group-open:rotate-180"
+                 fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </summary>
+
+          <div class="px-4 pb-4">
+            <%#
+              t(...steps) は YAML の配列を Ruby の配列として返す。
+              <ol> は番号付きリスト。list-decimal で 1. 2. 3. の番号を表示する。
+            %>
+            <ol class="list-decimal list-outside ml-5 space-y-1.5 text-sm text-gray-700 leading-relaxed">
+              <% t("pwa_install.guide.#{platform}.steps").each do |step| %>
+                <li><%= step %></li>
+              <% end %>
+            </ol>
+
+            <% if platform == "inapp" %>
+              <%#
+                LINE のアプリ内ブラウザから Safari / Chrome で開き直すリンク
+                openExternalBrowser=1:
+                  LINE 公式の仕組み。LINE の中で開いた URL にこのパラメーターが付いていると、
+                  LINE は端末の標準ブラウザで開く。LINE 内ブラウザの中で押した場合に
+                  効くかどうかは LINE のバージョンによるため、効かない場合の手順も上に書いている。
+                  このパラメーターは Rails 側では使わない（無視される）ので、副作用はない。
+                anchor: "pwa-install-guide":
+                  開き直した先で、このカードの位置まで画面をスクロールさせる。
+                data: { turbo: false }:
+                  Turbo の画面移動ではなく、通常のページ移動として LINE に URL を渡すため。
+              %>
+              <%= link_to t("pwa_install.guide.inapp.open_external"),
+                          settings_url(openExternalBrowser: 1, anchor: "pwa-install-guide"),
+                          data: { turbo: false },
+                          class: "mt-3 inline-flex items-center justify-center w-full px-4 py-3
+                                  text-sm font-medium text-white bg-blue-600 rounded-md
+                                  hover:bg-blue-700 transition-colors
+                                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" %>
+            <% end %>
+
+            <p class="mt-3 text-xs text-gray-500 leading-relaxed">
+              <%= t("pwa_install.guide.#{platform}.note") %>
+            </p>
+          </div>
+        </details>
+      <% end %>
+    </div>
+  </div>
+</section>

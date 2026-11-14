@@ -14,6 +14,11 @@
   【ログイン保持（remember me）での変更内容】
   - ソーシャルアカウント連携の下に「ログインの保持」セクションを追加
     （内容は settings/_remember_login.html.erb に分けている）
+
+  【ホーム画面に追加（PWA）での変更内容】
+  - 「ログインの保持」セクションの下に「ホーム画面に追加する」案内カードを追加
+    （内容は settings/_pwa_install_guide.html.erb に分けている。
+      ホーム画面から開いたときに、すぐ上の「ログインの保持」を案内するため、この位置に置く）
   ============================================================
 %>
 <% content_for :title, "アカウント設定 | HabitFlow" %>
@@ -349,6 +354,15 @@
   %>
   <%= render "settings/remember_login",
              remembered_device_count: @remembered_device_count %>
+
+  <%#
+    ============================================================
+    ホーム画面に追加（PWA）追加: 「ホーム画面に追加する」案内カード
+    ============================================================
+    中身は settings/_pwa_install_guide.html.erb に分けている。
+    コントローラーで新しく用意する値はない（locals なし）。
+  %>
+  <%= render "settings/pwa_install_guide" %>
 
   <%# G-3 由来: 通知設定へのナビゲーション %>
   <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
