@@ -10,6 +10,8 @@
 #   E-1追加: direct_reason / background_situation / next_action を必須化
 #   E-1修正: reflection_comment を任意に戻す
 #            （ユーザーフィードバック: 自由コメントは任意にしてほしい）
+#   AI分析状態の修正: ai_skipped_at 列と、AI分析の状態を判定するメソッドを追加
+#            （「AIなしで完了」した週に「AI分析中です…」が出たままになる不具合の修正）
 #
 # 【カラムと UI の対応表】
 #   DB カラム名          | UIラベル                | 必須/任意
@@ -19,11 +21,31 @@
 #   background_situation | どう？（改善策）          | 必須
 #   next_action          | からの？（次への展開）   | 必須
 #   reflection_comment   | 自由コメント             | 任意（E-1修正で任意に戻す）
+#   ai_skipped_at        | （画面入力なし）         | AI分析をしなかった日時。通常は nil
 # ==============================================================================
 
 class WeeklyReflection < ApplicationRecord
   # ── D-5 追加: CrisisDetector モジュールをインクルードする ────────────────
   include CrisisDetector
+
+  # ============================================================
+  # 定数
+  # ============================================================
+
+  # ── AI分析状態の修正で追加: AI_ANALYSIS_WAIT_LIMIT ─────────────────────────
+  #
+  # 【意味】
+  #   振り返りを完了してから、AI分析の結果を「待っている」とみなす時間。
+  #   この時間を過ぎても結果が無い場合は、「分析中」ではなく
+  #   「今回は結果を用意できなかった」と表示する。
+  #
+  # 【30分にした理由】
+  #   WeeklyReflectionAnalysisJob は全プロバイダが失敗すると、
+  #   60秒おきに最大3回まで再試行する。AI の応答時間を含めても
+  #   通常は数分で終わるため、30分あれば十分に余裕がある。
+  #   これより長く「分析中」を出し続けると、ユーザーを待たせ続けてしまう。
+  AI_ANALYSIS_WAIT_LIMIT = 30.minutes
+  # ────────────────────────────────────────────────────────────────────────────
 
   # ============================================================
   # アソシエーション
@@ -37,7 +59,7 @@ class WeeklyReflection < ApplicationRecord
   has_many :task_summaries,
            class_name: "WeeklyReflectionTaskSummary",
            dependent: :destroy
-  
+
   # ── E-3 追加: ai_analyses アソシエーション ────────────────────────────────
   #
   # 【なぜ has_many :ai_analyses が必要なのか】
@@ -207,6 +229,41 @@ class WeeklyReflection < ApplicationRecord
     return if completed?
     update!(completed_at: Time.current, is_locked: true)
   end
+
+  # ── AI分析状態の修正で追加: ai_skipped? ───────────────────────────────────
+  #
+  # 【役割】
+  #   この振り返りで AI分析を「しなかった」かどうかを返す。
+  #   「AIなしで振り返りを完了する」を選んだときや、
+  #   完了時点で月の上限に達していてジョブを登録しなかったときに true になる。
+  def ai_skipped?
+    ai_skipped_at.present?
+  end
+
+  # ── AI分析状態の修正で追加: ai_analysis_pending? ──────────────────────────
+  #
+  # 【役割】
+  #   「AI分析中です…」を表示してよいかを返す。
+  #   振り返り一覧のバナーとダッシュボードのバナーの両方がこのメソッドを使うため、
+  #   2つの画面で判定がずれない。
+  #
+  # 【引数 has_analysis:】
+  #   呼び出し側ですでに分かっている「AI分析の記録があるか」を渡す。
+  #   このメソッドの中で ai_analyses を検索しないので、余計なSQLが増えない。
+  #
+  # 【true になる条件（すべて満たすとき）】
+  #   ① AI分析の記録がまだ無い
+  #   ② AI分析をしないで完了した振り返りではない
+  #   ③ 振り返りが完了している
+  #   ④ 完了してから AI_ANALYSIS_WAIT_LIMIT（30分）以内
+  def ai_analysis_pending?(has_analysis:)
+    return false if has_analysis      # ① 結果があれば「分析中」ではない
+    return false if ai_skipped?       # ② AIなしで完了した週は待たない
+    return false if completed_at.nil? # ③ 未完了の振り返りは分析の対象外
+
+    completed_at >= AI_ANALYSIS_WAIT_LIMIT.ago # ④ 30分以内だけ「分析中」
+  end
+  # ────────────────────────────────────────────────────────────────────────────
 
   # ============================================================
   # プライベートメソッド

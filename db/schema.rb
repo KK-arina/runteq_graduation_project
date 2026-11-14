@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[8.1].define(version: 2026_11_11_122529) do
+ActiveRecord::Schema[8.1].define(version: 2026_11_14_073135) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "pg_catalog.plpgsql"
 
@@ -407,6 +407,7 @@ ActiveRecord::Schema[8.1].define(version: 2026_11_11_122529) do
   end
 
   create_table "weekly_reflections", force: :cascade do |t|
+    t.datetime "ai_skipped_at"
     t.text "background_situation"
     t.datetime "completed_at"
     t.datetime "created_at", null: false

@@ -5,7 +5,7 @@
   ==============================================================================
 
   【このファイルの役割】
-    AI分析の状態（分析中 / 完了）に応じてバナーを表示する。
+    AI分析の状態（分析中 / 完了 / AIなしで完了 / 結果なし）に応じてバナーを表示する。
     WeeklyReflectionAnalysisJob の broadcast_completion でリアルタイム更新される。
 
   【id="weekly_reflection_ai_banner" が必須の理由】
@@ -16,6 +16,15 @@
     latest_reflection  : WeeklyReflection インスタンス or nil
     latest_ai_analysis : AiAnalysis インスタンス or nil
     current_purpose    : UserPurpose インスタンス or nil
+
+  【AI分析状態の修正での変更】
+    これまでは「AI分析の記録が無い」だけで「AI分析中です…」を出していたため、
+    AIなしで完了した週や、ジョブが失敗した週で表示が出たままになっていた。
+    記録が無い場合を、次の3つに分けて表示する。
+      ① AIなしで完了した（ai_skipped?）       → 「AI分析なしで完了しました」
+      ② 完了から30分以内（ai_analysis_pending?） → これまでどおり「AI分析中です…」
+      ③ それ以外（30分たっても結果が無い）      → 「結果を用意できませんでした」
+    判定はモデルのメソッドにまとめ、ダッシュボードと同じ基準にしている。
   ==============================================================================
 %>
 
@@ -58,31 +67,63 @@
 
   <% elsif latest_reflection.present? %>
     <%#
-      AI分析中バナー:
-        ai_analyses が既に存在する（crisis スキップ / パース失敗）場合は表示しない。
-        存在しない（= ジョブが実行中）場合のみ「分析中」を表示する。
+      AI分析の記録が既にある（crisis スキップ / パース失敗）場合は何も表示しない（変更なし）。
+      記録が無い場合だけ、状態に応じて3種類のどれかを表示する。
     %>
     <% has_analysis_record = latest_reflection.ai_analyses.exists? %>
     <% unless has_analysis_record %>
-      <div class="max-w-3xl mx-auto px-4 pb-6">
-        <div class="bg-gray-50 border border-gray-200 rounded-2xl p-5">
-          <div class="flex items-center gap-3">
-            <span class="text-2xl animate-spin" aria-hidden="true">⏳</span>
-            <div>
-              <p class="font-bold text-gray-700 text-sm">AI分析中です...</p>
-              <p class="text-xs text-gray-500 mt-0.5">
-                分析が完了するとこのバナーが自動で更新されます（リロード不要）
-              </p>
+
+      <% if latest_reflection.ai_skipped? %>
+        <%# ── ① AIなしで完了した週（AI分析状態の修正で追加） ── %>
+        <div class="max-w-3xl mx-auto px-4 pb-6" data-testid="ai-banner-skipped">
+          <div class="bg-gray-50 border border-gray-200 rounded-2xl p-5" role="status">
+            <div class="flex items-start gap-3">
+              <span class="text-2xl" aria-hidden="true">📝</span>
+              <div>
+                <p class="font-bold text-gray-700 text-sm"><%= t("weekly_reflections.ai_banner.skipped_title") %></p>
+                <p class="text-xs text-gray-500 mt-0.5"><%= t("weekly_reflections.ai_banner.skipped_body") %></p>
+              </div>
             </div>
-            <button type="button"
-                    onclick="location.reload()"
-                    class="ml-auto flex-shrink-0 px-4 py-2 bg-gray-200 hover:bg-gray-300
-                           text-gray-700 text-sm font-semibold rounded-xl transition-colors">
-              更新する
-            </button>
           </div>
         </div>
-      </div>
+
+      <% elsif latest_reflection.ai_analysis_pending?(has_analysis: false) %>
+        <%# ── ② 完了から30分以内: これまでどおり「AI分析中」を表示 ── %>
+        <div class="max-w-3xl mx-auto px-4 pb-6" data-testid="ai-banner-pending">
+          <div class="bg-gray-50 border border-gray-200 rounded-2xl p-5">
+            <div class="flex items-center gap-3">
+              <span class="text-2xl animate-spin" aria-hidden="true">⏳</span>
+              <div>
+                <p class="font-bold text-gray-700 text-sm">AI分析中です...</p>
+                <p class="text-xs text-gray-500 mt-0.5">
+                  分析が完了するとこのバナーが自動で更新されます（リロード不要）
+                </p>
+              </div>
+              <button type="button"
+                      onclick="location.reload()"
+                      class="ml-auto flex-shrink-0 px-4 py-2 bg-gray-200 hover:bg-gray-300
+                             text-gray-700 text-sm font-semibold rounded-xl transition-colors">
+                更新する
+              </button>
+            </div>
+          </div>
+        </div>
+
+      <% else %>
+        <%# ── ③ 30分たっても結果が無い（ジョブの失敗など）（AI分析状態の修正で追加） ── %>
+        <div class="max-w-3xl mx-auto px-4 pb-6" data-testid="ai-banner-unavailable">
+          <div class="bg-gray-50 border border-gray-200 rounded-2xl p-5" role="status">
+            <div class="flex items-start gap-3">
+              <span class="text-2xl" aria-hidden="true">💤</span>
+              <div>
+                <p class="font-bold text-gray-700 text-sm"><%= t("weekly_reflections.ai_banner.unavailable_title") %></p>
+                <p class="text-xs text-gray-500 mt-0.5"><%= t("weekly_reflections.ai_banner.unavailable_body") %></p>
+              </div>
+            </div>
+          </div>
+        </div>
+      <% end %>
+
     <% end %>
 
   <% end %>

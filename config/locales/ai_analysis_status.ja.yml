@@ -1,0 +1,15 @@
+# config/locales/ai_analysis_status.ja.yml
+#
+# 振り返り一覧の AI 分析バナーで使う文言（AI分析状態の修正で追加）
+# 【別ファイルにした理由】
+#   ja.yml が長くなりすぎないよう、機能ごとに分けている（remember_login.ja.yml と同じ考え方）。
+#   Rails は config/locales の中の yml をすべて読み込み、同じ "ja:" の中身を自動で合体させる。
+ja:
+  weekly_reflections:
+    ai_banner:
+      # AIなしで振り返りを完了した週
+      skipped_title: "今週はAI分析なしで振り返りを完了しました"
+      skipped_body: "今月のAI分析回数の上限に達していたため、今回はAIの提案はありません。使用回数は毎月1日にリセットされます。"
+      # 完了から30分たってもAI分析の結果が無い週（ジョブの失敗など）
+      unavailable_title: "今回はAI分析の結果を用意できませんでした"
+      unavailable_body: "振り返りの内容は保存されています。次の振り返りでは、通常どおりAI分析を行います。"
