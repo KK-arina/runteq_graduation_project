@@ -20,6 +20,15 @@
     サーバー（Ruby）→ flash.now[:ai_limit] = true をセット
     HTML（ERB）    → data-ai-limit-modal-show-value="true" に反映
     JavaScript     → connect() で this.showValue を確認してモーダルを表示
+
+  【アクセシビリティ修正での変更】
+    ① 中身のパーシャルに variant（"desktop" / "mobile"）を渡すようにした。
+       同じ中身をパソコン用とスマホ用で2回表示しているため、
+       中の id（見出し・hidden 項目）が2つずつ重複していた。
+       variant を id の末尾に付けて、ページ内で重ならないようにする。
+    ② モーダルのカードに role="dialog" / aria-modal="true" / aria-labelledby を追加した。
+       スクリーンリーダーに「ダイアログが開いた」ことと、その名前（見出しの文言）を伝える。
+       aria-labelledby には、それぞれの variant の見出しの id を指定する。
   ==============================================================================
 %>
 
@@ -56,9 +65,17 @@
       max-w-lg      : 最大幅 512px（読みやすい幅）
       border-t-4    : 上部に赤いボーダーを付けてエラー系であることを示す
       overflow-hidden: 子要素がはみ出さないようにする
+
+      role="dialog" / aria-modal="true"（アクセシビリティ修正で追加）:
+        この要素がダイアログであり、開いている間は背後の画面を操作しないことを伝える。
+      aria-labelledby（アクセシビリティ修正で追加）:
+        パソコン用の見出し（id="ai-limit-modal-title-desktop"）をダイアログの名前にする。
     %>
-    <div class="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border-t-4 border-red-500">
-      <%= render "weekly_reflections/ai_limit_modal_content" %>
+    <div class="bg-white rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden border-t-4 border-red-500"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="ai-limit-modal-title-desktop">
+      <%= render "weekly_reflections/ai_limit_modal_content", variant: "desktop" %>
     </div>
   </div>
 
@@ -79,13 +96,19 @@
       rounded-t-2xl : 上部だけ角を丸くしてシートらしい見た目にする
       max-h-[85vh]  : 画面の85%を超えないよう高さを制限する（小さい画面でも収まる）
       overflow-y-auto: コンテンツが多い場合はスクロール可能にする
+
+      role="dialog" / aria-modal="true" / aria-labelledby（アクセシビリティ修正で追加）:
+        パソコン用と同じ。名前はスマホ用の見出し（id="ai-limit-modal-title-mobile"）にする。
     %>
-    <div class="bg-white w-full rounded-t-2xl max-h-[85vh] overflow-y-auto border-t-4 border-red-500">
-      <%# スワイプハンドル: スマホでボトムシートであることを視覚的に示すバー %>
-      <div class="flex justify-center pt-3 pb-1">
+    <div class="bg-white w-full rounded-t-2xl max-h-[85vh] overflow-y-auto border-t-4 border-red-500"
+         role="dialog"
+         aria-modal="true"
+         aria-labelledby="ai-limit-modal-title-mobile">
+      <%# スワイプハンドル: スマホでボトムシートであることを視覚的に示すバー（装飾なので読み上げない） %>
+      <div class="flex justify-center pt-3 pb-1" aria-hidden="true">
         <div class="w-10 h-1.5 bg-gray-300 rounded-full"></div>
       </div>
-      <%= render "weekly_reflections/ai_limit_modal_content" %>
+      <%= render "weekly_reflections/ai_limit_modal_content", variant: "mobile" %>
     </div>
   </div>
 

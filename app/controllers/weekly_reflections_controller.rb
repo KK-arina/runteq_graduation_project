@@ -175,6 +175,10 @@ class WeeklyReflectionsController < ApplicationController
   # ============================================================
   # complete_without_ai アクション（D-6 新規追加）
   # ============================================================
+  # 【AI分析状態の修正での変更】
+  #   サービスに skip_ai: true を渡すようにした。
+  #   これで「AIなしで完了」を選んだときは、上限の残り回数に関係なく
+  #   AI分析ジョブが登録されず、ai_skipped_at に日時が記録される。
   def complete_without_ai
     @weekly_reflection = find_pending_last_week_reflection ||
                         WeeklyReflection.find_or_build_for_current_week(current_user)
@@ -191,7 +195,8 @@ class WeeklyReflectionsController < ApplicationController
       reflection:  @weekly_reflection,
       user:        current_user,
       was_locked:  was_locked,
-      corrections: params[:reflection_numeric_corrections]
+      corrections: params[:reflection_numeric_corrections],
+      skip_ai:     true # AI分析状態の修正で追加: AIなしで完了する
     ).call
 
     if result[:success]

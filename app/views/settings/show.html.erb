@@ -10,6 +10,10 @@
   - タイムゾーン設定セクション追加
   - AIコスト使用状況セクション追加
   - 20-2番: プロフィール編集中の状態（他セクション非活性化）追加
+
+  【ログイン保持（remember me）での変更内容】
+  - ソーシャルアカウント連携の下に「ログインの保持」セクションを追加
+    （内容は settings/_remember_login.html.erb に分けている）
   ============================================================
 %>
 <% content_for :title, "アカウント設定 | HabitFlow" %>
@@ -126,9 +130,20 @@
                     class: "space-y-4 pt-2" do |f| %>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            ユーザー名
-          </label>
+          <%#
+            アクセシビリティ修正: 見出しを素の label から f.label に変更
+            【理由】
+              以前の label には for がなく、下の入力欄と結び付いていなかった。
+              このフォームは scope: :user なので、f.text_field :name は id="user_name" になる。
+              f.label :name を使うと Rails が for="user_name" を自動で出力し、
+              見出しと入力欄が結び付く。
+              ・スクリーンリーダーが入力欄で「ユーザー名、編集テキスト」と読み上げる
+              ・「ユーザー名」の文字をタップすると入力欄にカーソルが移る
+            入力欄1つの見出しなので、fieldset ではなく label のままが正しい形。
+            見た目のクラスは以前と同じ。
+          %>
+          <%= f.label :name, "ユーザー名",
+                class: "block text-sm font-medium text-gray-700 mb-1" %>
 
           <%#
             音声入力🎤対応のユーザー名フィールド
@@ -324,6 +339,16 @@
       </div>
     </div>
   </section>
+
+  <%#
+    ============================================================
+    ログイン保持追加: ログインの保持セクション
+    ============================================================
+    中身は settings/_remember_login.html.erb に分けている。
+    remembered_device_count: SettingsController#show で数えた、ログイン保持中の端末数。
+  %>
+  <%= render "settings/remember_login",
+             remembered_device_count: @remembered_device_count %>
 
   <%# G-3 由来: 通知設定へのナビゲーション %>
   <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"

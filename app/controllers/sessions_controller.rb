@@ -39,6 +39,22 @@
 #   safe_redirect_path? メソッド（ApplicationController に定義）で
 #   外部URLへのオープンリダイレクト攻撃を防いでいる。
 #   params[:redirect_to] が外部URLだった場合は dashboard_path に飛ばす。
+#
+# ============================================================
+# ログイン保持（remember me）での変更
+# ============================================================
+#
+# 【変更内容】
+#   ① create: 「ログインしたままにする」チェックボックスの値を受け取り、
+#      共通メソッド log_in（concerns/remember_login.rb）でログインする。
+#      チェックありなら、この端末用のログイン保持トークンを発行する。
+#   ② destroy: 共通メソッド log_out でログアウトする。
+#      この端末のログイン保持トークンも削除する（ほかの端末は残す）。
+#
+# 【なぜ共通メソッドにまとめたのか】
+#   reset_session（セッション固定攻撃対策）とログイン保持の処理を
+#   ログイン方法（メール・Google・LINE・新規登録）ごとに書くと、入れ忘れが起きやすい。
+#   log_in / log_out に1か所でまとめ、どの入口でも同じ安全対策がかかるようにした。
 # ============================================================
 
 class SessionsController < ApplicationController
@@ -55,6 +71,11 @@ class SessionsController < ApplicationController
     #   ログイン済みにもかかわらずエラーメッセージが表示されてしまう。
     #   ログイン済みユーザーにはログインページを表示する必要がないため、
     #   ダッシュボードへリダイレクトする。
+    #
+    # 【ログイン保持との関係】
+    #   logged_in? の中で current_user が呼ばれ、ログイン保持の Cookie があれば
+    #   ここで自動ログインされる。そのため「ログインしたまま」の人が
+    #   /login を開いても、ログイン画面ではなくダッシュボードが表示される。
     redirect_to dashboard_path if logged_in?
   end
 
@@ -87,15 +108,19 @@ class SessionsController < ApplicationController
     #   && の短絡評価: 左側が false なら右側（authenticate）は実行されない。
     if user && user.authenticate(params[:session][:password])
 
-      # ── 認証成功: セッション固定攻撃対策 ────────────────────────────────
+      # ── 認証成功: ログイン（ログイン保持対応で変更）──────────────────────
       #
-      # reset_session:
-      #   現在のセッションを完全に破棄し、新しいセッションIDを発行する。
-      #   「セッション固定攻撃」防止のため、ログイン時に必ず実行する。
-      reset_session
-
-      # 新しいセッションにユーザーIDを保存してログイン状態にする
-      session[:user_id] = user.id
+      # remember_me_param_checked?（concerns/remember_login.rb）:
+      #   チェックボックスの値（チェックあり "1" / なし "0"）を true / false に変換する。
+      #   params.dig を使う理由: params[:session] が無い不正なリクエストでも
+      #   例外にせず nil として扱い、「保持しない」側に倒すため。
+      #
+      # log_in（concerns/remember_login.rb）の中で行うこと:
+      #   ① この端末に古いログイン保持トークンがあれば削除する
+      #   ② reset_session でセッションIDを作り直す（セッション固定攻撃対策）
+      #   ③ session[:user_id] と session[:auth_version] を記録する
+      #   ④ チェックありなら新しいログイン保持トークンを発行して Cookie に保存する
+      log_in(user, remember: remember_me_param_checked?(params.dig(:session, :remember_me)))
 
       # ── E-4 追加: リダイレクト先の決定 ──────────────────────────────────
       #
@@ -114,6 +139,7 @@ class SessionsController < ApplicationController
 
       # render :new:
       #   同じリクエスト内でログイン画面を再表示する（リダイレクトしない）。
+      #   ビュー側で params からチェックボックスの状態を復元する。
       # status: :unprocessable_entity:
       #   HTTP 422。フォームのバリデーション失敗時の標準ステータスコード。
       render :new, status: :unprocessable_entity
@@ -125,15 +151,18 @@ class SessionsController < ApplicationController
   # ログアウト処理（セッション破棄）
   # ============================================================
   def destroy
-    # reset_session:
-    #   セッション全体を完全にリセットする。
-    #   session.delete(:user_id) より確実。CSRF トークンも再生成される。
-    reset_session
-
-    # @current_user = nil:
-    #   ApplicationController の current_user でメモ化しているため、
-    #   ここでリセットしないと同じリクエスト内でログイン状態に見えてしまう。
-    @current_user = nil
+    # log_out（concerns/remember_login.rb）の中で行うこと:
+    #   ① この端末のログイン保持トークンを DB から削除し、Cookie も削除する
+    #      （ログアウトしたのに、次に開いたら自動ログインされる、という事態を防ぐ）
+    #   ② reset_session でセッション全体を完全にリセットする
+    #      （session.delete(:user_id) より確実。CSRF トークンも再生成される）
+    #   ③ @current_user = nil でメモ化をリセットする
+    #      （同じリクエスト内でログイン状態に見えてしまうのを防ぐ）
+    #
+    # 【ほかの端末のログイン保持を消さない理由】
+    #   ログアウトは「今使っているこの端末」の操作のため。
+    #   すべての端末を解除したい場合は、設定画面の「すべての端末からログアウトする」を使う。
+    log_out
 
     # status: :see_other (303): DELETE後のリダイレクトには303が適切
     redirect_to root_path, status: :see_other, notice: "ログアウトしました"

@@ -15,6 +15,12 @@
 
   【locals】
     button_text: ボタンに表示するテキスト（呼び出し元から渡す）
+
+  【ログイン保持（remember me）での変更】
+    form_tag の data に remember_me_target: "oauthForm" を追加した。
+    ログイン画面では、RememberMeController がこのフォームの送信先を
+    /auth/google_oauth2?remember_me=1（または 0）に書き換える。
+    新規登録画面には RememberMeController がないため、この属性は何もしない。
   ==============================================================================
 %>
 <% if ENV["GOOGLE_CLIENT_ID"].present? %>
@@ -26,10 +32,15 @@
     data: { turbo: "false" } を文字列で指定する理由:
       Rails 7 の Turbo は外部リダイレクトを Fetch に変換してブロックするため、
       "false" を文字列で渡して data-turbo="false" を確実に出力する。
+
+    remember_me_target: "oauthForm":
+      data-remember-me-target="oauthForm" として出力される
+      （Rails は data のキーのアンダースコアをハイフンに変換する）。
+      RememberMeController の oauthFormTargets に含まれるようになる。
   %>
   <%= form_tag "/auth/google_oauth2",
                method: :post,
-               data: { turbo: "false" } do %>
+               data: { turbo: "false", remember_me_target: "oauthForm" } do %>
     <button type="submit"
             class="w-full flex items-center justify-center gap-3
                    px-4 py-2 bg-white border border-gray-300 rounded-md

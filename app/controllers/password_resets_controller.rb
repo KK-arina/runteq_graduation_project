@@ -21,6 +21,8 @@
 #   ・使用済みトークンは is_used=true で再利用不可
 #   ・パスワード変更完了時に同一ユーザーの全未使用トークンを無効化
 #   ・パスワード変更後に reset_session でセッション固定攻撃を防止
+#   ・ログイン保持追加: パスワード変更完了時に、すべての端末のログイン保持を解除し、
+#     ほかの端末に残っているセッションも無効にする（User#revoke_all_logins!）
 #
 # 【before_action の流れ】
 #   edit / update → set_token_by_id で URL の :id からトークン検索
@@ -175,6 +177,22 @@ class PasswordResetsController < ApplicationController
           .where(user: @user, is_used: false)
           .update_all(is_used: true, updated_at: Time.current)
 
+        # ── ログイン保持追加: すべての端末のログイン保持とセッションを無効にする ──
+        #
+        # 【なぜパスワードリセットで全端末を解除するのか】
+        #   パスワードを変えるのは「誰かにパスワードを知られたかもしれない」場面でもある。
+        #   古いパスワードでログインした第三者の端末が、ログイン保持やセッションで
+        #   使い続けられないようにする（OWASP も変更後のセッション無効化を推奨）。
+        #
+        # 【revoke_all_logins!（User モデル）の中身】
+        #   ① remember_tokens を全件削除する
+        #   ② auth_version を1つ増やす → ほかの端末のセッションは次のアクセスでログアウト
+        #
+        # 【transaction の中に入れる理由】
+        #   「パスワードは変わったのに、古い端末のログインが残っている」という
+        #   中途半端な状態を作らないため。失敗したらパスワード変更ごと取り消される。
+        @user.revoke_all_logins!
+
         saved = true
       end
     rescue ActiveRecord::RecordInvalid
@@ -189,6 +207,11 @@ class PasswordResetsController < ApplicationController
       #   万が一攻撃者が古いセッション ID を持っていた場合、
       #   reset_session で無効化することで不正アクセスを遮断できる。
       reset_session
+
+      # ログイン保持追加: この端末に残っているログイン保持の Cookie も削除する
+      #   DB のトークンは revoke_all_logins! で削除済みなので自動ログインはされないが、
+      #   使えなくなった Cookie をブラウザに残さないために削除する。
+      delete_remember_cookie
 
       redirect_to login_path,
                   notice: t("password_reset.success")

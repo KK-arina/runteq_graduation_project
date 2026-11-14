@@ -29,19 +29,29 @@
     環境変数が未設定の場合はボタンを非表示にすることで、
     LINE_CHANNEL_ID を設定していない開発環境でもエラーを防ぐ。
     Google ボタンの ENV["GOOGLE_CLIENT_ID"] チェックと同じ設計方針。
+
+  【ログイン保持（remember me）での変更】
+    form_tag の data に remember_me_target: "oauthForm" を追加した。
+    ログイン画面では、RememberMeController がこのフォームの送信先を
+    /auth/line_v2_1?remember_me=1（または 0）に書き換える。
+    新規登録画面には RememberMeController がないため、この属性は何もしない。
   ==============================================================================
 %>
 <% if ENV["LINE_CHANNEL_ID"].present? %>
   <%#
-    "/auth/line_v21" について:
-      omniauth-line-v2_1 gem は :line_v21 というストラテジー名を持つ。
-      OmniAuth は POST /auth/line_v21 を認証開始エンドポイントとして登録する。
+    "/auth/line_v2_1" について:
+      config/initializers/omniauth.rb で provider :line_v2_1 として登録しているため、
+      OmniAuth は POST /auth/line_v2_1 を認証開始エンドポイントとして扱う。
       NG: "/auth/line"     → OmniAuth::Strategies::Line がないため 404 になる
-      OK: "/auth/line_v21" → OmniAuth::Strategies::LineV21 が正しく処理する
+      OK: "/auth/line_v2_1" → OmniAuth::Strategies::LineV21 が正しく処理する
+
+    remember_me_target: "oauthForm":
+      data-remember-me-target="oauthForm" として出力される。
+      RememberMeController の oauthFormTargets に含まれるようになる。
   %>
   <%= form_tag "/auth/line_v2_1",
                method: :post,
-               data: { turbo: "false" } do %>
+               data: { turbo: "false", remember_me_target: "oauthForm" } do %>
     <%#
       button タグの style について:
         LINE ブランドガイドライン準拠の緑色（#06C755）を使用する。

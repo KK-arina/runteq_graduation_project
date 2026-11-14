@@ -17,10 +17,22 @@
 #   さらに統合テストのリクエスト env は Rails.application.env_config を土台に
 #   組み立てられるため、そこへ "omniauth.auth" を積んでおくと、
 #   コントローラーの request.env["omniauth.auth"] でモック情報を受け取れる。
+#
+# 【ログイン保持（remember me）のテストを追加】
+#   ログイン画面では、Google / LINE ボタンの送信先が
+#   /auth/google_oauth2?remember_me=1（または 0）に書き換わる（Stimulus）。
+#   テストでは、その URL へ実際に POST する。
+#   OmniAuth のテストモードは本物と同じく URL のクエリをセッションに保存し、
+#   コールバックへリダイレクトする。follow_redirect! でコールバックを開くと、
+#   request.env["omniauth.params"] にクエリが引き継がれる。
+#   テスト環境は CSRF 検証が無効なので、POST にトークンがなくても通る。
 # ==============================================================================
 require "test_helper"
 
 class OmniauthLoginFlowTest < ActionDispatch::IntegrationTest
+  # ログイン保持の Cookie 名（concerns/remember_login.rb と同じ）
+  REMEMBER_COOKIE = "_habitflow_remember".freeze
+
   setup do
     OmniAuth.config.test_mode = true
   end
@@ -46,6 +58,18 @@ class OmniauthLoginFlowTest < ActionDispatch::IntegrationTest
     # 統合テストのリクエスト env にモック auth を載せる（コントローラーがここから読む）
     Rails.application.env_config["omniauth.auth"] = auth
     auth
+  end
+
+  # 同意済み・オンボーディング完了済みの Google ユーザーを作るヘルパー（ログイン保持テスト用）
+  def create_google_user
+    User.create!(
+      name:            "保持グーグル",
+      provider:        "google_oauth2",
+      uid:             "g_remember_#{SecureRandom.hex(4)}",
+      email:           "remember_g_#{SecureRandom.hex(4)}@example.com",
+      terms_agreed_at: Time.current,
+      first_login_at:  1.month.ago
+    )
   end
 
   # ============================================================
@@ -136,5 +160,78 @@ class OmniauthLoginFlowTest < ActionDispatch::IntegrationTest
   test "認証失敗(/auth/failure)はログインページへ戻す" do
     get "/auth/failure", params: { message: "invalid_credentials" }
     assert_redirected_to login_path(omniauth_error: true)
+  end
+
+  # ============================================================
+  # ログイン保持（remember me）
+  # ============================================================
+
+  test "Google: チェックあり(remember_me=1)でログインするとトークンを発行し、再起動後も自動ログインされる" do
+    user = create_google_user
+    stub_omniauth(:google_oauth2, uid: user.uid, info: { email: user.email, name: user.name })
+
+    # ① 認証開始（ログイン画面で Stimulus が書き換えた URL と同じ）
+    post "/auth/google_oauth2?remember_me=1"
+    # ② OmniAuth（テストモード）がコールバックへリダイレクトする
+    assert_response :redirect
+    # ③ コールバックを開く（ここで omniauth.params に remember_me=1 が引き継がれる）
+    follow_redirect!
+
+    assert_redirected_to dashboard_path
+    assert_equal 1, user.remember_tokens.count
+    assert cookies[REMEMBER_COOKIE].present?
+
+    # ブラウザ再起動（セッション Cookie だけを削除）後も自動でログインされる
+    cookies.delete("_habitflow_session")
+    get dashboard_path
+    assert_response :success
+  end
+
+  test "Google: チェックなし(remember_me=0)ではトークンを発行しない" do
+    user = create_google_user
+    stub_omniauth(:google_oauth2, uid: user.uid, info: { email: user.email, name: user.name })
+
+    post "/auth/google_oauth2?remember_me=0"
+    follow_redirect!
+
+    assert_redirected_to dashboard_path
+    assert_equal 0, user.remember_tokens.count
+    assert cookies[REMEMBER_COOKIE].blank?
+  end
+
+  test "LINE: チェックあり(remember_me=1)でログインするとトークンを発行する" do
+    user = User.create!(
+      name:            "保持ライン",
+      provider:        "line_v2_1",
+      uid:             "U_remember_#{SecureRandom.hex(4)}",
+      terms_agreed_at: Time.current,
+      first_login_at:  1.month.ago
+    )
+    stub_omniauth(:line_v2_1, uid: user.uid, info: { name: user.name })
+
+    post "/auth/line_v2_1?remember_me=1"
+    follow_redirect!
+
+    assert_redirected_to dashboard_path
+    assert_equal 1, user.remember_tokens.count
+  end
+
+  test "remember_me がない再認証（設定画面からの連携など）では、同じユーザーの保持状態を変えない" do
+    user = users(:one)
+
+    # メールログインで「ログインしたままにする」をオンにする
+    post login_path, params: {
+      session: { email: user.email, password: "password", remember_me: "1" }
+    }
+    assert_equal 1, user.remember_tokens.count
+
+    # 設定画面の「Google で連携する」と同じく、remember_me なしでコールバックに来る
+    #   同じメールアドレスなので from_omniauth は同じユーザーを返す
+    stub_omniauth(:google_oauth2, info: { email: user.email, name: user.name })
+    get "/auth/google_oauth2/callback"
+
+    # ログイン保持は消えずに残っている
+    assert_equal 1, user.remember_tokens.count
+    assert cookies[REMEMBER_COOKIE].present?
   end
 end

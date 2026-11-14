@@ -219,13 +219,17 @@ class DashboardsController < ApplicationController
   #   !@reflection_crisis_skipped            … 危機スキップではない（★H-10 の肝。
   #                                            これが無いと危機スキップを「分析中」と誤判定し
   #                                            スピナーが永久表示される）
-  #   completed_at >= 1.week.ago             … 直近1週間以内の振り返りに限定
-  #                                            （古い振り返りで分析中バナーが出るのを防ぐ）
+  #   ai_analysis_pending?(has_analysis: false)
+  #     … AI分析状態の修正で変更（以前は「完了から1週間以内」）。
+  #       「AIなしで完了した週ではない」かつ「完了から30分以内」のときだけ true。
+  #       振り返り一覧のバナーと同じメソッドで判定するため、2つの画面で表示がずれない。
+  #       has_analysis: false を渡すのは、上の2つの条件で「分析結果が無い」ことを
+  #       確認済みのため（ここで追加の SQL は発行しない）。
   def reflection_analysis_pending?
     @latest_completed_reflection.present? &&
       @reflection_ai_analysis.nil? &&
       !@reflection_crisis_skipped &&
-      @latest_completed_reflection.completed_at >= 1.week.ago
+      @latest_completed_reflection.ai_analysis_pending?(has_analysis: false)
   end
 
   # ============================================================

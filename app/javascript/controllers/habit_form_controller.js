@@ -2,6 +2,14 @@
 // =============================================================
 // Stimulus コントローラー: 習慣作成フォームの動的切り替えを管理する
 // （E-2 修正: toggleUnit を Stimulus targets から querySelector ベースに変更）
+//
+// 【アクセシビリティ修正での変更】
+//   カラー・アイコンのボタンの「選択中」の状態を、見た目（枠線の色）だけでなく
+//   aria-pressed 属性（"true" / "false"）でも切り替えるようにした。
+//   スクリーンリーダーは aria-pressed="true" のボタンを「押されています」と読み上げるため、
+//   画面が見えない人にも、どの色・アイコンが選ばれているかが伝わる。
+//   見た目と aria-pressed を必ず同時に変えるため、共通メソッド
+//   markColorSwatch / markIconButton にまとめている。
 // =============================================================
 
 import { Controller } from "@hotwired/stimulus"
@@ -25,28 +33,21 @@ export default class extends Controller {
     this.syncInitialState()
   }
 
+  // syncInitialState: 画面表示時に、hidden の値と各ボタンの状態をそろえる
+  //   ブラウザの「戻る」で表示されたときなど、hidden の値とボタンの見た目が
+  //   ずれていても、ここで正しい状態に直す。
   syncInitialState() {
     if (this.hasColorInputTarget) {
       const currentColor = this.colorInputTarget.value
       this.colorSwatchTargets.forEach(swatch => {
-        if (swatch.dataset.colorValue === currentColor) {
-          swatch.classList.add("ring-2", "ring-offset-2", "ring-gray-800", "scale-110")
-        } else {
-          swatch.classList.remove("ring-2", "ring-offset-2", "ring-gray-800", "scale-110")
-        }
+        this.markColorSwatch(swatch, swatch.dataset.colorValue === currentColor)
       })
     }
 
     if (this.hasIconInputTarget) {
       const currentIcon = this.iconInputTarget.value
       this.iconButtonTargets.forEach(btn => {
-        if (btn.dataset.iconValue === currentIcon) {
-          btn.classList.add("border-blue-500", "bg-blue-50", "scale-110")
-          btn.classList.remove("border-gray-200")
-        } else {
-          btn.classList.remove("border-blue-500", "bg-blue-50", "scale-110")
-          btn.classList.add("border-gray-200")
-        }
+        this.markIconButton(btn, btn.dataset.iconValue === currentIcon)
       })
     }
   }
@@ -131,31 +132,55 @@ export default class extends Controller {
     }
   }
 
+  // selectColor: 色ボタンが押されたときに呼ばれる
   selectColor(event) {
     const button = event.currentTarget
     const color = button.dataset.colorValue
 
+    // 送信用の hidden に選んだ色を入れる
     this.colorInputTarget.value = color
 
+    // 押されたボタンだけを「選択中」、ほかはすべて「未選択」にする
     this.colorSwatchTargets.forEach(swatch => {
-      swatch.classList.remove("ring-2", "ring-offset-2", "ring-gray-800", "scale-110")
+      this.markColorSwatch(swatch, swatch === button)
     })
-
-    button.classList.add("ring-2", "ring-offset-2", "ring-gray-800", "scale-110")
   }
 
+  // selectIcon: アイコンボタンが押されたときに呼ばれる
   selectIcon(event) {
     const button = event.currentTarget
     const icon = button.dataset.iconValue
 
+    // 送信用の hidden に選んだアイコンを入れる
     this.iconInputTarget.value = icon
 
+    // 押されたボタンだけを「選択中」、ほかはすべて「未選択」にする
     this.iconButtonTargets.forEach(btn => {
+      this.markIconButton(btn, btn === button)
+    })
+  }
+
+  // markColorSwatch: 色ボタン1つの「選択中／未選択」を、見た目と aria-pressed の両方に反映する
+  //   selected: true なら選択中、false なら未選択
+  //   String(selected): aria-pressed は文字列の "true" / "false" で指定するため変換する
+  markColorSwatch(swatch, selected) {
+    if (selected) {
+      swatch.classList.add("ring-2", "ring-offset-2", "ring-gray-800", "scale-110")
+    } else {
+      swatch.classList.remove("ring-2", "ring-offset-2", "ring-gray-800", "scale-110")
+    }
+    swatch.setAttribute("aria-pressed", String(selected))
+  }
+
+  // markIconButton: アイコンボタン1つの「選択中／未選択」を、見た目と aria-pressed の両方に反映する
+  markIconButton(btn, selected) {
+    if (selected) {
+      btn.classList.add("border-blue-500", "bg-blue-50", "scale-110")
+      btn.classList.remove("border-gray-200")
+    } else {
       btn.classList.remove("border-blue-500", "bg-blue-50", "scale-110")
       btn.classList.add("border-gray-200")
-    })
-
-    button.classList.remove("border-gray-200")
-    button.classList.add("border-blue-500", "bg-blue-50", "scale-110")
+    }
+    btn.setAttribute("aria-pressed", String(selected))
   }
 }

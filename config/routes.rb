@@ -124,6 +124,38 @@ end
       delete :disconnect_line,
              to:   "settings#disconnect_line",
              path: "line"
+
+      # ============================================================
+      # ログイン保持追加: この端末のログイン保持・すべての端末からのログアウト
+      # ============================================================
+      #
+      # 【post :remember_device】POST /settings/remember_device
+      #   この端末でログイン保持を始める（トークンを新しく作る）ため POST。
+      #   ヘルパー名: remember_device_settings_path
+      #
+      # 【delete :forget_device】DELETE /settings/remember_device
+      #   この端末のログイン保持トークンを削除するため DELETE。
+      #   お休みモードの start / stop と同じく、同じパスを HTTP 動詞で使い分ける。
+      #   ヘルパー名: forget_device_settings_path
+      #
+      # 【delete :revoke_all_devices】DELETE /settings/remember_devices
+      #   すべての端末のログイン保持トークンを削除するため DELETE。
+      #   「この端末」と区別するため、パスを複数形にしている。
+      #   ヘルパー名: revoke_all_devices_settings_path
+      #
+      # 【なぜ GET にしないのか】
+      #   GET はリンクを開くだけで実行されてしまい、
+      #   画像タグなどを使った CSRF 攻撃でログイン保持を勝手に解除される恐れがある。
+      #   POST / DELETE なら Rails の CSRF トークン検証で守られる。
+      post   :remember_device,
+             to:   "settings#remember_device",
+             path: "remember_device"
+      delete :forget_device,
+             to:   "settings#forget_device",
+             path: "remember_device"
+      delete :revoke_all_devices,
+             to:   "settings#revoke_all_devices",
+             path: "remember_devices"
     end
   end
 

@@ -98,3 +98,4 @@
 |:-----|:-----|
 | 2026-03-10 | Issue #40 対応として MVPレビュー用ドキュメントを追加・初版作成 |
 | 2026-09-23 | #I-4: README を3ファイルに分割・スクショ更新・MVP検証レポートを archive に統合 |
+| 2026-11-14 | ログイン保持（Remember me）・アクセシビリティ改善・AI分析状態の修正を features / technical-notes / lessons-learned に追記 |

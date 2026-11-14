@@ -14,18 +14,35 @@
 #   - ロック解除も通常通り実行する（ユーザーを詰まらせない）
 #   - AI 分析ジョブだけスキップして crisis_detected=true を記録する
 #   - 危機介入モーダルの表示は controller 側で行う（service は記録のみ）
+#
+# 【AI分析状態の修正での変更内容】
+#   ① skip_ai: 引数を追加した。
+#      「AIなしで振り返りを完了する」（complete_without_ai）から true で呼ばれる。
+#      true のときは AI分析ジョブを登録せず、ai_skipped_at に日時を記録する。
+#      これまでは上限チェックに任せていたため、上限を下回っていると
+#      「AIなし」を選んでも AI分析が動いてしまう可能性があった。
+#   ② 月の上限・user_setting 無しでジョブを登録しなかったときも
+#      ai_skipped_at を記録する（「分析中」が出続けないようにする）。
 # ==============================================================================
 
 class WeeklyReflectionCompleteService
-  def initialize(reflection:, user:, was_locked:, corrections: nil)
+  # skip_ai: true のとき、AI分析ジョブを登録しない（AIなしで完了）
+  # 省略時は false なので、既存の呼び出し（create アクション）の動きは変わらない。
+  def initialize(reflection:, user:, was_locked:, corrections: nil, skip_ai: false)
     @reflection  = reflection
     @user        = user
     @was_locked  = was_locked
     @corrections = corrections&.to_h || {}
+    @skip_ai     = skip_ai
   end
 
   def call
     ApplicationRecord.with_transaction do
+      # ── AI分析状態の修正で追加 ─────────────────────────────────────────
+      # AIなしで完了する場合は、保存と同時に「AI分析をしなかった日時」を記録する。
+      # save! の前にセットするので、追加の UPDATE は発生しない。
+      @reflection.ai_skipped_at = Time.current if @skip_ai
+      # ──────────────────────────────────────────────────────────────────────
       @reflection.save!
       apply_numeric_corrections! unless @corrections.blank?
       WeeklyReflectionHabitSummary.create_all_for_reflection!(@reflection)
@@ -49,8 +66,15 @@ class WeeklyReflectionCompleteService
       # crisis_detected: true を含めて返す
       { success: true, error: nil, crisis_detected: true }
     else
-      # 通常の場合: AI 分析ジョブをエンキューする
-      enqueue_analysis_job_if_eligible
+      # ── AI分析状態の修正で変更 ───────────────────────────────────────
+      # AIなしで完了する場合は、ジョブを登録しない。
+      # それ以外は、これまでどおり条件を満たせばジョブを登録する。
+      if @skip_ai
+        Rails.logger.info "[WeeklyReflectionCompleteService] AIなしで完了したため AI 分析ジョブを登録しません: weekly_reflection_id=#{@reflection.id}"
+      else
+        enqueue_analysis_job_if_eligible
+      end
+      # ──────────────────────────────────────────────────────────────────
       { success: true, error: nil, crisis_detected: false }
     end
     # ────────────────────────────────────────────────────────────────────────
@@ -116,17 +140,21 @@ class WeeklyReflectionCompleteService
   end
   # ────────────────────────────────────────────────────────────────────────────
 
-  # enqueue_analysis_job_if_eligible（D-4 実装済み・変更なし）
+  # enqueue_analysis_job_if_eligible（D-4 実装済み）
+  # 【AI分析状態の修正での変更】
+  #   ジョブを登録しなかった2つのケースで mark_ai_skipped! を呼ぶようにした。
   def enqueue_analysis_job_if_eligible
     user_setting = @user.user_setting
 
     unless user_setting
       Rails.logger.warn "[WeeklyReflectionCompleteService] user_setting が存在しないため AI 分析をスキップ: user_id=#{@user.id}"
+      mark_ai_skipped!
       return
     end
 
     if user_setting.ai_analysis_count >= user_setting.ai_analysis_monthly_limit
       Rails.logger.info "[WeeklyReflectionCompleteService] AI分析の月次上限のためスキップ: user_id=#{@user.id}"
+      mark_ai_skipped!
       return
     end
 
@@ -151,6 +179,21 @@ class WeeklyReflectionCompleteService
     Rails.logger.info "[WeeklyReflectionCompleteService] UpdateAiProfileJob をエンキューしました: user_id=#{@user.id}"
     # ──────────────────────────────────────────────────────────────────────────
   end
+
+  # ── AI分析状態の修正で追加: mark_ai_skipped! ──────────────────────────────
+  #
+  # 【役割】
+  #   AI分析ジョブを登録しなかったことを ai_skipped_at に記録する。
+  #   記録しないと、結果が来ないのに「AI分析中です…」が表示されてしまう。
+  #
+  # 【update_column を使う理由】
+  #   振り返りはトランザクション内で保存済み。ここでは1列だけを書き換えればよく、
+  #   バリデーションやコールバック（キャッシュ削除）をもう一度走らせる必要がない。
+  #   書き込みは振り返り完了時の1回だけなので、Neon の負荷はほぼ増えない。
+  def mark_ai_skipped!
+    @reflection.update_column(:ai_skipped_at, Time.current)
+  end
+  # ────────────────────────────────────────────────────────────────────────────
 
   def complete_last_week_reflection!
     last_week_start = WeeklyReflection.current_week_start_date - 7.days

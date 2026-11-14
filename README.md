@@ -118,6 +118,7 @@ flowchart LR
 [![Rails 8.1・Ruby 3.4.10 最新化](https://img.shields.io/badge/Rails_8.1_%2F_Ruby_3.4.10-最新化・Dependabot導入-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-2-security-final-check)
 [![I-3 本番動作確認](https://img.shields.io/badge/I--3_本番動作確認-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-3-production-check)
 [![I-4 README・ドキュメント最終更新](https://img.shields.io/badge/I--4_READMEドキュメント最終更新-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/i-4-readme-docs-final-update)
+[![ログイン保持・アクセシビリティ改善](https://img.shields.io/badge/ログイン保持・アクセシビリティ改善-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/remember-me-login)
 [![本リリース進捗](https://img.shields.io/badge/本リリース進捗-70%2F70_ISSUE完了-10b981?style=flat-square)]()
 
 <br>
@@ -253,6 +254,16 @@ flowchart LR
 | #I-2 | セキュリティ最終確認（Brakeman 0件 / 認可 / Strong Parameters / OmniAuth CSRF / CSV署名トークン / ai_context） | 2026-07-26 | feature/i-2-security-final-check |
 | #I-3 | 本番動作確認（Render 本番の最終スモーク：本番設定/ENV 監査・Sentry 本番エラー修正・ストリークの cron 非依存化・CSP(blob/LINE)・/up ヘルスチェック・Lighthouse 対応・gem 脆弱性一括更新） | 2026-08-30 | feature/i-3-production-check |
 | #I-4 | README・ドキュメント最終更新（本リリース機能反映・技術スタック実バージョン化・既知の制限事項の刷新・スクリーンショット更新・README分割スリム化・本番Groqモデル廃止対応＋全プロバイダ失敗のSentry検知追加） | 2026-09-05 | feature/i-4-readme-docs-final-update |
+
+<br>
+
+#### ✨ リリース後の追加改善
+
+<br>
+
+| 内容 | 完了日 | ブランチ |
+|:---|:---:|:---|
+| ログインしたままにする（メール・Google・LINE 対応・保持30日スライド／最長180日・設定画面で端末ごと／全端末の解除・ログアウト/パスワードリセット/退会で無効化）＋ アクセシビリティ改善（fieldset/legend・aria-pressed・label 関連付け・id 重複解消・dialog 属性）＋「AIなしで完了」した週に「AI分析中」が出続ける不具合と気分スコア保存漏れの修正 | 2026-11-14 | feature/remember-me-login |
 
 <br>
 
@@ -432,7 +443,9 @@ Purpose / Mission / Vision / Value を登録し、AI が習慣・タスクとの
 |:---|:---|
 | ユーザー登録 | メールアドレス・パスワードで新規登録 |
 | ログイン / ログアウト | bcrypt による安全な認証 |
-| セッション管理 | `reset_session` によるセッション固定攻撃対策 |
+| セッション管理 | `reset_session` によるセッション固定攻撃対策。「ログインしたままにする」なしの場合はブラウザを閉じるとログアウト |
+| ログインしたままにする | チェックすると最後の利用から30日（使うたびに延長・最長180日）ログインを保持。メールアドレス・Google・LINE のどのログインでも利用可能 |
+| ログイン保持の管理 | 設定画面から「この端末」「すべての端末」のログイン保持を解除。ログアウト・パスワードリセット・退会時は自動で解除 |
 
 <br>
 
@@ -496,7 +509,7 @@ Purpose / Mission / Vision / Value を登録し、AI が習慣・タスクとの
 | ハンバーガーメニュー | モバイルでのナビゲーション |
 | トースト通知 | 操作結果をフェードアウトアニメーション付きで表示 |
 | カスタムエラーページ | 404 / 422 / 500 エラーページをカスタムデザインで表示 |
-| アクセシビリティ | WCAG 2.1 AA 基準準拠（スキップリンク・ARIA 属性・キーボード操作対応） |
+| アクセシビリティ | WCAG 2.1 AA 基準準拠（スキップリンク・ARIA 属性・キーボード操作対応）。選択式の項目を `fieldset` / `legend` でグループ化し、色・アイコンの選択状態を `aria-pressed` で読み上げ、モーダルに `role="dialog"` を付与 |
 
 <br>
 
@@ -706,6 +719,18 @@ ISSUE ごとの設計判断・実装ポイント・工夫は、以下の分割�
 | テーブル名 | 説明 | 状態 |
 |:---|:---|:---:|
 | `solid_cache_entries` | Solid Cache のキャッシュ保存領域（Redis不要・Neon 内に作成・キーは `key_hash` のユニークインデックスで検索） | ✅ 追加済み |
+
+<br>
+
+### リリース後の追加テーブル・カラム（ログイン保持・AI分析状態）
+
+<br>
+
+| テーブル | 追加内容 | 目的 |
+|:---|:---|:---|
+| `remember_tokens`（新規） | `user_id`・`token_digest`（UNIQUE）・`expires_at`・`last_used_at` | ログイン保持用。1端末1行。トークンそのものではなく SHA-256 のハッシュだけを保存。ユーザー削除時は `on_delete: :cascade` |
+| `users` | `auth_version`（integer・default 0） | ログイン世代番号。すべての端末のログイン保持解除・パスワードリセット・退会で +1 し、古い番号のセッションを無効化 |
+| `weekly_reflections` | `ai_skipped_at`（datetime） | AI 分析をしなかった日時。「AI分析中」の誤表示を防ぐ判定に使用 |
 
 <br>
 
@@ -1053,6 +1078,8 @@ Render 無料プランのスリープを避けるため、外部監視サービ�
 | PDCA ロックの発動タイミング | **月曜 AM4:00** 以降に前週の振り返りが未完了の場合にロックされる |
 | 振り返り入力可能期間 | 週次振り返りページは常に開けるが、ロック解除には完了が必要 |
 | 習慣の削除 | 論理削除（実データは残る）のため完全な削除はできない |
+| ログイン保持 | 端末（ブラウザ）ごとに保持する。iPhone のホーム画面アプリ（PWA）は Safari とは別に Cookie を保存するため、それぞれでログインが必要 |
+| AI 分析の待ち時間 | 振り返り完了から30分たっても AI 分析の結果が無い場合は「分析中」ではなく「結果を用意できませんでした」と表示する |
 
 <br>
 
@@ -1081,6 +1108,9 @@ Groq のモデル名は環境変数 `GROQ_MODEL` で切り替え可能にして�
 | SQL インジェクション対策 | Active Record のプレースホルダー使用（生 SQL なし） |
 | Strong Parameters | `params.permit()` で許可するパラメータを明示 |
 | セッション管理 | `httponly: true` / `secure: true`（本番）/ `same_site: :lax` |
+| ログイン保持（Remember me） | Cookie には推測できないトークンのみを `cookies.encrypted` で保存し、DB にはハッシュ（SHA-256）だけを保存。改ざん・期限切れ・退会済みでは自動ログインせず、自動ログイン時も `reset_session` でセッション固定攻撃を防止 |
+| 全端末のログアウト | `users.auth_version`（ログイン世代番号）でセッションを一括無効化。パスワードリセット・退会時に自動実行 |
+| DB 負荷への配慮 | ログイン保持期間の延長は1日1回まで（アクセスごとに DB へ書き込まない） |
 | 認可制御 | `current_user.habits.find` で他ユーザーのデータへのアクセスを遮断 |
 | エラーメッセージ設計 | I18n（`ja.yml`）でメッセージを管理。重複メール時は存在を推測されにくい文言に変更 |
 | メールバリデーション | 最大255文字制限・DB レベルの UNIQUE 制約で二重防御 |
@@ -1110,6 +1140,7 @@ habitflow/
 ├── app/
 │   ├── controllers/          # 認証・習慣・タスク・振り返り・PMVV・グラフ・設定・CSV 等の各コントローラ
 │   │   └── concerns/
+│   │       └── remember_login.rb    # ログイン保持（log_in / log_out / 自動ログイン）
 │   ├── models/               # user / habit / habit_record / task / ai_analysis / user_purpose 等
 │   │   └── concerns/
 │   │       └── crisis_detector.rb   # #D-5: 危機ワード検出モジュール
@@ -1205,7 +1236,7 @@ docker compose exec web bin/rails test
 <br>
 
 ```
-868 runs, 2309 assertions, 0 failures, 0 errors, 0 skips
+930 runs, 2557 assertions, 0 failures, 0 errors, 0 skips
 
 ```
 
@@ -1245,6 +1276,8 @@ docker compose exec web bin/rails test
 | `user_setting_test.rb` | ユーザー設定・AI レート制限・通知設定 |
 | `notification_log_test.rb` | 通知ログ・record_success/record_failure |
 | `password_reset_token_test.rb` | トークン生成・検証・期限切れ・多重発行防止（token_digest） |
+| `remember_token_test.rb` | ログイン保持トークンの発行・ハッシュ照合・期限切れ・端末数上限・期限の延長（1日1回） |
+| `weekly_reflection_ai_status_test.rb` | AI 分析状態（分析中／AIなしで完了／30分経過）の判定 |
 | `concerns/crisis_detector_test.rb` | 危機ワード検出・誤検出ガード・両モデル対応 |
 
 <br>
@@ -1334,7 +1367,11 @@ docker compose exec web bin/rails test
 | ファイル | 内容 |
 |:---|:---|
 | `user_auth_flow_test.rb` / `user_registration_test.rb` / `user_login_test.rb` | 登録→ログイン→ログアウトのフロー |
-| `omniauth_login_flow_test.rb` | OmniAuth（Google/LINE）コールバック→セッション→遷移 |
+| `omniauth_login_flow_test.rb` | OmniAuth（Google/LINE）コールバック→セッション→遷移・「ログインしたままにする」の引き継ぎ |
+| `remember_login_email_test.rb` | ログイン保持（チェックあり/なし・自動ログイン・改ざん/期限切れ Cookie の拒否・ログアウト） |
+| `remember_login_settings_test.rb` | 設定画面の端末/全端末解除・パスワードリセット・退会での無効化 |
+| `habit_form_accessibility_test.rb` / `settings_accessibility_test.rb` / `habit_record_accessibility_test.rb` / `ai_limit_modal_accessibility_test.rb` | ラベル関連付け・fieldset/legend・aria-pressed・id 重複・dialog 属性 |
+| `weekly_reflection_ai_status_test.rb` | 「AIなしで完了」でジョブを登録しない・気分スコア保存・一覧/ダッシュボードのバナー切り替え |
 | `habit_full_flow_test.rb` / `habit_creation_test.rb` / `habit_management_test.rb` / `habit_deletion_test.rb` | 習慣の作成・管理・削除フロー |
 | `habit_daily_record_test.rb` / `habit_record_instant_save_test.rb` | 日次記録・即時保存フロー |
 | `numeric_habit_flow_test.rb` | 数値型習慣の記録→進捗→ダッシュボード表示 |
@@ -1504,7 +1541,7 @@ docker compose exec web bin/rails db:test:prepare
 
 <br>
 
-181 項目を超える開発の教訓（マイグレーション運用・Docker・トランザクション設計・<br>
+189 項目を超える開発の教訓（マイグレーション運用・Docker・トランザクション設計・<br>
 AI 失敗前提設計・セキュリティなど）をまとめています。
 
 <br>

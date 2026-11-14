@@ -41,13 +41,31 @@
 #
 # 【5. セッション管理】
 #   - config/application.rb で Cookie のセキュリティ設定を明示化
-#     (secure, httponly, same_site: :lax, expire_after: 30.days)
-#   - ログイン時: reset_session でセッション固定攻撃を防止
-#   - ログアウト時: reset_session でセッションデータを完全消去
-#   - current_user は session[:user_id] からのみ取得（JWT等は使わない）
+#     (secure, httponly, same_site: :lax。expire_after なし = ブラウザを閉じると消える)
+#   - ログイン時: reset_session でセッション固定攻撃を防止（concerns/remember_login.rb の log_in）
+#   - ログアウト時: reset_session でセッションデータを完全消去（同 log_out）
+#   - current_user は session[:user_id] から取得（JWT等は使わない）
+#   - ログイン保持（remember me）追加:
+#       「ログインしたままにする」でログインした端末だけ、暗号化 Cookie のトークンで
+#       セッションが切れたあとも自動ログインする（30日・使うたびに延長・最長180日）。
+#       DB にはトークンの SHA-256 値だけを保存する（concerns/remember_login.rb）。
+#       自動ログイン時も reset_session でセッション固定攻撃を防止する。
+#   - session[:auth_version] と users.auth_version を比べ、
+#     すべての端末からのログアウト・パスワードリセット・退会のあとに
+#     古いセッションを無効にする
 # ============================================================
 
 class ApplicationController < ActionController::Base
+  # ============================================================
+  # ログイン保持追加: ログイン・ログアウト・自動ログインの共通処理を読み込む
+  # ============================================================
+  #
+  # include RememberLogin:
+  #   app/controllers/concerns/remember_login.rb のメソッド
+  #   （log_in / log_out / user_from_session / user_from_remember_cookie など）を
+  #   すべてのコントローラーで使えるようにする。
+  include RememberLogin
+
   # ============================================================
   # セキュリティ設定
   # ============================================================
@@ -99,19 +117,34 @@ class ApplicationController < ActionController::Base
   private
 
   # ----------------------------------------------------------
-  # current_user
+  # current_user（ログイン保持対応で変更）
   # ----------------------------------------------------------
-  # セッションに保存された user_id を元に、現在ログイン中の
-  # ユーザーを取得して返します。
-  # ||= を使ってメモ化しています。同じリクエスト内で2回以上呼ばれても
-  # DBへの問い合わせは1回だけです。
+  # 現在ログイン中のユーザーを取得して返します。
+  #
+  # 【取得の順番】
+  #   ① user_from_session:
+  #        セッションの user_id からユーザーを取得する（通常はここで決まる）。
+  #        退会済み・世代番号（auth_version）不一致の場合はログアウト扱いにする。
+  #   ② user_from_remember_cookie:
+  #        ①で見つからなかったときだけ、ログイン保持の Cookie で自動ログインする。
+  #        Cookie がない人は DB にアクセスせずに終わる。
+  #   どちらも concerns/remember_login.rb に定義している。
+  #
+  # 【defined?(@current_user) でメモ化する理由】
+  #   以前の ||= は、結果が nil（未ログイン）のときに覚えておけないため、
+  #   同じリクエスト内で呼ばれるたびに処理をやり直してしまう。
+  #   ログイン保持の確認まで毎回走らないよう、
+  #   「nil だった」という結果も含めて1リクエスト1回だけ実行する。
   #
   # 【セキュリティ上の意味】
   # session[:user_id] は Rails が暗号化した Cookie から取得する。
   # 攻撃者が Cookie を改ざんしても、復号に失敗するため user_id を
   # 書き換えることはできない（Rails の暗号化セッションの恩恵）。
+  # ログイン保持の Cookie も同じく暗号化しており、改ざんされたものは使われない。
   def current_user
-    @current_user ||= User.find_by(id: session[:user_id]) if session[:user_id]
+    return @current_user if defined?(@current_user)
+
+    @current_user = user_from_session || user_from_remember_cookie
   end
 
   # ----------------------------------------------------------

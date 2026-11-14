@@ -75,24 +75,29 @@ module RunteqGraduationProject
     # 【same_site】
     #   CSRF（クロスサイトリクエストフォージェリ）対策の追加層。
     #   :strict → 外部サイトからのリクエストには Cookie を一切送らない
-    #   :lax    → 外部サイトからの GET リクエストには Cookie を送る（推奨）
+    #   :lax    → 外部サイトからの GET（画面遷移）には Cookie を送る（推奨）
     #   :none   → 常に Cookie を送る（非推奨）
-    #   HabitFlow は外部 OAuth 連携がないため :lax で十分。
+    #   Google / LINE ログインのコールバックは「外部サイトから戻ってくる GET」のため、
+    #   :strict だとセッションが送られず、ログイン処理が正しく動かない。
+    #   LINE やメールの通知リンクから開いたときも同様のため :lax にする。
     #
-    # 【expire_after】
-    #   セッションの有効期限。
-    #   nil（デフォルト）はブラウザを閉じるまで有効。
-    #   習慣管理アプリはUXと安全性のバランスから 14.days を選択。
-    #   （金融系: 30分 / EC: 7日 / SNS: 14日 / 習慣管理: 14日が目安）
-    #   将来的に「ログイン状態を保持する」チェックボックスを
-    #   実装する場合は、チェックなし: 1日 / あり: 30日 のように
-    #   セッション長を分けることを検討する。
+    # 【expire_after を指定しない理由（ログイン保持の導入で変更）】
+    #   以前は expire_after: 14.days を指定しており、
+    #   全員がブラウザを閉じても14日間ログインしたままになっていた。
+    #   「ログインしたままにする」チェックボックスを導入したため、
+    #   セッション Cookie は「ブラウザを閉じると消える Cookie」に戻す。
+    #     チェックなし: ブラウザを閉じたらログアウト（共用のパソコンでも安全）
+    #     チェックあり: 別の暗号化 Cookie（_habitflow_remember）で
+    #                   30日間（使うたびに延長・最長180日）ログインを保持する
+    #   長期間のログインは、サーバー側で取り消せるトークン（remember_tokens テーブル）に任せ、
+    #   セッション Cookie 自体は短く保つ（OWASP の推奨に沿った分担）。
+    #   ※ すでに14日の期限付きで配られている Cookie は、
+    #     次にセッションが書き直されたときに期限なしの Cookie に置き換わる。
     config.session_store :cookie_store,
                          key: "_habitflow_session",
                          secure: Rails.env.production?,
                          httponly: true,
-                         same_site: :lax,
-                         expire_after: 14.days
+                         same_site: :lax
 
     config.i18n.default_locale = :ja
 

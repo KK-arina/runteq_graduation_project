@@ -8,8 +8,26 @@
     render :new 時にフォームのURLが相対パスになる問題があった。
     そのため、モーダル内に complete_without_ai 専用フォームを持ち、
     メインフォームの入力値を JavaScript でコピーして送信する方式に変更。
+
+  【locals（アクセシビリティ修正で追加）】
+    variant: "desktop" または "mobile"
+      このパーシャルはパソコン用とスマホ用で2回表示されるため、
+      id の末尾に variant を付けてページ内で重ならないようにする。
+      渡されなかった場合は "desktop" として扱う（local_assigns.fetch）。
+
+  【id を変えても送信内容が変わらない理由】
+    hidden 項目の name（reflection_comment など）は変えていないため、
+    complete_without_ai アクションが受け取るパラメータは以前と同じ。
+    JavaScript も id ではなく data-field 属性で hidden 項目を探している。
+
+  【AI分析状態の修正での変更】
+    気分スコア（mood）の hidden 項目を追加した。
+    以前は mood を送っていなかったため、「AIなしで完了」すると
+    フォームで選んだ気分スコアが保存されず、気分グラフに反映されなかった。
+    complete_without_ai_params は以前から :mood を許可している。
   ==============================================================================
 %>
+<% variant = local_assigns.fetch(:variant, "desktop") %>
 
 <div class="p-5">
 
@@ -17,7 +35,12 @@
   <div class="flex items-start justify-between mb-4 gap-2">
     <div class="flex items-start gap-2 flex-1 min-w-0">
       <span class="text-xl flex-shrink-0 mt-0.5" aria-hidden="true">⚠️</span>
-      <h2 class="text-base font-bold text-gray-900 leading-snug" id="ai-limit-modal-title">
+      <%#
+        見出しの id（アクセシビリティ修正で variant 付きに変更）:
+          ai-limit-modal-title-desktop / ai-limit-modal-title-mobile になる。
+          モーダル本体の aria-labelledby がこの id を参照し、ダイアログの名前として読み上げる。
+      %>
+      <h2 class="text-base font-bold text-gray-900 leading-snug" id="ai-limit-modal-title-<%= variant %>">
         今月のAI分析回数の上限に達しました
       </h2>
     </div>
@@ -74,7 +97,7 @@
     <%#
       「AIなしで振り返りを完了する」専用フォーム
       complete_without_ai に直接 POST する独立したフォーム。
-      メインフォームの入力値は Stimulus の copyAndSubmit() で
+      メインフォームの入力値は Stimulus の submitWithoutAi() で
       hidden フィールドにコピーしてから送信する。
       data-ai-limit-modal-target="submitForm" で JS から参照する。
     %>
@@ -87,11 +110,21 @@
         hidden フィールド: メインフォームの入力値を JS でコピーする先。
         初期値は空文字。submitWithoutAi() が呼ばれたときに
         メインフォームの各フィールドの値をここにセットする。
+
+        id（アクセシビリティ修正で variant 付きに変更）:
+          何も指定しないと Rails が id="reflection_comment" などを自動で付け、
+          パソコン用とスマホ用で重複していた。
+          ai_limit_desktop_reflection_comment のように variant を含めて重ならないようにする。
+          name（送信される項目名）は以前のままなので、サーバー側の受け取りは変わらない。
+
+        mood（AI分析状態の修正で追加）:
+          気分スコア。空のまま送られた場合は nil として保存される（任意入力のため問題なし）。
       %>
-      <%= f.hidden_field :reflection_comment,   value: "", data: { field: "reflection_comment" } %>
-      <%= f.hidden_field :direct_reason,        value: "", data: { field: "direct_reason" } %>
-      <%= f.hidden_field :background_situation, value: "", data: { field: "background_situation" } %>
-      <%= f.hidden_field :next_action,          value: "", data: { field: "next_action" } %>
+      <%= f.hidden_field :reflection_comment,   value: "", id: "ai_limit_#{variant}_reflection_comment",   data: { field: "reflection_comment" } %>
+      <%= f.hidden_field :direct_reason,        value: "", id: "ai_limit_#{variant}_direct_reason",        data: { field: "direct_reason" } %>
+      <%= f.hidden_field :background_situation, value: "", id: "ai_limit_#{variant}_background_situation", data: { field: "background_situation" } %>
+      <%= f.hidden_field :next_action,          value: "", id: "ai_limit_#{variant}_next_action",          data: { field: "next_action" } %>
+      <%= f.hidden_field :mood,                 value: "", id: "ai_limit_#{variant}_mood",                 data: { field: "mood" } %>
 
       <%#
         送信ボタン

@@ -109,3 +109,16 @@ application.register("analytics-chart", AnalyticsChartController)
 // H-5追加: オンボーディング習慣テンプレート選択コントローラー
 import OnboardingTemplateController from "./onboarding_template_controller"
 application.register("onboarding-template", OnboardingTemplateController)
+
+// ログイン保持追加: ログイン画面の「ログインしたままにする」連携コントローラー
+// 【役割】
+//   チェックボックスの状態を Google / LINE ボタンのフォームの送信先 URL に
+//   ?remember_me=1 / 0 として反映する（OmniAuth がコールバックまで引き継ぐ）。
+// 【登録名 "remember-me" について】
+//   ビュー側の data-controller="remember-me" / data-remember-me-target と一致させる。
+//   ここの名前とビューの名前がずれると、エラーにならずに何も動かないので注意。
+// 【なぜ手動登録するのか】
+//   このファイルは手動登録方式のため、新しいコントローラーは
+//   ここに import と register を追加しないと読み込まれない。
+import RememberMeController from "./remember_me_controller"
+application.register("remember-me", RememberMeController)
