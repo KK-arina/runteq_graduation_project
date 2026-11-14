@@ -4199,3 +4199,14 @@ OmniAuth は認証開始時のリクエスト（`/auth/google_oauth2?remember_me
 
 「結果がまだ無い＝処理中」という判定だけでは、最初から処理しない場合や処理が失敗した場合に、表示が永久に「処理中」のままになる。<br>
 「処理しなかった」ことを記録する列（`ai_skipped_at`）と、待つ上限時間（30分）を用意し、判定を1つのメソッドにまとめて全画面で共有する。
+
+<br>
+
+### 190. Turbo の「読み込み中止」は AbortError として Sentry に届くことがある
+
+<br>
+
+Turbo は、読み込み中に別の画面への移動が始まると、前の読み込みを `AbortController` で中止する。<br>
+この `AbortError: signal is aborted without reason` は正常な中止だが、LINE アプリ内ブラウザ（Android WebView）などでは「未処理の Promise」として Sentry に届いた。<br>
+中止のときは `turbo:fetch-request-error` が発火しないため、通信断と同じ「同一オブジェクトで判定」はできない。<br>
+`Sentry.addEventProcessor` で「名前が `AbortError`」かつ「スタックトレースに Turbo のファイルを含む」ものだけを除外し、アプリ自身の `AbortError` やスタックトレースの無いエラーは送る（見逃さない側に倒す）。
