@@ -4122,3 +4122,80 @@ TTFB が支配的なら未使用 JS 削減や minify を頑張ってもスコア
 `bundler-audit` の実行ファイルは Docker の PATH に無いことがあり、`bundle audit`（サブコマンド）も認識されない場合がある。<br>
 `docker compose exec web bundle exec bundle-audit check --update` が確実。<br>
 CI/手元で定期実行し、`No vulnerabilities found` を保つ（Dependabot と併用で二重の監視）。
+
+<br>
+
+### 182. ログイン保持は「Cookie にトークン、DB にハッシュ」で持つ（Remember me）
+
+<br>
+
+Cookie にユーザーIDを入れると、値を書き換えるだけで他人になりすませる。<br>
+推測できないランダムなトークンを Cookie（`cookies.encrypted`）に入れ、DB には SHA-256 のハッシュだけを保存する。<br>
+Cookie が盗まれても DB 側で無効化でき、DB が漏れてもハッシュから Cookie を作り直せない。<br>
+トークン自体が十分に長いランダム値なので、パスワードのような bcrypt ではなく SHA-256 で十分（照合も速い）。
+
+<br>
+
+### 183. 他の端末のセッションは「世代番号」で一括無効化する（Remember me）
+
+<br>
+
+Rails 標準の Cookie ストアのセッションは、サーバー側から個別に消せない。<br>
+`users.auth_version` を用意し、ログイン時にセッションへ番号を保存して、リクエストのたびに一致を確認する。<br>
+パスワードリセット・退会・「すべての端末を解除」で番号を1つ進めると、古い番号を持つ全端末がログアウト扱いになる。
+
+<br>
+
+### 184. 無料 DB（Neon）ではアクセスのたびに書き込まない（Remember me）
+
+<br>
+
+保持期間の延長（スライド）を毎リクエストで `UPDATE` すると、Compute の使用量が増える。<br>
+`last_used_at` が1日以上前のときだけ延長することで、書き込みを1日1回に抑えた。<br>
+トークンのローテーション（使うたびに再発行）も、タブの復元や Turbo の先読みで同時アクセスが起きると正しいトークンを失うため、採用しなかった。
+
+<br>
+
+### 185. OmniAuth で外部サイトを往復しても値を引き継ぐには `omniauth.params`（Remember me）
+
+<br>
+
+OmniAuth は認証開始時のリクエスト（`/auth/google_oauth2?remember_me=1` など）のクエリをセッションに保存し、コールバックで `request.env["omniauth.params"]` として返す。<br>
+チェックボックスの状態は Stimulus でボタンのフォームの URL に反映し、値が無い場合（古い画面など）は「現状維持」として扱う。
+
+<br>
+
+### 186. セッション Cookie に期限を付けないと「ブラウザを閉じたらログアウト」になる（Remember me）
+
+<br>
+
+`session_store` に `expire_after` を指定すると、セッション Cookie に有効期限が付き、ブラウザを閉じても残る。<br>
+「チェックなしならブラウザ終了でログアウト」にするため `expire_after` を外し、長く保持したい場合だけ別の Cookie（ログイン保持トークン）を使う。
+
+<br>
+
+### 187. 同じパーシャルを2回描画すると `id` が重複する（アクセシビリティ）
+
+<br>
+
+パソコン用とスマホ用で同じパーシャルを描画すると、中の `id`（見出し・`hidden_field` の自動 id）が重複し、`label` や `aria-labelledby` の参照先があいまいになる。<br>
+`render ..., variant: "desktop"` のように locals を渡して `id` に接尾辞を付ける。`name`（送信される項目名）は変えないので、サーバー側の受け取りには影響しない。<br>
+また、Stimulus の `this.xxxTarget` は同名ターゲットの**最初の1つ**を返すため、押されたボタンの近くのフォームは `event.currentTarget.closest("form")` で取る。
+
+<br>
+
+### 188. Ruby の `a.b = x rescue nil` は代入の右辺にしか効かない
+
+<br>
+
+`obj.foo = nil rescue nil` は `obj.foo = (nil rescue nil)` と解釈されるため、`foo=` が存在しない `NoMethodError` は捕まえられない。<br>
+コンソールに貼った複数行の途中で例外が起きると、それ以降の行は実行されない。
+
+<br>
+
+### 189. 「処理中」の表示には「しない」と「時間切れ」の状態を用意する（AI分析状態）
+
+<br>
+
+「結果がまだ無い＝処理中」という判定だけでは、最初から処理しない場合や処理が失敗した場合に、表示が永久に「処理中」のままになる。<br>
+「処理しなかった」ことを記録する列（`ai_skipped_at`）と、待つ上限時間（30分）を用意し、判定を1つのメソッドにまとめて全画面で共有する。
