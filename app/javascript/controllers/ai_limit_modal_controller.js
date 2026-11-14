@@ -3,6 +3,14 @@
 // ==============================================================================
 // AiLimitModalController（D-6）
 // ==============================================================================
+//
+// 【アクセシビリティ修正での変更】
+//   submitWithoutAi で、押されたボタンが入っているフォームを使うようにした。
+//   以前は this.submitFormTarget（同じ名前のターゲットのうち最初の1つ＝パソコン用）を
+//   使っていたため、スマホでボタンを押しても、隠れているパソコン用のフォームに値を
+//   コピーして送信していた。結果は同じだったが、押したボタンと送信するフォームを
+//   一致させておくほうが分かりやすく、今後どちらかのフォームだけ変更しても壊れない。
+// ==============================================================================
 
 import { Controller } from "@hotwired/stimulus"
 
@@ -10,7 +18,7 @@ export default class extends Controller {
   static targets = [
     "desktopModal",
     "mobileSheet",
-    "submitForm"   // complete_without_ai 専用フォーム
+    "submitForm"   // complete_without_ai 専用フォーム（パソコン用とスマホ用の2つ）
   ]
 
   static values = {
@@ -43,10 +51,10 @@ export default class extends Controller {
   // ============================================================
   //
   // 【処理の流れ】
-  //   1. ページ内のメインフォーム（振り返り入力フォーム）を取得する
-  //   2. メインフォームの各フィールドの値を
-  //      モーダル内の hidden フィールドにコピーする
-  //   3. モーダル内の complete_without_ai 専用フォームを送信する
+  //   1. 押されたボタンが入っているフォーム（complete_without_ai 専用）を特定する
+  //   2. ページ内のメインフォーム（振り返り入力フォーム）の各値を
+  //      そのフォームの hidden フィールドにコピーする
+  //   3. そのフォームを送信する
   //
   // 【なぜメインフォームを書き換えないのか】
   //   render :new で描画されたページでは form の action が
@@ -54,6 +62,14 @@ export default class extends Controller {
   //   独立した専用フォームを使う方が確実。
   submitWithoutAi(event) {
     event.preventDefault()
+
+    // ── 送信するフォームを特定する（アクセシビリティ修正で変更）──────────────
+    // event.currentTarget.closest("form"):
+    //   押されたボタンから外側へたどり、いちばん近い form を取得する。
+    //   スマホで押せばスマホ用、パソコンで押せばパソコン用のフォームになる。
+    // || this.submitFormTarget:
+    //   万一 form が見つからない場合は、以前と同じく最初のフォームを使う（安全策）。
+    const form = event.currentTarget.closest("form") || this.submitFormTarget
 
     // ── メインフォームから入力値を取得する ──────────────────────────────
     // data-field 属性でフィールドを特定する（IDやnameの変動に対応）
@@ -72,8 +88,8 @@ export default class extends Controller {
          input[name="weekly_reflection[${fieldName}]"]`
       )
 
-      // モーダル内の hidden フィールドを取得する
-      const targetField = this.submitFormTarget.querySelector(
+      // 送信するフォームの中の hidden フィールドを取得する
+      const targetField = form.querySelector(
         `input[data-field="${fieldName}"]`
       )
 
@@ -85,7 +101,7 @@ export default class extends Controller {
     // ────────────────────────────────────────────────────────────────────────
 
     // complete_without_ai 専用フォームを送信する
-    this.submitFormTarget.submit()
+    form.submit()
   }
 
   closeOnOverlay(event) {

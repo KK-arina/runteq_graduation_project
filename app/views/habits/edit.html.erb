@@ -23,6 +23,20 @@
     ③ 週次目標値 number inputのフォントサイズを text-sm → text-base（16px）に変更（理由は①と同様）
 
     縦余白（py-3）は既に適切なサイズが設定されているため変更なし。
+
+    ============================================================
+    【アクセシビリティ修正での変更点】
+    ============================================================
+
+    ① 「カラー」「アイコン」「除外する曜日」の見出しを label から fieldset + legend に変更
+       （理由は new.html.erb と同じ。選択肢のグループの見出しには legend を使う）
+
+    ② 「記録タイプ」の見出しを label から p に変更
+       【理由】編集画面の記録タイプは変更できない「表示だけ」の項目で、
+         選択する入力欄がない。結び付ける相手のいない label は警告の対象になるため、
+         ふつうの見出し（p）にする。見た目のクラスは同じ。
+
+    ③ カラー・アイコンのボタンに aria-pressed を追加（理由は new.html.erb と同じ）
     ==============================================================================
 %>
 <% content_for :title, "習慣を編集 | HabitFlow" %>
@@ -44,6 +58,7 @@
                 data: { controller: "habit-form" } do |f| %>
 
     <%# 習慣名（H-6: text-base に変更） %>
+    <%# 入力欄1つの見出しなので label のままでよい（for="habit_name" と id="habit_name" が一致） %>
     <div>
       <%= f.label :name, "習慣名",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
@@ -60,10 +75,16 @@
                     transition-colors" %>
     </div>
 
-    <%# カラー選択（B-6 追加） %>
-    <div>
-      <label class="block text-sm font-semibold text-gray-700 mb-1">カラー</label>
-      <p class="text-xs text-gray-500 mb-3">習慣カードの左ボーダーの色を選択してください</p>
+    <%# カラー選択（B-6 追加・アクセシビリティ修正で fieldset 化） %>
+    <%#
+      fieldset: 色ボタン8個と hidden の color を1つのグループにまとめる。
+      legend: グループの見出し。以前の label と同じ見た目のクラスを付けている。
+      aria-describedby: 説明文（id="habit_color_hint"）をグループの説明として読み上げさせる。
+      min-w-0: fieldset が中身より狭くならない初期設定を解除し、スマホではみ出さないようにする。
+    %>
+    <fieldset class="min-w-0" aria-describedby="habit_color_hint">
+      <legend class="block text-sm font-semibold text-gray-700 mb-1">カラー</legend>
+      <p id="habit_color_hint" class="text-xs text-gray-500 mb-3">習慣カードの左ボーダーの色を選択してください</p>
 
       <%= f.hidden_field :color,
             value: @habit.color.presence || "#3b82f6",
@@ -83,6 +104,10 @@
       <% selected_color = @habit.color.presence || "#3b82f6" %>
       <div class="flex gap-3 flex-wrap">
         <% habit_colors.each do |color_item| %>
+          <%#
+            aria-pressed（アクセシビリティ修正で追加）:
+              DB に保存されている色のボタンだけ "true" にする。
+          %>
           <button type="button"
                   class="w-9 h-9 rounded-full transition-all
                         focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400
@@ -91,16 +116,17 @@
                   data-action="click->habit-form#selectColor"
                   data-color-value="<%= color_item[:value] %>"
                   data-habit-form-target="colorSwatch"
+                  aria-pressed="<%= selected_color == color_item[:value] %>"
                   aria-label="<%= color_item[:label] %>を選択">
           </button>
         <% end %>
       </div>
-    </div>
+    </fieldset>
 
-    <%# アイコン選択（B-6 追加） %>
-    <div>
-      <label class="block text-sm font-semibold text-gray-700 mb-1">アイコン</label>
-      <p class="text-xs text-gray-500 mb-3">習慣カードに表示する絵文字を選択してください</p>
+    <%# アイコン選択（B-6 追加・アクセシビリティ修正で fieldset 化） %>
+    <fieldset class="min-w-0" aria-describedby="habit_icon_hint">
+      <legend class="block text-sm font-semibold text-gray-700 mb-1">アイコン</legend>
+      <p id="habit_icon_hint" class="text-xs text-gray-500 mb-3">習慣カードに表示する絵文字を選択してください</p>
 
       <%= f.hidden_field :icon,
             value: @habit.icon.presence || "📋",
@@ -110,26 +136,35 @@
                         "💻", "🌱", "🍎", "😴", "🎯", "⭐",
                         "📋", "🔥", "💡", "🎨"] %>
 
+      <%# selected_icon: class と aria-pressed で同じ判定を使い、食い違いを防ぐための変数 %>
+      <% selected_icon = @habit.icon.presence || "📋" %>
+
       <div class="grid grid-cols-8 sm:grid-cols-8 gap-2">
         <% habit_icons.each do |icon| %>
           <button type="button"
                   class="aspect-square flex items-center justify-center text-xl
                          border-2 rounded-lg transition-all
                          focus:outline-none focus:ring-2 focus:ring-blue-500
-                         <%= (@habit.icon.presence || '📋') == icon ? 'border-blue-500 bg-blue-50 scale-110' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50' %>"
+                         <%= selected_icon == icon ? 'border-blue-500 bg-blue-50 scale-110' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50' %>"
                   data-action="click->habit-form#selectIcon"
                   data-icon-value="<%= icon %>"
                   data-habit-form-target="iconButton"
+                  aria-pressed="<%= selected_icon == icon %>"
                   aria-label="<%= icon %>を選択">
             <%= icon %>
           </button>
         <% end %>
       </div>
-    </div>
+    </fieldset>
 
-    <%# measurement_type（変更不可） %>
+    <%# measurement_type（変更不可・アクセシビリティ修正で見出しを p に変更） %>
+    <%#
+      編集画面では記録タイプを変更できないため、選べる入力欄がない。
+      結び付く相手のいない label は警告の対象になるので、ふつうの見出し（p）にする。
+      送信用の値は下の hidden_field で送る（これまでと同じ）。
+    %>
     <div>
-      <label class="block text-sm font-semibold text-gray-700 mb-1">記録タイプ</label>
+      <p class="block text-sm font-semibold text-gray-700 mb-1">記録タイプ</p>
       <div class="px-4 py-3 border border-gray-200 rounded-xl bg-gray-50 text-sm text-gray-500">
         <%= @habit.check_type? ? "☑️ チェック型（やった/やらない）" : "🔢 数値型（#{@habit.unit}で記録）" %>
         <span class="ml-2 text-xs text-gray-500">※ 過去データの整合性のため変更できません</span>
@@ -184,10 +219,14 @@
       </div>
     <% end %>
 
-    <%# 除外する曜日 %>
-    <div>
-      <label class="block text-sm font-semibold text-gray-700 mb-1">除外する曜日</label>
-      <p class="text-xs text-gray-500 mb-3">実施しない曜日を選択してください（達成率の計算から除外されます）</p>
+    <%# 除外する曜日（アクセシビリティ修正で fieldset 化） %>
+    <%#
+      チェックボックス7個のグループなので fieldset + legend にする。
+      説明文と注意書きの2つを aria-describedby で結び付ける（空白区切りで複数指定できる）。
+    %>
+    <fieldset class="min-w-0" aria-describedby="habit_excluded_days_hint habit_excluded_days_note">
+      <legend class="block text-sm font-semibold text-gray-700 mb-1">除外する曜日</legend>
+      <p id="habit_excluded_days_hint" class="text-xs text-gray-500 mb-3">実施しない曜日を選択してください（達成率の計算から除外されます）</p>
       <% selected_days = if params.key?(:excluded_day_numbers)
                            Array(params[:excluded_day_numbers]).map(&:to_i)
                          else
@@ -211,8 +250,8 @@
           </label>
         <% end %>
       </div>
-      <p class="text-xs text-gray-500 mt-2">※ 例: 土日を除外すると週5日が最大達成日数になります</p>
-    </div>
+      <p id="habit_excluded_days_note" class="text-xs text-gray-500 mt-2">※ 例: 土日を除外すると週5日が最大達成日数になります</p>
+    </fieldset>
 
     <%# ボタンエリア %>
     <div class="flex justify-end items-center gap-4 pt-2">

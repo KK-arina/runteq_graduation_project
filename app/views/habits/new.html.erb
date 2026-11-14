@@ -25,6 +25,33 @@
 
     なお、カラー選択・アイコン選択ボタンは aspect-square / w-9 h-9 で
     44px以上が確保されているため変更不要。
+
+    ============================================================
+    【アクセシビリティ修正での変更点】
+    ============================================================
+
+    ① 「カラー」「アイコン」「記録タイプ」「除外する曜日」の見出しを
+       label から fieldset + legend に変更
+       【理由】
+         label は「入力欄1つ」と結び付けるための部品で、for 属性で入力欄の id を指定する。
+         これらの見出しは「選択肢のグループ」の見出しなので、label のままだと
+         Chrome の DevTools が「どの入力欄とも結び付いていない label」と警告し、
+         スクリーンリーダーも見出しを正しく読み上げられない。
+         fieldset（グループ）と legend（グループの見出し）を使うのが HTML 標準の方法で、
+         スクリーンリーダーはグループに入ると「記録タイプ、グループ」のように読み上げる。
+       【見た目について】
+         Tailwind CSS の preflight（初期化スタイル）で fieldset の枠線と余白はリセットされる。
+         min-w-0 は、fieldset が中身の幅より狭くならない初期設定を解除し、
+         スマホの狭い画面でグリッドがはみ出さないようにするために付ける。
+
+    ② 説明文に id を付け、fieldset の aria-describedby で結び付ける
+       【理由】グループに入ったときに、見出しに続けて説明文も読み上げられるようにするため。
+
+    ③ カラー・アイコンのボタンに aria-pressed を追加
+       【理由】これまでは「選択中」を枠線の色だけで表していたため、
+         画面が見えない人には、どれが選ばれているか分からなかった。
+         aria-pressed="true" のボタンは、スクリーンリーダーが「押されています」と読み上げる。
+         選択を変えたときの切り替えは habit_form_controller.js で行う。
     ==============================================================================
 %>
 <% content_for :title, "習慣を追加 | HabitFlow" %>
@@ -48,6 +75,11 @@
                 data: { controller: "habit-form" } do |f| %>
 
     <%# 習慣名（H-3: 音声入力対応、H-6: text-base に変更） %>
+    <%#
+      ここは入力欄1つの見出しなので label のままでよい。
+      f.label :name は for="habit_name"、f.text_field :name は id="habit_name" になり、
+      正しく結び付いている。
+    %>
     <div class="relative" data-controller="voice-input">
       <%= f.label :name, "習慣名",
             class: "block text-sm font-semibold text-gray-700 mb-1" %>
@@ -82,10 +114,15 @@
       </div>
     </div>
 
-    <%# カラー選択（B-6 追加） %>
-    <div>
-      <label class="block text-sm font-semibold text-gray-700 mb-1">カラー</label>
-      <p class="text-xs text-gray-500 mb-3">習慣カードの左ボーダーの色を選択してください</p>
+    <%# カラー選択（B-6 追加・アクセシビリティ修正で fieldset 化） %>
+    <%#
+      fieldset: 色ボタン8個と hidden の color を1つのグループにまとめる。
+      legend: グループの見出し。以前の label と同じ見た目のクラスを付けている。
+      aria-describedby: 下の説明文（id="habit_color_hint"）をグループの説明として読み上げさせる。
+    %>
+    <fieldset class="min-w-0" aria-describedby="habit_color_hint">
+      <legend class="block text-sm font-semibold text-gray-700 mb-1">カラー</legend>
+      <p id="habit_color_hint" class="text-xs text-gray-500 mb-3">習慣カードの左ボーダーの色を選択してください</p>
 
       <%= f.hidden_field :color,
             value: @habit.color.presence || "#3b82f6",
@@ -110,6 +147,10 @@
             スマホのタップ誤差を考慮してカラー選択ボタンは
             gap-3 で間隔を設けることでタップしやすくしている。
             hover:scale-110 は PC のみ意味があるが残しておく。
+
+            aria-pressed（アクセシビリティ修正で追加）:
+              選択中の色は "true"、それ以外は "false" を出力する。
+              スクリーンリーダーが「押されています／押されていません」と読み上げる。
           %>
           <button type="button"
                   class="w-9 h-9 rounded-full transition-all
@@ -119,16 +160,17 @@
                   data-action="click->habit-form#selectColor"
                   data-color-value="<%= color_item[:value] %>"
                   data-habit-form-target="colorSwatch"
+                  aria-pressed="<%= selected_color == color_item[:value] %>"
                   aria-label="<%= color_item[:label] %>を選択">
           </button>
         <% end %>
       </div>
-    </div>
+    </fieldset>
 
-    <%# アイコン選択（B-6 追加） %>
-    <div>
-      <label class="block text-sm font-semibold text-gray-700 mb-1">アイコン</label>
-      <p class="text-xs text-gray-500 mb-3">習慣カードに表示する絵文字を選択してください</p>
+    <%# アイコン選択（B-6 追加・アクセシビリティ修正で fieldset 化） %>
+    <fieldset class="min-w-0" aria-describedby="habit_icon_hint">
+      <legend class="block text-sm font-semibold text-gray-700 mb-1">アイコン</legend>
+      <p id="habit_icon_hint" class="text-xs text-gray-500 mb-3">習慣カードに表示する絵文字を選択してください</p>
 
       <%= f.hidden_field :icon,
             value: @habit.icon.presence || "📋",
@@ -138,6 +180,8 @@
                         "💻", "🌱", "🍎", "😴", "🎯", "⭐",
                         "📋", "🔥", "💡", "🎨"] %>
 
+      <% selected_icon = @habit.icon.presence || "📋" %>
+
       <%#
         grid-cols-8: スマホ（375px）でも8列に並べる。
           各セル幅 ≈ 375px / 8 ≈ 46px なので WCAG の 44px をギリギリ確保できる。
@@ -145,26 +189,42 @@
       %>
       <div class="grid grid-cols-8 sm:grid-cols-8 gap-2">
         <% habit_icons.each do |icon| %>
+          <%#
+            aria-pressed（アクセシビリティ修正で追加）:
+              選択中のアイコンは "true"、それ以外は "false"。
+              selected_icon を変数にしたのは、class と aria-pressed で同じ判定を
+              2回書かずに済ませ、食い違いを防ぐため。
+          %>
           <button type="button"
                   class="aspect-square flex items-center justify-center text-xl
                          border-2 rounded-lg transition-all
                          focus:outline-none focus:ring-2 focus:ring-blue-500
-                         <%= (@habit.icon.presence || '📋') == icon ? 'border-blue-500 bg-blue-50 scale-110' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50' %>"
+                         <%= selected_icon == icon ? 'border-blue-500 bg-blue-50 scale-110' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50' %>"
                   data-action="click->habit-form#selectIcon"
                   data-icon-value="<%= icon %>"
                   data-habit-form-target="iconButton"
+                  aria-pressed="<%= selected_icon == icon %>"
                   aria-label="<%= icon %>を選択">
             <%= icon %>
           </button>
         <% end %>
       </div>
-    </div>
+    </fieldset>
 
-    <%# measurement_type %>
-    <div>
-      <%= f.label :measurement_type, "記録タイプ",
-            class: "block text-sm font-semibold text-gray-700 mb-1" %>
-      <p class="text-xs text-gray-500 mb-2">習慣をどのように記録するかを選択してください</p>
+    <%# measurement_type（アクセシビリティ修正で fieldset 化） %>
+    <%#
+      以前は f.label :measurement_type を使っていたが、
+      これは for="habit_measurement_type" を出力する。
+      一方、ラジオボタンの id は habit_measurement_type_check_type と
+      habit_measurement_type_numeric_type なので、どの要素とも一致せず
+      「Incorrect use of label for」のエラーになっていた。
+      ラジオボタンのグループには fieldset + legend を使う。
+      それぞれのラジオボタンは、外側の label（カード）の中に入っているので、
+      カードのどこをタップしても選べる状態はそのまま。
+    %>
+    <fieldset class="min-w-0" aria-describedby="habit_measurement_type_hint">
+      <legend class="block text-sm font-semibold text-gray-700 mb-1">記録タイプ</legend>
+      <p id="habit_measurement_type_hint" class="text-xs text-gray-500 mb-2">習慣をどのように記録するかを選択してください</p>
       <div class="grid grid-cols-2 gap-3">
         <%#
           ラジオカードの高さ: p-4 で十分なタップ領域が確保されている。
@@ -202,7 +262,7 @@
           </div>
         </label>
       </div>
-    </div>
+    </fieldset>
 
     <%# unit（数値型のみ表示） %>
     <div data-habit-form-target="unitField"
@@ -248,10 +308,17 @@
                     transition-colors" %>
     </div>
 
-    <%# 除外する曜日 %>
-    <div>
-      <label class="block text-sm font-semibold text-gray-700 mb-1">除外する曜日</label>
-      <p class="text-xs text-gray-500 mb-3">実施しない曜日を選択してください（達成率の計算から除外されます）</p>
+    <%# 除外する曜日（アクセシビリティ修正で fieldset 化） %>
+    <%#
+      チェックボックス7個のグループなので fieldset + legend にする。
+      各チェックボックスは曜日名の label の中に入っているため、
+      スクリーンリーダーは「除外する曜日、グループ」→「月曜日、チェックボックス」のように読み上げる。
+      注意書き（※ 例: ...）も aria-describedby に含め、説明文と一緒に読み上げさせる
+      （aria-describedby には空白区切りで複数の id を書ける）。
+    %>
+    <fieldset class="min-w-0" aria-describedby="habit_excluded_days_hint habit_excluded_days_note">
+      <legend class="block text-sm font-semibold text-gray-700 mb-1">除外する曜日</legend>
+      <p id="habit_excluded_days_hint" class="text-xs text-gray-500 mb-3">実施しない曜日を選択してください（達成率の計算から除外されます）</p>
       <% selected_days = Array(params[:excluded_day_numbers]).map(&:to_i) %>
       <%#
         grid-cols-4: スマホ（375px）では4列。各セル幅 ≈ 84px で十分なタップ領域がある。
@@ -271,8 +338,8 @@
           </label>
         <% end %>
       </div>
-      <p class="text-xs text-gray-500 mt-2">※ 例: 土日を除外すると週5日が最大達成日数になります</p>
-    </div>
+      <p id="habit_excluded_days_note" class="text-xs text-gray-500 mt-2">※ 例: 土日を除外すると週5日が最大達成日数になります</p>
+    </fieldset>
 
     <%# ボタンエリア %>
     <div class="flex justify-end items-center gap-4 pt-2">

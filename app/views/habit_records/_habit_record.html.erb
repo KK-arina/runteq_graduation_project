@@ -13,6 +13,18 @@
 
     メモあり → show_memo_area = true → メモエリアを展開・💬を青色で表示
     メモなし → show_memo_area = false → メモエリアを非表示・💬をグレーで表示
+
+  【アクセシビリティ修正での変更】
+    メモ入力欄（textarea）に id="habit_memo_<習慣ID>" と autocomplete="off" を追加した。
+    ・id がないと、Chrome の DevTools が「id も name もない入力欄」として指摘する
+      （ブラウザの自動入力が欄を区別できないため）。
+    ・チェックボックス（habit_checkbox_<習慣ID>）や数値入力（habit_numeric_input_<習慣ID>）と
+      同じく習慣IDを使うので、1つの画面に習慣が並んでも id は重ならない。
+    ・メモは fetch で送信している（form ではない）ため、name は付けない。
+      保存処理は data-habit-record-target="memoTextarea" で入力欄を探しており、
+      id を追加しても動作は変わらない。
+    ・autocomplete="off": メモは毎日違う自由な文章なので、
+      ブラウザに過去の入力を候補として表示させない。
   ===========================================================================
 %>
 
@@ -161,7 +173,19 @@
          class="flex flex-col gap-1.5">
 
       <div class="flex items-start gap-2">
-        <textarea data-habit-record-target="memoTextarea"
+        <%#
+          メモ入力欄
+          id（アクセシビリティ修正で追加）:
+            習慣IDを使った重ならない id。ブラウザが入力欄を区別できるようにする。
+          autocomplete="off"（アクセシビリティ修正で追加）:
+            過去に入力したメモを候補として表示させない。
+          aria-label:
+            見える見出しがない入力欄なので、スクリーンリーダー向けに
+            「習慣メモ入力欄（習慣名）」と読み上げる名前を付けている（既存）。
+        %>
+        <textarea id="habit_memo_<%= habit.id %>"
+                  autocomplete="off"
+                  data-habit-record-target="memoTextarea"
                   data-voice-input-target="field"
                   data-action="input->habit-record#updateMemoCount"
                   maxlength="200"

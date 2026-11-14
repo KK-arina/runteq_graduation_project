@@ -130,9 +130,20 @@
                     class: "space-y-4 pt-2" do |f| %>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            ユーザー名
-          </label>
+          <%#
+            アクセシビリティ修正: 見出しを素の label から f.label に変更
+            【理由】
+              以前の label には for がなく、下の入力欄と結び付いていなかった。
+              このフォームは scope: :user なので、f.text_field :name は id="user_name" になる。
+              f.label :name を使うと Rails が for="user_name" を自動で出力し、
+              見出しと入力欄が結び付く。
+              ・スクリーンリーダーが入力欄で「ユーザー名、編集テキスト」と読み上げる
+              ・「ユーザー名」の文字をタップすると入力欄にカーソルが移る
+            入力欄1つの見出しなので、fieldset ではなく label のままが正しい形。
+            見た目のクラスは以前と同じ。
+          %>
+          <%= f.label :name, "ユーザー名",
+                class: "block text-sm font-medium text-gray-700 mb-1" %>
 
           <%#
             音声入力🎤対応のユーザー名フィールド
