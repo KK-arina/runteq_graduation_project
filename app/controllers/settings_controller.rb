@@ -5,11 +5,14 @@
 # ==============================================================================
 #
 # 【アクション一覧】
-#   GET    /settings           → show:            設定ページを表示
-#   DELETE /settings           → destroy:         退会処理を実行
-#   PATCH  /settings/profile   → update_profile:  ユーザー名を更新（G-6追加）
-#   PATCH  /settings/timezone  → update_timezone: タイムゾーンを更新（G-6追加）
-#   DELETE /settings/line      → disconnect_line: LINE通知連携を解除（G-6追加）
+#   GET    /settings                   → show:               設定ページを表示
+#   DELETE /settings                   → destroy:            退会処理を実行
+#   PATCH  /settings/profile           → update_profile:     ユーザー名を更新（G-6追加）
+#   PATCH  /settings/timezone          → update_timezone:    タイムゾーンを更新（G-6追加）
+#   DELETE /settings/line              → disconnect_line:    LINE通知連携を解除（G-6追加）
+#   POST   /settings/remember_device   → remember_device:    この端末でログインを保持する（ログイン保持追加）
+#   DELETE /settings/remember_device   → forget_device:      この端末のログイン保持をやめる（ログイン保持追加）
+#   DELETE /settings/remember_devices  → revoke_all_devices: すべての端末からログアウトする（ログイン保持追加）
 #
 # 【G-5 での変更内容】
 #   show アクションに CSV エクスポート用の件数取得を追加。
@@ -17,6 +20,12 @@
 # 【G-6 での変更内容】
 #   update_profile / update_timezone / disconnect_line アクションを追加。
 #   show アクションに @line_connected / @current_timezone / @ai_usage_rate を追加。
+#
+# 【ログイン保持（remember me）での変更内容】
+#   1. show に @remembered_device_count（ログイン保持中の端末数）を追加。
+#   2. remember_device / forget_device / revoke_all_devices アクションを追加。
+#   3. destroy（退会）で、この端末のログイン保持の Cookie も削除するようにした。
+#      （DB のトークンは UserDestroyService がまとめて削除する）
 # ==============================================================================
 class SettingsController < ApplicationController
 
@@ -74,6 +83,13 @@ class SettingsController < ApplicationController
     @habit_record_count      = current_user.habit_records.where(deleted_at: nil).count
     @task_count              = current_user.tasks.where(deleted_at: nil).count
     @weekly_reflection_count = current_user.weekly_reflections.count
+
+    # ログイン保持追加: ログイン保持中の端末数（期限切れは数えない）
+    #   .active は RememberToken モデルのスコープ（expires_at が今より後のもの）。
+    #   .count は SELECT COUNT(*) を1回発行するだけで、レコードを読み込まない。
+    #   「この端末で保持中か」はビューから remembered_on_this_device? で判定する
+    #   （concerns/remember_login.rb の helper_method）。
+    @remembered_device_count = current_user.remember_tokens.active.count
   end
 
   # ==============================================================================
@@ -190,14 +206,111 @@ class SettingsController < ApplicationController
   end
 
   # ==============================================================================
+  # ログイン保持追加: remember_device: この端末でログインを保持する
+  # POST /settings/remember_device
+  # ==============================================================================
+  #
+  # 【使う場面】
+  #   ・Google / LINE ログインのときにチェックを付け忘れた
+  #   ・新規登録した直後（登録フォームにはチェックボックスがない）
+  #   ・将来 PWA（ホーム画面に追加）で、ホーム画面アプリ側でも保持したいとき
+  #
+  # 【すでに保持中の場合に新しく発行しない理由】
+  #   押すたびにトークンが増えると、端末数の表示が実際とずれるため。
+  #
+  # 【ログイン中の人だけが実行できる理由】
+  #   before_action :require_login があるため、未ログインでは実行できない。
+  #   すでに本人確認（ログイン）が済んでいる端末に限って保持を始めるので安全。
+  def remember_device
+    if remembered_on_this_device?
+      redirect_to settings_path,
+                  notice: t("remember_login.flash.already_enabled"),
+                  status: :see_other
+      return
+    end
+
+    # remember_this_device（concerns/remember_login.rb）:
+    #   トークンを発行して DB に digest を保存し、生のトークンを暗号化 Cookie に入れる。
+    remember_this_device(current_user)
+
+    redirect_to settings_path,
+                notice: t("remember_login.flash.enabled"),
+                status: :see_other
+  end
+
+  # ==============================================================================
+  # ログイン保持追加: forget_device: この端末のログイン保持をやめる
+  # DELETE /settings/remember_device
+  # ==============================================================================
+  #
+  # 【ログアウトとの違い】
+  #   ログイン保持だけを解除し、今のログイン状態はそのまま続ける。
+  #   ブラウザを閉じたら、次回はログインが必要になる。
+  #
+  # 【ほかの端末に影響しない理由】
+  #   この端末の Cookie に対応するトークン1件だけを削除するため。
+  def forget_device
+    # forget_this_device（concerns/remember_login.rb）:
+    #   この端末のトークンを DB から削除し、Cookie も削除する。
+    forget_this_device
+
+    redirect_to settings_path,
+                notice: t("remember_login.flash.disabled"),
+                status: :see_other
+  end
+
+  # ==============================================================================
+  # ログイン保持追加: revoke_all_devices: すべての端末からログアウトする
+  # DELETE /settings/remember_devices
+  # ==============================================================================
+  #
+  # 【使う場面】
+  #   スマホを紛失したとき、共用パソコンでログインしたままにしてしまったときなど。
+  #
+  # 【処理の流れ】
+  #   ① current_user.revoke_all_logins!（User モデル）
+  #      ・このユーザーのログイン保持トークンを全端末分削除する
+  #      ・auth_version を1つ増やす → ほかの端末に残っているセッションは
+  #        世代番号が合わなくなり、次のアクセスで自動的にログアウトされる
+  #   ② この端末の Cookie を削除する（DB 側のトークンは①で削除済み）
+  #   ③ start_session_for で、この端末だけ新しい世代番号でセッションを作り直す
+  #      → 操作したこの端末はログインしたまま使い続けられる
+  #      → reset_session でセッションIDも新しくなるため、
+  #        万一このセッションIDが漏れていても使えなくなる
+  #
+  # 【flash を start_session_for の後に設定する理由】
+  #   start_session_for の中の reset_session は flash も消すため、
+  #   redirect_to の notice:（セッション作り直しの後に設定される）で渡す。
+  def revoke_all_devices
+    current_user.revoke_all_logins!
+
+    delete_remember_cookie
+    @current_remember_token = nil
+
+    start_session_for(current_user)
+
+    redirect_to settings_path,
+                notice: t("remember_login.flash.revoked_all"),
+                status: :see_other
+  end
+
+  # ==============================================================================
   # destroy: 退会処理を実行する
   # DELETE /settings
   # ==============================================================================
+  #
+  # 【ログイン保持での変更】
+  #   退会後に、この端末のログイン保持 Cookie も削除する。
+  #   DB のトークン削除と auth_version の更新は UserDestroyService が行うため、
+  #   ほかの端末のログイン保持とセッションもまとめて無効になる。
+  #   Cookie を残しても自動ログインはされない（トークンが DB にない）が、
+  #   不要な Cookie をブラウザに残さないために削除する。
   def destroy
     result = UserDestroyService.new(user: current_user).call
     if result[:success]
       reset_session
       cookies.delete(:_habitflow_session)
+      delete_remember_cookie
       redirect_to root_path,
                   notice: t("settings.destroy.success"),
                   status: :see_other

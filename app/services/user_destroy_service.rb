@@ -22,12 +22,17 @@
 #   ■ 論理削除
 #     - deleted_at    → Time.current
 #
+#   ■ ログイン保持追加: ログインの世代番号を進める
+#     - auth_version  → 現在の値 + 1
+#                       ※ ほかの端末に残っているセッションを次のアクセスで無効にする
+#
 #   ■ 統計用に匿名化して保持（物理削除しない）
 #     - habits / tasks / weekly_reflections / user_purposes / ai_analyses
 #
 #   ■ セキュリティリスクがあるため物理削除
 #     - PasswordResetToken: 退会後にパスワードリセットURLを悪用されると危険
 #     - PushSubscription:   退会後に通知が届いてしまうと危険
+#     - RememberToken:      退会後にログイン保持の Cookie で自動ログインされると危険（ログイン保持追加）
 #
 # 【Issue #A-7 との連携】
 #   ApplicationRecord.with_transaction を使いトランザクション管理する。
@@ -79,6 +84,12 @@ class UserDestroyService
       #   バリデーションとコールバックをスキップして直接DBを更新する。
       #   before_save :downcase_email など不要なコールバックを走らせない。
       #   updated_at を明示する理由: update_columns は Rails が自動更新しない。
+      #
+      # ログイン保持追加: auth_version を1つ進める
+      #   ほかの端末に残っているセッションに記録された世代番号と一致しなくなり、
+      #   次のアクセスでログアウトされる。
+      #   （current_user は User.active で退会済みを除外するため二重の守りになる）
+      #   .to_i: 念のため nil でも 0 として計算できるようにする
       @user.update_columns(
         deleted_at:      Time.current,
         name:            "退会済みユーザー",
@@ -87,6 +98,7 @@ class UserDestroyService
         line_user_id:    nil,
         provider:        "deleted",
         uid:             nil,
+        auth_version:    @user.auth_version.to_i + 1,
         updated_at:      Time.current
       )
 
@@ -94,6 +106,12 @@ class UserDestroyService
       #
       # PasswordResetToken: 退会後にパスワードリセットURLを悪用されると危険
       PasswordResetToken.where(user_id: @user.id).delete_all
+
+      # ログイン保持追加: RememberToken を全端末分削除する
+      #   退会後に、どこかの端末に残ったログイン保持の Cookie で
+      #   自動ログインされることを防ぐ。
+      #   delete_all: コールバックなしの DELETE 文1本で削除する（高速）
+      RememberToken.where(user_id: @user.id).delete_all
 
       # push_subscriptions: モデルファイルが未作成のためSanitizeしたSQLで直接削除する
       #

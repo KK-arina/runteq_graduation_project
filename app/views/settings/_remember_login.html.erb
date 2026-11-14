@@ -1,0 +1,114 @@
+<%# app/views/settings/_remember_login.html.erb %>
+<%#
+  ============================================================
+  【このパーシャルの役割】ログイン保持の設定セクション（設定ページ20番）
+  ============================================================
+
+  【表示する内容】
+    ・この端末でログインを保持しているか（保持中 / 保持していない）
+    ・ログインを保持している端末の数
+    ・「この端末でログインを保持する」または「この端末のログイン保持をやめる」ボタン
+    ・「すべての端末からログアウトする」ボタン（確認ダイアログ付き）
+
+  【locals】
+    remembered_device_count: ログイン保持中の端末数（SettingsController#show で計算）
+
+  【remembered_on_this_device? について】
+    concerns/remember_login.rb で helper_method として登録したメソッド。
+    この端末の Cookie のトークンが、ログイン中のユーザーのものかどうかを返す。
+
+  【data-settings-profile-target="otherSection"】
+    ほかのセクションと同じく、プロフィール編集中は半透明になり操作できなくなる。
+
+  【data-testid】
+    統合テストでこのセクションを特定するための目印（見た目には影響しない）。
+%>
+<section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
+         data-settings-profile-target="otherSection"
+         data-testid="remember-login-section">
+  <h2 class="text-lg font-semibold text-gray-800 mb-2">
+    <%= t("remember_login.settings.title") %>
+  </h2>
+  <p class="text-sm text-gray-500 mb-4 leading-relaxed">
+    <%= t("remember_login.settings.description") %>
+  </p>
+
+  <%#
+    ── 現在の状態の表示 ──
+    保持中は緑、保持していない場合はグレーのバッジで表示する
+    （通知設定・お休みモードのセクションと同じ見た目にそろえる）。
+  %>
+  <div class="flex flex-wrap items-center gap-2 mb-4">
+    <% if remembered_on_this_device? %>
+      <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full
+                   text-xs font-medium bg-green-100 text-green-700"
+            data-testid="remember-this-device-on">
+        🔐 <%= t("remember_login.settings.this_device_on") %>
+      </span>
+    <% else %>
+      <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full
+                   text-xs font-medium bg-gray-100 text-gray-600"
+            data-testid="remember-this-device-off">
+        <%= t("remember_login.settings.this_device_off") %>
+      </span>
+    <% end %>
+    <span class="text-xs text-gray-500">
+      <%= t("remember_login.settings.device_count", count: remembered_device_count) %>
+    </span>
+  </div>
+
+  <%#
+    ── この端末のオン / オフ ──
+    button_to:
+      Rails が小さな form を作り、POST / DELETE で送信するボタンを生成する。
+      CSRF トークンも自動で埋め込まれる。
+    min-h-[44px]:
+      タップ領域を 44px 以上にする（H-6 のスマホ対応方針と同じ）。
+    data: { disable_with: ... }:
+      送信中はボタンを押せなくして、連打による二重送信を防ぐ。
+  %>
+  <div class="mb-5">
+    <% if remembered_on_this_device? %>
+      <%= button_to t("remember_login.settings.disable_button"),
+          forget_device_settings_path,
+          method: :delete,
+          class: "w-full sm:w-auto min-h-[44px] px-4 py-2 text-sm font-medium
+                  text-gray-700 bg-white border border-gray-300 rounded-md
+                  hover:bg-gray-50 transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
+          data: { disable_with: "処理中..." } %>
+    <% else %>
+      <%= button_to t("remember_login.settings.enable_button"),
+          remember_device_settings_path,
+          method: :post,
+          class: "w-full sm:w-auto min-h-[44px] px-4 py-2 text-sm font-medium
+                  text-white bg-blue-600 rounded-md
+                  hover:bg-blue-700 transition-colors
+                  focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
+          data: { disable_with: "処理中..." } %>
+    <% end %>
+  </div>
+
+  <%#
+    ── すべての端末からログアウト ──
+    form: { data: { turbo_confirm: ... } }:
+      Turbo の確認ダイアログを表示する。「キャンセル」を押すと送信されない。
+      button_to の場合、turbo_confirm はボタンではなく form 側に付ける必要がある。
+    赤系の色:
+      取り消せない操作であることを見た目でも伝えるため。
+  %>
+  <div class="pt-4 border-t border-gray-100">
+    <%= button_to t("remember_login.settings.revoke_all_button"),
+        revoke_all_devices_settings_path,
+        method: :delete,
+        form: { data: { turbo_confirm: t("remember_login.settings.revoke_all_confirm") } },
+        class: "w-full sm:w-auto min-h-[44px] px-4 py-2 text-sm font-medium
+                text-red-700 bg-white border border-red-300 rounded-md
+                hover:bg-red-50 transition-colors
+                focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2",
+        data: { disable_with: "処理中..." } %>
+    <p class="mt-2 text-xs text-gray-500 leading-relaxed">
+      <%= t("remember_login.settings.revoke_all_hint") %>
+    </p>
+  </div>
+</section>

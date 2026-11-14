@@ -10,6 +10,10 @@
   - タイムゾーン設定セクション追加
   - AIコスト使用状況セクション追加
   - 20-2番: プロフィール編集中の状態（他セクション非活性化）追加
+
+  【ログイン保持（remember me）での変更内容】
+  - ソーシャルアカウント連携の下に「ログインの保持」セクションを追加
+    （内容は settings/_remember_login.html.erb に分けている）
   ============================================================
 %>
 <% content_for :title, "アカウント設定 | HabitFlow" %>
@@ -324,6 +328,16 @@
       </div>
     </div>
   </section>
+
+  <%#
+    ============================================================
+    ログイン保持追加: ログインの保持セクション
+    ============================================================
+    中身は settings/_remember_login.html.erb に分けている。
+    remembered_device_count: SettingsController#show で数えた、ログイン保持中の端末数。
+  %>
+  <%= render "settings/remember_login",
+             remembered_device_count: @remembered_device_count %>
 
   <%# G-3 由来: 通知設定へのナビゲーション %>
   <section class="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6"
