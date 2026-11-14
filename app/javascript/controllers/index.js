@@ -122,3 +122,16 @@ application.register("onboarding-template", OnboardingTemplateController)
 //   ここに import と register を追加しないと読み込まれない。
 import RememberMeController from "./remember_me_controller"
 application.register("remember-me", RememberMeController)
+
+// ホーム画面に追加（PWA）追加: 端末に合わせて「ホーム画面に追加」の案内を出し分けるコントローラー
+// 【役割】
+//   設定ページの案内カードと、ログイン画面の注意書き（ホーム画面から開いたときだけ表示）で使う。
+//   Chrome / Edge の「インストールできます」の合図（beforeinstallprompt）は、
+//   このファイルがアプリ起動時に読み込まれた時点で受け取り始める。
+// 【登録名 "pwa-guide" について】
+//   ビュー側の data-controller="pwa-guide" / data-pwa-guide-target と一致させる。
+// 【なぜ手動登録するのか】
+//   このファイルは手動登録方式のため、新しいコントローラーは
+//   ここに import と register を追加しないと読み込まれない。
+import PwaGuideController from "./pwa_guide_controller"
+application.register("pwa-guide", PwaGuideController)

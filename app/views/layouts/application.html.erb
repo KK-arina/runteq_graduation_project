@@ -94,6 +94,75 @@
     %>
     <meta name="description"
           content="<%= content_for(:description) || "HabitFlow は、習慣の記録・振り返り（PDCA）・目標管理を、AI のサポートとともに無理なく続けられる習慣化アプリです。" %>">
+    <%#
+      ==========================================================================
+      ホーム画面に追加（PWA）: マニフェスト・アイコン・テーマ色
+      ==========================================================================
+      【なぜ public/ の静的ファイルを直接指すのか（Rails 8 標準の rails/pwa を使わない理由）】
+        Rails 経由（routes の rails/pwa#manifest）で返すと、リクエストが
+        Rack::Attack を通り、レート制限のカウント（Rails.cache = Solid Cache = Neon）が
+        増えるたびに DB へ書き込みが発生する。
+        public/ のファイルは、ミドルウェアの最初の方にある ActionDispatch::Static が
+        そのまま返すため、Rack::Attack にも Rails にも DB にも届かない。
+
+      【ファイル名に -v1 を付けている理由】
+        production.rb で public/ のファイルは1年間キャッシュ（immutable）される。
+        アイコンを変えるときは -v2 のようにファイル名ごと変える（design/pwa/README.md）。
+
+      【Service Worker を入れない理由】
+        オフライン用のキャッシュは、古い習慣データの表示や、Turbo・ログイン状態との
+        食い違いを起こしうる。現在の Chrome / Edge / Safari は、Service Worker が
+        なくてもホーム画面に追加（インストール）できる。
+
+      manifest:
+        アプリ名・起動ページ（/dashboard）・表示方法（standalone）・アイコンを
+        ブラウザに伝える。
+    %>
+    <link rel="manifest" href="/pwa/manifest-v1.webmanifest">
+    <%#
+      theme-color:
+        Android のステータスバー、PC でインストールしたアプリのタイトルバー、
+        iPhone のホーム画面アプリのステータスバーの色になる（テーマ色の青）。
+    %>
+    <meta name="theme-color" content="#2563eb">
+    <%#
+      application-name / apple-mobile-web-app-title:
+        ホーム画面のアイコンの下に表示される名前。
+        付けないと、ページの <title>（例:「ダッシュボード | HabitFlow」）が
+        そのまま名前の候補になってしまう。
+    %>
+    <meta name="application-name" content="HabitFlow">
+    <meta name="apple-mobile-web-app-title" content="HabitFlow">
+    <%#
+      mobile-web-app-capable / apple-mobile-web-app-capable:
+        「ホーム画面から開いたら、アドレスバーなしのアプリ画面で開く」という指定。
+        今のブラウザはマニフェストの display: standalone を読むが、
+        マニフェストを読まない古い iPhone のために apple- の方も残す。
+        apple- だけを書くと Chrome の開発者ツールに「非推奨」の警告が出るため、
+        標準の mobile-web-app-capable も一緒に書く。
+    %>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <%#
+      apple-mobile-web-app-status-bar-style:
+        iPhone のホーム画面アプリで、画面上部（時計や電波の表示）の見た目。
+        default は「ステータスバーの下からページを表示する」設定。
+        black-translucent にすると画面が上に重なり、余白の調整（safe-area）が
+        必要になるため、Bottom Navigation と干渉しない default を選ぶ。
+    %>
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <%#
+      icon:
+        ブラウザのタブに出す小さいアイコン（ファビコン）。
+        public/favicon.ico は残しておき、PNG に対応したブラウザはこちらを使う。
+    %>
+    <link rel="icon" type="image/png" sizes="32x32" href="/pwa/favicon-32-v1.png">
+    <%#
+      apple-touch-icon:
+        iPhone / iPad でホーム画面に追加したときのアイコン（180x180・全面塗り）。
+        iPhone はマニフェストの icons より、こちらを優先して使う。
+    %>
+    <link rel="apple-touch-icon" sizes="180x180" href="/pwa/apple-touch-icon-v1.png">
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
     <%#

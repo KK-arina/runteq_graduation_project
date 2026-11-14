@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  design/pwa/icon-any.svg
+  ============================================================
+  HabitFlow アプリアイコンの原本（purpose: any 用）
+  ============================================================
+  【この画像から作る PNG】
+    public/pwa/icon-512-v1.png（512x512）
+    public/pwa/icon-192-v1.png（192x192）
+    public/pwa/favicon-32-v1.png（32x32・ブラウザのタブ用）
+  【デザインの意味】
+    白い円の矢印 … 毎日くり返す習慣と、PDCA の「回す」流れ
+    中央のチェック … 習慣の達成
+    背景の青 … テーマ色 #2563eb（Tailwind の blue-600）
+  【角を丸くしている理由】
+    purpose: any のアイコンは、PC の Chrome / Edge などで
+    そのまま（切り抜かれずに）表示される。
+    角丸にしておくと、ほかのアプリのアイコンと並べたときに自然に見える。
+  【座標について】
+    viewBox="0 0 512 512" の座標で描いている。
+    rsvg-convert で 192 や 32 に縮小しても、線の太さは比率どおりに縮む。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 背景: 角丸（rx=112）の青い四角 -->
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="#2563eb"/>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <!-- 円の矢印の本体: 中心(256,256)・半径132 の円を、右上だけ少し空けて描く -->
+    <path d="M 370.2 190 A 132 132 0 1 1 322 141.7" stroke-width="34"/>
+    <!-- 矢じり: 円の終わり（右上）で、回る向きを示す -->
+    <path d="M 312 98 L 336 150 L 282 166" stroke-width="34"/>
+    <!-- 中央のチェックマーク -->
+    <path d="M 198 262 L 240 304 L 318 218" stroke-width="38"/>
+  </g>
+</svg>

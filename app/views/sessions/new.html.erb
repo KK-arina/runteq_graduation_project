@@ -37,6 +37,16 @@
      Google / LINE フォームの送信先 URL に remember_me=1 または 0 を付ける。
      OmniAuth は URL のクエリをログイン完了時まで引き継ぐため、
      コールバックで「保持するかどうか」を判断できる。
+
+  ============================================================
+  【ホーム画面に追加（PWA）での変更点】
+  ============================================================
+
+  ① カードの先頭に、ホーム画面から開いたときだけ表示する注意書きを追加
+     （shared/_pwa_login_notice.html.erb）
+     ホーム画面アプリで「ログインしたままにする」を付けずにログインすると、
+     アプリを閉じるたびにログアウトされるため、ログインする場所で案内する。
+     iPhone では Google / LINE ログインが完了しない場合の手順も表示する。
 %>
 <% content_for :title, "ログイン | HabitFlow" %>
 
@@ -55,6 +65,14 @@
   %>
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
        data-controller="remember-me">
+
+    <%#
+      ホーム画面に追加（PWA）追加: ホーム画面から開いたときだけ表示する注意書き
+      ふつうのブラウザで開いたときは hidden のまま表示されない。
+      「ログインしたままにする」チェックボックスと同じカードの中に置き、
+      案内とチェックボックスが近くにあるようにする。
+    %>
+    <%= render "shared/pwa_login_notice" %>
 
     <%= form_with url: login_path,
                   scope: :session,

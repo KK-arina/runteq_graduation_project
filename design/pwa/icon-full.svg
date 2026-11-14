@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  design/pwa/icon-full.svg
+  ============================================================
+  iPhone / iPad 用アイコン（apple-touch-icon）の原本
+  ============================================================
+  【この画像から作る PNG】
+    public/pwa/apple-touch-icon-v1.png（180x180）
+    public/apple-touch-icon.png と public/apple-touch-icon-precomposed.png（同じ画像のコピー）
+  【icon-any.svg との違い】
+    角丸にせず、背景の青を四隅まで塗りつぶしている（全面塗り）。
+  【全面塗りにする理由】
+    iPhone はアイコンの角を自動で丸く切り抜く。
+    画像の角が透明だと、その部分が黒く表示されてしまうため、
+    透明な部分のない四角い画像にする必要がある。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 背景: 角丸なしで全面を青で塗る -->
+  <rect x="0" y="0" width="512" height="512" fill="#2563eb"/>
+  <g fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <!-- 絵柄は icon-any.svg と同じ（円の矢印・矢じり・チェック） -->
+    <path d="M 370.2 190 A 132 132 0 1 1 322 141.7" stroke-width="34"/>
+    <path d="M 312 98 L 336 150 L 282 166" stroke-width="34"/>
+    <path d="M 198 262 L 240 304 L 318 218" stroke-width="38"/>
+  </g>
+</svg>

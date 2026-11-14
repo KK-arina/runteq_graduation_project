@@ -55,9 +55,44 @@
 #   reset_session（セッション固定攻撃対策）とログイン保持の処理を
 #   ログイン方法（メール・Google・LINE・新規登録）ごとに書くと、入れ忘れが起きやすい。
 #   log_in / log_out に1か所でまとめ、どの入口でも同じ安全対策がかかるようにした。
+#
+# ============================================================
+# 古い画面からのログアウト（CSRF トークンの不一致）への対応
+# ============================================================
+#
+# 【起きていたこと】
+#   同じブラウザで、タブ（またはホーム画面アプリのウィンドウ）を2つ開き、
+#   片方でログインし直すと、log_in の reset_session でセッションが作り直され、
+#   CSRF トークンも新しくなる。もう片方の画面には古いトークンが残っているため、
+#   そこで「ログアウト」を押すと InvalidAuthenticityToken になり、
+#   422 の「セッションが期限切れです」画面が表示されていた。
+#
+# 【対応（CSRF の検証そのものは外さない）】
+#   ログアウトのときだけ、この例外を受け止めて分かりやすく案内する。
+#   ・まだログインしている → ログアウトせずに元の画面へ戻し、
+#     「もう一度ログアウトを押してください」と表示する。
+#     戻った画面は新しいトークンで描き直されるので、2回目は成功する。
+#   ・すでにログアウトしている → 通常のログアウトと同じくトップページへ。
+#   ログイン（create）など、ほかの操作は今までどおり 422 の画面にする。
+#
+# 【CSRF の検証を外さない（skip_forgery_protection を使わない）理由】
+#   検証を外すと、悪意のあるサイトが利用者のブラウザから DELETE /logout を送り、
+#   勝手にログアウトさせることができてしまう（ログアウト CSRF）。
+#   トークンが合わないときは「何もしないで案内だけする」ことで、安全性は今のまま保つ。
 # ============================================================
 
 class SessionsController < ApplicationController
+  # ============================================================
+  # CSRF トークンの不一致を、このコントローラーで受け止める
+  # ============================================================
+  #
+  # 【rescue_from を ApplicationController と重ねて書いてよい理由】
+  #   rescue_from は「あとから登録したもの」が優先される。
+  #   子クラス（このコントローラー）で登録すると、ApplicationController の
+  #   rescue_from ActionController::InvalidAuthenticityToken（render_422）より先に使われる。
+  #   ほかのコントローラーには影響しない。
+  rescue_from ActionController::InvalidAuthenticityToken, with: :handle_invalid_authenticity_token
+
   # ============================================================
   # GET /login
   # ログインフォームを表示する
@@ -169,6 +204,50 @@ class SessionsController < ApplicationController
   end
 
   private
+
+  # ============================================================
+  # handle_invalid_authenticity_token（古い画面からのログアウト対応で追加）
+  # ============================================================
+  #
+  # 【役割】
+  #   CSRF トークンが一致しないときに呼ばれる（rescue_from で登録）。
+  #   ログアウトのときだけ分かりやすく案内し、ほかは今までどおり 422 の画面にする。
+  #
+  # 【この時点の状態】
+  #   CSRF の検証は、どの before_action よりも先に実行される。
+  #   そのため destroy の中身（log_out）は一切実行されていない（＝ログアウトしていない）。
+  def handle_invalid_authenticity_token(exception)
+    # ログアウト以外（ログインの送信など）は、ApplicationController の render_422 に任せる
+    return render_422(exception) unless action_name == "destroy"
+
+    # ログには事実だけを残す（トークンの値などは出さない）
+    Rails.logger.info "[SessionsController#destroy] CSRF トークンが一致しないため、ログアウトせずに案内を表示しました"
+
+    # ── すでにログアウトしている場合 ──────────────────────────────
+    #   例: ほかのウィンドウでログアウトしたあと、古い画面でログアウトを押した。
+    #   利用者の目的（ログアウト）はもう達成されているので、通常のログアウト後と同じ表示にする。
+    #   logged_in? は、ログイン保持の Cookie があればここで自動ログインする点に注意
+    #   （その場合は「まだログインしている」側の処理になる）。
+    unless logged_in?
+      redirect_to root_path, status: :see_other, notice: "ログアウトしました"
+      return
+    end
+
+    # ── まだログインしている場合 ──────────────────────────────────
+    # redirect_back_or_to（Rails 7 以降の標準メソッド）:
+    #   前の画面（Referer ヘッダーの URL）に戻す。
+    #   Referer が無い場合や、自分のサイト以外の URL の場合は、
+    #   第1引数の dashboard_path に戻す（外部サイトへ飛ばされない＝オープンリダイレクト対策）。
+    # status: :see_other（303）:
+    #   DELETE のあとに Turbo が GET で画面を読み直すようにする。
+    #   読み直した画面には新しい CSRF トークンが入るので、もう一度押せばログアウトできる。
+    # flash: { warning: ... }:
+    #   layout の flash 表示で、黄色の ⚠️（warning）として表示する。
+    #   エラー（alert・赤）ではなく「もう一度押してください」という案内のため。
+    redirect_back_or_to dashboard_path,
+                        status: :see_other,
+                        flash: { warning: t("sessions.destroy.stale_page") }
+  end
 
   # ============================================================
   # determine_redirect_path（E-4 追加）

@@ -1,0 +1,52 @@
+<%# app/views/shared/_pwa_login_notice.html.erb %>
+<%#
+  ============================================================
+  ホーム画面に追加（PWA）: ログイン画面の注意書き
+  ============================================================
+  【このパーシャルの役割】
+    ホーム画面のアイコンから開いたときだけ、ログイン画面に注意書きを出す。
+    ・すべての端末: 「ログインしたままにする」にチェックしてログインする案内
+      （チェックしないと、アプリを閉じるたびにログアウトされるため）
+    ・iPhone / iPad のみ: Google / LINE ログインが完了しない場合の案内
+      （iPhone のホーム画面アプリは Safari と Cookie が別のため、
+        外部サイトのログインが Safari 側で開くと、アプリ側でログインできないことがある）
+
+  【外側と内側の div】
+    外側の div: PwaGuideController を接続するだけの入れ物（中身が非表示のときは場所を取らない）
+    内側の div: ホーム画面から開いているときだけ表示する注意書き本体
+
+  【hidden を付けている理由】
+    ふつうにブラウザで開いている人には関係のない案内なので、最初は非表示にする。
+    PwaGuideController がホーム画面から開いていると判定したときだけ表示する。
+    JavaScript が動かない場合は表示されないが、ログインそのものには影響しない。
+
+  【role="note"】
+    スクリーンリーダーに「補足説明」であることを伝える。
+    エラーではないので role="alert"（すぐ読み上げる）は使わない。
+
+  文言は config/locales/pwa_install.ja.yml の pwa_install.login で管理する。
+  ============================================================
+%>
+<div data-controller="pwa-guide">
+  <div hidden
+       data-pwa-guide-target="standaloneOnly"
+       data-testid="pwa-login-notice"
+       role="note"
+       class="mb-5 p-3 rounded-md border border-blue-200 bg-blue-50 text-blue-900">
+    <p class="flex gap-1.5 text-xs leading-relaxed">
+      <span class="flex-shrink-0" aria-hidden="true">📲</span>
+      <span><%= t("pwa_install.login.remember_hint") %></span>
+    </p>
+    <%#
+      iPhone / iPad のホーム画面アプリのときだけ表示する追加の注意
+      data-pwa-guide-target="iosStandaloneOnly":
+        PwaGuideController が「iPhone / iPad かつホーム画面から開いている」ときだけ表示する
+    %>
+    <p hidden
+       data-pwa-guide-target="iosStandaloneOnly"
+       class="mt-2 flex gap-1.5 text-xs leading-relaxed">
+      <span class="flex-shrink-0" aria-hidden="true">⚠️</span>
+      <span><%= t("pwa_install.login.ios_oauth_hint") %></span>
+    </p>
+  </div>
+</div>
