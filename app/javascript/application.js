@@ -17,7 +17,10 @@ import "controllers"
 //
 // 【このブロックがやること】
 //   1. Turbo 起因の通信失敗エラーの「オブジェクトそのもの」を記録する
-//   2. Sentry へ送る直前に、記録したものと同一のエラーだけを除外する
+//   2. Sentry へ送る直前に、次のものだけを除外する
+//      2-a. 1 で記録したものと同一のエラー（通信断）
+//      2-b. Turbo が読み込みを中止したときの AbortError
+//           （ブランチ: fix/sentry-ignore-turbo-abort で追加）
 //   3. Turbo のページ遷移が 503 を受けたら、1回だけ通常遷移でやり直す
 //
 // 【即時実行関数 (() => { ... })() で囲む理由】
@@ -60,7 +63,49 @@ import "controllers"
   })
 
   // ---------------------------------------------------------------------------
-  // 2. Sentry: 記録した「同一のエラー」だけを送信対象から外す
+  // 2-b 用: Turbo が読み込みを中止したときの AbortError かどうかを判定する
+  //         （ブランチ: fix/sentry-ignore-turbo-abort で追加）
+  // ---------------------------------------------------------------------------
+  //
+  // 【なぜ起きるのか】
+  //   Turbo は、ページの読み込み中に別の画面への移動が始まると、
+  //   前の読み込みを AbortController で中止して新しい移動を優先する。
+  //   このとき出る AbortError（"signal is aborted without reason"）は正常な中止の合図だが、
+  //   LINE アプリ内ブラウザ（Android WebView）などでは「未処理の Promise」として表に出て、
+  //   Sentry の自動収集に拾われることがある。利用者への影響は無い。
+  //
+  // 【なぜ 1 と同じ「同一オブジェクト」の方式を使わないのか】
+  //   Turbo は中止のときに turbo:fetch-request-error を発火しないため、
+  //   事前にエラーを記録できない。そこで、Sentry に届いたエラーの中身で判定する。
+  //
+  // 【除外するのは次の2つをどちらも満たすときだけ】
+  //   ① エラーの名前が "AbortError"（読み込みの中止）
+  //   ② スタックトレース（エラーが起きた場所の記録）に Turbo のファイルが含まれる
+  //      本番では importmap により /assets/turbo.min-xxxx.js のようなファイル名になる。
+  //   アプリ自身のコードで起きた AbortError や、スタックトレースが無いエラーは
+  //   除外しない（＝本物の不具合を見逃さない安全側）。
+  const TURBO_FILE_PATTERN = /turbo/i
+
+  const isTurboAbortError = (event, original) => {
+    // ① 名前が AbortError でなければ対象外
+    //    （DOMException も Error と同じく name を持つ）
+    if (!original || original.name !== "AbortError") return false
+
+    // ② Sentry のイベントに入っているスタックトレースを調べる
+    //    event.exception.values: エラー（原因が連なる場合は複数）の一覧
+    //    stacktrace.frames: 呼び出し元から順に並んだ「どのファイルの何行目か」の一覧
+    const values = (event && event.exception && event.exception.values) || []
+
+    return values.some((value) => {
+      const frames = (value.stacktrace && value.stacktrace.frames) || []
+      return frames.some((frame) =>
+        TURBO_FILE_PATTERN.test(frame.filename || frame.abs_path || "")
+      )
+    })
+  }
+
+  // ---------------------------------------------------------------------------
+  // 2. Sentry: 除外対象のエラーだけを送信対象から外す
   // ---------------------------------------------------------------------------
 
   // Sentry は本番のみ layout の <head> で読み込まれる（#I-5）。
@@ -74,10 +119,15 @@ import "controllers"
       // hint.originalException = Sentry が捕まえた元のエラーオブジェクト
       const original = hint && hint.originalException
 
-      // 時刻ではなく「同一オブジェクトかどうか」で判定する。
+      // 2-a. 時刻ではなく「同一オブジェクトかどうか」で判定する。
       // 同じ時刻に起きた別の fetch の本物のエラー（CSP ブロック等）は
       // 別オブジェクトなので除外されず、きちんと Sentry に届く。
       if (original && typeof original === "object" && turboNetworkErrors.has(original)) {
+        return null
+      }
+
+      // 2-b. Turbo が読み込みを中止したときの AbortError（fix/sentry-ignore-turbo-abort で追加）
+      if (isTurboAbortError(event, original)) {
         return null
       }
 
