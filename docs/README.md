@@ -99,4 +99,4 @@
 | 2026-03-10 | Issue #40 対応として MVPレビュー用ドキュメントを追加・初版作成 |
 | 2026-09-23 | #I-4: README を3ファイルに分割・スクショ更新・MVP検証レポートを archive に統合 |
 | 2026-11-14 | ログイン保持（Remember me）・アクセシビリティ改善・AI分析状態の修正を features / technical-notes / lessons-learned に追記 |
-| 2026-11-14 | ホーム画面に追加（PWA）・古い画面からのログアウトの修正を features / technical-notes（191〜197）/ lessons-learned に追記 |
+| 2026-11-14 | ホーム画面に追加（PWA）・古い画面からのログアウトの修正・omniauth の脆弱性対応を features / technical-notes（191〜198）/ lessons-learned に追記 |

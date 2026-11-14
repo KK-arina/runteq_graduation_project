@@ -4279,3 +4279,13 @@ iPhone のホーム画面アプリは、Safari とは別に Cookie・localStorag
 同じブラウザのタブやホーム画面アプリのウィンドウで、片方がログインし直すと、`reset_session` で CSRF トークンが新しくなり、もう片方の画面の「ログアウト」は `InvalidAuthenticityToken`（422）になる。<br>
 ログアウトだけ CSRF の検証を外すと、外部サイトから勝手にログアウトさせられる（ログアウト CSRF）ため、検証は残す。<br>
 `SessionsController` だけで `rescue_from` し、ログイン中なら `redirect_back_or_to`（自分のサイトの Referer のみ）で元の画面に戻して「もう一度押してください」と案内し、すでにログアウト済みならトップページへ移動する。ほかのアクションは今までどおり 422 の画面にする。
+
+<br>
+
+### 198. OmniAuth のコールバック URL は、本番では `full_host` でホストを固定する（CVE-2026-63183）
+
+<br>
+
+omniauth 2.2.0 より前は、Google / LINE に渡すコールバック URL を、リクエストの Host / X-Forwarded-Host ヘッダーから組み立てるため、ヘッダーを偽装されると書き換えられるおそれがあった。<br>
+gem を 2.2 以上に更新し（Gemfile で下限を明示）、さらに本番では `OmniAuth.config.full_host` に `APP_HOST` を設定して、ヘッダーの値を使わないようにした。<br>
+Rails の `config.hosts`（ホスト検証）を本番で設定していないアプリでは、gem の更新だけに頼らず、ホストを固定しておくと安全。
