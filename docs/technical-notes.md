@@ -4210,3 +4210,72 @@ Turbo は、読み込み中に別の画面への移動が始まると、前の�
 この `AbortError: signal is aborted without reason` は正常な中止だが、LINE アプリ内ブラウザ（Android WebView）などでは「未処理の Promise」として Sentry に届いた。<br>
 中止のときは `turbo:fetch-request-error` が発火しないため、通信断と同じ「同一オブジェクトで判定」はできない。<br>
 `Sentry.addEventProcessor` で「名前が `AbortError`」かつ「スタックトレースに Turbo のファイルを含む」ものだけを除外し、アプリ自身の `AbortError` やスタックトレースの無いエラーは送る（見逃さない側に倒す）。
+
+<br>
+
+### 191. ホーム画面用のマニフェストは `public/` の静的ファイルで返す（PWA）
+
+<br>
+
+Rails 8 標準の `rails/pwa#manifest`（ルート経由）で返すと、リクエストが `Rack::Attack` を通り、レート制限のカウント（`Rails.cache` = Solid Cache = Neon）でアクセスのたびに DB へ書き込む。<br>
+`public/` のファイルは、ミドルウェアの先頭近くにある `ActionDispatch::Static` がそのまま返すため、`Rack::Attack`・Rails・DB のどれにも届かない（`bin/rails middleware` の並び順で確認できる）。<br>
+マニフェストは中身が変わらない JSON なので、ERB で組み立てる必要もない。
+
+<br>
+
+### 192. Service Worker が無くてもホーム画面に追加できる・Lighthouse の PWA カテゴリは廃止（PWA）
+
+<br>
+
+Chrome はメニューからのインストールについて、Service Worker（fetch ハンドラー）の条件を Android は 108、パソコンは 112 から外している。<br>
+Safari（iPhone）は Service Worker の有無に関係なくホーム画面に追加できる。<br>
+Lighthouse は Chrome のインストール条件の変更に合わせて PWA カテゴリを削除したため、確認は Chrome DevTools の「Application」→「Manifest」で行う。
+
+<br>
+
+### 193. 1年キャッシュされる `public/` のファイルは、ファイル名にバージョンを付ける（PWA）
+
+<br>
+
+`production.rb` の `public_file_server.headers` で、`public/` のファイルには `max-age=1年, immutable` が付く。<br>
+アイコンやマニフェストを同じ名前のまま差し替えると、ブラウザは古いものを使い続けるため、`-v1` → `-v2` のようにファイル名ごと変える。<br>
+インストール済みのアプリは、マニフェストの `id`（`/`）が同じなら、URL が変わっても同じアプリとして更新される。
+
+<br>
+
+### 194. `.webmanifest` の Content-Type は Rack の対応表で決まる（PWA）
+
+<br>
+
+`ActionDispatch::Static` は拡張子から `Rack::Mime::MIME_TYPES` を引いて Content-Type を決める。<br>
+W3C の正式な種類は `application/manifest+json` なので、初期化ファイルで `MIME_TYPES[".webmanifest"] ||= ...` と登録し、Rack 側に登録済みなら上書きしないようにした。
+
+<br>
+
+### 195. iPhone のホーム画面アプリは Safari と Cookie が別（PWA）
+
+<br>
+
+iPhone のホーム画面アプリは、Safari とは別に Cookie・localStorage を持つ。iOS 17.2 以降は、ホーム画面に追加した時点の Safari の Cookie が1回だけコピーされる。<br>
+アプリの範囲（`scope`）の外（Google・LINE のログイン画面）へ移動すると、アプリ内の Safari 画面や Safari 本体で開くことがあり、OmniAuth の `state` を保存したセッションが見つからず、ログインが完了しない場合がある（実機で確認する）。<br>
+そのため、Safari で「ログインしたままにする」にチェックしてログインしてから追加する順番を案内している。ログイン保持の Cookie（`_habitflow_remember`）は期限付きなので、コピー後もアプリ側で使える。
+
+<br>
+
+### 196. `beforeinstallprompt` はモジュールの読み込み時に受け取る（PWA）
+
+<br>
+
+`beforeinstallprompt` はページを最初に読み込んだときに届く。Turbo の画面移動ではページを読み込み直さないため、設定ページのコントローラーの `connect()` で受け取ろうとすると取りこぼす。<br>
+`controllers/index.js` が起動時に読み込むコントローラーのファイルの一番上の階層でイベントを受け取り、変数に保存しておく。<br>
+`preventDefault()` を呼ぶと Android の Chrome の自動の案内（ミニ情報バー）が出なくなるため、呼ばずに保存だけしている。
+
+<br>
+
+### 197. 古い画面からのログアウトは、CSRF の検証を外さずに案内で解決する（PWA と同時に修正）
+
+<br>
+
+同じブラウザのタブやホーム画面アプリのウィンドウで、片方がログインし直すと、`reset_session` で CSRF トークンが新しくなり、もう片方の画面の「ログアウト」は `InvalidAuthenticityToken`（422）になる。<br>
+ログアウトだけ CSRF の検証を外すと、外部サイトから勝手にログアウトさせられる（ログアウト CSRF）ため、検証は残す。<br>
+`SessionsController` だけで `rescue_from` し、ログイン中なら `redirect_back_or_to`（自分のサイトの Referer のみ）で元の画面に戻して「もう一度押してください」と案内し、すでにログアウト済みならトップページへ移動する。ほかのアクションは今までどおり 422 の画面にする。
