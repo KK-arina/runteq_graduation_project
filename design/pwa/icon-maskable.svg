@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  design/pwa/icon-maskable.svg
+  ============================================================
+  Android 用アイコン（purpose: maskable）の原本
+  ============================================================
+  【この画像から作る PNG】
+    public/pwa/icon-maskable-512-v1.png（512x512）
+  【maskable（マスカブル）とは】
+    Android は機種ごとに、アイコンを「丸」「角丸」「しずく形」などに切り抜く。
+    maskable アイコンは「切り抜かれる前提」で作るアイコンのこと。
+    用意しないと、Android は透明部分を白で埋めた小さなアイコンを表示する。
+  【セーフゾーン（必ず表示される範囲）】
+    中心から「幅の 40%」の円の内側（512px なら半径約 205px）。
+    外側の約 10% は切り取られることがある。
+  【この画像の作り方】
+    1. 背景の青を四隅まで全面に塗る（切り抜かれても青が続くように）
+    2. 絵柄を 0.8 倍に縮小して中央に置く（セーフゾーンの内側に収める）
+       transform="translate(51.2 51.2) scale(0.8)" の 51.2 は
+       512 x (1 - 0.8) / 2 = 51.2 で、縮小した絵柄をちょうど中央へ戻す値。
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 背景: 全面を青で塗る -->
+  <rect x="0" y="0" width="512" height="512" fill="#2563eb"/>
+  <!-- 絵柄: 0.8 倍に縮小して中央へ（セーフゾーンの内側に収める） -->
+  <g transform="translate(51.2 51.2) scale(0.8)" fill="none" stroke="#ffffff" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 370.2 190 A 132 132 0 1 1 322 141.7" stroke-width="34"/>
+    <path d="M 312 98 L 336 150 L 282 166" stroke-width="34"/>
+    <path d="M 198 262 L 240 304 L 318 218" stroke-width="38"/>
+  </g>
+</svg>

@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+# =============================================================================
+# bin/generate_pwa_icons
+# =============================================================================
+#
+# 【このスクリプトの役割】
+#   design/pwa/ にある SVG（アイコンの原本）から、
+#   ホーム画面用のアイコン PNG を public/ に書き出す。
+#
+# 【実行方法（リポジトリのルートで）】
+#   bash bin/generate_pwa_icons
+#
+# 【なぜ一時的な Docker コンテナで変換するのか】
+#   SVG を PNG に変換するには rsvg-convert（librsvg）が必要だが、
+#   アプリ用の Docker イメージ（Dockerfile.dev / Dockerfile）には入っていない。
+#   アプリのイメージに入れると、本番のイメージまで大きくなってしまう。
+#   そこで「変換のときだけ使い捨てのコンテナを起動し、終わったら消す」方式にする。
+#     --rm  : 変換が終わったらコンテナを自動で削除する（ゴミを残さない）
+#     -v    : 今のフォルダ（リポジトリ）をコンテナ内の /work として見せる
+#
+# 【なぜ ruby:3.4.10-slim のイメージを使うのか】
+#   Dockerfile.dev の土台と同じイメージなので、すでにパソコンにダウンロード済み。
+#   新しいイメージを取りに行く時間と容量がかからない（中身は Debian）。
+#   librsvg2-bin は Debian 公式のパッケージで、無料（LGPL）で使える。
+#
+# 【アイコンを作り直すとき】
+#   1. design/pwa/*.svg を編集する
+#   2. 下の VERSION を v2 などに上げる
+#      （public/ のファイルは1年間ブラウザにキャッシュされるため、
+#        同じファイル名のままだと古いアイコンが表示され続ける）
+#   3. このスクリプトを実行する
+#   4. public/pwa/manifest-v1.webmanifest・layouts/application.html.erb・
+#      test/integration/pwa_home_screen_test.rb のファイル名も新しい版に合わせる
+# =============================================================================
+
+# set -e: 途中のコマンドが失敗したら、そこで止める（壊れた PNG を残さない）
+# set -u: 定義していない変数を使ったらエラーにする（タイプミスに気づける）
+# set -o pipefail: パイプ（|）の途中で失敗しても、失敗として扱う
+set -euo pipefail
+
+# このスクリプトがある bin/ の1つ上（＝リポジトリのルート）へ移動する
+# どのフォルダから実行しても、同じ場所に書き出されるようにするため
+cd "$(dirname "$0")/.."
+
+SRC_DIR="design/pwa"
+OUT_DIR="public/pwa"
+VERSION="v1"
+IMAGE="ruby:3.4.10-slim"
+
+mkdir -p "$OUT_DIR"
+
+# -e HOST_UID / HOST_GID:
+#   コンテナの中は root ユーザーで動くため、作った PNG の持ち主が root になり、
+#   あとで VSCode から上書き・削除できなくなる。
+#   自分のユーザーID（id -u）とグループID（id -g）を渡し、最後に持ち主を自分に戻す。
+docker run --rm \
+  -v "$PWD":/work -w /work \
+  -e HOST_UID="$(id -u)" \
+  -e HOST_GID="$(id -g)" \
+  -e SRC_DIR="$SRC_DIR" \
+  -e OUT_DIR="$OUT_DIR" \
+  -e VERSION="$VERSION" \
+  "$IMAGE" bash -euo pipefail -c '
+    # DEBIAN_FRONTEND=noninteractive:
+    #   apt に「質問の画面を出さず、既定の設定で進めてよい」と伝える。
+    #   これが無いと、端末（TTY）の無い docker run の中で
+    #   「debconf: unable to initialize frontend」というメッセージが大量に出る（動作には影響しない）。
+    export DEBIAN_FRONTEND=noninteractive
+
+    # rsvg-convert（SVG を PNG に変換するコマンド）を入れる
+    # -qq と > /dev/null で、大量のインストールログを画面に出さない
+    apt-get update -qq
+    apt-get install -y -qq --no-install-recommends librsvg2-bin > /dev/null
+
+    # purpose: any（角丸）… Chrome / Edge / Android の一般的な表示用
+    rsvg-convert -w 512 -h 512 "$SRC_DIR/icon-any.svg" -o "$OUT_DIR/icon-512-$VERSION.png"
+    rsvg-convert -w 192 -h 192 "$SRC_DIR/icon-any.svg" -o "$OUT_DIR/icon-192-$VERSION.png"
+
+    # ブラウザのタブに出す小さいアイコン（ファビコン）
+    rsvg-convert -w 32 -h 32 "$SRC_DIR/icon-any.svg" -o "$OUT_DIR/favicon-32-$VERSION.png"
+
+    # purpose: maskable（全面塗り＋中央に縮小）… Android の丸・角丸などの切り抜き用
+    rsvg-convert -w 512 -h 512 "$SRC_DIR/icon-maskable.svg" -o "$OUT_DIR/icon-maskable-512-$VERSION.png"
+
+    # iPhone / iPad 用（全面塗り・180x180）
+    rsvg-convert -w 180 -h 180 "$SRC_DIR/icon-full.svg" -o "$OUT_DIR/apple-touch-icon-$VERSION.png"
+
+    # iPhone や一部のサービスは、<link> を見ずに /apple-touch-icon.png を直接取りに来る。
+    # ファイルが無いと Rails の 404 処理（rack-attack → Neon）まで届いてしまうため、
+    # 同じ画像を public/ 直下にも置いて、静的ファイルとして返せるようにする。
+    cp "$OUT_DIR/apple-touch-icon-$VERSION.png" public/apple-touch-icon.png
+    cp "$OUT_DIR/apple-touch-icon-$VERSION.png" public/apple-touch-icon-precomposed.png
+
+    # 作ったファイルの持ち主を、コンテナの root から自分のユーザーに戻す
+    chown "$HOST_UID:$HOST_GID" "$OUT_DIR"/*.png public/apple-touch-icon.png public/apple-touch-icon-precomposed.png
+  '
+
+echo "===== 書き出したアイコン ====="
+ls -la "$OUT_DIR"/*.png public/apple-touch-icon.png public/apple-touch-icon-precomposed.png
