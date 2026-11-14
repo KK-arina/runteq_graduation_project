@@ -6989,6 +6989,26 @@ AI 分析の月間上限に達し「AIなしで振り返りを完了する」を
 
 <br>
 
+### 🔒 gem 脆弱性の更新（2026年11月）
+
+<br>
+
+デプロイ前の `bundle-audit check --update` で、8月以降に公表された脆弱性を検出し、一括で更新した（結果は `No vulnerabilities found`）。
+
+<br>
+
+| gem | 更新 | 主な内容 |
+|:---|:---|:---|
+| `rails` | 8.1.3.1 → **8.1.4.1** | セキュリティリリース（21件の CVE。Active Storage・XSS・IP 偽装・Strong Parameters 等） |
+| `rack` | 3.2.7 → **3.2.8** | マルチパートのメモリ枯渇 等 |
+| `nokogiri` | 1.19.4 → **1.19.7** | Use-After-Free・XSS |
+| `loofah` | 2.25.2 → **2.25.3** | サニタイズの回避（XSS） |
+| `rails-html-sanitizer` | 1.7.1 → **1.7.2** | XSS・ReDoS |
+| `crass` | 1.0.7 → **1.0.8** | CSS サニタイズの回避 |
+| `addressable` | 2.9.0 → **2.9.2** | ReDoS 等 |
+
+<br>
+
 ### ✅ テスト
 
 <br>
