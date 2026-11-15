@@ -227,11 +227,17 @@
 
   </div>
 
-  <%# 新規登録へのリンク %>
+  <%#
+    新規登録へのリンク
+    underline（常に下線）: 文の途中にあるリンクは、色だけだと色覚の違いによって
+      周りの文字と区別できないことがある（Lighthouse の「リンクは色に依存して識別可能です」）。
+      マウスを乗せたときだけでなく、常に下線を表示してリンクだと分かるようにする。
+    underline-offset-2: 下線を文字から少し離し、日本語の文字に重ならないようにする。
+  %>
   <div class="mt-4 text-center text-sm text-gray-600">
     アカウントをお持ちでない方は
     <%= link_to "新規登録", new_user_path,
-        class: "text-blue-600 hover:text-blue-700 hover:underline" %>
+        class: "text-blue-600 underline underline-offset-2 hover:text-blue-700" %>
   </div>
 
 </div>
