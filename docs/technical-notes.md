@@ -4319,3 +4319,30 @@ LINE ログインボタンの「コントラスト不足」の指摘は、LINE �
 `import ... from "./xxx_controller"`（相対パス）は importmap を通らないため、ブラウザはハッシュ無しの URL（`/assets/controllers/xxx_controller`）を直接取りに行く。<br>
 一方で `javascript_importmap_tags` はハッシュ付きの URL を先読み（modulepreload）しているので、全コントローラーが2回ずつダウンロードされ、ハッシュ無しのほうは長期キャッシュも効かなかった。<br>
 `pin_all_from` が作るキー（`"controllers/xxx_controller"`）で import すれば、先読みしたハッシュ付きのファイルがそのまま使われる。DevTools の Network で、同じコントローラーがハッシュ付きと無しの2行で出ていたことから気づいた。
+
+<br>
+
+### 202. DB（Neon）のリージョンを Render と揃える（シンガポール → オレゴン）
+
+<br>
+
+Render（Web サービス）はオレゴン、Neon（PostgreSQL）はシンガポールにあり、SQL を1回実行するたびに太平洋を往復していた。<br>
+Render のログの `ActiveRecord: 2794.1ms (18 queries, …)` を回数で割ると、どのページでも1回あたり約170 ms で一定だった。SQL の中身ではなく、通信の往復時間が原因だと分かる。<br>
+Neon のリージョンは作成後に変更できないため、オレゴン（AWS US West 2）に新しいプロジェクトを Postgres 16（旧と同じメジャーバージョン）で作り、データを移した。<br>
+手順は、Render を Suspend して書き込みを止める → Docker の `postgres:16` で `pg_dump -Fc --no-owner --no-acl`（直接接続）→ `pg_restore` → 全テーブルの `count(*)` を旧と新で比べて一致を確認 → Render の `DATABASE_URL` を新しい接続文字列（旧と同じ pooler の種類）に差し替えてデプロイ、の順。<br>
+環境変数を「Save only」で保存して Resume しただけでは、新しい値は使われなかった（Resume は前回のデプロイを起動し直すだけ）。「Manual Deploy」で新しいデプロイを行う必要がある。その間の書き込みは旧 DB に入ったため、`pg_restore --clean --if-exists` でコピーし直した。<br>
+結果は、1回あたり約174 ms → 1〜2 ms、`/dashboard` の ActiveRecord が約2,800 ms → 60〜120 ms、Lighthouse の TTFB が約4.0秒 → 約2.1秒。rack-attack の回数カウントも Solid Cache（Neon）を使うので、ログイン画面なども速くなった。<br>
+旧プロジェクトは、問題が無いことを確かめるため1週間残してから削除する。
+
+<br>
+
+### 203. Sentry のブラウザ SDK を自前で配信するなら、ソースマップも一緒に置く
+
+<br>
+
+`public/sentry/bundle.min.js`（Sentry 公式の 10.66.0）の最終行には `//# sourceMappingURL=bundle.min.js.map` がある。DevTools を開くと、ブラウザはこれを見てソースマップを取りに来る。<br>
+ファイルが無いため、そのリクエストは Rails の catch-all ルート（`match "*path"`）まで届き、ErrorsController が 404 を返していた。ログイン中はユーザーを調べるので、DB への問い合わせも1回発生していた。<br>
+公式 CDN の同じバージョンの `bundle.min.js` と SHA-256 が一致することを確かめてから、同じ CDN の `bundle.min.js.map` を隣に置いた。`ActionDispatch::Static` がルーティングより前に返すので、Rails にも DB にも届かなくなる。<br>
+ソースマップは約1.2 MB あるが、取りに来るのは DevTools を開いたときだけなので、利用者の読み込みには影響しない。<br>
+SDK を更新するときは、`bundle.min.js` と `bundle.min.js.map` を同じバージョンで一緒に置き換える（テスト `sentry_source_map_test.rb` がソースマップの有無と中身を確かめる）。<br>
+サーバー側の `Envelope sending failed: Net::ReadTimeout` は7日間で1回だけだったため、一時的な通信の失敗と判断し、送信の待ち時間の設定は変えていない。
