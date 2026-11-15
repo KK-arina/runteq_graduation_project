@@ -100,3 +100,4 @@
 | 2026-09-23 | #I-4: README を3ファイルに分割・スクショ更新・MVP検証レポートを archive に統合 |
 | 2026-11-14 | ログイン保持（Remember me）・アクセシビリティ改善・AI分析状態の修正を features / technical-notes / lessons-learned に追記 |
 | 2026-11-14 | ホーム画面に追加（PWA）・古い画面からのログアウトの修正・omniauth の脆弱性対応を features / technical-notes（191〜198）/ lessons-learned に追記 |
+| 2026-11-15 | Lighthouse の指摘への対応（ライブラリの読み込みを必要なページだけに・コントローラーの二重読み込みの解消・文中リンクの下線）を features / technical-notes（199〜201）に追記 |

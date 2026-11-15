@@ -4289,3 +4289,33 @@ iPhone のホーム画面アプリは、Safari とは別に Cookie・localStorag
 omniauth 2.2.0 より前は、Google / LINE に渡すコールバック URL を、リクエストの Host / X-Forwarded-Host ヘッダーから組み立てるため、ヘッダーを偽装されると書き換えられるおそれがあった。<br>
 gem を 2.2 以上に更新し（Gemfile で下限を明示）、さらに本番では `OmniAuth.config.full_host` に `APP_HOST` を設定して、ヘッダーの値を使わないようにした。<br>
 Rails の `config.hosts`（ホスト検証）を本番で設定していないアプリでは、gem の更新だけに頼らず、ホストを固定しておくと安全。
+
+<br>
+
+### 199. グラフ・並べ替えのライブラリは、使うページだけで読み込む（動的 import・preload: false）
+
+<br>
+
+`controllers/index.js` は全コントローラーを起動時に読み込むため、コントローラーの一番上で `import "chart.js"` すると、グラフを使わないページでも chart.js（約 60KB）が読み込まれる。<br>
+`config/importmap.rb` で `preload: false` にして全ページの先読み（modulepreload）をやめ、コントローラーの `connect()` で `import("chart.js")` / `import("Sortable")` を呼んで、使うときだけ読み込むようにした。<br>
+読み込みを待つ間に Turbo で画面が変わる場合に備えて、接続ごとに番号（`connectId`）を進め、番号が変わっていたら描画しない。失敗した読み込みは捨てて、次に開いたときに取り直す。<br>
+読み込みの失敗がそのコントローラーの中で完結するので、「chart.js の例外で全コントローラーが止まる」連鎖も起きなくなった。
+
+<br>
+
+### 200. 文の途中のリンクには常に下線を付ける・LINE ボタンの色はガイドラインを優先する（Lighthouse）
+
+<br>
+
+`hover:underline`（マウスを乗せたときだけ下線）は、色だけでリンクを区別することになり、Lighthouse の「リンクは色に依存して識別可能です」に当たる。文の途中のリンクは `underline underline-offset-2` で常に下線を表示する。<br>
+LINE ログインボタンの「コントラスト不足」の指摘は、LINE 公式のデザインガイドラインで指定された色（基本色 #06C755・文字色 #FFFFFF）によるものなので、色は変えずにガイドラインを優先している。
+
+<br>
+
+### 201. `controllers/index.js` の import は相対パスではなく importmap のキーで書く
+
+<br>
+
+`import ... from "./xxx_controller"`（相対パス）は importmap を通らないため、ブラウザはハッシュ無しの URL（`/assets/controllers/xxx_controller`）を直接取りに行く。<br>
+一方で `javascript_importmap_tags` はハッシュ付きの URL を先読み（modulepreload）しているので、全コントローラーが2回ずつダウンロードされ、ハッシュ無しのほうは長期キャッシュも効かなかった。<br>
+`pin_all_from` が作るキー（`"controllers/xxx_controller"`）で import すれば、先読みしたハッシュ付きのファイルがそのまま使われる。DevTools の Network で、同じコントローラーがハッシュ付きと無しの2行で出ていたことから気づいた。
