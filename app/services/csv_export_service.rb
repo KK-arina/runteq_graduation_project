@@ -32,7 +32,6 @@
 require "csv"
 
 class CsvExportService
-
   # CSVの列ごとのヘッダー定義
   # 【定数にする理由】
   #   ヘッダーはコード全体で統一する必要がある。

@@ -220,7 +220,7 @@ class WeeklyReflectionCompleteService
 
       current_sum = HabitRecord
         .where(user: @user, habit: habit, record_date: week_range, deleted_at: nil)
-        .where(is_manual_input: [false, nil])
+        .where(is_manual_input: [ false, nil ])
         .sum(:numeric_value)
         .to_f
 

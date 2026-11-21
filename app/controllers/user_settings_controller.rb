@@ -18,7 +18,6 @@
 #   UserSettingsController: user_settings の通知設定・お休みモード管理
 # ==============================================================================
 class UserSettingsController < ApplicationController
-
   # require_login: 未ログインユーザーをログインページへリダイレクトする。
   # ApplicationController に定義されている before_action。
   before_action :require_login

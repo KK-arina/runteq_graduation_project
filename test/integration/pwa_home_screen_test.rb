@@ -106,10 +106,10 @@ class PwaHomeScreenTest < ActionDispatch::IntegrationTest
   end
 
   test "iPhone 用アイコンとファビコンが返り、public 直下のコピーも同じ画像になっている" do
-    assert_equal [180, 180], png_size(public_file(APPLE_TOUCH_ICON_PATH))
-    assert_equal [32, 32],   png_size(public_file(FAVICON_PATH))
+    assert_equal [ 180, 180 ], png_size(public_file(APPLE_TOUCH_ICON_PATH))
+    assert_equal [ 32, 32 ],   png_size(public_file(FAVICON_PATH))
 
-    [APPLE_TOUCH_ICON_PATH, FAVICON_PATH, "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png"].each do |path|
+    [ APPLE_TOUCH_ICON_PATH, FAVICON_PATH, "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png" ].each do |path|
       get path
       assert_response :success
       assert_equal "image/png", response.media_type

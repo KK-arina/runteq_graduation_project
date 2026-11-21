@@ -301,7 +301,7 @@ class ApplicationController < ActionController::Base
       return
     end
 
-    if current_user.user_purposes.where(analysis_state: [:pending, :analyzing]).exists?
+    if current_user.user_purposes.where(analysis_state: [ :pending, :analyzing ]).exists?
       flash[:notice] = I18n.t("ai_throttle.already_processing")
       redirect_back fallback_location: root_path
       return

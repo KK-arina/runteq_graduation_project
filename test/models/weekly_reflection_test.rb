@@ -17,7 +17,6 @@
 require "test_helper"
 
 class WeeklyReflectionTest < ActiveSupport::TestCase
-
   test "complete! sets completed_at to the exact current time" do
     reflection = weekly_reflections(:pending_reflection)
     assert_nil reflection.completed_at

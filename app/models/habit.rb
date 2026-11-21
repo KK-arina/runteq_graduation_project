@@ -256,9 +256,9 @@ class Habit < ApplicationRecord
                     .each_with_object({}) do |(date, completed, numeric_value), hash|
                       hash[date] = if check_type?
                                      completed
-                                   else
+                      else
                                      numeric_value.present? && numeric_value > 0
-                                   end
+                      end
                     end
 
     excluded_days_set = Set.new(excluded_day_numbers)

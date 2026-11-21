@@ -17,7 +17,6 @@
 require "test_helper"
 
 class UserSettingsRestModeTest < ActionDispatch::IntegrationTest
-
   setup do
     @user         = users(:one)
     @user_setting = @user.user_setting ||

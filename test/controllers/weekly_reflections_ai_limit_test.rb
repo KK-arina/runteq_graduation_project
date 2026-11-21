@@ -164,7 +164,7 @@ class WeeklyReflectionsAiLimitTest < ActionDispatch::IntegrationTest
     end
 
     # どちらかにリダイレクトされること
-    assert_includes [dashboard_url, weekly_reflections_url], response.location,
+    assert_includes [ dashboard_url, weekly_reflections_url ], response.location,
                     "dashboard または weekly_reflections にリダイレクトされるはず"
 
     # AI スキップのメッセージがいずれかの flash にセットされていること

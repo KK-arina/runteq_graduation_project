@@ -6,7 +6,6 @@
 require "test_helper"
 
 class PurposeAnalysisJobTest < ActiveJob::TestCase
-
   setup do
     @user = User.create!(
       name:                  "G7テストユーザー",

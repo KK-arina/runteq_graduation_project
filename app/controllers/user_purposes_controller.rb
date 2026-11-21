@@ -21,7 +21,7 @@ class UserPurposesController < ApplicationController
   # 【show / edit / apply_proposals / ai_result には適用しない理由】
   #   これらのアクションは AI 分析ジョブを投入しない閲覧・後処理アクション。
   # ──────────────────────────────────────────────────────────────────────
-  before_action :throttle_ai_request, only: [:create, :update, :retry_analysis]
+  before_action :throttle_ai_request, only: [ :create, :update, :retry_analysis ]
 
   def show
     @current_purpose = UserPurpose.current_for(current_user)
@@ -190,7 +190,7 @@ class UserPurposesController < ApplicationController
     #   weekly_reflections#confirm_proposals と同じ設計方針。
     already_confirmed = current_user.tasks
                                     .where(ai_generated: true, task_type: :improve)
-                                    .where('created_at > ?', @ai_analysis.created_at)
+                                    .where("created_at > ?", @ai_analysis.created_at)
                                     .exists?
 
     if already_confirmed
@@ -240,11 +240,11 @@ class UserPurposesController < ApplicationController
         next unless proposal
 
         priority_value = case proposal[:priority].to_s.downcase
-                         when "must"   then :must
-                         when "should" then :should
-                         when "could"  then :could
-                         else               :should
-                         end
+        when "must"   then :must
+        when "should" then :should
+        when "could"  then :could
+        else               :should
+        end
 
         current_user.tasks.create!(
           title:        proposal[:title].to_s.truncate(100),
@@ -350,7 +350,7 @@ class UserPurposesController < ApplicationController
     )
   end
 
-    # ── E-3 追加: parse_frequency_to_weekly_target ────────────────────────────
+  # ── E-3 追加: parse_frequency_to_weekly_target ────────────────────────────
   #
   # 【役割】
   #   AI が返す frequency 文字列（"毎日", "週3回" など）を

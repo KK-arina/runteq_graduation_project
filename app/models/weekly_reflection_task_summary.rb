@@ -110,7 +110,7 @@ class WeeklyReflectionTaskSummary < ApplicationRecord
   #   inclusion を使うのが正しい。
   validates :was_completed,
             inclusion: {
-              in:      [true, false],
+              in:      [ true, false ],
               message: "は true か false を指定してください"
             }
 

@@ -108,7 +108,7 @@ class AddMissingIndexesForPerformance < ActiveRecord::Migration[7.2]
     # idx_tasks_active_tasks という名前で、
     # 「アクティブなタスクの検索に使うインデックス」であることを示している。
     add_index :tasks,
-              [:user_id, :status, :deleted_at, :due_date],
+              [ :user_id, :status, :deleted_at, :due_date ],
               name: "idx_tasks_active_tasks",
               where: "deleted_at IS NULL",
               algorithm: :concurrently,

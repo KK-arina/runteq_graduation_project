@@ -58,7 +58,7 @@ class WeeklyReflectionCompleteServiceTest < ActiveSupport::TestCase
   end
 
   test "今週75分の記録を90分に補正すると差分15分が week_end_date に加算されること" do
-    [0, 1, 2].each do |offset|
+    [ 0, 1, 2 ].each do |offset|
       HabitRecord.create!(
         user: @user, habit: @numeric_habit,
         record_date: @week_start + offset,
@@ -133,7 +133,7 @@ class WeeklyReflectionCompleteServiceTest < ActiveSupport::TestCase
   end
 
   test "再補正しても元の記録（事実）を基準に正しく動くこと" do
-    [0, 1, 2].each do |offset|
+    [ 0, 1, 2 ].each do |offset|
       HabitRecord.create!(
         user: @user, habit: @numeric_habit,
         record_date: @week_start + offset,

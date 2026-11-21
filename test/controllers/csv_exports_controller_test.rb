@@ -16,7 +16,6 @@
 require "test_helper"
 
 class CsvExportsControllerTest < ActionDispatch::IntegrationTest
-
   setup do
     @user = users(:one)
     post login_path, params: { session: { email: @user.email, password: "password" } }
@@ -84,7 +83,7 @@ class CsvExportsControllerTest < ActionDispatch::IntegrationTest
   test "習慣記録が1000件超の場合は CsvExportJob がエンキューされる" do
     CsvExportService.stub(:new, LargeDataCsvExportService.new(user: @user)) do
       assert_enqueued_with(job: CsvExportJob,
-                           args: [@user.id, "habit_records"]) do
+                           args: [ @user.id, "habit_records" ]) do
         post export_csv_habit_records_settings_path,
              headers: { "Accept" => "text/vnd.turbo-stream.html" }
       end
@@ -96,7 +95,7 @@ class CsvExportsControllerTest < ActionDispatch::IntegrationTest
   test "タスクが1000件超の場合は CsvExportJob がエンキューされる" do
     CsvExportService.stub(:new, LargeDataCsvExportService.new(user: @user)) do
       assert_enqueued_with(job: CsvExportJob,
-                           args: [@user.id, "tasks"]) do
+                           args: [ @user.id, "tasks" ]) do
         post export_csv_tasks_settings_path,
              headers: { "Accept" => "text/vnd.turbo-stream.html" }
       end

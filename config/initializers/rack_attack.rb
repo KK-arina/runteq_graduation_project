@@ -56,7 +56,7 @@ unless Rails.env.test?
   #   "0.0.0.0" として渡るケースがある。
   if Rails.env.development?
     Rack::Attack.safelist("allow-localhost") do |req|
-      ["127.0.0.1", "::1", "0.0.0.0", "172.18.0.1"].include?(req.ip)
+      [ "127.0.0.1", "::1", "0.0.0.0", "172.18.0.1" ].include?(req.ip)
     end
   end
 
@@ -133,7 +133,7 @@ unless Rails.env.test?
         "Retry-After"   => period.to_s,
         "Cache-Control" => "no-cache, no-store"
       },
-      [<<~HTML]
+      [ <<~HTML ]
         <!DOCTYPE html>
         <html lang="ja">
           <head>

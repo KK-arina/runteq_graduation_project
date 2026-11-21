@@ -406,24 +406,24 @@ class HabitStreakTest < ActiveSupport::TestCase
     end
   end
 
-# test/models/habit_streak_test.rb の
-# 「first_recorded_today?: 昨日作成されたレコードで false を返すこと」テストのみ修正
-#
-# 【エラーの原因】
-#   travel_to ブロックの中に別の travel_to ブロックをネストすると
-#   Rails が警告ではなく RuntimeError を発生させる。
-#   （Rails 7.x 以降は入れ子の travel_to を禁止している）
-#
-# 【修正方針】
-#   「昨日作成されたレコード」を再現するために travel_to のネストを使っていたが、
-#   update_columns で created_at を直接書き換えてから
-#   travel_to を1つだけ使う方式に変更する。
-#
-#   具体的な手順:
-#   1. 今日（4/13）のコンテキストで travel_to する
-#   2. record_date を昨日（4/12）にしてレコードを作成する
-#   3. created_at を昨日に強制変更（update_columns 使用）
-#   4. first_recorded_today? が false を返すことを確認する
+  # test/models/habit_streak_test.rb の
+  # 「first_recorded_today?: 昨日作成されたレコードで false を返すこと」テストのみ修正
+  #
+  # 【エラーの原因】
+  #   travel_to ブロックの中に別の travel_to ブロックをネストすると
+  #   Rails が警告ではなく RuntimeError を発生させる。
+  #   （Rails 7.x 以降は入れ子の travel_to を禁止している）
+  #
+  # 【修正方針】
+  #   「昨日作成されたレコード」を再現するために travel_to のネストを使っていたが、
+  #   update_columns で created_at を直接書き換えてから
+  #   travel_to を1つだけ使う方式に変更する。
+  #
+  #   具体的な手順:
+  #   1. 今日（4/13）のコンテキストで travel_to する
+  #   2. record_date を昨日（4/12）にしてレコードを作成する
+  #   3. created_at を昨日に強制変更（update_columns 使用）
+  #   4. first_recorded_today? が false を返すことを確認する
 
   test "first_recorded_today?: 昨日作成されたレコードで false を返すこと" do
     # travel_to で「今日」を 4/13 に固定する

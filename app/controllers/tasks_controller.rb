@@ -38,17 +38,17 @@ class TasksController < ApplicationController
     base_tasks = current_user.tasks.active
 
     @tasks = case @current_tab
-            when "must"
+    when "must"
               base_tasks.not_archived.must
-            when "should"
+    when "should"
               base_tasks.not_archived.should
-            when "could"
+    when "could"
               base_tasks.not_archived.could
-            when "done"
+    when "done"
               base_tasks.where(status: Task.statuses[:done])
-            else
+    else
               base_tasks.not_archived
-            end
+    end
 
     priority_counts = base_tasks.not_archived.unscope(:order).group(:priority).count
 
@@ -254,12 +254,12 @@ class TasksController < ApplicationController
         )
 
         current_count = case current_tab
-                        when "must"   then current_user.tasks.active.not_archived.must.count
-                        when "should" then current_user.tasks.active.not_archived.should.count
-                        when "could"  then current_user.tasks.active.not_archived.could.count
-                        when "done"   then current_user.tasks.active.where(status: Task.statuses[:done]).count
-                        else               current_user.tasks.active.not_archived.count
-                        end
+        when "must"   then current_user.tasks.active.not_archived.must.count
+        when "should" then current_user.tasks.active.not_archived.should.count
+        when "could"  then current_user.tasks.active.not_archived.could.count
+        when "done"   then current_user.tasks.active.where(status: Task.statuses[:done]).count
+        else               current_user.tasks.active.not_archived.count
+        end
 
         streams << turbo_stream.replace(
           "task-count-display",
@@ -415,12 +415,12 @@ class TasksController < ApplicationController
     current_tab = params[:tab] || "all"
 
     current_count = case current_tab
-                    when "must"   then current_user.tasks.active.not_archived.must.count
-                    when "should" then current_user.tasks.active.not_archived.should.count
-                    when "could"  then current_user.tasks.active.not_archived.could.count
-                    when "done"   then current_user.tasks.active.where(status: Task.statuses[:done]).count
-                    else               current_user.tasks.active.not_archived.count
-                    end
+    when "must"   then current_user.tasks.active.not_archived.must.count
+    when "should" then current_user.tasks.active.not_archived.should.count
+    when "could"  then current_user.tasks.active.not_archived.could.count
+    when "done"   then current_user.tasks.active.where(status: Task.statuses[:done]).count
+    else               current_user.tasks.active.not_archived.count
+    end
 
     respond_to do |format|
       format.turbo_stream do

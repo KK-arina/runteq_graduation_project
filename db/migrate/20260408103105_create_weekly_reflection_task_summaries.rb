@@ -109,7 +109,7 @@ class CreateWeeklyReflectionTaskSummaries < ActiveRecord::Migration[7.2]
     #     task_id が NULL のレコードが複数できてしまう可能性を防ぐために
     #     「task_id が NULL でないレコードだけ」に UNIQUE を適用する部分インデックスにする。
     add_index :weekly_reflection_task_summaries,
-              [:weekly_reflection_id, :task_id],
+              [ :weekly_reflection_id, :task_id ],
               unique: true,
               where: "task_id IS NOT NULL",
               name: "idx_wr_task_summaries_on_wr_id_and_task_id"

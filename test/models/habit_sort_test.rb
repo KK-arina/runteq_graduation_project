@@ -136,7 +136,7 @@ class HabitSortTest < ActiveSupport::TestCase
       "position が設定されているアクティブな習慣は昇順に並んでいること"
 
     # setup で作成した3件は必ず position が設定されているはず
-    [@habit1, @habit2, @habit3].each do |habit|
+    [ @habit1, @habit2, @habit3 ].each do |habit|
       assert_not_nil habit.reload.position,
         "#{habit.name} の position が nil でないこと（acts_as_list が自動付与する）"
     end
@@ -165,7 +165,7 @@ class HabitSortTest < ActiveSupport::TestCase
 
     # 他の習慣は自動的にずれていること
     # habit1 は 2 に、habit3 は 3 になるはず
-    assert_equal [1, 2, 3], [@habit2, @habit1, @habit3].map(&:position).sort,
+    assert_equal [ 1, 2, 3 ], [ @habit2, @habit1, @habit3 ].map(&:position).sort,
       "並び替え後に 1,2,3 の連番になること"
   end
 end

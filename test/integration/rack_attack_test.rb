@@ -33,7 +33,7 @@ class RackAttackTest < ActionDispatch::IntegrationTest
           "Retry-After"  => period.to_s,
           "Cache-Control" => "no-cache, no-store"
         },
-        ["Too Many Requests"]
+        [ "Too Many Requests" ]
       ]
     end
   end

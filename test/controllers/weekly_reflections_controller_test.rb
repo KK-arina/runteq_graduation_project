@@ -192,7 +192,7 @@ class WeeklyReflectionsControllerTest < ActionDispatch::IntegrationTest
     post confirm_proposals_weekly_reflections_path,
          params: {
            reflection_id:       reflection.id,
-           task_modify_indices: ["0"]
+           task_modify_indices: [ "0" ]
          }
 
     assert_redirected_to dashboard_path
@@ -231,7 +231,7 @@ class WeeklyReflectionsControllerTest < ActionDispatch::IntegrationTest
       post confirm_proposals_weekly_reflections_path,
            params: {
              reflection_id:       reflection.id,
-             task_modify_indices: ["0"]
+             task_modify_indices: [ "0" ]
            }
     end
 

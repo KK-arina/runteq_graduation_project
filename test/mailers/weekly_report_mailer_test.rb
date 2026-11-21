@@ -2,7 +2,6 @@
 require "test_helper"
 
 class WeeklyReportMailerTest < ActionMailer::TestCase
-
   def setup
     @user = User.create!(
       name:                  "テストユーザー",
@@ -35,7 +34,7 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
   test "振り返りありの場合にメールが正しく送信される" do
     mail = WeeklyReportMailer.report(@user, @reflection, @habit_stats)
 
-    assert_equal ["test@example.com"], mail.to
+    assert_equal [ "test@example.com" ], mail.to
     assert_not_empty mail.from
 
     # 件名フォーマット: 「【HabitFlow】先週（期間）の振り返りレポートが届きました」
@@ -53,14 +52,14 @@ class WeeklyReportMailerTest < ActionMailer::TestCase
   test "振り返りなしの場合でもメールが送信される" do
     mail = WeeklyReportMailer.report(@user, nil, @habit_stats)
 
-    assert_equal ["test@example.com"], mail.to
+    assert_equal [ "test@example.com" ], mail.to
     assert_includes mail.html_part.body.decoded, "提出されていません"
   end
 
   test "習慣なしの場合でもメールが送信される" do
     mail = WeeklyReportMailer.report(@user, @reflection, [])
 
-    assert_equal ["test@example.com"], mail.to
+    assert_equal [ "test@example.com" ], mail.to
     assert_includes mail.html_part.body.decoded, "登録されていません"
   end
 end

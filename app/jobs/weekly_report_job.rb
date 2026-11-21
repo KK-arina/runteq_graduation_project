@@ -20,7 +20,6 @@
 #
 # ==============================================================================
 class WeeklyReportJob < ApplicationJob
-
   # ============================================================
   # キュー設定
   # ============================================================
@@ -202,9 +201,9 @@ class WeeklyReportJob < ApplicationJob
       # ゼロ除算防止（除外日設定によって target が 0 になる場合がある）
       rate = if target.zero?
                0
-             else
+      else
                ((completed_count.to_f / target) * 100).round
-             end
+      end
 
       # 目標以上に達成した場合に 100% を超えることがあるため上限を設ける
       rate = rate.clamp(0, 100)

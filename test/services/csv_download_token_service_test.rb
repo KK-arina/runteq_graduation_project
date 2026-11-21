@@ -6,7 +6,6 @@
 require "test_helper"
 
 class CsvDownloadTokenServiceTest < ActiveSupport::TestCase
-
   setup do
     @user = users(:one)
   end

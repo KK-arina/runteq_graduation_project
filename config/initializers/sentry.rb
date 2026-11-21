@@ -32,7 +32,7 @@ if ENV["SENTRY_DSN"].present?
     # パンくずリストとして一緒に送る。原因調査が格段に楽になる。
     #   :active_support_logger … Rails のログを足あととして記録
     #   :http_logger           … 外部API（Gemini/Groq/LINE等）への通信を記録
-    config.breadcrumbs_logger = [:active_support_logger, :http_logger]
+    config.breadcrumbs_logger = [ :active_support_logger, :http_logger ]
 
     # --------------------------------------------------------------------------
     # enabled_environments: 送信を許可する環境を本番だけに限定する

@@ -90,7 +90,7 @@ class DashboardsController < ApplicationController
                        is_latest:       true,
                        analysis_type:   AiAnalysis.analysis_types[:purpose_breakdown]
                      ).first
-                   end
+    end
     # ─────────────────────────────────────────────────────────────────────
     #
     # G-4 追加: ダッシュボードで current_user.user_setting を複数回呼ぶ N+1 を防ぐ。

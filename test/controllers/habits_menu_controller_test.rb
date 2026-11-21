@@ -12,7 +12,6 @@
 require "test_helper"
 
 class HabitsMenuControllerTest < ActionDispatch::IntegrationTest
-
   setup do
     @user = users(:one)
 

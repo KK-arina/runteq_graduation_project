@@ -33,7 +33,7 @@
 
 class OmniauthCallbacksController < ApplicationController
   # CSRF 検証スキップ（コールバックのみ）
-  skip_before_action :verify_authenticity_token, only: [:google, :line]
+  skip_before_action :verify_authenticity_token, only: [ :google, :line ]
 
   # ============================================================
   # google アクション（GET /auth/google_oauth2/callback）

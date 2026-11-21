@@ -98,7 +98,6 @@ class UserAuthFlowTest < ActionDispatch::IntegrationTest
 
     # SessionsController#create はログイン成功後に dashboard_path にリダイレクトします
     assert_redirected_to onboarding_step2_path
-
   end
 
   # ============================================================

@@ -69,7 +69,7 @@ class UserSetting < ApplicationRecord
   #   presence: true を boolean に使うと false を invalid と判定してしまう。
   #   （Rails の presence は blank? を使うため false.blank? → true になってしまう）
   #   boolean の存在チェックは必ず inclusion: { in: [true, false] } を使う。
-  validates :weekly_report_enabled, inclusion: { in: [true, false] }
+  validates :weekly_report_enabled, inclusion: { in: [ true, false ] }
 
   # ============================================================
   # インスタンスメソッド

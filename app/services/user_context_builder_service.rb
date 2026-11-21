@@ -210,7 +210,7 @@ class UserContextBuilderService
         deleted_at:  nil
       ).count
 
-      expected_days = [weeks * available_days_per_week, 1].max
+      expected_days = [ weeks * available_days_per_week, 1 ].max
       ((completed_count.to_f / expected_days) * 100).clamp(0, 100).round
     else
       actual_sum = HabitRecord.where(
@@ -220,7 +220,7 @@ class UserContextBuilderService
         deleted_at:  nil
       ).sum(:numeric_value).to_f
 
-      expected_total = [weeks * habit.weekly_target, 1].max
+      expected_total = [ weeks * habit.weekly_target, 1 ].max
       ((actual_sum / expected_total) * 100).clamp(0, 100).round
     end
   end
@@ -241,7 +241,7 @@ class UserContextBuilderService
     avg_mood = moods.any? ? (moods.sum.to_f / moods.size).round(1) : nil
 
     all_text = reflections.map do |r|
-      [r.direct_reason, r.background_situation, r.next_action, r.reflection_comment]
+      [ r.direct_reason, r.background_situation, r.next_action, r.reflection_comment ]
         .compact.join(" ")
     end.join(" ")
 
@@ -263,7 +263,7 @@ class UserContextBuilderService
   def analyze_proposal_adoption
     ai_tasks  = @user.tasks.where(ai_generated: true, deleted_at: nil)
     total     = ai_tasks.count
-    completed = ai_tasks.where(status: [:done, :archived]).count
+    completed = ai_tasks.where(status: [ :done, :archived ]).count
     rate      = total > 0 ? ((completed.to_f / total) * 100).clamp(0, 100).round : 0
 
     {
@@ -304,7 +304,7 @@ class UserContextBuilderService
   # ============================================================
 
   def build_habit_section(habit_patterns)
-    lines = ["### 習慣達成パターン（過去#{ANALYSIS_WEEKS}週間）"]
+    lines = [ "### 習慣達成パターン（過去#{ANALYSIS_WEEKS}週間）" ]
 
     if habit_patterns[:all].empty?
       lines << "- アクティブな習慣がまだありません。"
@@ -331,7 +331,7 @@ class UserContextBuilderService
   end
 
   def build_reflection_section(reflection_trends)
-    lines = ["### 振り返りの傾向（過去#{ANALYSIS_WEEKS}週間）"]
+    lines = [ "### 振り返りの傾向（過去#{ANALYSIS_WEEKS}週間）" ]
     lines << "- 振り返り完了率: #{reflection_trends[:completion_rate]}%（#{reflection_trends[:completion_count]}/#{ANALYSIS_WEEKS}週）"
 
     if reflection_trends[:avg_mood].present?
@@ -350,7 +350,7 @@ class UserContextBuilderService
   end
 
   def build_adoption_section(proposal_adoption)
-    lines = ["### AI提案の採用状況"]
+    lines = [ "### AI提案の採用状況" ]
 
     if proposal_adoption[:total_ai_tasks].zero?
       lines << "- AI提案タスクはまだありません。"

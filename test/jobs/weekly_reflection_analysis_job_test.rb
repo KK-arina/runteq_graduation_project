@@ -35,7 +35,7 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
 
   test "AI分析が成功するとAiAnalysisレコードが作成される" do
     mock_client = Minitest::Mock.new
-    mock_client.expect(:analyze, success_response, [String])
+    mock_client.expect(:analyze, success_response, [ String ])
 
     AiClient.stub(:new, mock_client) do
       assert_difference "AiAnalysis.count", 1 do
@@ -58,7 +58,7 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
     initial_count = @user_setting.ai_analysis_count
 
     mock_client = Minitest::Mock.new
-    mock_client.expect(:analyze, success_response, [String])
+    mock_client.expect(:analyze, success_response, [ String ])
 
     AiClient.stub(:new, mock_client) do
       WeeklyReflectionAnalysisJob.perform_now(@reflection.id)
@@ -89,7 +89,7 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
     # ────────────────────────────────────────────────────────────────────────
 
     mock_client = Minitest::Mock.new
-    mock_client.expect(:analyze, success_response, [String])
+    mock_client.expect(:analyze, success_response, [ String ])
 
     AiClient.stub(:new, mock_client) do
       WeeklyReflectionAnalysisJob.perform_now(@reflection.id)
@@ -104,7 +104,7 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
 
   test "PMVVが存在しなくても正常に動作する" do
     mock_client = Minitest::Mock.new
-    mock_client.expect(:analyze, success_response, [String])
+    mock_client.expect(:analyze, success_response, [ String ])
 
     AiClient.stub(:new, mock_client) do
       assert_difference "AiAnalysis.count", 1 do
@@ -120,7 +120,7 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
 
   test "AIがnilを返した場合はAiAnalysisが作成されない" do
     mock_client = Minitest::Mock.new
-    mock_client.expect(:analyze, nil, [String])
+    mock_client.expect(:analyze, nil, [ String ])
 
     AiClient.stub(:new, mock_client) do
       assert_no_difference "AiAnalysis.count" do
@@ -155,7 +155,7 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
 
   test "input_snapshotに振り返りの全フィールドが含まれる" do
     mock_client = Minitest::Mock.new
-    mock_client.expect(:analyze, success_response, [String])
+    mock_client.expect(:analyze, success_response, [ String ])
 
     AiClient.stub(:new, mock_client) do
       WeeklyReflectionAnalysisJob.perform_now(@reflection.id)
@@ -170,7 +170,7 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
     assert_equal "残業が多かった",        snapshot["direct_reason"]
     assert_equal "朝の時間を活用する",    snapshot["background_situation"]
     assert_equal "朝型に切り替える",      snapshot["next_action"]
-    assert_not_nil                       snapshot["analyzed_at"]
+    assert_not_nil snapshot["analyzed_at"]
   end
 
   private
@@ -276,7 +276,7 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
     )
 
     job    = WeeklyReflectionAnalysisJob.new
-    prompt = job.send(:build_prompt, @reflection, nil, [habit], [])
+    prompt = job.send(:build_prompt, @reflection, nil, [ habit ], [])
 
     # 習慣名がプロンプトに含まれることを確認する
     assert_includes prompt, "テスト習慣G9"
@@ -301,7 +301,7 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
     )
 
     job    = WeeklyReflectionAnalysisJob.new
-    prompt = job.send(:build_prompt, @reflection, nil, [], [task])
+    prompt = job.send(:build_prompt, @reflection, nil, [], [ task ])
 
     # タスク名がプロンプトに含まれることを確認する
     assert_includes prompt, "テストタスクG9"
@@ -353,7 +353,7 @@ class WeeklyReflectionAnalysisJobTest < ActiveSupport::TestCase
     )
 
     job      = WeeklyReflectionAnalysisJob.new
-    snapshot = job.send(:build_input_snapshot, @reflection, nil, [habit], [task])
+    snapshot = job.send(:build_input_snapshot, @reflection, nil, [ habit ], [ task ])
 
     # 習慣のスナップショットが配列として含まれることを確認する
     assert snapshot[:habits].is_a?(Array), "habits が配列であること"

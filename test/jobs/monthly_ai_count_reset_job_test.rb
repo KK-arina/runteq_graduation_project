@@ -36,7 +36,6 @@
 require "test_helper"
 
 class MonthlyAiCountResetJobTest < ActiveJob::TestCase
-
   # ============================================================
   # セットアップ
   # ============================================================

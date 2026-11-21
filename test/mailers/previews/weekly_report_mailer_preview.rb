@@ -12,7 +12,6 @@
 #   「デザイン崩れ」「achievement_color の NoMethodError」を事前に防ぐ。
 # ==============================================================================
 class WeeklyReportMailerPreview < ActionMailer::Preview
-
   def report
     # DB に保存しないダミーユーザー
     user = User.new(name: "テスト太郎", email: "test@example.com")

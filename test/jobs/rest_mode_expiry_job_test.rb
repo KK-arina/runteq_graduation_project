@@ -11,7 +11,6 @@
 require "test_helper"
 
 class RestModeExpiryJobTest < ActiveJob::TestCase
-
   setup do
     @user         = users(:one)
     @user_setting = @user.user_setting ||
