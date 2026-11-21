@@ -169,40 +169,43 @@
       ==========================================================================
       Issue #I-5: Sentry Browser SDK（フロントエンドJSエラー監視）
       ==========================================================================
-      【なぜこの位置（csp_meta_tag の直後・importmap より前）に置くのか】
-        Stimulus コントローラや Turbo などアプリのJSが動き出す前に、最優先で
-        Sentry のエラー捕捉網（window.onerror / unhandledrejection フック）を
-        張るため。これにより読み込み初期のJSエラーも取りこぼさない。
+      【読み込み方（defer）】
+        SDK 本体（/sentry/bundle.min.js）と初期化（/sentry/init-v1.js）を、どちらも defer で読み込む。
+        defer にすると、HTML の解析を止めずにダウンロードし、解析が終わってから実行する。
+        以前は同期読み込みで、ページの表示を 150〜300 ms 止めていた
+        （Lighthouse の「レンダリングをブロックしているリクエスト」）。
+
+      【実行の順番が保たれる理由】
+        defer のスクリプトと、importmap が出す type="module" のスクリプトは、
+        どちらも「解析が終わった後に、HTML に書かれた順で」実行される。
+        そのため ① SDK 本体 → ② 初期化 → ③ アプリの JS（Stimulus・Turbo）の順は変わらず、
+        アプリの JS が動き出す前に、Sentry のエラー捕捉が始まる。
+
+      【初期化を別ファイルに分けた理由】
+        HTML に直接書いた（インラインの）script には defer が効かず、すぐ実行される。
+        その時点では SDK 本体がまだ読み込まれていないため、Sentry が初期化されなくなる。
+        そこで初期化を public/sentry/init-v1.js に分け、DSN とリリースは meta タグで渡す。
+        （DSN はブラウザに見えても問題ない、公開を前提とした値）
+
+      【init-v1.js のファイル名に -v1 を付けている理由】
+        public/ のファイルは本番で 1 年間キャッシュされる（immutable）。
+        中身を変えるときは init-v2.js のように名前を変えないと、古いファイルが使われ続ける。
 
       【なぜ self-host した classic script を使うのか】
-        /sentry/bundle.min.js は Step 1 で public/ 配下に置いた自前ファイル。
         外部CDNに実行時依存しないため、CDN障害でアプリが巻き添えにならず安定。
-        classic script（module ではない）なので importmap の読み込み順に
-        左右されず、確実に最初に初期化できる。
 
       【なぜ本番(production)かつ SENTRY_DSN がある時だけ出力するのか】
         開発・テスト環境では余計な送信を完全に防ぎ、無料枠(月5,000件)を
         本番のためだけに温存するため。バックエンドの sentry.rb と同じ思想。
     %>
     <% if Rails.env.production? && ENV["SENTRY_DSN"].present? %>
-      <%# ① self-host した Sentry Browser SDK 本体を同期読み込みする %>
-      <script src="/sentry/bundle.min.js"></script>
-
-      <%# ② SDK を初期化する。window.Sentry の存在を確認してから呼ぶことで、
-             万一 ①の読み込みに失敗しても JS エラーで画面を壊さない安全設計。 %>
-      <script>
-        if (window.Sentry) {
-          Sentry.init({
-            // 送信先DSN（バックエンドと同一プロジェクト。DSNは公開前提で安全）
-            dsn: "<%= ENV['SENTRY_DSN'] %>",
-            // Render が自動提供するコミットSHAをJS側のリリースにも紐付け、
-            // 「どのデプロイのJSで起きたか」をバックエンドと突き合わせられる
-            release: "<%= ENV['RENDER_GIT_COMMIT'] %>",
-            // 環境名を production として明示（Sentry画面のフィルタ用）
-            environment: "production"
-          });
-        }
-      </script>
+      <%# init-v1.js が読む設定値。content の値は ERB が HTML エスケープして埋め込む %>
+      <meta name="sentry-dsn" content="<%= ENV['SENTRY_DSN'] %>">
+      <meta name="sentry-release" content="<%= ENV['RENDER_GIT_COMMIT'] %>">
+      <%# ① SDK 本体（defer） %>
+      <script src="/sentry/bundle.min.js" defer></script>
+      <%# ② 初期化（defer。HTML に書いた順に実行されるので、必ず ① の後になる） %>
+      <script src="/sentry/init-v1.js" defer></script>
     <% end %>
     <%#
       stylesheet_link_tag の preload 警告対策（E-2 修正）
