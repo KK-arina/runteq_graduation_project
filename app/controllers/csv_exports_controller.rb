@@ -23,7 +23,6 @@
 #
 # ==============================================================================
 class CsvExportsController < ApplicationController
-
   # require_login: 未ログインユーザーをログインページへリダイレクト
   before_action :require_login
 

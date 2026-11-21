@@ -1,0 +1,29 @@
+# .editorconfig
+#
+# 【このファイルの役割】
+#   エディタの保存のしかたを、プロジェクト全体でそろえる。
+#   これまで、保存したファイルの最後に改行が付かず、RuboCop の
+#   Layout/TrailingEmptyLines（Final newline missing）の指摘や、
+#   Git の差分の「\ No newline at end of file」が多く出ていた。
+#
+# 【VS Code で使う場合】
+#   VS Code はこのファイルを標準では読まないため、拡張機能「EditorConfig for VS Code」を入れる。
+
+# これより上のフォルダの .editorconfig は探さない
+root = true
+
+# すべてのファイル
+[*]
+charset = utf-8
+# 改行コードは LF（Linux・Docker・Git と同じ）
+end_of_line = lf
+# ファイルの最後に必ず改行を付ける
+insert_final_newline = true
+# 行の末尾の空白を消す
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Markdown は、行末の空白 2 つが「改行」の意味になることがあるので、行末の空白を消さない
+[*.md]
+trim_trailing_whitespace = false

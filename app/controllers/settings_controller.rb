@@ -28,7 +28,6 @@
 #      （DB のトークンは UserDestroyService がまとめて削除する）
 # ==============================================================================
 class SettingsController < ApplicationController
-
   before_action :require_login
   before_action :set_user
 
@@ -71,10 +70,10 @@ class SettingsController < ApplicationController
     # ゼロ除算（ZeroDivisionError）防止:
     #   monthly_limit が 0 の場合は 0% を返す。
     @ai_usage_rate = if @ai_analysis_monthly_limit > 0
-                       [(@ai_analysis_count.to_f / @ai_analysis_monthly_limit * 100).round, 100].min
-                     else
+                       [ (@ai_analysis_count.to_f / @ai_analysis_monthly_limit * 100).round, 100 ].min
+    else
                        0
-                     end
+    end
 
     # G-5 由来: CSV エクスポートボタンの表示制御（1000件超で非同期切替）に使う
     # コントローラで件数を取得する理由:

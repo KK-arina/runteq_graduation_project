@@ -140,9 +140,9 @@ class NotificationService
   def app_host
     @app_host ||= if Rails.env.production?
                     "https://#{ENV.fetch('APP_HOST', 'habitflow-web.onrender.com')}"
-                  else
+    else
                     "http://localhost:3000"
-                  end
+    end
   end
 
   # use_line?: LINE通知を使うか判定する

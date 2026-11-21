@@ -45,7 +45,7 @@ class HabitRecordAccessibilityTest < ActionDispatch::IntegrationTest
     get path
     assert_response :success
 
-    [@check_habit, @numeric_habit].each do |habit|
+    [ @check_habit, @numeric_habit ].each do |habit|
       # [id='...'] で属性を指定して1つだけ見つかることを確認する
       assert_select "textarea[id='habit_memo_#{habit.id}'][autocomplete='off']", count: 1
       assert_select "textarea[id='habit_memo_#{habit.id}'][aria-label='習慣メモ入力欄（#{habit.name}）']"

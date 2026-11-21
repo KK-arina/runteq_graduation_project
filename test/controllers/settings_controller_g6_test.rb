@@ -12,7 +12,6 @@
 require "test_helper"
 
 class SettingsControllerG6Test < ActionDispatch::IntegrationTest
-
   setup do
     # テスト用ユーザーを fixture から取得する
     @user = users(:one)
@@ -200,5 +199,4 @@ class SettingsControllerG6Test < ActionDispatch::IntegrationTest
     assert_redirected_to settings_path
     assert_nil @user.reload.line_user_id
   end
-
 end

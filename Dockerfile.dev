@@ -1,4 +1,4 @@
-ARG RUBY_VERSION=3.4.10
+ARG RUBY_VERSION=3.4.13
 FROM ruby:$RUBY_VERSION-slim
 
 # 開発に必要なパッケージをインストール（本番用より多めに入れておく）

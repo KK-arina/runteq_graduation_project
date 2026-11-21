@@ -15,7 +15,6 @@
 #
 # ==============================================================================
 class WeeklyReportMailer < ApplicationMailer
-
   # ============================================================
   # helper :application を明示する理由
   # ============================================================
@@ -106,13 +105,13 @@ class WeeklyReportMailer < ApplicationMailer
     #   ユーザーが「いつの週のレポートか」を判断できるようにする。
     @week_label = if reflection.present?
                     reflection.week_label
-                  else
+    else
                     # WeeklyReflection.current_week_start_date は「今週月曜日」を返す
                     # そこから 7 日引いて「先週の月曜日」を取得する
                     last_monday = WeeklyReflection.current_week_start_date - 7.days
                     last_sunday = last_monday + 6.days
                     "#{last_monday.strftime('%Y/%m/%d')} - #{last_sunday.strftime('%m/%d')}"
-                  end
+    end
 
     # ----------------------------------------------------------
     # メール送信

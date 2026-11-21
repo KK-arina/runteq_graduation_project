@@ -18,7 +18,7 @@
 #     --rm  : 変換が終わったらコンテナを自動で削除する（ゴミを残さない）
 #     -v    : 今のフォルダ（リポジトリ）をコンテナ内の /work として見せる
 #
-# 【なぜ ruby:3.4.10-slim のイメージを使うのか】
+# 【なぜ ruby:3.4.13-slim のイメージを使うのか】
 #   Dockerfile.dev の土台と同じイメージなので、すでにパソコンにダウンロード済み。
 #   新しいイメージを取りに行く時間と容量がかからない（中身は Debian）。
 #   librsvg2-bin は Debian 公式のパッケージで、無料（LGPL）で使える。
@@ -45,7 +45,7 @@ cd "$(dirname "$0")/.."
 SRC_DIR="design/pwa"
 OUT_DIR="public/pwa"
 VERSION="v1"
-IMAGE="ruby:3.4.10-slim"
+IMAGE="ruby:3.4.13-slim"
 
 mkdir -p "$OUT_DIR"
 

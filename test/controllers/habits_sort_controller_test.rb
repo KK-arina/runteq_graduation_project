@@ -59,7 +59,7 @@ class HabitsSortControllerTest < ActionDispatch::IntegrationTest
 
     # C → A → B の順に並び替えるリクエストを送信する
     patch sort_habits_path,
-          params: { habit_ids: [@habit_c.id, @habit_a.id, @habit_b.id] },
+          params: { habit_ids: [ @habit_c.id, @habit_a.id, @habit_b.id ] },
           as: :json
 
     assert_response :ok
@@ -78,7 +78,7 @@ class HabitsSortControllerTest < ActionDispatch::IntegrationTest
   test "未ログインユーザーは並び替えできない" do
     # ログインせずに直接リクエストを送る
     patch sort_habits_path,
-          params: { habit_ids: [@habit_c.id, @habit_a.id, @habit_b.id] },
+          params: { habit_ids: [ @habit_c.id, @habit_a.id, @habit_b.id ] },
           as: :json
 
     # ログインページへリダイレクトされることを確認する
@@ -103,7 +103,7 @@ class HabitsSortControllerTest < ActionDispatch::IntegrationTest
     #   エラーにならず安全にスキップするという点が重要であり、
     #   位置の連番性より安全性を優先している。
     patch sort_habits_path,
-          params: { habit_ids: [@habit_a.id, 99999, @habit_b.id] },
+          params: { habit_ids: [ @habit_a.id, 99999, @habit_b.id ] },
           as: :json
 
     # エラーにならず 200 OK を返すこと（存在しない ID は無視される）

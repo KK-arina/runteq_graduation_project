@@ -13,7 +13,6 @@
 #   全メイラーで同じ from 設定を繰り返し書く必要がない。
 # ==============================================================================
 class CsvExportMailer < ApplicationMailer
-
   # helper :application を明示する理由:
   # WeeklyReportMailer と同様に ApplicationHelper のメソッドを
   # ビューテンプレートで使えるようにするため。

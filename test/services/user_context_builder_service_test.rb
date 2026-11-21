@@ -118,15 +118,15 @@ class UserContextBuilderServiceTest < ActiveSupport::TestCase
   test "generate_context_summary: 傾向データのヘッダーが含まれること" do
     result = @service.send(:generate_context_summary,
       habit_patterns: {
-        strong: [{ name: "読書", rate: 85 }],
+        strong: [ { name: "読書", rate: 85 } ],
         weak:   [],
-        all:    [{ name: "読書", rate: 85 }]
+        all:    [ { name: "読書", rate: 85 } ]
       },
       reflection_trends: {
         completion_count: 4, completion_rate: 50,
         avg_mood: 3.5,
-        negative_keywords: ["疲れ"],
-        positive_keywords: ["達成"]
+        negative_keywords: [ "疲れ" ],
+        positive_keywords: [ "達成" ]
       },
       proposal_adoption: { total_ai_tasks: 5, completed_ai_tasks: 3, adoption_rate: 60 }
     )

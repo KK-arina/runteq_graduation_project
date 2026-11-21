@@ -6,7 +6,6 @@
 require "test_helper"
 
 class CsvExportServiceTest < ActiveSupport::TestCase
-
   # setup: 各テスト実行前に共通の準備を行う
   # fixture の users(:one) でテストユーザーを取得する。
   # @service: テスト対象のサービスインスタンス

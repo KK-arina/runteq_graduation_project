@@ -237,7 +237,7 @@ class AiClient
       req.headers["Content-Type"] = "application/json"
       req.body = {
         contents: [
-          { parts: [{ text: prompt }] }
+          { parts: [ { text: prompt } ] }
         ],
         generationConfig: {
           temperature:     0.7,
@@ -326,9 +326,9 @@ class AiClient
     status     = response.status
     error_body = if response.body.is_a?(Hash)
                    response.body.dig("error", "message").to_s
-                 else
+    else
                    response.body.to_s[0, 200]  # 長すぎるボディを切り詰める
-                 end
+    end
 
     Rails.logger.error "[AiClient] #{provider_name} HTTP #{status}: #{error_body}"
 

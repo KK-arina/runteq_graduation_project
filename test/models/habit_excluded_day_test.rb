@@ -108,7 +108,7 @@ class HabitExcludedDayTest < ActiveSupport::TestCase
     #   create! 後も @habit インスタンスはキャッシュを持っている場合がある。
     #   reload することで DB の最新状態を取得できる。
     @habit.reload
-    assert_equal [0, 6], @habit.excluded_day_numbers,
+    assert_equal [ 0, 6 ], @habit.excluded_day_numbers,
                  "除外日番号が昇順（0=日, 6=土）でソートされるはず"
   end
 
@@ -138,7 +138,7 @@ class HabitExcludedDayTest < ActiveSupport::TestCase
       weekly_target: 7,
       measurement_type: :check_type
     )
-    [1, 2, 3, 4, 5].each { |d| habit_7.habit_excluded_days.create!(day_of_week: d) }
+    [ 1, 2, 3, 4, 5 ].each { |d| habit_7.habit_excluded_days.create!(day_of_week: d) }
     habit_7.reload
 
     assert_equal 2, habit_7.effective_weekly_target,
@@ -230,7 +230,7 @@ class HabitExcludedDayTest < ActiveSupport::TestCase
     assert_equal 100, stats[:rate],
                  "150/150 = 100% のはず"
   end
-  
+
   # ============================================================
   # ⑤ 除外日を全て外す操作のテスト（destroy_all 設計の検証）
   # ============================================================
@@ -242,7 +242,7 @@ class HabitExcludedDayTest < ActiveSupport::TestCase
     @habit.reload
 
     # 除外日が設定されていることを確認する
-    assert_equal [0, 6], @habit.excluded_day_numbers
+    assert_equal [ 0, 6 ], @habit.excluded_day_numbers
 
     # Controller の save_excluded_days! が行う操作を再現する
     # 【なぜ destroy_all を使うのか】

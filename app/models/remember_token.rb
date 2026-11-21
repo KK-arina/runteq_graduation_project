@@ -135,7 +135,7 @@ class RememberToken < ApplicationRecord
       prune_excess_for!(user)
     end
 
-    [record, raw_token]
+    [ record, raw_token ]
   end
 
   # find_active_by_raw_token
@@ -205,7 +205,7 @@ class RememberToken < ApplicationRecord
     return false if last_used_at > now - SLIDE_INTERVAL
 
     # [今から30日後, 最長期限].min → 2つのうち早いほうを新しい期限にする
-    new_expires_at = [now + IDLE_TIMEOUT, absolute_expires_at].min
+    new_expires_at = [ now + IDLE_TIMEOUT, absolute_expires_at ].min
 
     update_columns(expires_at: new_expires_at, last_used_at: now, updated_at: now)
     true

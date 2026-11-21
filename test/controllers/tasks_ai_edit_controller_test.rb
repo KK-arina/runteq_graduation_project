@@ -22,7 +22,6 @@
 require "test_helper"
 
 class TasksAiEditControllerTest < ActionDispatch::IntegrationTest
-
   # ============================================================
   # setup: テスト前の共通準備
   # ============================================================

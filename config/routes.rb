@@ -34,7 +34,7 @@ Rails.application.routes.draw do
   get "/terms",   to: "pages#terms",   as: :terms
   get "/privacy", to: "pages#privacy", as: :privacy
 
-  resources :password_resets, only: [:new, :create, :edit, :update]
+  resources :password_resets, only: [ :new, :create, :edit, :update ]
 
   get  "/terms_agreement", to: "terms_agreement#show",  as: :terms_agreement
   post "/terms_agreement", to: "terms_agreement#agree", as: :terms_agreement_agree
@@ -179,7 +179,7 @@ end
   #   参照していたが、本実装で analytics_path に差し替える）。
   get "analytics", to: "analytics#index", as: :analytics
 
-  resource :user_purpose, only: [:show, :new, :create, :edit, :update] do
+  resource :user_purpose, only: [ :show, :new, :create, :edit, :update ] do
     member do
       post :retry_analysis
       get  :ai_result
@@ -219,7 +219,7 @@ end
     resources :habit_records, only: [ :create, :update ]
   end
 
-  resources :weekly_reflections, only: [:index, :new, :create, :show] do
+  resources :weekly_reflections, only: [ :index, :new, :create, :show ] do
     collection do
       post :complete_without_ai
       post :confirm_proposals

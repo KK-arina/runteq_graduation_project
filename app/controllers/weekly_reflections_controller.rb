@@ -33,7 +33,7 @@
 
 class WeeklyReflectionsController < ApplicationController
   before_action :require_login
-  before_action :set_weekly_reflection, only: [:show]
+  before_action :set_weekly_reflection, only: [ :show ]
 
   # ── D-10 追加: AI API レート制限（連打防止）────────────────────────────
   #
@@ -45,7 +45,7 @@ class WeeklyReflectionsController < ApplicationController
   # 【throttle_ai_request は ApplicationController に定義】
   #   全コントローラーで再利用可能にするため親クラスに配置している。
   # ──────────────────────────────────────────────────────────────────────
-  before_action :throttle_ai_request, only: [:create]
+  before_action :throttle_ai_request, only: [ :create ]
 
   def index
     @weekly_reflections = current_user.weekly_reflections
@@ -228,25 +228,25 @@ class WeeklyReflectionsController < ApplicationController
     end
   end
 
-# 【G-9 での変更内容】
-#   confirm_proposals に以下の4種類の新 type の処理を追加:
-#     - "habit_modify"  : 習慣の weekly_target 等を更新
-#     - "habit_delete"  : 習慣を論理削除（archived_at を設定）
-#     - "task_modify"   : タスクの priority 等を更新
-#     - "goal_review"   : DBへの変更なし（ユーザーをPMVVページへ誘導するのみ）
-#
-#   【既存の "habit" / "task" type の処理は変更しない（後方互換性）】
-#     G-9 完了条件「既存の "habit" / "task" type の動作が変わらない」を満たすため。
-#
-#   【マッチング戦略：名前の完全一致】
-#     habit_name / task_title で既存レコードを検索する。
-#     マッチしない場合はスキップ（エラーにしない）。
-#     理由: AIが若干異なる名前を返す可能性があり、その場合もアプリをクラッシュさせない。
-#
-#   【トランザクション境界】
-#     既存の transaction ブロック内に全処理を含める（A-7 トランザクション原則）。
-#     habit_modify / habit_delete / task_modify を transaction で包むことで、
-#     途中でエラーが起きても中途半端な状態にならない。
+  # 【G-9 での変更内容】
+  #   confirm_proposals に以下の4種類の新 type の処理を追加:
+  #     - "habit_modify"  : 習慣の weekly_target 等を更新
+  #     - "habit_delete"  : 習慣を論理削除（archived_at を設定）
+  #     - "task_modify"   : タスクの priority 等を更新
+  #     - "goal_review"   : DBへの変更なし（ユーザーをPMVVページへ誘導するのみ）
+  #
+  #   【既存の "habit" / "task" type の処理は変更しない（後方互換性）】
+  #     G-9 完了条件「既存の "habit" / "task" type の動作が変わらない」を満たすため。
+  #
+  #   【マッチング戦略：名前の完全一致】
+  #     habit_name / task_title で既存レコードを検索する。
+  #     マッチしない場合はスキップ（エラーにしない）。
+  #     理由: AIが若干異なる名前を返す可能性があり、その場合もアプリをクラッシュさせない。
+  #
+  #   【トランザクション境界】
+  #     既存の transaction ブロック内に全処理を含める（A-7 トランザクション原則）。
+  #     habit_modify / habit_delete / task_modify を transaction で包むことで、
+  #     途中でエラーが起きても中途半端な状態にならない。
 
   def confirm_proposals
     reflection = current_user.weekly_reflections.find(params[:reflection_id])
@@ -267,7 +267,7 @@ class WeeklyReflectionsController < ApplicationController
 
     already_confirmed = current_user.tasks
                                     .where(ai_generated: true, task_type: :improve)
-                                    .where('created_at > ?', ai_analysis.created_at)
+                                    .where("created_at > ?", ai_analysis.created_at)
                                     .exists?
 
     if already_confirmed

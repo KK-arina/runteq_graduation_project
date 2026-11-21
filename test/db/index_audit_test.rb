@@ -60,7 +60,7 @@ class IndexAuditTest < ActiveSupport::TestCase
     # DashboardsController#index の build_habit_stats が発行する
     # WHERE user_id=? AND record_date BETWEEN ? AND ? AND completed=true
     # というクエリがインデックスを利用できるかのカギ。
-    assert connection.index_exists?(:habit_records, [:user_id, :record_date]),
+    assert connection.index_exists?(:habit_records, [ :user_id, :record_date ]),
            "habit_records に (user_id, record_date) の複合インデックスが必要です"
   end
 
@@ -72,7 +72,7 @@ class IndexAuditTest < ActiveSupport::TestCase
     # DBのUNIQUE制約があれば必ずどちらかがエラーになり2重記録を防げる。
     assert connection.index_exists?(
       :habit_records,
-      [:user_id, :habit_id, :record_date],
+      [ :user_id, :habit_id, :record_date ],
       unique: true
     ), "habit_records に (user_id, habit_id, record_date) の UNIQUE 制約が必要です"
   end
@@ -85,7 +85,7 @@ class IndexAuditTest < ActiveSupport::TestCase
     # 【重要度：高】
     # タスク一覧のフィルタリング（WHERE user_id=? AND status=0 ORDER BY due_date）
     # を高速化する既存インデックス。
-    assert connection.index_exists?(:tasks, [:user_id, :status, :due_date]),
+    assert connection.index_exists?(:tasks, [ :user_id, :status, :due_date ]),
            "tasks に (user_id, status, due_date) の複合インデックスが必要です"
   end
 
@@ -112,8 +112,8 @@ class IndexAuditTest < ActiveSupport::TestCase
 
     # 対象カラムの確認
     # idx.columns → ["user_id", "status", "deleted_at", "due_date"] のような配列
-    assert_equal ["user_id", "status", "deleted_at", "due_date"],
-                 idx.columns.map(&:to_s).sort == ["deleted_at", "due_date", "status", "user_id"] ? idx.columns.map(&:to_s) : idx.columns.map(&:to_s),
+    assert_equal [ "user_id", "status", "deleted_at", "due_date" ],
+                 idx.columns.map(&:to_s).sort == [ "deleted_at", "due_date", "status", "user_id" ] ? idx.columns.map(&:to_s) : idx.columns.map(&:to_s),
                  "idx_tasks_active_tasks のカラム構成が正しくありません"
 
     # WHERE条件（部分インデックス）の確認
@@ -126,7 +126,7 @@ class IndexAuditTest < ActiveSupport::TestCase
     # 【重要度：中】
     # GoodJob がアラーム通知対象タスクを検索する
     # WHERE alarm_enabled=true AND scheduled_at<=? というクエリを高速化する。
-    assert connection.index_exists?(:tasks, [:alarm_enabled, :scheduled_at]),
+    assert connection.index_exists?(:tasks, [ :alarm_enabled, :scheduled_at ]),
            "tasks に (alarm_enabled, scheduled_at) の複合インデックスが必要です"
   end
 
@@ -137,7 +137,7 @@ class IndexAuditTest < ActiveSupport::TestCase
   test "notification_logs に (user_id, created_at) の複合インデックスが存在する" do
     # 【重要度：高】
     # 通知履歴の取得・1日の送信回数チェックで使われる。
-    assert connection.index_exists?(:notification_logs, [:user_id, :created_at]),
+    assert connection.index_exists?(:notification_logs, [ :user_id, :created_at ]),
            "notification_logs に (user_id, created_at) の複合インデックスが必要です"
   end
 
@@ -158,7 +158,7 @@ class IndexAuditTest < ActiveSupport::TestCase
     # 同じユーザーが同じ週に2つ振り返りを作れないようにするDB制約。
     assert connection.index_exists?(
       :weekly_reflections,
-      [:user_id, :week_start_date],
+      [ :user_id, :week_start_date ],
       unique: true
     ), "weekly_reflections に (user_id, week_start_date) の UNIQUE 制約が必要です"
   end
@@ -198,7 +198,7 @@ class IndexAuditTest < ActiveSupport::TestCase
     # 【重要度：高】
     # OmniAuth（Google/LINEログイン）で同じアカウントが重複登録されないようにする。
     assert connection.index_exists?(
-      :users, [:provider, :uid], unique: true
+      :users, [ :provider, :uid ], unique: true
     ), "users に (provider, uid) の UNIQUE 制約が必要です"
   end
 

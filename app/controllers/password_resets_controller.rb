@@ -41,10 +41,10 @@ class PasswordResetsController < ApplicationController
   #   未ログインユーザー（current_user が nil）の場合は自然にスキップされる。
 
   # edit と update では URL の :id からトークンを特定する
-  before_action :set_token_by_id, only: [:edit, :update]
+  before_action :set_token_by_id, only: [ :edit, :update ]
 
   # トークンが有効か（期限内・未使用）をチェックする
-  before_action :validate_token,  only: [:edit, :update]
+  before_action :validate_token,  only: [ :edit, :update ]
 
   # ============================================================
   # GET /password_resets/new
