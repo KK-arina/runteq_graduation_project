@@ -1,3 +1,22 @@
+# .github/workflows/ci.yml
+#
+# 【このワークフローの役割】
+#   PR を作ったときと main にプッシュしたときに、次の 4 つを自動で確認する。
+#   ・scan_ruby … Brakeman で Rails のセキュリティの問題を探す
+#   ・scan_js   … importmap で読み込む JS ライブラリの脆弱性を調べる
+#   ・lint      … RuboCop でコードの書き方をそろえる
+#   ・test      … テストを実行する
+#
+# 【2026-11 の見直し】
+#   リポジトリの GitHub Actions が無効になっていて、この CI は一度も動いていなかった。
+#   有効にしたところ失敗したため、次の点を直した。
+#   ・test：テスト用 DB の接続先は config/database.yml で DB_HOST（初期値 db＝Docker Compose のコンテナ名）。
+#           CI の DB は localhost で動いているので、DB_HOST に localhost を渡す。
+#           test 環境は DATABASE_URL を使わない構成（#I-3）なので、DATABASE_URL は渡さない。
+#   ・test：システムテスト（test/system）が 0 件なので、test:system と Chrome のインストールをやめた。
+#   ・test：CI の PostgreSQL を本番（Neon）と同じ 16 に固定した。
+#   ・actions/checkout を v5 に上げた（v4 は Node.js 20 で動き、GitHub から非推奨の警告が出ていた）。
+
 name: CI
 
 on:
@@ -5,13 +24,17 @@ on:
   push:
     branches: [ main ]
 
+# CI はリポジトリの中身を読むだけなので、GitHub トークンの権限を「読み取り」だけにする
+permissions:
+  contents: read
+
 jobs:
   scan_ruby:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -19,6 +42,7 @@ jobs:
           ruby-version: .ruby-version
           bundler-cache: true
 
+      # bin/brakeman は --ensure-latest を付けて実行するため、Brakeman が最新版でないと失敗する
       - name: Scan for common Rails security vulnerabilities using static analysis
         run: bin/brakeman --no-pager
 
@@ -27,7 +51,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -40,9 +64,10 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -50,34 +75,35 @@ jobs:
           ruby-version: .ruby-version
           bundler-cache: true
 
+      # -f github … 指摘を PR の画面（Annotations）に表示する形式で出す
       - name: Lint code for consistent style
         run: bin/rubocop -f github
 
   test:
     runs-on: ubuntu-latest
 
+    # テスト用の PostgreSQL を、このジョブの横で動かす（localhost:5432 で接続できる）
     services:
       postgres:
-        image: postgres
+        # 本番（Neon）と同じメジャーバージョンに固定する
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
+        # DB が接続を受け付けられるようになるまで、テストを始めない
         options: --health-cmd="pg_isready" --health-interval=10s --health-timeout=5s --health-retries=3
 
-      # redis:
-      #   image: redis
-      #   ports:
-      #     - 6379:6379
-      #   options: --health-cmd "redis-cli ping" --health-interval 10s --health-timeout 5s --health-retries 5
-
     steps:
+      # libjemalloc2 … Ruby のメモリ管理を効率化するライブラリ（本番の Docker イメージと同じ）
+      # libvips … 画像処理のライブラリ（Active Storage が使う）
+      # postgresql-client … DB の準備（db:test:prepare）で使う
       - name: Install packages
-        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y google-chrome-stable curl libjemalloc2 libvips postgresql-client
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y libjemalloc2 libvips postgresql-client
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Ruby
         uses: ruby/setup-ruby@v1
@@ -88,14 +114,8 @@ jobs:
       - name: Run tests
         env:
           RAILS_ENV: test
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432
-          # REDIS_URL: redis://localhost:6379/0
-        run: bin/rails db:test:prepare test test:system
-
-      - name: Keep screenshots from failed system tests
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: screenshots
-          path: ${{ github.workspace }}/tmp/screenshots
-          if-no-files-found: ignore
+          # config/database.yml の host / username / password は、これらの環境変数で上書きできる
+          DB_HOST: localhost
+          DB_USERNAME: postgres
+          DB_PASSWORD: postgres
+        run: bin/rails db:test:prepare test
