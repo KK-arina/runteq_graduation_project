@@ -113,4 +113,67 @@ class WeeklyReportJobTest < ActiveSupport::TestCase
       end
     end
   end
+
+  # ============================================================
+  # テスト 5: 先週分の完了記録だけが集計される（record_date 列のバグ修正の確認）
+  # ============================================================
+  #
+  # 【このテストを追加した理由】
+  #   以前は集計に存在しない列 recorded_on を使っていたため、
+  #   習慣を持つユーザーでは毎回エラーになり、メールが送られていなかった。
+  #   テスト 1〜4 のユーザーは習慣を持たないため集計処理が実行されず、
+  #   このバグを見つけられなかった。
+  #   ここでは習慣と記録を実際に作り、集計の SQL を必ず実行させる。
+  test "先週の完了記録だけが habit_stats に集計されてメールに渡される" do
+    # 「今日」を 2026-11-23（月）9:00 に固定する
+    # 【固定する理由】
+    #   「先週」の範囲は実行日によって変わるため、日付を固定しないと
+    #   テストを実行する日によって結果が変わってしまう。
+    #   この日の先週は 11/16（月）〜 11/22（日）になる。
+    travel_to Time.zone.local(2026, 11, 23, 9, 0, 0) do
+      habit = Habit.create!(
+        user:             @target_user,
+        name:             "読書",
+        measurement_type: :check_type,
+        weekly_target:    7
+      )
+      # 集計対象は「先週末までに作られた習慣」だけなので、作成日時を過去にずらす
+      # （update_column はバリデーションとコールバックを通さずに1列だけ更新する）
+      habit.update_column(:created_at, 30.days.ago)
+
+      # 先週の範囲内で完了 → 数える（2件）
+      # 11/17・11/18 は「月曜始まり」でも「日曜始まり」でも先週に入る日付
+      HabitRecord.create!(user: @target_user, habit: habit, record_date: Date.new(2026, 11, 17), completed: true)
+      HabitRecord.create!(user: @target_user, habit: habit, record_date: Date.new(2026, 11, 18), completed: true)
+
+      # 先週の範囲内だが未完了 → 数えない
+      HabitRecord.create!(user: @target_user, habit: habit, record_date: Date.new(2026, 11, 19), completed: false)
+
+      # 先週の範囲外（2週間前と今日）→ 数えない
+      HabitRecord.create!(user: @target_user, habit: habit, record_date: Date.new(2026, 11, 10), completed: true)
+      HabitRecord.create!(user: @target_user, habit: habit, record_date: Date.new(2026, 11, 23), completed: true)
+
+      # メーラーに渡された stats を記録しておく入れ物
+      captured_stats = nil
+      original_report = WeeklyReportMailer.method(:report)
+
+      # 本物のメーラーを呼びつつ、渡された stats だけを横取りして記録する
+      WeeklyReportMailer.stub(:report, ->(user, reflection, stats) {
+        captured_stats = stats if user.id == @target_user.id
+        original_report.call(user, reflection, stats)
+      }) do
+        assert_emails 1 do
+          WeeklyReportJob.new.perform
+        end
+      end
+
+      # 集計でエラーになるとメーラーまで届かず captured_stats が nil のままになる
+      assert_not_nil captured_stats, "集計中にエラーが起きてメーラーが呼ばれていません"
+      assert_equal 1, captured_stats.size
+
+      stat = captured_stats.first
+      assert_equal "読書", stat[:name]
+      assert_equal 2, stat[:completed]
+    end
+  end
 end

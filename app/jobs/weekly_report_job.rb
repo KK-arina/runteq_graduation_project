@@ -187,10 +187,10 @@ class WeeklyReportJob < ApplicationJob
 
     habits.map do |habit|
       # 先週の完了レコード数を集計する
-      # recorded_on: 先週月曜〜日曜の範囲で絞り込む
+      # record_date: 先週月曜〜日曜の範囲で絞り込む
       # completed: true のみカウント（除外日・スキップは false）
       completed_count = habit.habit_records
-                             .where(recorded_on: last_week_start..last_week_end)
+                             .where(record_date: last_week_start..last_week_end)
                              .where(completed: true)
                              .count
 
