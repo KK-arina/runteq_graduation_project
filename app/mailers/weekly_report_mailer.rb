@@ -10,7 +10,7 @@
 #
 # 【親クラス ApplicationMailer について】
 #   ApplicationMailer を継承することで以下を自動的に引き継ぐ:
-#   - default from: "HabitFlow <onboarding@resend.dev>" （送信元アドレス）
+#   - default from: "HabitFlow <no-reply@mail.habitflow-arina.com>" （送信元アドレス）
 #   - layout "mailer" （HTML メールのレイアウトテンプレート）
 #
 # ==============================================================================
