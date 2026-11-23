@@ -23,20 +23,26 @@ class ApplicationMailer < ActionMailer::Base
   # ここを一箇所で定義することで、全メールの送信元が統一される。
   #
   # 【書式の説明】
-  # "HabitFlow <onboarding@resend.dev>"
-  #   - "HabitFlow"           → メールクライアントに表示される送信者名
-  #   - onboarding@resend.dev → 実際の送信元メールアドレス
+  # "HabitFlow <no-reply@mail.habitflow-arina.com>"
+  #   - "HabitFlow"                         → メールクライアントに表示される送信者名
+  #   - no-reply@mail.habitflow-arina.com → 実際の送信元メールアドレス
   #   - この形式で書くことでGmailなどで「HabitFlow」と表示される
   #
-  # 【独自ドメインがある場合の変更例】
-  # "HabitFlow <noreply@yourdomain.com>"
-  #   → SPF/DKIM設定済みの独自ドメインを使うとスパム判定されにくい
+  # 【独自ドメイン mail.habitflow-arina.com を使う理由】
+  # 以前は Resend のテスト用アドレス onboarding@resend.dev を使っていたが、
+  # これは Resend アカウントの持ち主にしか届かないため、
+  # ほかのユーザーにはパスワードリセットなどのメールが届かなかった。
+  # Resend で mail.habitflow-arina.com を確認済み（DKIM / SPF / DMARC 設定済み）にしたため、
+  # 全ユーザーに送れるようになり、迷惑メールとも判定されにくい。
   #
-  # 【現在 onboarding@resend.dev を使う理由】
-  # Resendが提供するテスト用アドレス。
-  # 独自ドメインのDNS設定（SPF/DKIM）が完了するまでの暫定対応として使用。
-  # 将来的には独自ドメインのアドレスに変更することを推奨。
-  default from: "HabitFlow <onboarding@resend.dev>"
+  # 【注意】
+  # @ の後ろは Resend で確認したドメイン「mail.habitflow-arina.com」と完全に一致させる必要がある。
+  # 「@habitflow-arina.com」（mail. なし）は Resend で確認していないため送信できない。
+  #
+  # 【no-reply にする理由】
+  # Resend の受信機能（Enable receiving）は無効にしているため、返信されても受け取れない。
+  # 「返信しないでください」という意味が伝わる名前にしている。
+  default from: "HabitFlow <no-reply@mail.habitflow-arina.com>"
 
   # ============================================================
   # レイアウトテンプレートの指定

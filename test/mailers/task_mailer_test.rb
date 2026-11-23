@@ -50,7 +50,7 @@ class TaskMailerTest < ActionMailer::TestCase
     assert_includes mail.to, @user.email,
                     "宛先がユーザーのメールアドレスであるべきです"
 
-    assert_includes mail.from, "onboarding@resend.dev",
+    assert_includes mail.from, "no-reply@mail.habitflow-arina.com",
                     "送信元が HabitFlow のアドレスであるべきです"
   end
 end
