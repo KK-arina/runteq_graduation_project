@@ -162,3 +162,14 @@ application.register("remember-me", RememberMeController)
 //   ここに import と register を追加しないと読み込まれない。
 import PwaGuideController from "controllers/pwa_guide_controller"
 application.register("pwa-guide", PwaGuideController)
+
+// ホーム画面に追加（PWA）追加: ダッシュボードの「ホーム画面に追加」バナーを ✕ で閉じるコントローラー
+// 【役割】
+//   ✕ で閉じたことをブラウザの localStorage に記録し、次からは表示しない（サーバーには何も送らない）。
+// 【登録名 "install-banner" について】
+//   ビュー側の data-controller="install-banner" / data-action="install-banner#dismiss" と一致させる。
+// 【なぜ手動登録するのか】
+//   このファイルは手動登録方式のため、新しいコントローラーは
+//   ここに import と register を追加しないと読み込まれない。
+import InstallBannerController from "controllers/install_banner_controller"
+application.register("install-banner", InstallBannerController)
