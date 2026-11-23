@@ -1,0 +1,93 @@
+<%# app/views/dashboards/_install_banner.html.erb %>
+<%#
+  ============================================================
+  ホーム画面に追加（PWA）: ダッシュボードのバナー
+  ============================================================
+  【このパーシャルの役割】
+    ブラウザで開いている人に「ホーム画面に追加すると1タップで開ける」ことを知らせる。
+    詳しい手順は、設定ページの案内カード（settings/_pwa_install_guide.html.erb）に任せる。
+
+  【3重の入れ物の役割】
+    外側の div（data-controller="pwa-guide"）:
+      既存の PwaGuideController を接続する。
+      ・ホーム画面から開いているかの判定（browserOnly）
+      ・Chrome / Edge の「今すぐ追加する」ボタン（installArea / install）
+    真ん中の div（data-pwa-guide-target="browserOnly"）:
+      ホーム画面から開いているときは隠れる（すでに追加済みの人には案内しない）。
+    内側の section（data-controller="install-banner"）:
+      ✕ で閉じたら localStorage に記録し、次から表示しない。
+
+  【すべて hidden で出力している理由】
+    JavaScript が「ブラウザで開いている」かつ「まだ閉じていない」と判定したときだけ表示する。
+    最初から表示しておくと、ホーム画面から開いた人や、閉じた人の画面で一瞬だけ見えてしまう（ちらつく）。
+    JavaScript が動かない場合は表示されないだけで、ダッシュボードの利用には影響しない。
+
+  【DB（Neon）へのアクセス】
+    このバナーはサーバーにも DB にもアクセスしない（判定と記録はブラウザの中だけ）。
+
+  【role="region" と aria-labelledby】
+    スクリーンリーダーで「ホーム画面に追加」の区画として見出しから移動できるようにする。
+
+  文言は config/locales/pwa_install.ja.yml の pwa_install.banner で管理する。
+  ============================================================
+%>
+<div data-controller="pwa-guide">
+  <div hidden data-pwa-guide-target="browserOnly">
+    <section hidden
+             data-controller="install-banner"
+             data-testid="dashboard-install-banner"
+             role="region"
+             aria-labelledby="dashboard-install-banner-title"
+             class="mb-6 p-4 rounded-lg border border-blue-200 bg-blue-50 text-blue-900">
+      <div class="flex items-start gap-3">
+        <span class="text-2xl flex-shrink-0" aria-hidden="true">📲</span>
+
+        <div class="flex-1 min-w-0">
+          <h2 id="dashboard-install-banner-title" class="text-sm font-bold">
+            <%= t("pwa_install.banner.title") %>
+          </h2>
+          <p class="mt-1 text-sm leading-relaxed">
+            <%= t("pwa_install.banner.body") %>
+          </p>
+
+          <div class="mt-3 flex flex-wrap items-center gap-3">
+            <%#
+              Chrome / Edge のときだけ表示される「今すぐ追加する」ボタン
+              data-pwa-guide-target="installArea":
+                PwaGuideController が「インストールできる」合図を受け取ったときだけ表示する
+              data-action="pwa-guide#install":
+                押すとブラウザのインストール画面を出す（設定ページのボタンと同じ処理）
+            %>
+            <div hidden data-pwa-guide-target="installArea">
+              <button type="button"
+                      data-action="pwa-guide#install"
+                      class="px-3 py-1.5 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">
+                <%= t("pwa_install.banner.install_button") %>
+              </button>
+            </div>
+
+            <%#
+              設定ページの案内カードへのリンク
+              anchor: "pwa-install-guide" … 案内カードの id。移動したときにカードの位置まで画面が進む
+              iPhone の Safari や LINE 内ブラウザなど、ボタンで追加できない端末の人はこちらから手順を見る
+            %>
+            <%= link_to t("pwa_install.banner.how_to"),
+                        settings_path(anchor: "pwa-install-guide"),
+                        class: "text-sm font-medium text-blue-700 underline hover:text-blue-900" %>
+          </div>
+        </div>
+
+        <%#
+          ✕ ボタン
+          aria-label: 見た目は「✕」だけなので、スクリーンリーダー向けに何のボタンかを伝える
+        %>
+        <button type="button"
+                data-action="install-banner#dismiss"
+                aria-label="<%= t("pwa_install.banner.dismiss") %>"
+                class="flex-shrink-0 p-1 rounded text-blue-700 hover:text-blue-900 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500">
+          <span aria-hidden="true">✕</span>
+        </button>
+      </div>
+    </section>
+  </div>
+</div>

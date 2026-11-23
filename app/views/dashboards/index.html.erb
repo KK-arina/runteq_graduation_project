@@ -18,6 +18,12 @@
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
   <%#
+    ホーム画面に追加（PWA）: ブラウザで開いていて、まだ閉じていない人にだけ表示するバナー
+    （中身と表示の条件は dashboards/_install_banner.html.erb に書いている）
+  %>
+  <%= render "dashboards/install_banner" %>
+
+  <%#
     D-7: PMVV AI分析状態バナー（16番ページとの共有ストリーム）
     G-7: ダッシュボード専用 PMVV 完了通知バナーの追加
   %>
