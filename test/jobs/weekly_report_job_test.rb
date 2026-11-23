@@ -176,4 +176,43 @@ class WeeklyReportJobTest < ActiveSupport::TestCase
       assert_equal 2, stat[:completed]
     end
   end
+
+  # ============================================================
+  # テスト 6: 送信に失敗したユーザーは Sentry 通知に渡される
+  # ============================================================
+  #
+  # 【確認したいこと】
+  #   ログだけで終わらず、失敗のたびに report_failure_to_sentry が
+  #   「エラー」と「ユーザー」を受け取って呼ばれること。
+  #   テスト環境では Sentry が動かないため、メソッドを差し替えて呼ばれたかを記録する。
+  test "送信に失敗したユーザーは Sentry 通知用のメソッドに渡される" do
+    job = WeeklyReportJob.new
+    reported = []
+
+    WeeklyReportMailer.stub(:report, ->(*) { raise StandardError, "テスト用の強制エラー" }) do
+      job.stub(:report_failure_to_sentry, ->(error, user) { reported << [ error, user ] }) do
+        job.perform
+      end
+    end
+
+    assert_equal 1, reported.size
+    error, user = reported.first
+    assert_equal "テスト用の強制エラー", error.message
+    assert_equal @target_user.id, user.id
+  end
+
+  # ============================================================
+  # テスト 7: Sentry が無効な環境では何もせず、エラーにもならない
+  # ============================================================
+  #
+  # 【確認したいこと】
+  #   開発・テスト環境（Sentry 未初期化）で、通知処理そのものが
+  #   新しいエラーを起こさないこと。
+  test "Sentry が初期化されていないときは何もせずエラーにならない" do
+    Sentry.stub(:initialized?, false) do
+      assert_nothing_raised do
+        WeeklyReportJob.new.send(:report_failure_to_sentry, StandardError.new("テスト"), @target_user)
+      end
+    end
+  end
 end

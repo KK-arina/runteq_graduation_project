@@ -105,6 +105,8 @@ class WeeklyReportJob < ApplicationJob
         failed_count += 1
         Rails.logger.error "[WeeklyReportJob] ユーザー ID=#{user.id} への送信失敗: " \
                            "#{e.class} - #{e.message}"
+        # ログだけでは気づくのが遅れるため、Sentry にも通知する（本番のみ）
+        report_failure_to_sentry(e, user)
       end
     end
 
@@ -113,6 +115,32 @@ class WeeklyReportJob < ApplicationJob
   end
 
   private
+
+  # ==============================================================
+  # report_failure_to_sentry - 送信失敗を Sentry に通知する
+  # ==============================================================
+  #
+  # 【なぜ必要か】
+  #   ユーザーごとの失敗は rescue でログに残すだけだったため、
+  #   列名の間違い（recorded_on）のようなバグに、ログを見るまで気づけなかった。
+  #   Sentry に送ると、失敗が起きた時点で通知が届く。
+  #
+  # 【Sentry.initialized? でガードする理由】本番のみ送信（dev/test では何もしない）。
+  #
+  # 【個人情報を送らない配慮】
+  #   メールアドレスなどは送らず、匿名の user.id だけを付ける
+  #   （application_controller.rb の render_500 と同じ方針）。
+  #   set_tags で「週次レポートジョブの失敗」と印を付け、Sentry の画面で検索しやすくする。
+  #   with_scope で、この1件のイベントだけに情報を限定し、ほかの処理に影響させない。
+  def report_failure_to_sentry(error, user)
+    return unless Sentry.initialized?
+
+    Sentry.with_scope do |scope|
+      scope.set_user(id: user.id)
+      scope.set_tags(source: "weekly_report_job")
+      Sentry.capture_exception(error)
+    end
+  end
 
   # ==============================================================
   # send_report_to - 1ユーザーへのレポート送信処理
