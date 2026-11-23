@@ -82,7 +82,7 @@ if worker_count > 1
   workers worker_count
 
   # ----------------------------------------------------------------
-  # on_worker_boot: 各 Worker が起動したときに実行するコールバック
+  # before_worker_boot: 各 Worker が起動したときに実行するコールバック（Puma 7 で on_worker_boot から名前が変わった）
   # ----------------------------------------------------------------
   #
   # なぜ必要か:
@@ -99,7 +99,7 @@ if worker_count > 1
   # defined?(ActiveRecord) で条件分岐する理由:
   #   将来的に ActiveRecord を使わない Worker タスクを追加した場合に
   #   エラーが発生しないよう、ActiveRecord が読み込まれているか確認してから実行する。
-  on_worker_boot do
+  before_worker_boot do
     ActiveRecord::Base.establish_connection if defined?(ActiveRecord)
   end
 end
