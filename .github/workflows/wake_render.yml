@@ -1,0 +1,56 @@
+# .github/workflows/wake_render.yml
+#
+# ==============================================================================
+# スリープ中の Render を起こす（cron-job.org から API で手動起動される）
+# ==============================================================================
+#
+# 【なぜ必要か】
+#   Render の無料プランは15分アクセスがないとスリープし、その間は GoodJob の cron が動かない。
+#   cron-job.org から直接 /up を叩くと、Render が起動を拒否して 503
+#   （x-render-routing: hibernate-wake-error）を返し、アプリが起きなかった。
+#   GitHub Actions からの curl では起きた実績があるため、
+#   cron-job.org は「このワークフローを起動する」だけにし、起こす処理はここで行う。
+#
+# 【なぜ schedule ではなく workflow_dispatch なのか】
+#   GitHub の schedule（定期実行）は混雑時に数時間遅れることがあり、ジョブの時刻に間に合わなかった。
+#   workflow_dispatch（API からの手動起動）は、呼ばれるとすぐに始まる。
+#
+# 【起動のタイミング（cron-job.org 側の設定・Asia/Tokyo）】
+#   23:55 … 0:00 / 0:05 のジョブ用
+#   4:00 / 4:10 … 4:05 / 4:10 / 4:15 のジョブ用
+#   月曜 8:55 … 9:00 の週次レポート用
+#   Render は最後のアクセスから15分は起きているので、少し前に起こせば間に合う。
+# ==============================================================================
+name: Wake Render for cron jobs
+
+on:
+  # API（cron-job.org）と Actions の画面の「Run workflow」ボタンからだけ起動する
+  workflow_dispatch:
+
+# このワークフローは curl を実行するだけなので、リポジトリへの権限は何も渡さない
+permissions: {}
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    # 万一止まらなくなっても、10分で打ち切る（Actions の実行時間を無駄にしない）
+    timeout-minutes: 10
+    steps:
+      - name: Wake up Render until /up returns 200
+        run: |
+          # 起動には30秒〜1分ほどかかるため、15秒おきに最大12回（約3分＋待ち時間）試す
+          for i in $(seq 1 12); do
+            # -s: 進み具合を表示しない / -o /dev/null: 本文は捨てる / -w: ステータスコードだけ出す
+            # --max-time 60: 1回の待ち時間は最大60秒（起動中は応答が遅いため長めにする）
+            # || true: 接続に失敗しても、ここでワークフローを止めずに次の回へ進む
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://habitflow-web.onrender.com/up || true)
+            echo "attempt ${i}: HTTP ${code}"
+            if [ "${code}" = "200" ]; then
+              echo "Render is awake."
+              exit 0
+            fi
+            sleep 15
+          done
+          # 最後まで 200 にならなければ失敗にして、Actions の画面で気づけるようにする
+          echo "Render did not wake up."
+          exit 1
