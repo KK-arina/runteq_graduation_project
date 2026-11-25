@@ -53,9 +53,16 @@ class StreakCalculationJob < ApplicationJob
     #   includes で一括取得する。
     # includes(:user => :user_setting): N+1 防止
     #   on_rest_mode? が user.user_setting を参照するため一括取得する。
+    #
+    # reorder(nil): Habit.active に付いている並び順（position 順・作成日時順）を外す
+    #   find_each は ID の順でしか取り出せないため、並び順が付いていると
+    #   「Scoped order is ignored」の警告が出る（並び順は無視される）。
+    #   ストリークは習慣ごとに別々に計算するので、処理する順番は結果に影響しない。
+    #   画面の表示で並び順が必要なため、scope :active 自体は変えずに、ここでだけ外す。
     habits = Habit.active
                   .includes(:habit_excluded_days)
                   .includes(user: :user_setting)
+                  .reorder(nil)
 
     success_count = 0
     error_count   = 0
