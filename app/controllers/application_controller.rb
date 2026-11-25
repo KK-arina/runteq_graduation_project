@@ -380,11 +380,23 @@ class ApplicationController < ActionController::Base
 
   # render_error_page（共通ヘルパー）
   def render_error_page(template, status)
+    # 【return if performed? の理由】
+    #   すでにレスポンスを返し終わっている（render や head を実行済み）のに、
+    #   もう一度返そうとすると DoubleRenderError（500エラー）になる。
+    #   例外処理の流れでこのメソッドが2回呼ばれても、2回目は何もしないようにする。
+    return if performed?
+
     respond_to do |format|
       format.turbo_stream { head status }
       format.html { render template: template, layout: "application", status: status }
       format.json { render json: { error: status.to_s }, status: status }
-      format.any { head status }
+      # 【content_type: "text/plain" を付ける理由】
+      #   存在しない .js の URL では、何も指定しないとレスポンスの種類が
+      #   text/javascript（JavaScript）になる。
+      #   Rails の CSRF 対策は「JavaScript のレスポンスを、ほかのサイトから読み込まれる」ことを防ぐため、
+      #   これを InvalidCrossOriginRequest（例外）として止め、結果として 500 エラーになっていた。
+      #   中身のない「ただの文字」（text/plain）として返せば、この判定に引っかからない。
+      format.any { head status, content_type: "text/plain" }
     end
   end
 
