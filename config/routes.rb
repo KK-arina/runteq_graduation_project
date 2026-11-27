@@ -263,6 +263,10 @@ end
   #   それより後ろに書いたルートには一度も届かない。
   namespace :admin do
     root "dashboards#show"
+
+    # GET /admin/users → Admin::UsersController#index（ユーザー一覧・読み取り専用）
+    #   only: [ :index ] で一覧だけにする（編集・削除の画面は作らない）
+    resources :users, only: [ :index ]
   end
 
   match "*path", to: "errors#not_found", via: :all

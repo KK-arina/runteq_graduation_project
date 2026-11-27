@@ -76,10 +76,7 @@ ja:
           recording_users: "習慣を記録した人数"
           signups_aria: "週ごとの新規登録数のグラフ（直近12週）"
           recording_users_aria: "週ごとの習慣を記録した人数のグラフ（直近12週）"
-        funnel_headers:
-          step: "段階"
-          count: "人数"
-          rate: "登録した人に対する割合"
+        funnel_note: "（ ）内は、登録した人に対する割合です。"
         funnel_steps:
           registered: "登録"
           onboarding_passed: "オンボーディング通過（完了またはスキップ）"

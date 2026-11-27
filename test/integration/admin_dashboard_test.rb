@@ -46,7 +46,7 @@ class AdminDashboardTest < ActionDispatch::IntegrationTest
     assert_select "[data-testid='admin-stat-total-users'] dd", "1人"
     assert_select "[data-testid='admin-stat-active-7d'] dd", "1人"
     assert_select "[data-controller='admin-usage-chart'] canvas", 2
-    assert_select "[data-testid='admin-funnel'] tbody tr", 6
+    assert_select "[data-testid='admin-funnel'] > li", 6
     assert_select "[data-testid='admin-provider-email'] dd", "1人"
   end
 

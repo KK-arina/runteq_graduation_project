@@ -33,6 +33,11 @@
   <%# ── ① 見出しと集計日時 ──────────────────────────────────────────── %>
   <div>
     <h1 class="text-2xl font-bold text-gray-900"><%= t(".title") %></h1>
+    <%# ユーザー一覧（/admin/users）へのリンク %>
+    <p class="mt-2">
+      <%= link_to t("admin.users.index.open_list"), admin_users_path,
+            class: "text-sm font-bold text-blue-600 hover:underline" %>
+    </p>
     <p class="mt-2 text-sm text-gray-600">
       <%= t(".generated_at",
             time: @stats[:generated_at].strftime("%Y/%m/%d %H:%M"),
@@ -130,43 +135,39 @@
   </section>
 
   <%#
-    ── ④ ファネル ──────────────────────────────────────────────────────
-    棒の長さ（style="width: ○%"）:
+    ── ④ ファネル（どこで離脱しているか）──────────────────────────────
+    【表ではなく、順番のあるリスト（ol）にする理由】
+      列が3つある表だと、スマホの幅では列が狭くなり、段階の名前が1〜2文字ずつ折り返して読みにくかった。
+      1段階を「名前と人数（割合）の行」＋「割合の棒」の2段にすると、どの幅でも折り返さずに読める。
+      段階には順番（登録 → … → 振り返りを完了）があるので、順番を表すリスト ol を使う。
+
+    【棒の長さ（style="width: ○%"）】
       割合によって長さが変わるため、Tailwind のクラスでは書けず、style 属性で指定する。
       CSP の style_src は unsafe_inline を許可しているため表示できる。
       値は AdminUsageStatsService が計算した数字だけで、利用者の入力は入らない。
+
+    【棒に aria-hidden="true" を付ける理由】
+      棒は見た目の補助で、同じ割合を文字でも表示しているため、
+      スクリーンリーダーが同じ内容を2回読み上げないようにする。
   %>
   <section aria-labelledby="admin-section-funnel">
-    <h2 id="admin-section-funnel" class="text-lg font-bold text-gray-900 mb-3"><%= t(".sections.funnel") %></h2>
-    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
-      <table class="min-w-full text-sm" data-testid="admin-funnel">
-        <thead class="bg-gray-50 text-gray-600">
-          <tr>
-            <th scope="col" class="px-4 py-2 text-left font-medium"><%= t(".funnel_headers.step") %></th>
-            <th scope="col" class="px-4 py-2 text-right font-medium"><%= t(".funnel_headers.count") %></th>
-            <th scope="col" class="px-4 py-2 text-left font-medium"><%= t(".funnel_headers.rate") %></th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-          <% @stats[:funnel].each do |step| %>
-            <tr>
-              <th scope="row" class="px-4 py-2 text-left font-medium text-gray-900">
-                <%= t(".funnel_steps.#{step[:key]}") %>
-              </th>
-              <td class="px-4 py-2 text-right text-gray-900"><%= t(".units.people", count: step[:count]) %></td>
-              <td class="px-4 py-2">
-                <div class="flex items-center gap-2">
-                  <div class="h-2 w-40 bg-gray-100 rounded-full" aria-hidden="true">
-                    <div class="h-2 bg-blue-600 rounded-full" style="width: <%= step[:rate] %>%"></div>
-                  </div>
-                  <span class="text-gray-700"><%= step[:rate] %>%</span>
-                </div>
-              </td>
-            </tr>
-          <% end %>
-        </tbody>
-      </table>
-    </div>
+    <h2 id="admin-section-funnel" class="text-lg font-bold text-gray-900 mb-1"><%= t(".sections.funnel") %></h2>
+    <p class="text-xs text-gray-500 mb-3"><%= t(".funnel_note") %></p>
+    <ol class="bg-white rounded-xl border border-gray-200 shadow-sm divide-y divide-gray-100" data-testid="admin-funnel">
+      <% @stats[:funnel].each do |step| %>
+        <li class="px-4 py-3">
+          <div class="flex items-baseline justify-between gap-3">
+            <span class="text-sm font-medium text-gray-900"><%= t(".funnel_steps.#{step[:key]}") %></span>
+            <span class="text-sm text-gray-900 whitespace-nowrap">
+              <%= t(".units.people_with_rate", count: step[:count], rate: step[:rate]) %>
+            </span>
+          </div>
+          <div class="mt-2 h-2 w-full bg-gray-100 rounded-full" aria-hidden="true">
+            <div class="h-2 bg-blue-600 rounded-full" style="width: <%= step[:rate] %>%"></div>
+          </div>
+        </li>
+      <% end %>
+    </ol>
   </section>
 
   <%#

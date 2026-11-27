@@ -1,0 +1,65 @@
+# config/locales/admin_users.ja.yml
+#
+# ==============================================================================
+# 管理画面のユーザー一覧（/admin/users）の日本語メッセージ
+# ==============================================================================
+#
+# 【admin.ja.yml と分けても大丈夫な理由】
+#   Rails（I18n）は config/locales/ の .yml をすべて読み込み、
+#   同じ ja: → admin: の下の内容を1つにまとめる（深い階層まで合わせる）。
+#   admin.ja.yml の admin.dashboards と、このファイルの admin.users は両方とも使える。
+#
+# 【キーに yes / no を使わない理由】
+#   YAML では、引用符のない yes / no は true / false として読まれてしまうため。
+#
+# 【新しいファイルを追加したあとの注意】
+#   ブラウザで確認する前に docker compose restart web でサーバーを再起動する。
+#
+# 【YAML のルール】インデントはスペースのみ（タブ文字は禁止）
+# ==============================================================================
+
+ja:
+  admin:
+    users:
+      index:
+        page_title: "ユーザー一覧 | HabitFlow"
+        title: "ユーザー一覧"
+        open_list: "ユーザー一覧を見る →"
+        back_to_dashboard: "← 利用状況の管理画面へ戻る"
+        description: "名前とメールアドレスの一部だけを表示します。入力内容（振り返りのコメント・目標・メモ）は表示しません。退会済みのユーザー・デモ／テスト用アカウント・管理者自身は表示しません。"
+        filters_label: "表示するユーザーの絞り込み"
+        filters:
+          all: "すべて"
+          unused: "未使用（記録0件）"
+          dormant: "休眠（%{days}日以上利用なし）"
+          active: "継続中（%{days}日以内に利用）"
+        summary: "%{total}人中 %{from}〜%{to}人目"
+        empty: "該当するユーザーはいません。"
+        headers:
+          id: "ID"
+          name: "名前"
+          email: "メール（一部）"
+          provider: "ログイン方法"
+          registered_at: "登録日"
+          onboarding: "オンボーディング"
+          pmvv: "PMVV"
+          last_active_at: "最終利用日"
+          habits: "習慣"
+          records: "記録"
+          reflections: "振り返り完了"
+          status: "状態"
+        values:
+          done: "済"
+          not_yet: "未"
+          no_email: "（メールなし）"
+          never: "記録なし"
+        statuses:
+          unused: "未使用"
+          active: "継続中"
+          cooling: "様子見"
+          dormant: "休眠"
+        pagination:
+          label: "ページ送り"
+          previous: "← 前へ"
+          next: "次へ →"
+          current: "%{page} / %{total}ページ"
