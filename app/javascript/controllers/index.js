@@ -173,3 +173,15 @@ application.register("pwa-guide", PwaGuideController)
 //   ここに import と register を追加しないと読み込まれない。
 import InstallBannerController from "controllers/install_banner_controller"
 application.register("install-banner", InstallBannerController)
+
+// 管理画面追加: 管理画面（/admin）の「週ごとの推移」のグラフを描くコントローラー
+// 【役割】
+//   chart.js 本体は、管理画面のグラフが画面に出たときだけ import("chart.js") で読み込む
+//   （グラフ・進捗分析ページの analytics-chart と同じ方式）。
+// 【登録名 "admin-usage-chart" について】
+//   ビュー側の data-controller="admin-usage-chart" / data-admin-usage-chart-target と一致させる。
+// 【なぜ手動登録するのか】
+//   このファイルは手動登録方式のため、新しいコントローラーは
+//   ここに import と register を追加しないと読み込まれない。
+import AdminUsageChartController from "controllers/admin_usage_chart_controller"
+application.register("admin-usage-chart", AdminUsageChartController)

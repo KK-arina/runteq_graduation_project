@@ -2,14 +2,189 @@
 <%#
   管理画面のトップ（GET /admin）
 
-  【今の状態】
-    認可の仕組みを先に作ったため、画面は仮のもの。
-    全体の集計・グラフ・ユーザー一覧への導線は、あとのコミットで追加する。
+  【このページの構成】
+    ① 集計日時と、数えていない人の説明
+    ② ユーザー・利用量・連携の数字のカード
+    ③ 週ごとの推移のグラフ（新規登録・習慣を記録した人数）
+    ④ どこで離脱しているか（ファネル）
+    ⑤ ログイン方法の内訳
+
+  【表示するもの・しないもの】
+    @stats（AdminUsageStatsService）の件数・割合・日付だけを表示する。
+    名前・メールアドレス・入力内容（振り返りのコメント・PMVV・メモ）はこの画面に出さない。
+
+  【t(".xxx") の書き方】
+    このファイルの場所から、config/locales/admin.ja.yml の
+    admin.dashboards.show.xxx を探す（遅延ルックアップ）。
 %>
-<% content_for :title, t("admin.dashboards.show.page_title") %>
+<% content_for :title, t(".page_title") %>
 <%= render "admin/robots_meta" %>
 
-<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-  <h1 class="text-2xl font-bold text-gray-900 mb-4"><%= t("admin.dashboards.show.title") %></h1>
-  <p class="text-sm text-gray-600"><%= t("admin.dashboards.show.placeholder") %></p>
+<%#
+  グラフに渡すデータ（横軸のラベルと数字）
+  strftime("%-m/%-d") で「11/24」のように月と日だけにする（- は先頭の 0 を付けない指定）
+%>
+<% week_labels  = @stats[:signups_by_week].map { |week| week[:week_start].strftime("%-m/%-d") } %>
+<% signups_data = { labels: week_labels, data: @stats[:signups_by_week].map { |week| week[:count] } } %>
+<% recording_data = { labels: week_labels, data: @stats[:weekly_recording_users].map { |week| week[:count] } } %>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+
+  <%# ── ① 見出しと集計日時 ──────────────────────────────────────────── %>
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900"><%= t(".title") %></h1>
+    <p class="mt-2 text-sm text-gray-600">
+      <%= t(".generated_at",
+            time: @stats[:generated_at].strftime("%Y/%m/%d %H:%M"),
+            minutes: AdminUsageStatsService::CACHE_TTL.in_minutes.to_i) %>
+    </p>
+    <p class="mt-1 text-xs text-gray-500"><%= t(".excluded_note") %></p>
+  </div>
+
+  <%# ── ② ユーザー ──────────────────────────────────────────────────── %>
+  <section aria-labelledby="admin-section-users">
+    <h2 id="admin-section-users" class="text-lg font-bold text-gray-900 mb-3"><%= t(".sections.users") %></h2>
+    <dl class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <%= render "admin/dashboards/stat_card", label: t(".stats.total_users"),
+            value: t(".units.people", count: @stats[:total_users]), testid: "admin-stat-total-users" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.active_7d"),
+            value: t(".units.people", count: @stats[:active_7d]), testid: "admin-stat-active-7d" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.active_30d"),
+            value: t(".units.people", count: @stats[:active_30d]), testid: "admin-stat-active-30d" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.onboarding"),
+            value: t(".units.people_with_rate", count: @stats[:onboarding_passed], rate: @stats[:onboarding_rate]),
+            testid: "admin-stat-onboarding" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.pmvv"),
+            value: t(".units.people", count: @stats[:pmvv_registered]), testid: "admin-stat-pmvv" %>
+    </dl>
+  </section>
+
+  <%# ── ② 利用量 ──────────────────────────────────────────────────── %>
+  <section aria-labelledby="admin-section-usage">
+    <h2 id="admin-section-usage" class="text-lg font-bold text-gray-900 mb-3"><%= t(".sections.usage") %></h2>
+    <dl class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <%= render "admin/dashboards/stat_card", label: t(".stats.habits_active"),
+            value: t(".units.items", count: @stats[:habits_active]), testid: "admin-stat-habits" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.habit_records"),
+            value: t(".units.items", count: @stats[:habit_records_total]), testid: "admin-stat-habit-records" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.habit_records_7d"),
+            value: t(".units.items", count: @stats[:habit_records_7d]), testid: "admin-stat-habit-records-7d" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.reflections"),
+            value: t(".units.completed_of_total", completed: @stats[:reflections_completed],
+                     total: @stats[:reflections_total], rate: @stats[:reflections_completion_rate]),
+            testid: "admin-stat-reflections" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.reflections_without_ai"),
+            value: t(".units.items", count: @stats[:reflections_completed_without_ai]),
+            testid: "admin-stat-reflections-without-ai" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.ai_analyses"),
+            value: t(".units.items", count: @stats[:ai_analyses_total]), testid: "admin-stat-ai-analyses" %>
+    </dl>
+  </section>
+
+  <%# ── ② 連携 ────────────────────────────────────────────────────── %>
+  <section aria-labelledby="admin-section-connections">
+    <h2 id="admin-section-connections" class="text-lg font-bold text-gray-900 mb-3"><%= t(".sections.connections") %></h2>
+    <dl class="grid grid-cols-2 md:grid-cols-3 gap-3">
+      <%= render "admin/dashboards/stat_card", label: t(".stats.line_connected"),
+            value: t(".units.people", count: @stats[:line_connected]), testid: "admin-stat-line-connected" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.line_notification"),
+            value: t(".units.people", count: @stats[:line_notification_enabled]), testid: "admin-stat-line-notification" %>
+      <%= render "admin/dashboards/stat_card", label: t(".stats.remember"),
+            value: t(".units.people", count: @stats[:remember_users]), testid: "admin-stat-remember" %>
+    </dl>
+  </section>
+
+  <%#
+    ── ③ 週ごとの推移のグラフ ──────────────────────────────────────────
+    data-controller="admin-usage-chart":
+      app/javascript/controllers/admin_usage_chart_controller.js が、
+      この要素が画面に出たときだけ chart.js を読み込んで描画する（グラフ・進捗分析ページと同じ方式）。
+    data-admin-usage-chart-...-value:
+      グラフのデータを JSON で渡す。<%= で出力すると HTML エスケープされるので安全。
+    canvas の role="img" と aria-label:
+      スクリーンリーダーに「何のグラフか」を伝える。
+    h-64（高さ 16rem）の箱に入れる理由:
+      Chart.js の maintainAspectRatio: false は、親の要素の高さに合わせて描くため。
+  %>
+  <section aria-labelledby="admin-section-charts"
+           data-controller="admin-usage-chart"
+           data-admin-usage-chart-signups-value="<%= signups_data.to_json %>"
+           data-admin-usage-chart-recording-value="<%= recording_data.to_json %>">
+    <h2 id="admin-section-charts" class="text-lg font-bold text-gray-900 mb-3"><%= t(".sections.charts") %></h2>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <h3 class="text-sm font-bold text-gray-700 mb-2"><%= t(".charts.signups") %></h3>
+        <div class="relative h-64">
+          <canvas data-admin-usage-chart-target="signupsCanvas" role="img"
+                  aria-label="<%= t(".charts.signups_aria") %>"></canvas>
+        </div>
+      </div>
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+        <h3 class="text-sm font-bold text-gray-700 mb-2"><%= t(".charts.recording_users") %></h3>
+        <div class="relative h-64">
+          <canvas data-admin-usage-chart-target="recordingCanvas" role="img"
+                  aria-label="<%= t(".charts.recording_users_aria") %>"></canvas>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <%#
+    ── ④ ファネル ──────────────────────────────────────────────────────
+    棒の長さ（style="width: ○%"）:
+      割合によって長さが変わるため、Tailwind のクラスでは書けず、style 属性で指定する。
+      CSP の style_src は unsafe_inline を許可しているため表示できる。
+      値は AdminUsageStatsService が計算した数字だけで、利用者の入力は入らない。
+  %>
+  <section aria-labelledby="admin-section-funnel">
+    <h2 id="admin-section-funnel" class="text-lg font-bold text-gray-900 mb-3"><%= t(".sections.funnel") %></h2>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+      <table class="min-w-full text-sm" data-testid="admin-funnel">
+        <thead class="bg-gray-50 text-gray-600">
+          <tr>
+            <th scope="col" class="px-4 py-2 text-left font-medium"><%= t(".funnel_headers.step") %></th>
+            <th scope="col" class="px-4 py-2 text-right font-medium"><%= t(".funnel_headers.count") %></th>
+            <th scope="col" class="px-4 py-2 text-left font-medium"><%= t(".funnel_headers.rate") %></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <% @stats[:funnel].each do |step| %>
+            <tr>
+              <th scope="row" class="px-4 py-2 text-left font-medium text-gray-900">
+                <%= t(".funnel_steps.#{step[:key]}") %>
+              </th>
+              <td class="px-4 py-2 text-right text-gray-900"><%= t(".units.people", count: step[:count]) %></td>
+              <td class="px-4 py-2">
+                <div class="flex items-center gap-2">
+                  <div class="h-2 w-40 bg-gray-100 rounded-full" aria-hidden="true">
+                    <div class="h-2 bg-blue-600 rounded-full" style="width: <%= step[:rate] %>%"></div>
+                  </div>
+                  <span class="text-gray-700"><%= step[:rate] %>%</span>
+                </div>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <%#
+    ── ⑤ ログイン方法の内訳 ────────────────────────────────────────────
+    t("admin.providers.#{provider}", default: ...):
+      provider の値（email / google_oauth2 / line_v2_1）を表示名に変える。
+      一覧にない値のときは default の「その他」を表示する。
+    sort_by { |_, count| -count }:
+      人数の多い順に並べる（- を付けて、大きい数字が先に来るようにする）。
+  %>
+  <section aria-labelledby="admin-section-providers">
+    <h2 id="admin-section-providers" class="text-lg font-bold text-gray-900 mb-3"><%= t(".sections.providers") %></h2>
+    <dl class="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="admin-providers">
+      <% @stats[:provider_breakdown].sort_by { |_, count| -count }.each do |provider, count| %>
+        <%= render "admin/dashboards/stat_card",
+              label: t("admin.providers.#{provider}", default: t("admin.providers.other")),
+              value: t(".units.people", count: count), testid: "admin-provider-#{provider}" %>
+      <% end %>
+    </dl>
+  </section>
 </div>

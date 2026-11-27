@@ -1,0 +1,17 @@
+<%# app/views/admin/dashboards/_stat_card.html.erb %>
+<%#
+  管理画面の「数字のカード」1枚分の部品
+
+  【受け取る値（locals）】
+    label  : カードの見出し（例: 登録ユーザー）
+    value  : 表示する数字の文字列（例: 12人）
+    testid : テストで探すための目印（data-testid）
+
+  【dl / dt / dd を使う理由】
+    「見出しと値の組」を表す HTML のタグで、スクリーンリーダーが
+    「登録ユーザー、12人」のように組として読み上げられる。
+%>
+<div class="bg-white rounded-xl border border-gray-200 shadow-sm p-4" data-testid="<%= testid %>">
+  <dt class="text-xs font-medium text-gray-500"><%= label %></dt>
+  <dd class="mt-1 text-xl font-bold text-gray-900"><%= value %></dd>
+</div>
