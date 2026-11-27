@@ -25,11 +25,11 @@ end
 ```ruby
 # 今日の記録を O(1) で参照できるハッシュに変換（1クエリ）
 @today_records_hash = current_user.habit_records
-  .where(recorded_on: today).index_by(&:habit_id)
+  .where(record_date: today).index_by(&:habit_id)
 
 # 今週の集計も1クエリで完結
 @weekly_counts_hash = current_user.habit_records
-  .where(recorded_on: week_start..(week_start + 6.days))
+  .where(record_date: week_start..(week_start + 6.days))
   .group(:habit_id).count
 ```
 

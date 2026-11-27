@@ -219,7 +219,7 @@ https://www.figma.com/design/ayV08jHHGE18BHlp7CEEvc/Habitflow--%E6%8F%90%E5%87%B
 |:---|:---|:---|
 | `users` | ユーザー情報・bcrypt認証 | `email` に UNIQUE 制約 |
 | `habits` | 習慣 | 論理削除（`deleted_at`）で過去データを保持 |
-| `habit_records` | 日次記録 | AM4:00基準・`(habit_id, user_id, recorded_on)` に UNIQUE 制約 |
+| `habit_records` | 日次記録 | AM4:00基準・`(habit_id, user_id, record_date)` に UNIQUE 制約 |
 | `weekly_reflections` | 週次振り返り | `(user_id, week_start_date)` に UNIQUE 制約 |
 | `weekly_reflection_habit_summaries` | 振り返り時点のスナップショット | 習慣名・目標値を保存時点で固定し、後から変更しても過去データが正確に表示される |
 
@@ -419,7 +419,7 @@ end
 
 # ユニーク制約: 同じ習慣を同じ日に2回記録できない
 # モデルバリデーションだけでは競合状態で抜けがあるため DB レベルでも制約を設ける
-validates :recorded_on, uniqueness: { scope: [:habit_id, :user_id] }
+validates :record_date, uniqueness: { scope: [:habit_id, :user_id] }
 ```
 
 <br>
@@ -429,7 +429,7 @@ validates :recorded_on, uniqueness: { scope: [:habit_id, :user_id] }
 class AddUniqueIndexToHabitRecords < ActiveRecord::Migration[7.2]
   def change
     add_index :habit_records,
-              [:habit_id, :user_id, :recorded_on],
+              [:habit_id, :user_id, :record_date],
               unique: true,
               name: "index_habit_records_on_habit_user_recorded",
               if_not_exists: true
@@ -484,7 +484,7 @@ toggle(event) {
 def weekly_progress_stats(week_start: Date.current.beginning_of_week(:monday))
   # 今週の記録を1クエリで取得（N+1 防止）
   records_count = habit_records
-    .where(recorded_on: week_start..(week_start + 6.days))
+    .where(record_date: week_start..(week_start + 6.days))
     .count
 
   {
@@ -518,12 +518,12 @@ def show
 
   # 今日の記録を habit_id をキーにしたハッシュで取得（1クエリ）
   @today_records_hash = current_user.habit_records
-    .where(recorded_on: today)
+    .where(record_date: today)
     .index_by(&:habit_id)
 
   # 今週の記録数を habit_id をキーにしたハッシュで取得（1クエリ）
   @weekly_counts_hash = current_user.habit_records
-    .where(recorded_on: week_start..(week_start + 6.days))
+    .where(record_date: week_start..(week_start + 6.days))
     .group(:habit_id)
     .count
 
@@ -673,7 +673,7 @@ Rails.application.config.content_security_policy_nonce_generator =
 | `index_by` による一括取得 | 習慣ごとの今日の記録を1クエリで取得しハッシュ化 |
 | `group(:habit_id).count` | 週次記録数を GROUP BY の1クエリで集計 |
 | `exists?` への置き換え | 存在確認だけなら `SELECT 1 LIMIT 1` で十分 |
-| 複合インデックス追加 | `habit_records(user_id, recorded_on, habit_id)` の3カラム複合インデックス |
+| 複合インデックス追加 | `habit_records(user_id, record_date, habit_id)` の3カラム複合インデックス |
 
 <br>
 
