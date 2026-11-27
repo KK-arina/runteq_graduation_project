@@ -84,6 +84,11 @@ class ApplicationController < ActionController::Base
   #   ダッシュボード等にアクセスするのを防ぐため。法規上、同意なしの利用は認めてはいけない。
   before_action :redirect_to_terms_agreement_if_needed
 
+  # 管理画面追加: ログイン中のユーザーが画面を開いたら、最終利用日時を1日1回だけ記録する
+  #   中身は app/controllers/concerns/last_active_tracking.rb。
+  #   上の利用規約の確認より後に実行したいので、この位置で include している。
+  include LastActiveTracking
+
   # ============================================================
   # Issue #27: カスタムエラーハンドリングの設定
   # ============================================================

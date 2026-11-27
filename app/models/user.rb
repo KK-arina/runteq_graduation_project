@@ -42,6 +42,10 @@ class User < ApplicationRecord
   # （User モデルが長いため、管理者まわりの処理を別ファイルに分けた）
   include AdminRole
 
+  # 最終利用日時（users.last_active_at）の1日1回の記録
+  #   メソッドは app/models/concerns/last_activity.rb にまとめている。
+  include LastActivity
+
   # ============================================================
   # 認証関連
   # ============================================================
