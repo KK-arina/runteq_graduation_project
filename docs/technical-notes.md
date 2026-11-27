@@ -4346,3 +4346,110 @@ Neon のリージョンは作成後に変更できないため、オレゴン（
 ソースマップは約1.2 MB あるが、取りに来るのは DevTools を開いたときだけなので、利用者の読み込みには影響しない。<br>
 SDK を更新するときは、`bundle.min.js` と `bundle.min.js.map` を同じバージョンで一緒に置き換える（テスト `sentry_source_map_test.rb` がソースマップの有無と中身を確かめる）。<br>
 サーバー側の `Envelope sending failed: Net::ReadTimeout` は7日間で1回だけだったため、一時的な通信の失敗と判断し、送信の待ち時間の設定は変えていない。
+
+<br>
+
+### 204. GoodJob の cron が本番で動いていなかった（enable_cron・存在しないクラス・タイムゾーン）
+
+<br>
+
+本番で `enable_cron` が有効になっておらず、cron に登録した定期ジョブが1件も実行されていなかった。`config/initializers/good_job.rb` で `enable_cron = Rails.env.production?` とした。<br>
+有効にする前に、cron の設定を確かめるテスト（`good_job_cron_config_test.rb`）を追加したところ、登録していた `GoodJob::CleanupJobsJob` が GoodJob 4 に存在しないクラスだと分かった。GoodJob は600秒ごと、または1000件ごとに自動で古いジョブを掃除するため、登録ごと削除した。<br>
+cron の文字列にタイムゾーンを書かないと、Fugit は `config.time_zone`（Tokyo）で読む。UTC に換算して書いていた時刻が、実際には9時間遅れて実行されていた。すべての文字列の最後に `Asia/Tokyo` を付け、JST の時刻のまま書くようにした（例：`"5 4 * * * Asia/Tokyo"`）。<br>
+Neon の接続は PgBouncer（transaction モード）を通るため、LISTEN/NOTIFY は使えない。`enable_listen_notify = false` にしている。<br>
+同じ時刻のジョブは `(cron_key, cron_at)` の一意制約で二重に実行されない。一方で、アプリが止まっていて実行できなかった時刻の分は、あとから実行されない。
+
+<br>
+
+### 205. Render の無料プランで夜の定期ジョブを動かす（cron-job.org → GitHub Actions の workflow_dispatch）
+
+<br>
+
+Render の無料プランは、15分アクセスがないとスリープする。スリープ中は GoodJob の cron も止まるため、ジョブの少し前にアプリを起こす必要がある。<br>
+① GitHub Actions の `schedule` で `/up` を叩いた → 混雑時に数時間遅れ、ジョブの時刻に間に合わなかった。<br>
+② cron-job.org から直接 `/up` を叩いた → 約1秒で 503 が返り、アプリは起きなかった。レスポンスヘッダーに `x-render-routing: hibernate-wake-error` があり、Render のログにも起動の記録がなかった。Render の入り口が起動を断っていた（正確な条件は公式ドキュメントで見つからなかった）。User-Agent の偽装など、判定をすり抜ける方法はとらない。<br>
+③ cron-job.org から GitHub の API で `.github/workflows/wake_render.yml` を起動（`workflow_dispatch`）し、そのワークフローの curl で `/up` を叩く → 起きた。スリープ中は実行に約1分20秒かかり、起動のあとに 0:00・0:05・4:05・4:10 のジョブが実行されることを確認した。<br>
+ワークフローは `permissions: {}`（リポジトリへの権限なし）、`/up` が 200 になるまで15秒おきに最大12回試し、`timeout-minutes: 10` で打ち切る。<br>
+cron-job.org のジョブ（Asia/Tokyo）は、23:55（0:00・0:05 用）、4:00 と 4:10（4:05・4:10・月曜 4:15 用）、月曜 8:55（9:00 の週次レポート用）。Render は最後のアクセスから15分は起きている。<br>
+cron-job.org の設定は、URL `https://api.github.com/repos/KK-arina/runteq_graduation_project/actions/workflows/wake_render.yml/dispatches`、POST、ヘッダー `Accept: application/vnd.github+json`・`Authorization: Bearer <トークン>`・`X-GitHub-Api-Version: 2022-11-28`・`Content-Type: application/json`、本文 `{"ref":"main"}`。成功すると 204 が返る。<br>
+トークンは fine-grained personal access token（名前 `cron-job-org-wake-render`、このリポジトリだけ、Actions の Read and write だけ、期限 2027-11-24）。cron-job.org の中だけに置く。cron-job.org の実行の詳細（リクエストのヘッダー）にはトークンがそのまま出るので、貼り付けない。一度チャットに貼ってしまったため、すぐに Regenerate した。<br>
+**毎年の作業（2027-11-16 ごろ）：** ① GitHub の Settings → Developer settings → Fine-grained tokens で `cron-job-org-wake-render` を Regenerate（期限1年） ② cron-job.org の3つのジョブの `Authorization` を新しいトークンに書き換える ③ `X-GitHub-Api-Version` を新しい版（例：`2026-03-10`）にする。`2022-11-28` は 2028-03-10 に提供終了の予定（レスポンスの `Sunset` ヘッダー） ④ 0時台のジョブで TEST RUN → 200 または 204 なら完了。<br>
+期限が切れると 401 になり、夜のジョブが止まる（アプリ自体は動く）。
+
+<br>
+
+### 206. CI の修正・Ruby 3.4.13 への更新・gem の脆弱性対応
+
+<br>
+
+GitHub Actions を有効にしたところ、CI の4つのジョブが失敗した。テストのジョブは、Postgres を `services:` で動かしているため `DB_HOST=localhost` が必要だった（Docker Compose の `db` という名前は使えない）。<br>
+`bin/brakeman --ensure-latest` は Brakeman が最新でないと失敗するため、8.1.1 に更新した。8.1.1 が Ruby 3.4.10 の CVE を検出したので、Ruby を 3.4.13 に上げた（`.ruby-version`・`Dockerfile`・`Dockerfile.dev`・`Gemfile`・`Gemfile.lock`・`bin/generate_pwa_icons`）。gem を変えたら `docker compose build` も行う。<br>
+`bundle-audit` で puma 7.2.2 と rack-protection 4.2.1 の脆弱性が見つかった。`bundle update puma rack-protection --conservative` で、ほかの gem を変えずに 7.2.3 と 4.2.2 に上げた。rack-protection は omniauth が使っているため、更新後に Google・LINE ログインを本番で確かめた。<br>
+PR のマージ欄に CI の結果が表示されないことがある。PR を作ってすぐはジョブが始まっていないため、Checks タブか Actions の画面で4つすべてが緑になったのを確かめてからマージする。
+
+<br>
+
+### 207. Sentry のブラウザ SDK を defer で読み込む
+
+<br>
+
+`bundle.min.js` と初期化のスクリプトが、ページの表示を止める（render-blocking）読み込み方になっていた。<br>
+DSN とリリース名を `<meta name="sentry-dsn">`・`<meta name="sentry-release">` に出し、`public/sentry/init-v1.js` がそれを読んで `Sentry.init` するようにして、2つのスクリプトを `defer` にした。表示を止めるのは CSS（約170 ms）だけになった。<br>
+`defer` のスクリプトは HTML を読み終わってから実行されるため、それより前に起きたエラーは送られない。表示の速さを優先して許容している（テスト `sentry_defer_loading_test.rb`）。
+
+<br>
+
+### 208. 週次レポートが「成功」と表示されたまま、習慣を持つ全員に届いていなかった（recorded_on）
+
+<br>
+
+`WeeklyReportJob#calculate_habit_stats` が、存在しない列 `recorded_on` で絞り込んでいた（正しくは `record_date`）。習慣を持つユーザーでは毎回エラーになり、メールは1通も送られていなかった。<br>
+ジョブはユーザーごとの失敗を `rescue` してログに「送信失敗」と出すだけなので、GoodJob の画面では Succeeded（成功）になり、ログを読むまで気づけなかった。<br>
+既存のテストは習慣を持たないユーザーだけを使っていたため、集計の SQL が一度も実行されていなかった。`travel_to` で日付を固定し、先週の範囲の内・外、完了・未完了の記録を作って、先週の完了だけが数えられることを確かめるテストを追加した。修正前のコードに戻すとテストが失敗することを `git stash` で確かめた。<br>
+ユーザーごとの失敗は `report_failure_to_sentry` で Sentry にも送る（本番のみ・匿名の `user.id` と `source: "weekly_report_job"` のタグだけ）。
+
+<br>
+
+### 209. 独自ドメインでメールを送る（Cloudflare Registrar・Resend・予約ドメイン宛ての停止）
+
+<br>
+
+Resend のテスト用アドレス `onboarding@resend.dev` は、Resend アカウントの持ち主にしか届かない。ほかのユーザーには、パスワードリセットも週次レポートも届いていなかった。<br>
+Render の無料プランは SMTP（25・465・587番ポート）への接続をふさいでいるため、Gmail の SMTP などは使えない。Resend は HTTPS の API で送るので影響を受けない。<br>
+ドメインは Cloudflare Registrar で `habitflow-arina.com` を取得した（`.com` は登録・更新とも年 $11.17 の原価）。GitHub と Cloudflare の両方に二要素認証を付け、リカバリーコードを保管した。GitHub でログインして作った Cloudflare アカウントには Cloudflare のパスワードがないため、パスワードの再設定で作ってから二要素認証を付けた。自動更新・移管ロック（登録から60日は移管不可）・WHOIS の非公開・DNSSEC を確認した。<br>
+Resend にはサブドメイン `mail.habitflow-arina.com`（Tokyo リージョン）を登録し、Auto configure で DKIM（TXT）と SPF 用の CNAME（`send.mail`・`rsend.mail`、プロキシなし）を追加した。DMARC（`_dmarc` に `v=DMARC1; p=none;`）と、メールを送らないルートドメインの SPF（`v=spf1 -all`）は手で追加した。クリックと開封の追跡はオフにしている。<br>
+送信元は `HabitFlow <no-reply@mail.habitflow-arina.com>`。`@` の後ろは Resend で確認したドメインと完全に一致させる必要がある。Yahoo!メールで SPF・DKIM・DMARC がすべて PASS になることを確かめた。<br>
+本番のデモ用アカウントに `example.com` のアドレスがあり、週次レポートのたびにバウンスが出る状態だった。`ReservedDomainInterceptor` で、RFC 2606 / 6761 の予約ドメイン（`example.com`・`.test`・`.invalid` など）宛てのメールを送信直前に止める。テストが `example.com` 宛ての送信を前提にしているため、`config.to_prepare` の中で本番だけ登録する。ログにはアドレスを出さず件名だけを残す。
+
+<br>
+
+### 210. 本番ログの改善（code・state のフィルタ、Puma の設定名、画像変換の警告）
+
+<br>
+
+OAuth のコールバックで届く `code`（認可コード）と `state` が、ログにそのまま出ていた。`filter_parameters` は部分一致なので、`:code` と書くと `country_code` まで隠れる。正規表現 `/\Acode\z/`・`/\Astate\z/` で名前が完全に一致するものだけを隠す。URL の行（`Started GET`）と `Parameters:` の行の両方が `[FILTERED]` になる。<br>
+Puma 7 で `on_worker_boot` が非推奨になり（Puma 8 で削除予定）、起動のたびに警告が出ていた。`before_worker_boot` に名前を変えた（処理は同じ）。<br>
+画像の変換（variant）を使っていないのに、`image_processing` gem が無いという警告が出ていた。gem を足すのではなく、`config/initializers/active_storage.rb` で `variant_processor = :disabled` にした。<br>
+Render のデプロイ中は、古いインスタンスと新しいインスタンスのログが混ざって表示される。警告が消えたかは、新しい起動（`Production environment detected` → `=> Booting Puma`）の部分で確かめる。
+
+<br>
+
+### 211. 存在しない .js の URL が 500 になる・find_each で並び順が無視される
+
+<br>
+
+存在しない `.js` の URL では、エラーページの `format.any { head status }` が `text/javascript` の空レスポンスを返していた。Rails の CSRF 対策（`verify_same_origin_request`）がこれを `InvalidCrossOriginRequest` として止め、その例外の処理で再びレスポンスを返そうとして `DoubleRenderError`（500）になっていた。`head status, content_type: "text/plain"` にし、`return if performed?` で二重に返すのも防いだ。テストでは CSRF 対策が無効なので、そのテストの間だけ `allow_forgery_protection = true` にして再現した。<br>
+`StreakCalculationJob` で `Habit.active`（画面表示用の `order` 付き）に `find_each` を使っていたため、「Scoped order is ignored」の警告が出ていた。`find_each` は ID の順でしか取り出さない。ストリークは習慣ごとに計算するので順番は関係なく、ジョブの中でだけ `.reorder(nil)` を付けた。<br>
+テストでは `ActiveRecord.error_on_ignored_order = true` にして、警告の代わりに例外が出るようにした。`ApplicationJob` の `retry_on` があるため、`perform_now` ではなく `new.perform` で実行しないと、例外がテストに見えない。
+
+<br>
+
+### 212. ダッシュボードの「ホーム画面に追加」バナー（localStorage で閉じた状態を覚える）
+
+<br>
+
+ブラウザで開いている人に、ダッシュボードの上部で「ホーム画面に追加しませんか？」と案内する（`app/views/dashboards/_install_banner.html.erb`）。<br>
+ホーム画面から開いているかの判定と、Chrome / Edge の「今すぐ追加する」ボタンは、既存の `pwa-guide` コントローラー（`browserOnly`・`installArea`・`install`）をそのまま使う。iPhone の Safari や LINE の中のブラウザの人は、「追加のしかたを見る」から設定ページの案内カード（`#pwa-install-guide`）へ移動する。<br>
+✕ で閉じたことは `install_banner_controller.js` が localStorage（`habitflow:install-banner-dismissed:v1`）に記録する。サーバーにも DB（Neon）にもアクセスしない。`dismissible_controller.js` はサーバーへ保存する作りなので使っていない。<br>
+最初から `hidden` で出力し、JavaScript が「ブラウザで開いている」かつ「まだ閉じていない」と判定したときだけ表示する。ホーム画面から開いた人や、閉じた人の画面で一瞬見える（ちらつく）のを防ぐため。<br>
+テストの `log_in_as` はパスワード `"password"` でログインするため、`User.create!` で別のパスワードのユーザーを作るとログインできない。fixture の `users(:one)` を使う。
