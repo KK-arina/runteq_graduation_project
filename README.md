@@ -46,7 +46,7 @@ flowchart LR
 <br>
 
 [![Ruby](https://img.shields.io/badge/Ruby-3.4.13-CC342D?style=flat-square&logo=ruby)](https://www.ruby-lang.org/)
-[![Rails](https://img.shields.io/badge/Rails-8.1.3-CC0000?style=flat-square&logo=ruby-on-rails)](https://rubyonrails.org/)
+[![Rails](https://img.shields.io/badge/Rails-8.1.4.1-CC0000?style=flat-square&logo=ruby-on-rails)](https://rubyonrails.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/Docker-対応済み-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
 [![DB Migration](https://img.shields.io/badge/A--1_DBマイグレーション-完了-10b981?style=flat-square)](https://github.com/KK-arina/HabitFlow/tree/feature/A-1-db-migrations)
@@ -562,7 +562,7 @@ ISSUE ごとの設計判断・実装ポイント・工夫は、以下の分割�
 | 技術 | バージョン | 用途 |
 |:---|:---|:---|
 | Ruby | 3.4.13 | プログラミング言語（3.4 系最新パッチ・Brakeman 8.1.1 が検出した CVE に対応） |
-| Ruby on Rails | 8.1.3.1 | Web フレームワーク（7.2.3 からアップグレード・#I-3 でパッチ更新） |
+| Ruby on Rails | 8.1.4.1 | Web フレームワーク（7.2.3 からアップグレード・#I-3 でパッチ更新） |
 | PostgreSQL | 16 | データベース |
 | bcrypt | 3.1.7 系 | パスワードハッシュ化 |
 | Puma | 7.2.1 | Web サーバー（#I-3 で 7.0 系 → 7.2.1 に更新） |
