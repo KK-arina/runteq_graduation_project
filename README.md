@@ -45,7 +45,7 @@ flowchart LR
 
 <br>
 
-[![Ruby](https://img.shields.io/badge/Ruby-3.4.10-CC342D?style=flat-square&logo=ruby)](https://www.ruby-lang.org/)
+[![Ruby](https://img.shields.io/badge/Ruby-3.4.13-CC342D?style=flat-square&logo=ruby)](https://www.ruby-lang.org/)
 [![Rails](https://img.shields.io/badge/Rails-8.1.3-CC0000?style=flat-square&logo=ruby-on-rails)](https://rubyonrails.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
 [![Docker](https://img.shields.io/badge/Docker-対応済み-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
@@ -561,7 +561,7 @@ ISSUE ごとの設計判断・実装ポイント・工夫は、以下の分割�
 
 | 技術 | バージョン | 用途 |
 |:---|:---|:---|
-| Ruby | 3.4.10 | プログラミング言語（3.4 系最新パッチ・zlib CVE 対応） |
+| Ruby | 3.4.13 | プログラミング言語（3.4 系最新パッチ・Brakeman 8.1.1 が検出した CVE に対応） |
 | Ruby on Rails | 8.1.3.1 | Web フレームワーク（7.2.3 からアップグレード・#I-3 でパッチ更新） |
 | PostgreSQL | 16 | データベース |
 | bcrypt | 3.1.7 系 | パスワードハッシュ化 |
@@ -1197,7 +1197,7 @@ habitflow/
 ├── .github/
 │   └── dependabot.yml        # gem・Docker の依存を毎週監視し更新 PR を自動作成
 ├── .env.example              # 環境変数のテンプレート（実際の値は .env に記載しコミットしない）
-├── .ruby-version             # Ruby 3.4.10
+├── .ruby-version             # Ruby 3.4.13
 ├── Dockerfile / Dockerfile.dev / docker-compose.yml
 ├── render.yaml               # 本番インフラ構成（Render）
 ├── Gemfile / Gemfile.lock
