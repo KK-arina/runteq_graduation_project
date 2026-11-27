@@ -565,7 +565,7 @@ ISSUE ごとの設計判断・実装ポイント・工夫は、以下の分割�
 | Ruby on Rails | 8.1.4.1 | Web フレームワーク（7.2.3 からアップグレード・#I-3 でパッチ更新） |
 | PostgreSQL | 16 | データベース |
 | bcrypt | 3.1.7 系 | パスワードハッシュ化 |
-| Puma | 7.2.1 | Web サーバー（#I-3 で 7.0 系 → 7.2.1 に更新） |
+| Puma | 7.2.3 | Web サーバー（#I-3 で 7.0 系 → 7.2.1、脆弱性対応で 7.2.3 に更新） |
 
 <br>
 
@@ -593,6 +593,8 @@ ISSUE ごとの設計判断・実装ポイント・工夫は、以下の分割�
 | acts_as_list | 習慣の並び替え | #B-6 | ✅ 完了 |
 | Chart.js v4（UMDビルド） | グラフ可視化（折れ線・棒グラフ） | #H-4 | ✅ 完了 |
 | bundler-audit | gem の既知脆弱性スキャン（`bundle exec bundle-audit`） | #I-3 | ✅ 完了 |
+| cron-job.org ＋ GitHub Actions（workflow_dispatch） | Render 無料プランを夜の定期ジョブの前に起こす（`.github/workflows/wake_render.yml`） | 運用改善 | ✅ 完了 |
+| 独自ドメイン（Cloudflare Registrar）＋ Resend | `mail.habitflow-arina.com` からメール送信（DKIM・SPF・DMARC を設定） | 運用改善 | ✅ 完了 |
 
 <br>
 
