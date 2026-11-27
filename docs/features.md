@@ -296,7 +296,7 @@ Resend をAction Mailerに接続。開発環境では letter_opener でブラウ
 | `config/initializers/resend.rb` | 新規作成（APIキーを環境変数から初期化） |
 | `config/environments/production.rb` | Action Mailer本番設定追加（delivery_method・raise_delivery_errors・default_url_options・asset_host）<br>GoodJob execution_mode を `:external` → `:async` に変更（Render Worker非対応のため）<br>GoodJob max_threads を `2` に設定（Freeプランリソース制約対応） |
 | `config/environments/development.rb` | letter_opener設定追加 |
-| `app/mailers/application_mailer.rb` | fromアドレスを `HabitFlow <onboarding@resend.dev>` に設定 |
+| `app/mailers/application_mailer.rb` | fromアドレスを `HabitFlow <no-reply@mail.habitflow-arina.com>` に設定 |
 | `app/mailers/test_mailer.rb` | 新規作成（動作確認用・将来のMailer実装の参考） |
 | `render.yaml` | `RESEND_API_KEY` 環境変数を追加（`sync: false`）<br>Workerセクションをコメントアウト（Render Freeプランは Worker 非対応） |
 
