@@ -30,6 +30,23 @@ class ReservedDomainInterceptor
   #   i        : 大文字・小文字を区別しない
   RESERVED_DOMAIN_PATTERN = /(\A|\.)(example\.(com|net|org)|example|test|invalid|localhost)\z/i
 
+  # 上と同じ判定を、PostgreSQL の正規表現で書いたもの（管理画面の集計で使う）
+  #
+  # 【なぜ別に用意するのか】
+  #   管理画面では、デモ・テスト用アカウント（予約ドメインのアドレス）を集計から外す。
+  #   ユーザーを1人ずつ Ruby で判定すると全員を読み込むことになるため、
+  #   DB の中で絞り込めるように SQL 用の書き方も用意する。
+  #
+  # 【Ruby の正規表現との違い】
+  #   \A（先頭）→ ^、\z（末尾）→ $。大文字小文字は SQL 側で LOWER() してから比べる。
+  #   末尾の "." は、Ruby では delete_suffix で取り除いているため、こちらでは \.? で許す。
+  #   2つの判定が同じ結果になることは test/models/user_countable_test.rb で確かめている。
+  #
+  # 【シングルクォートで書く理由】
+  #   ダブルクォートだと Ruby が \. を特別な文字として扱ってしまうため、
+  #   書いたとおりの文字列のまま PostgreSQL に渡せるシングルクォートにしている。
+  RESERVED_DOMAIN_SQL_PATTERN = '(^|\.)(example\.(com|net|org)|example|test|invalid|localhost)\.?$'.freeze
+
   # Action Mailer から、メール送信の直前に呼ばれるメソッド
   def self.delivering_email(message)
     # 宛先（to）のうち、予約ドメインではないものだけを残す

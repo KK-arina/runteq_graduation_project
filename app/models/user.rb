@@ -46,6 +46,10 @@ class User < ApplicationRecord
   #   メソッドは app/models/concerns/last_activity.rb にまとめている。
   include LastActivity
 
+  # 管理画面の集計の対象にするユーザー（User.countable_for_usage）
+  #   scope は app/models/concerns/usage_countable.rb にまとめている。
+  include UsageCountable
+
   # ============================================================
   # 認証関連
   # ============================================================
