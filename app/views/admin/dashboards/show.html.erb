@@ -1,0 +1,15 @@
+<%# app/views/admin/dashboards/show.html.erb %>
+<%#
+  管理画面のトップ（GET /admin）
+
+  【今の状態】
+    認可の仕組みを先に作ったため、画面は仮のもの。
+    全体の集計・グラフ・ユーザー一覧への導線は、あとのコミットで追加する。
+%>
+<% content_for :title, t("admin.dashboards.show.page_title") %>
+<%= render "admin/robots_meta" %>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <h1 class="text-2xl font-bold text-gray-900 mb-4"><%= t("admin.dashboards.show.title") %></h1>
+  <p class="text-sm text-gray-600"><%= t("admin.dashboards.show.placeholder") %></p>
+</div>

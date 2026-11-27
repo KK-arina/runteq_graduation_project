@@ -243,5 +243,27 @@ end
     end
   end
 
+  # ============================================================
+  # 管理画面（管理者だけが見られる「ユーザー・利用状況の管理画面」）
+  # ============================================================
+  #
+  # 【namespace :admin を使う理由】
+  #   URL を /admin/...、コントローラーを app/controllers/admin/ にまとめ、
+  #   一般の画面と混ざらないようにする。ヘルパー名も admin_root_path のように admin_ が付く。
+  #
+  # 【root "dashboards#show"】
+  #   GET /admin を Admin::DashboardsController#show で表示する。
+  #
+  # 【管理者以外に 404 を返す仕組み】
+  #   ルートは誰にでも見えるが、Admin::BaseController が管理者以外には
+  #   存在しないページと同じ 404 を返すため、管理画面があること自体が分からない。
+  #
+  # 【catch-all（match "*path"）より前に書く理由】
+  #   catch-all は「どのルートにも当たらなかったもの」を拾うため、
+  #   それより後ろに書いたルートには一度も届かない。
+  namespace :admin do
+    root "dashboards#show"
+  end
+
   match "*path", to: "errors#not_found", via: :all
 end

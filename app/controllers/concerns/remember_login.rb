@@ -72,6 +72,23 @@ module RememberLogin
     # セッション固定攻撃対策（reset_session）をしてからログイン状態にする
     start_session_for(user)
 
+    # 管理画面追加: 「ログイン画面から手でログインした時刻」をセッションに記録する
+    #
+    # 【何に使うか】
+    #   管理画面（Admin::BaseController）は、この時刻から12時間以内のときだけ開ける。
+    #   「ログインしたままにする」による自動ログイン（user_from_remember_cookie）は
+    #   start_session_for だけを呼び、ここを通らないため、この値は入らない。
+    #   → 盗まれたログイン保持の Cookie だけでは、管理画面を開けないようにする。
+    #
+    # 【なぜ DB ではなくセッションに入れるのか】
+    #   セッションは暗号化された Cookie に保存されるため、DB（Neon）への書き込みが増えない。
+    #   利用者が書き換えることもできない（改ざんすると復号に失敗する）。
+    #
+    # 【Time.current.to_i（数字）で保存する理由】
+    #   Cookie のセッションは JSON で保存されるため、Time のままだと文字列に変わってしまう。
+    #   1970年からの秒数（整数）にしておけば、比べるときにそのまま使える。
+    session[:interactive_login_at] = Time.current.to_i
+
     # このリクエストの中でも、すぐにログイン済みとして扱えるようにする
     @current_user = user
 
