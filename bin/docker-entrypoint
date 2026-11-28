@@ -40,6 +40,7 @@ if [ "$RAILS_ENV" = "production" ]; then
   # DATABASE_URL の設定確認
   # Neon の接続文字列が正しく Render 環境変数に設定されているか検証する。
   # 未設定の場合はサーバー起動前にエラーを出して停止する（起動後のエラーより分かりやすい）。
+  # 値そのものは表示せず、「設定されているか（yes）」だけを表示する。
   echo "DATABASE_URL is set: ${DATABASE_URL:+yes}"
   if [ -z "$DATABASE_URL" ]; then
     echo "ERROR: DATABASE_URL is not set!"
@@ -63,15 +64,23 @@ if [ "$RAILS_ENV" = "production" ]; then
   echo "Running database migrations..."
   ./bin/rails db:migrate
 
-  # ==================== デモデータ投入（条件付き） ====================
-  # SEED_IN_PRODUCTION=true の場合のみ db:seed を実行する。
-  # 通常デプロイでは seed は実行しない（本番データを上書きするリスクがある）。
+  # ==================== 習慣テンプレートの読み込み（条件付き） ====================
+  # SEED_IN_PRODUCTION=true のときだけ db:seed を実行する。
   #
-  # 【デモデータ投入手順】
-  # Render ダッシュボード → habitflow-web → Shell タブで実行:
-  #   SEED_IN_PRODUCTION=true bin/rails db:seed
+  # 【本番の db:seed がすること】
+  #   db/seeds.rb は、本番では習慣テンプレート（db/seeds/habit_templates.rb）だけを読み込む。
+  #   デモデータ（db/seeds/demo_data.rb）は開発環境でしか読み込まない。
+  #   habit_templates.rb は find_or_initialize_by で「あれば更新・なければ作成」するため、
+  #   何度実行しても同じ結果になり、利用者のデータを消すこともない。
   #
-  # ⚠️ 実行すると既存データが削除されるため、本物のユーザーデータがある場合は実行しない。
+  # 【ふだん false にしておく理由】
+  #   true のままだと、Render がサーバーを起動するたび（デプロイ・再起動・スリープからの復帰）に
+  #   毎回 db:seed が走り、DB への問い合わせが無駄に増える。
+  #
+  # 【テンプレートを変えたときの手順】
+  #   Render の Environment で SEED_IN_PRODUCTION を true にする → デプロイ
+  #   → ログに「Running db:seed」が出て、テンプレートが反映されたことを確認
+  #   → false に戻す
   if [ "$SEED_IN_PRODUCTION" = "true" ]; then
     echo "SEED_IN_PRODUCTION=true detected. Running db:seed..."
     ./bin/rails db:seed
@@ -84,8 +93,7 @@ fi
 # Render からの SIGTERM（停止シグナル）を直接受け取れる。
 # これにより処理中のリクエストを完了してから終了する Graceful Shutdown が機能する。
 #
-# "$@": このスクリプトに渡された引数をそのまま実行する。
-# render.yaml の startCommand で指定した
-# 「bundle exec rails db:migrate && exec bundle exec puma -C config/puma.rb」
-# の後半「exec bundle exec puma -C config/puma.rb」がここで実行される。
+# "$@": このスクリプトに渡された引数（起動するコマンド）をそのまま実行する。
+# 本番（Render）では、Dockerfile の CMD（./bin/rails server -b 0.0.0.0）が渡される。
+# （render.yaml に dockerCommand を書いておらず、Render の画面の Docker Command も空欄のため）
 exec "$@"
