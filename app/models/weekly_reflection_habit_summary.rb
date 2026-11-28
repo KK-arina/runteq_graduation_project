@@ -118,12 +118,23 @@ class WeeklyReflectionHabitSummary < ApplicationRecord
     # transaction により「全部成功 or 全部失敗」を保証する
     # 1件でも save! が失敗すると全件ロールバック（巻き戻し）される
     transaction do
-      weekly_reflection.user.habits.active.each do |habit|
+      # 【N+1 を防ぐ工夫】
+      #   ① includes(:habit_excluded_days)
+      #      build_from_habit の中で、チェック型の習慣ごとに effective_weekly_target
+      #      （中で habit_excluded_days.size）を呼ぶ。先にまとめて読み込まないと、
+      #      習慣の数だけ除外日の SQL が発行される（Bullet が検出した N+1）。
+      #   ② existing_habit_ids
+      #      「すでにサマリーがある習慣か」を習慣ごとに exists? で調べると、
+      #      これも習慣の数だけ SQL になる。最初に1回だけ habit_id の一覧を取り、
+      #      Ruby の Set（重複のない集まり。include? が速い）で調べる。
+      existing_habit_ids = weekly_reflection.habit_summaries.pluck(:habit_id).to_set
+
+      weekly_reflection.user.habits.active.includes(:habit_excluded_days).each do |habit|
         # 二重作成の防止：
         #   既に同じ habit のサマリーが存在する場合はスキップする。
         #   振り返り入力途中でページを再読み込みした場合など、
         #   このメソッドが2回呼ばれても UNIQUE エラーにならず安全に動作する。
-        next if weekly_reflection.habit_summaries.exists?(habit: habit)
+        next if existing_habit_ids.include?(habit.id)
 
         build_from_habit(weekly_reflection, habit).save!
       end

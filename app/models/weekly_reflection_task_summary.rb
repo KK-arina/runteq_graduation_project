@@ -243,9 +243,15 @@ class WeeklyReflectionTaskSummary < ApplicationRecord
       #   ループ内の処理に「順番」が必要な場合は each を使う。
       #   ここでは順番に依存しないため find_each で問題ない。
       # ----------------------------------------------------------------
+      # 【N+1 を防ぐ工夫】
+      #   「すでにスナップショットがあるタスクか」をタスクごとに exists? で調べると、
+      #   タスクの数だけ SQL が発行される。最初に1回だけ task_id の一覧を取り、
+      #   Ruby の Set（重複のない集まり。include? が速い）で調べる。
+      existing_task_ids = weekly_reflection.task_summaries.pluck(:task_id).to_set
+
       tasks.find_each do |task|
         # 冪等性の保証: 既に同じタスクのスナップショットが存在すればスキップ
-        next if weekly_reflection.task_summaries.exists?(task: task)
+        next if existing_task_ids.include?(task.id)
 
         build_from_task(weekly_reflection, task).save!
       end

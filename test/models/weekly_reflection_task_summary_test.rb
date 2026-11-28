@@ -254,4 +254,46 @@ class WeeklyReflectionTaskSummaryTest < ActiveSupport::TestCase
     @summary.priority = :could
     assert_includes @summary.priority_color_class, "green"
   end
+
+  # ============================================================
+  # create_all_for_reflection! の N+1（タスクごとに SQL が増えない）
+  # ============================================================
+  #
+  # 【SQL を数える方法】
+  #   ActiveSupport::Notifications.subscribed で、ブロックの中で発行された SQL を集める。
+  #   SCHEMA（テーブルの列情報の読み込み）は、数えたい SQL ではないので除く。
+  #
+  # 【SELECT 1 の回数を「作った件数」と比べる理由】
+  #   uniqueness の入力チェックがあると、保存1件ごとに SELECT 1 AS one … を1回発行する。
+  #   タスクごとに exists? でも調べていると、同じ形の SQL がそれより多くなる。
+  #   uniqueness がなければ、SELECT 1 は1回も出ないはず。
+  test "create_all_for_reflection! は、タスクごとにスナップショットの有無を調べない（N+1 にならない）" do
+    user = @reflection.user
+    2.times do |i|
+      task = user.tasks.create!(
+        title:        "N+1確認用のタスク#{i}",
+        priority:     "should",
+        task_type:    :improve,
+        ai_generated: true,
+        status:       :todo
+      )
+      # 振り返りの週に含まれるよう、期限を週の初日にする（入力チェックを通さず直接書き換える）
+      task.update_columns(due_date: @reflection.week_start_date)
+    end
+
+    before_count = WeeklyReflectionTaskSummary.count
+    queries = []
+    collect_sql = ->(*, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
+    ActiveSupport::Notifications.subscribed(collect_sql, "sql.active_record") do
+      WeeklyReflectionTaskSummary.create_all_for_reflection!(@reflection)
+    end
+    created_count = WeeklyReflectionTaskSummary.count - before_count
+
+    select_one_queries = queries.count { |sql| sql.match?(/SELECT 1 AS one FROM "weekly_reflection_task_summaries"/) }
+    has_uniqueness = WeeklyReflectionTaskSummary.validators.any? { |v| v.is_a?(ActiveRecord::Validations::UniquenessValidator) }
+
+    assert_operator created_count, :>=, 2, "テストの前提: 足したタスクのスナップショットが作られていない"
+    assert_equal (has_uniqueness ? created_count : 0), select_one_queries,
+                 "スナップショットがあるかをタスクごとに調べている（N+1）"
+  end
 end

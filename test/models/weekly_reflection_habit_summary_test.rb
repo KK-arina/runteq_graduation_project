@@ -419,4 +419,41 @@ class WeeklyReflectionHabitSummaryTest < ActiveSupport::TestCase
     assert_includes WeeklyReflectionHabitSummary.incomplete, incomplete_fixture
     assert_not_includes WeeklyReflectionHabitSummary.completed, incomplete_fixture
   end
+
+  # ============================================================
+  # create_all_for_reflection! の N+1（習慣ごとに SQL が増えない）
+  # ============================================================
+  #
+  # 【SQL を数える方法】
+  #   ActiveSupport::Notifications.subscribed で、ブロックの中で発行された SQL
+  #   （sql.active_record という通知）を集める。
+  #   SCHEMA（テーブルの列情報の読み込み）は、数えたい SQL ではないので除く。
+  #
+  # 【SELECT 1 の回数を「作った件数」と比べる理由】
+  #   このモデルには uniqueness（同じ振り返りに同じ習慣が2つ入らない）の入力チェックがあり、
+  #   保存1件ごとに SELECT 1 AS one … を1回発行する。これはデータを守るために必要な SQL。
+  #   習慣ごとに exists? でも調べていると、同じ形の SQL がそれより多くなる。
+  test "create_all_for_reflection! は、習慣ごとに除外日やサマリーの有無を調べない（N+1 にならない）" do
+    user = @reflection.user
+    # チェック型の習慣を2つ足し、「習慣が複数あっても SQL が増えない」ことを確かめる
+    user.habits.create!(name: "N+1確認用の習慣A", weekly_target: 3, measurement_type: :check_type)
+    user.habits.create!(name: "N+1確認用の習慣B", weekly_target: 3, measurement_type: :check_type)
+
+    before_count = WeeklyReflectionHabitSummary.count
+    queries = []
+    collect_sql = ->(*, payload) { queries << payload[:sql] unless payload[:name] == "SCHEMA" }
+    ActiveSupport::Notifications.subscribed(collect_sql, "sql.active_record") do
+      WeeklyReflectionHabitSummary.create_all_for_reflection!(@reflection)
+    end
+    created_count = WeeklyReflectionHabitSummary.count - before_count
+
+    excluded_day_queries = queries.count { |sql| sql.include?('FROM "habit_excluded_days"') }
+    select_one_queries = queries.count { |sql| sql.match?(/SELECT 1 AS one FROM "weekly_reflection_habit_summaries"/) }
+    has_uniqueness = WeeklyReflectionHabitSummary.validators.any? { |v| v.is_a?(ActiveRecord::Validations::UniquenessValidator) }
+
+    assert_operator created_count, :>=, 2, "テストの前提: 足した習慣のサマリーが作られていない"
+    assert_operator excluded_day_queries, :<=, 1, "除外日を習慣ごとに読み込んでいる（N+1）"
+    assert_equal (has_uniqueness ? created_count : 0), select_one_queries,
+                 "サマリーがあるかを習慣ごとに調べている（N+1）"
+  end
 end
