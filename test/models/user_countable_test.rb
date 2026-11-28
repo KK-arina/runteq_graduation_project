@@ -82,21 +82,30 @@ class UserCountableTest < ActiveSupport::TestCase
   end
 
   # ── ④ Ruby の判定と SQL の判定が同じになること ───────────────────────
-  test "予約ドメインの判定は、メールを止める仕組み（Ruby）と SQL で同じ結果になる" do
+  #
+  # 【実際の scope で確かめる理由】
+  #   SQL の式をテストの中に別に書いて比べると、scope の式とずれても気づけない。
+  #   そこで、ユーザーのメールアドレスを書き換えながら countable_for_usage そのものを使い、
+  #   「Ruby で予約ドメインと判定された → 集計から外れる」「そうでない → 含まれる」を確かめる。
+  #
+  # 【不正な形の値も入れる理由】
+  #   @ がない・@ が2つある・@ で終わる値は、ふつうは登録できない。
+  #   ただ、2つの判定の「ドメインの取り出し方」がずれていないかを確かめるため、
+  #   update_columns（入力チェックを通さない）で直接入れて試す。
+  test "予約ドメインの判定は、メールを止める仕組み（Ruby）と集計の SQL で同じ結果になる" do
     samples = %w[
       a@example.com a@EXAMPLE.org a@sub.example.net a@foo.test a@x.invalid
       a@localhost a@example a@example.com.
       a@myexample.com a@example.com.evil a@gmail.com a@test.co.jp a@mail.habitflow-arina.com
+      localhost example.com a@b@example.com a@example.com@gmail.com a@
     ]
 
     samples.each do |address|
-      sql = ActiveRecord::Base.sanitize_sql_array(
-        [ "SELECT LOWER(SPLIT_PART(?, '@', 2)) ~ ?", address, ReservedDomainInterceptor::RESERVED_DOMAIN_SQL_PATTERN ]
-      )
-      sql_result = ActiveRecord::Base.connection.select_value(sql)
+      @real_user.update_columns(email: address)
 
-      assert_equal ReservedDomainInterceptor.reserved?(address), sql_result,
-                   "#{address} の判定が Ruby と SQL で違います"
+      # Ruby で予約ドメインと判定されたら、集計から外れているはず
+      expected = !ReservedDomainInterceptor.reserved?(address)
+      assert_equal expected, countable?(@real_user), "#{address} の判定が Ruby と SQL で違います"
     end
   end
 end

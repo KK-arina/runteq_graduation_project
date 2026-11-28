@@ -36,15 +36,21 @@ module UsageCountable
     # 【!~ とは】
     #   PostgreSQL の「正規表現に一致しない」という演算子（一致する、は ~）。
     #
-    # 【SPLIT_PART(users.email, '@', 2)】
-    #   メールアドレスを "@" で区切った2つ目（ドメイン部分）を取り出す。
+    # 【COALESCE(SUBSTRING(users.email FROM '@(.*)$'), '')】
+    #   メールアドレスの「最初の @ より後ろ」をドメインとして取り出す。
+    #   SUBSTRING に正規表現を渡すと、( ) で囲んだ部分が返る。
+    #   正規表現は左から探すので、@ が2つ以上あっても「最初の @」の後ろ全体になる。
+    #   @ がないときは NULL が返るため、COALESCE で空文字にする（予約ドメイン扱いしない）。
+    #   ReservedDomainInterceptor.reserved?（Ruby）と同じ取り出し方にそろえている。
+    #   （以前の SPLIT_PART(users.email, '@', 2) は「1つ目と2つ目の @ の間」を返すため、
+    #     @ が2つ以上ある値で、Ruby の判定と結果が違っていた）
     #
     # 【? を使う理由】
     #   正規表現やメールアドレスの一覧を、SQL の文字列に直接つなげず、
     #   Rails に安全に埋め込ませる（SQL インジェクションを防ぐ）。
     scope :countable_for_usage, -> {
       relation = active.where(
-        "users.email IS NULL OR LOWER(SPLIT_PART(users.email, '@', 2)) !~ ?",
+        "users.email IS NULL OR LOWER(COALESCE(SUBSTRING(users.email FROM '@(.*)$'), '')) !~ ?",
         ReservedDomainInterceptor::RESERVED_DOMAIN_SQL_PATTERN
       )
 
