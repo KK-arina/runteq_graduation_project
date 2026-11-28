@@ -101,7 +101,7 @@ class UserTest < ActiveSupport::TestCase
 
   test "from_omniauth creates a new LINE user without email" do
     auth = {
-      "provider" => "line_v2_1",   # :line_v21 プロバイダなので "line_v21" が入る
+      "provider" => "line_v2_1",   # omniauth-line-v2_1 は provider に "line_v2_1" を返す
       "uid"      => "sub_#{SecureRandom.hex(8)}",
       "info"     => {
         "name"  => "LINE ユーザー太郎",
@@ -113,7 +113,7 @@ class UserTest < ActiveSupport::TestCase
       user = User.from_omniauth(auth)
 
       assert_equal auth["uid"], user.uid
-      assert_equal "line_v2_1",          user.provider  # "line_v21" で保存される
+      assert_equal "line_v2_1",          user.provider  # "line_v2_1" で保存される
       assert_equal "LINE ユーザー太郎", user.name
       assert_nil user.email
       assert user.persisted?
@@ -123,7 +123,7 @@ class UserTest < ActiveSupport::TestCase
   test "from_omniauth returns existing LINE user on second login" do
     uid = "sub_existing_#{SecureRandom.hex(8)}"
     auth = {
-      "provider" => "line_v2_1",   # 修正
+      "provider" => "line_v2_1",
       "uid"      => uid,
       "info"     => { "name" => "LINE ユーザー二郎" }
     }
@@ -139,7 +139,7 @@ class UserTest < ActiveSupport::TestCase
 
   test "from_omniauth uses LINE User as fallback name when LINE name is blank" do
     auth = {
-      "provider" => "line_v2_1",   # 修正
+      "provider" => "line_v2_1",
       "uid"      => "sub_noname_#{SecureRandom.hex(8)}",
       "info"     => { "name" => nil }
     }
@@ -151,7 +151,7 @@ class UserTest < ActiveSupport::TestCase
 
   test "LINE user is valid without password" do
     line_user = User.new(
-      provider: "line_v21",        # 修正
+      provider: "line_v2_1",
       uid:      "sub_valid_#{SecureRandom.hex(8)}",
       name:     "LINE テストユーザー",
       email:    nil,

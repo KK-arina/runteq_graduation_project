@@ -79,7 +79,7 @@ fixture_only_user:
 one:
   name: "テストユーザー1"
   email: "test1@example.com"
-  # "$2a$12$..." は "password" を BCrypt でハッシュ化した文字列
+  # "password" を BCrypt でハッシュ化する。cost: 1 は計算を最小にしてテストを速くするため（本番の既定は 12）
   password_digest: "<%= BCrypt::Password.create('password', cost: 1) %>"
   # D-7 追加: オンボーディング完了済みとして扱う（NULL だとリダイレクトされる）
   first_login_at: "2026-01-01 00:00:00"

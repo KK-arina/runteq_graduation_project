@@ -31,7 +31,7 @@
 #
 # 【provider の値について】
 #   OmniAuth Google OAuth2 gem は auth["provider"] に "google_oauth2" を返す。
-#   OmniAuth LINE gem は auth["provider"] に "line" を返す。
+#   OmniAuth LINE gem（omniauth-line-v2_1）は auth["provider"] に "line_v2_1" を返す。
 #
 # ==============================================================================
 class User < ApplicationRecord

@@ -24,14 +24,16 @@
 #   Active Record のクエリメソッド（where, find, find_by など）は
 #   内部でプレースホルダー（? や :name）を使ってSQLを組み立てるため、
 #   ユーザー入力が SQL として実行されることはない。
-#   このアプリでは生SQL（execute や find_by_sql）を使っていないため安全。
+#   生 SQL（connection.execute）や SQL の断片を使う場所（退会処理・管理画面の集計など）でも、
+#   sanitize_sql_array や ? のプレースホルダーで値を埋め込み、ユーザー入力を SQL に直接つなげない。
 #
 # 【3. XSS対策（クロスサイトスクリプティング）】
 #   Rails の ERB テンプレートは <%= %> で出力する文字列を
 #   自動的に HTML エスケープする。
 #   例: <script>alert('XSS')</script> → &lt;script&gt;...&lt;/script&gt;
 #   raw() や html_safe を意図的に使わない限り、XSSは発生しない。
-#   また config/environments/production.rb で X-XSS-Protection ヘッダーも設定済み。
+#   なお X-XSS-Protection ヘッダーは、古いブラウザの機能が逆に悪用されるおそれがあるため、
+#   production.rb で "0"（無効）にしている。代わりに Content Security Policy でも防いでいる。
 #
 # 【4. Strong Parameters】
 #   各コントローラーで params.require().permit() を使い、
