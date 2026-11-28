@@ -51,9 +51,10 @@ class OmniauthCallbacksController < ApplicationController
       redirect_to determine_redirect_path_for_omniauth(@user),
                   notice: t("omniauth.google.success")
     else
+      # uid（Google・LINE の利用者 ID）は人を特定できる値なので、ログには書かない。
       Rails.logger.error "[OmniauthCallbacksController#google] " \
                          "ユーザーが persisted? でない: " \
-                         "provider=#{auth['provider']}, uid=#{auth['uid']}"
+                         "provider=#{auth['provider']}"
       redirect_to login_path, alert: t("omniauth.google.failure")
     end
 
@@ -132,9 +133,10 @@ class OmniauthCallbacksController < ApplicationController
       redirect_to determine_redirect_path_for_omniauth(@user),
                   notice: t("omniauth.line.success")
     else
+      # uid（Google・LINE の利用者 ID）は人を特定できる値なので、ログには書かない。
       Rails.logger.error "[OmniauthCallbacksController#line] " \
                          "ユーザーが persisted? でない: " \
-                         "provider=#{auth['provider']}, uid=#{auth['uid']}"
+                         "provider=#{auth['provider']}"
       redirect_to login_path, alert: t("omniauth.line.failure")
     end
   rescue ActiveRecord::RecordInvalid => e
@@ -218,8 +220,6 @@ class OmniauthCallbacksController < ApplicationController
     # 既に同じ値が設定済みなら何もしない（不要な DB 更新を防ぐ）
     return if user.line_user_id == line_uid
 
-    Rails.logger.debug "[OmniauthCallbacksController] line_user_id は変更なし: user_id=#{user.id}" if user.line_user_id == line_uid
-
     # update_column を使う理由:
     #   update_columns（複数形）は updated_at を自動更新しないため明示が必要で危険。
     #   update_column（単数形）は指定の1カラムのみ更新し、
@@ -227,9 +227,10 @@ class OmniauthCallbacksController < ApplicationController
     #   line_user_id という単一カラムの保存のみが目的のため単数形が適切。
     user.update_column(:line_user_id, line_uid)
 
+    # line_user_id（LINE の利用者 ID）は人を特定できる値なので、ログには user_id だけを書く。
     Rails.logger.info(
       "[OmniauthCallbacksController] line_user_id を保存しました: " \
-      "user_id=#{user.id} line_user_id=#{line_uid}"
+      "user_id=#{user.id}"
     )
 
   rescue => e
