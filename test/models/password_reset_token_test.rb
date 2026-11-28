@@ -166,4 +166,20 @@ class PasswordResetTokenTest < ActiveSupport::TestCase
     record.reload
     assert record.is_used
   end
+
+  # 【回帰テスト】find_by_raw_token が、候補のトークンのユーザーをまとめて読み込まないこと
+  #   以前は includes(:user) で全候補のユーザーを読み込み、Bullet が
+  #   「AVOID eager loading（不要な事前読み込み）」と警告していた。
+  test "find_by_raw_token は一致したトークンを返し、ユーザーは必要になるまで読み込まない" do
+    user = users(:one)
+    raw_token = PasswordResetToken.generate_token_for(user)
+
+    record = PasswordResetToken.find_by_raw_token(raw_token)
+
+    assert_equal user.id, record.user_id
+    # association(:user).loaded?: user がすでに読み込まれているか（true なら事前読み込みされている）
+    assert_not record.association(:user).loaded?
+    # 使うときには、正しいユーザーが読み込まれる
+    assert_equal user, record.user
+  end
 end
