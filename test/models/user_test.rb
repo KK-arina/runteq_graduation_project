@@ -163,6 +163,51 @@ class UserTest < ActiveSupport::TestCase
   end
 
   # ============================================================
+  # メールアドレスが同じアカウントへの統合（Google だけ許す）
+  # ============================================================
+
+  test "from_omniauth は LINE では、同じメールアドレスのアカウントがあっても統合しない" do
+    existing = users(:one)
+    original_provider = existing.provider
+    original_uid      = existing.uid
+
+    auth = {
+      "provider" => "line_v2_1",
+      "uid"      => "sub_dup_#{SecureRandom.hex(8)}",
+      # 大文字で届いても同じアドレスとして扱われることも、あわせて確かめる
+      "info"     => { "name" => "LINE 三郎", "email" => existing.email.upcase }
+    }
+
+    assert_no_difference "User.count" do
+      assert_raises(User::EmailAlreadyRegisteredError) { User.from_omniauth(auth) }
+    end
+
+    # 既存のアカウントは書き換えられていない
+    existing.reload
+    # uid は nil のこともあるため、「nil は assert_nil で」という警告が出ないよう、配列にまとめて比べる
+    assert_equal [ original_provider, original_uid ], [ existing.provider, existing.uid ]
+  end
+
+  test "from_omniauth は Google では、同じメールアドレスのアカウントに統合する（今までどおり）" do
+    existing = users(:one)
+
+    auth = {
+      "provider" => "google_oauth2",
+      "uid"      => "g_merge_#{SecureRandom.hex(8)}",
+      "info"     => { "name" => "グーグル四郎", "email" => existing.email }
+    }
+
+    assert_no_difference "User.count" do
+      user = User.from_omniauth(auth)
+      assert_equal existing.id, user.id
+    end
+
+    existing.reload
+    assert_equal "google_oauth2", existing.provider
+    assert_equal auth["uid"], existing.uid
+  end
+
+  # ============================================================
   # F-6 追加: 論理削除・再登録関連テスト
   # ============================================================
 

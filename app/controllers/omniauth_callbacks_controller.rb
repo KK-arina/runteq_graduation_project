@@ -139,6 +139,11 @@ class OmniauthCallbacksController < ApplicationController
                          "provider=#{auth['provider']}"
       redirect_to login_path, alert: t("omniauth.line.failure")
     end
+  rescue User::EmailAlreadyRegisteredError
+    # 同じメールアドレスのアカウントがすでにある（LINE では自動で統合しない）。
+    # どのアドレスかはログにも画面にも出さず、ログインの方法だけを案内する。
+    Rails.logger.info "[OmniauthCallbacksController#line] 同じメールアドレスのアカウントがあるため統合しませんでした"
+    redirect_to login_path, alert: t("omniauth.line.email_already_registered")
   rescue ActiveRecord::RecordInvalid => e
     Rails.logger.error "[OmniauthCallbacksController#line] ユーザー作成失敗: #{e.message}"
     redirect_to login_path, alert: t("omniauth.line.failure")

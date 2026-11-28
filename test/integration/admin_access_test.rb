@@ -83,7 +83,7 @@ class AdminAccessTest < ActionDispatch::IntegrationTest
 
   test "同じメールで LINE ログインに切り替わったユーザーでは 404 になる" do
     log_in_as(@admin)
-    # User.from_omniauth の「メールが同じなら統合する」で provider が書き換わった状態を作る
+    # provider が line_v2_1 の状態を作る（LINE ログインは同じメールアドレスでも統合しなくなったが、provider で判定していることを確かめる）
     @admin.update_columns(provider: "line_v2_1")
 
     get admin_root_path
