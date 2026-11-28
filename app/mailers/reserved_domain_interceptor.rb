@@ -30,6 +30,27 @@ class ReservedDomainInterceptor
   #   i        : 大文字・小文字を区別しない
   RESERVED_DOMAIN_PATTERN = /(\A|\.)(example\.(com|net|org)|example|test|invalid|localhost)\z/i
 
+  # 上と同じ判定を、PostgreSQL の正規表現で書いたもの（管理画面の集計で使う）
+  #
+  # 【なぜ別に用意するのか】
+  #   管理画面では、デモ・テスト用アカウント（予約ドメインのアドレス）を集計から外す。
+  #   ユーザーを1人ずつ Ruby で判定すると全員を読み込むことになるため、
+  #   DB の中で絞り込めるように SQL 用の書き方も用意する。
+  #
+  # 【Ruby の正規表現との違い】
+  #   \A（先頭）→ ^、\z（末尾）→ $。大文字小文字は SQL 側で LOWER() してから比べる。
+  #   末尾の "." は、Ruby では delete_suffix で取り除いているため、こちらでは \.? で許す。
+  #
+  # 【ドメインの取り出し方もそろえる】
+  #   Ruby（下の reserved?）も SQL（app/models/concerns/usage_countable.rb）も、
+  #   「最初の @ より後ろ」をドメインとし、@ がなければ空文字（予約扱いしない）にしている。
+  #   2つの判定が同じ結果になることは test/models/user_countable_test.rb で確かめている。
+  #
+  # 【シングルクォートで書く理由】
+  #   ダブルクォートだと Ruby が \. を特別な文字として扱ってしまうため、
+  #   書いたとおりの文字列のまま PostgreSQL に渡せるシングルクォートにしている。
+  RESERVED_DOMAIN_SQL_PATTERN = '(^|\.)(example\.(com|net|org)|example|test|invalid|localhost)\.?$'.freeze
+
   # Action Mailer から、メール送信の直前に呼ばれるメソッド
   def self.delivering_email(message)
     # 宛先（to）のうち、予約ドメインではないものだけを残す
@@ -51,8 +72,15 @@ class ReservedDomainInterceptor
 
   # メールアドレスのドメインが予約ドメインかどうかを判定する
   def self.reserved?(address)
-    # "@" より後ろをドメインとして取り出す（"@" がない不正な値は空文字になり、予約扱いしない）
-    domain = address.to_s.split("@", 2).last.to_s
+    # 「最初の @ より後ろ」をドメインとして取り出す。
+    #
+    # 【partition を使う理由】
+    #   partition("@") は [@ より前, "@", @ より後ろ] の3つに分ける。
+    #   @ がないときは 2つ目が空文字になるので、「@ のない不正な値は予約扱いしない」と書ける。
+    #   （以前の split("@", 2).last は、@ がないと値全体を返すため、
+    #     "localhost" のような値が予約ドメイン扱いになり、SQL の判定とずれていた）
+    _local_part, at_mark, domain = address.to_s.partition("@")
+    return false if at_mark.empty?
 
     # 末尾に "." が付いた表記（"example.com."）でも判定できるように取り除く
     domain.delete_suffix(".").match?(RESERVED_DOMAIN_PATTERN)

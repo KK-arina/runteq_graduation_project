@@ -132,18 +132,15 @@ class PasswordResetToken < ApplicationRecord
   def self.find_by_raw_token(raw_token)
     return nil if raw_token.blank?
 
-    # 変更前
-    candidates = where(is_used: false).where("expires_at > ?", Time.current)
-
-    # 変更後（F-4修正: Bullet N+1警告対応 - userを事前にEager Loadingする）
+    # 有効期限内・未使用のトークンだけを照合の候補にする
     #
-    # 【なぜ includes(:user) を追加するのか】
-    #   find_by_raw_token で取得したレコードに対して、
-    #   コントローラーで @token_record.user を呼ぶと
-    #   追加のSQLクエリが発生する（N+1問題）。
-    #   includes(:user) で user を事前に読み込むことで
-    #   余分なクエリを防ぐ。Bullet gem の警告を解消する。
-    candidates = where(is_used: false).where("expires_at > ?", Time.current).includes(:user)
+    # 【includes(:user) を付けない理由（Bullet の AVOID eager loading 警告への対応）】
+    #   以前は includes(:user) で、候補のトークン全件分のユーザーをまとめて読み込んでいた。
+    #   しかし使うのは、BCrypt の照合に一致した1件のトークンのユーザーだけなので、
+    #   ほかのユーザーの読み込みは無駄になり、Bullet が「不要な事前読み込み」と警告していた。
+    #   一致した1件のユーザーは、コントローラーで @token_record.user を呼んだときに
+    #   SELECT 1回で読み込まれる（1件だけなので N+1 にはならない）。
+    candidates = where(is_used: false).where("expires_at > ?", Time.current)
 
     candidates.find do |record|
       BCrypt::Password.new(record.token_digest).is_password?(raw_token)

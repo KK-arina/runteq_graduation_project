@@ -399,7 +399,9 @@ class PurposeAnalysisJob < ApplicationJob
 
     if json_str.blank?
       Rails.logger.error "[PurposeAnalysisJob] JSON が見つかりません"
-      Rails.logger.error "[PurposeAnalysisJob] 元のレスポンス（先頭300文字）: #{raw_response[0..300]}"
+      # AI の返答は、利用者の目標（PMVV）をもとに書かれているため、中身はログに書かない。
+      # 調べるときの手がかりとして、文字数だけを残す。
+      Rails.logger.error "[PurposeAnalysisJob] 元のレスポンスの文字数: #{raw_response.to_s.length}"
       return nil
     end
 
@@ -419,8 +421,10 @@ class PurposeAnalysisJob < ApplicationJob
 
     parsed
   rescue JSON::ParserError => e
-    Rails.logger.error "[PurposeAnalysisJob] JSON パース失敗: #{e.message}"
-    Rails.logger.error "[PurposeAnalysisJob] 元のレスポンス（先頭500文字）: #{raw_response[0..500]}"
+    # JSON::ParserError のメッセージには、読み取れなかった文章の一部が入るため、
+    # ログにはエラーの種類（e.class）だけを書く。
+    Rails.logger.error "[PurposeAnalysisJob] JSON パース失敗: #{e.class}"
+    Rails.logger.error "[PurposeAnalysisJob] 元のレスポンスの文字数: #{raw_response.to_s.length}"
     nil
   end
 

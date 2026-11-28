@@ -1,0 +1,16 @@
+<%# app/views/admin/_robots_meta.html.erb %>
+<%#
+  管理画面の全ページで使う「検索エンジンに載せない」指定
+
+  【content_for :head を使う理由】
+    レイアウト（layouts/application.html.erb）の head の中にある yield :head に、
+    この meta タグを差し込むため。管理画面のページでだけ出力される。
+
+  【HTTP ヘッダー（X-Robots-Tag）と両方に書く理由】
+    Admin::BaseController でも X-Robots-Tag を付けているが、
+    HTML の中にも書いておくと、ヘッダーが途中で落ちた場合でも検索エンジンに伝わる。
+    両方ある場合は、より厳しい指定が使われる。
+%>
+<% content_for :head do %>
+  <meta name="robots" content="noindex, nofollow">
+<% end %>

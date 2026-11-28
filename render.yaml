@@ -1,85 +1,91 @@
 # ==============================================================================
-# render.yaml - インフラ構成定義ファイル（G-1 更新）
+# render.yaml - Render の設定（Blueprint）
 # ==============================================================================
 #
-# 【構成】
-#   Web サービスのみ使用する。
-#   GoodJob は execution_mode: :async で Web プロセス内で実行するため
-#   Worker サービスは不要。
-#   Render の Free プランは Background Worker が使えないため（最低$7/月）
-#   この構成を採用している。
+# 【このファイルの位置づけ（2026-11-28 時点）】
+#   Render の Blueprint「habitflow」が、このファイルと main ブランチを結び付けている。
+#   ただし Blueprint の Auto Sync は「No」にしてあり、このファイルを変えても
+#   Render の設定は自動では変わらない。実際の設定は Render の画面が正しい。
+#   このファイルは「Render の画面の設定と同じ内容」を記録しておくためのもの。
 #
+# 【Manual Sync を押すときの注意】
+#   Render の画面で Manual Sync を押すと、このファイルの内容で設定が上書きされる。
+#   押す前に、表示される差分（変わる項目）を必ず確かめる。
+#   以前はこのファイルに startCommand（Docker のサービスでは使えない項目）や
+#   region: singapore（作成後は変えられない項目）が書いてあり、同期が失敗していた。
+#
+# 【構成】
+#   Web サービス1つだけ。GoodJob は execution_mode: :async で Web プロセスの中で動かすため、
+#   Worker サービスは使わない（Render の Free プランでは Background Worker が使えないため）。
+#
+# 【起動の流れ】
+#   Dockerfile の ENTRYPOINT（bin/docker-entrypoint）が db:migrate などの準備をしたあと、
+#   CMD（./bin/rails server -b 0.0.0.0）でサーバーを起動する。
+#   dockerCommand を書かないと Dockerfile の CMD が使われる（Render の画面の Docker Command も空欄）。
+#   参考: https://render.com/docs/blueprint-spec
 services:
   - type: web
     name: habitflow-web
     runtime: docker
-    region: singapore
+    # region は作成後に変えられない。実際のサービスは Oregon（DB の Neon も AWS US West 2 (Oregon)）
+    region: oregon
     plan: free
     branch: main
     dockerfilePath: ./Dockerfile
     dockerContext: .
+    # main へのコミット（push）ごとに自動でデプロイする（画面の Auto-Deploy: On Commit と同じ）
+    autoDeployTrigger: commit
 
-    buildCommand: |
-      bundle install
-      bundle exec rails assets:precompile
-      bundle exec rails assets:clean
-
-    startCommand: bundle exec rails db:migrate && exec bundle exec puma -C config/puma.rb
-
+    # 環境変数
+    #   value を書いたもの … 秘密ではない設定値
+    #   sync: false        … 秘密の値。Render の画面（Environment）で値だけを入れる。GitHub には書かない
     envVars:
       - key: RAILS_ENV
         value: production
+      - key: RAILS_LOG_TO_STDOUT
+        value: "true"
+      - key: RAILS_SERVE_STATIC_FILES
+        value: "true"
+      - key: WEB_CONCURRENCY
+        value: "2"
+      # true にすると、起動のたびに db:seed（習慣テンプレートの読み込み）を行う。ふだんは false
+      - key: SEED_IN_PRODUCTION
+        value: "false"
 
       - key: RAILS_MASTER_KEY
         sync: false
-
+      # Neon（PostgreSQL）への接続文字列
       - key: DATABASE_URL
         sync: false
-
-      - key: RAILS_LOG_TO_STDOUT
-        value: "true"
-
-      - key: RAILS_SERVE_STATIC_FILES
-        value: "true"
-
-      - key: WEB_CONCURRENCY
-        value: "2"
-
-      # Resend メール送信サービス API キー
-      # Render ダッシュボードから手動で設定する
+      # メール送信（Resend）
       - key: RESEND_API_KEY
         sync: false
-
-      # ============================================================
-      # G-1 追加: LINE Messaging API チャネルアクセストークン
-      # ============================================================
-      #
-      # 【LINE_CHANNEL_ACCESS_TOKEN とは何か】
-      #   LINE Messaging API チャネルで発行する「チャネルアクセストークン」。
-      #   LINE Developers Console → Messaging API チャネル →
-      #   「Messaging API設定」タブ → 「チャネルアクセストークン（長期）」で取得する。
-      #
-      # 【sync: false の意味】
-      #   実際のトークン値は Render ダッシュボードから手動で設定する。
-      #   GitHub に秘密情報を上げないためこの形式を使う。
+      # AI 分析（まず Gemini、失敗したら Groq）
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      # Google ログイン
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      # LINE ログイン（LINE Login チャネル）
+      - key: LINE_CHANNEL_ID
+        sync: false
+      - key: LINE_CHANNEL_SECRET
+        sync: false
+      # LINE 通知（Messaging API チャネル）
       - key: LINE_CHANNEL_ACCESS_TOKEN
         sync: false
-
-      # ============================================================
-      # I-5 追加: Sentry エラー監視用 DSN
-      # ============================================================
-      #
-      # 【SENTRY_DSN とは】
-      #   Sentry プロジェクトの送信先URL。Sentry管理画面で発行される。
-      #   これが本番に設定されているときだけ Sentry が有効になる
-      #   （config/initializers/sentry.rb が if ENV["SENTRY_DSN"].present? で判定）。
-      #
-      # 【sync: false の意味】
-      #   実際の値は Render ダッシュボードから手動で設定する（GitHubに秘密情報を上げない）。
-      #
-      # 【Release Tracking について】
-      #   デプロイのコミットSHAは Render が RENDER_GIT_COMMIT 環境変数として
-      #   自動提供するため、ここに追記する必要はない。
-      #   sentry.rb 側で config.release = ENV["RENDER_GIT_COMMIT"] として読み込む。
+      # /good_job（ジョブの管理画面）の Basic 認証
+      - key: GOOD_JOB_LOGIN
+        sync: false
+      - key: GOOD_JOB_PASSWORD
+        sync: false
+      # エラー監視（Sentry）。設定されているときだけ有効になる
       - key: SENTRY_DSN
+        sync: false
+      # 管理画面（/admin）を開けるメールアドレス（カンマ区切り）
+      - key: ADMIN_EMAILS
         sync: false

@@ -31,10 +31,25 @@
 #
 # 【provider の値について】
 #   OmniAuth Google OAuth2 gem は auth["provider"] に "google_oauth2" を返す。
-#   OmniAuth LINE gem は auth["provider"] に "line" を返す。
+#   OmniAuth LINE gem（omniauth-line-v2_1）は auth["provider"] に "line_v2_1" を返す。
 #
 # ==============================================================================
 class User < ApplicationRecord
+  # ============================================================
+  # 管理者の判定（管理画面 /admin 用）
+  # ============================================================
+  # user.admin? などのメソッドは app/models/concerns/admin_role.rb にまとめている。
+  # （User モデルが長いため、管理者まわりの処理を別ファイルに分けた）
+  include AdminRole
+
+  # 最終利用日時（users.last_active_at）の1日1回の記録
+  #   メソッドは app/models/concerns/last_activity.rb にまとめている。
+  include LastActivity
+
+  # 管理画面の集計の対象にするユーザー（User.countable_for_usage）
+  #   scope は app/models/concerns/usage_countable.rb にまとめている。
+  include UsageCountable
+
   # ============================================================
   # 認証関連
   # ============================================================
@@ -224,6 +239,22 @@ class User < ApplicationRecord
   # クラスメソッド（F-1 追加、F-2 拡張）
   # ============================================================
 
+  # ============================================================
+  # OAuth で「同じメールアドレスのアカウントへの統合」を許すプロバイダ
+  # ============================================================
+  #
+  # 【なぜ Google だけなのか】
+  #   Google（omniauth-google-oauth2 0.7.0 以降）は、持ち主の確認が済んだ
+  #   メールアドレスだけを info.email として返す。
+  #   LINE から届くメールアドレスには、同じ形の確認済みの保証がない。
+  #   確認されていないメールアドレスで統合すると、他人のメールアドレスを使って
+  #   既存のアカウントに入れてしまうおそれがあるため、Google 以外では統合しない。
+  EMAIL_MERGEABLE_PROVIDERS = %w[google_oauth2].freeze
+
+  # LINE などで、同じメールアドレスのアカウントがすでにあるときに発生させる例外。
+  # コントローラーで受け止めて、「メールアドレスか Google でログインしてください」と案内する。
+  class EmailAlreadyRegisteredError < StandardError; end
+
   # from_omniauth
   #
   # 【役割】
@@ -244,6 +275,12 @@ class User < ApplicationRecord
 
     if email.present?
       existing_user = find_by(email: email)
+
+      # 【Google 以外では統合しない】
+      #   新しく作ろうとすると、メールアドレスの重複で保存に失敗し、
+      #   「LINE 認証に失敗しました」という理由の分からない表示になる。
+      #   そのため、専用の例外で「すでに登録されている」ことを知らせる。
+      raise EmailAlreadyRegisteredError if existing_user && EMAIL_MERGEABLE_PROVIDERS.exclude?(auth["provider"])
 
       if existing_user
         # 既存メールアカウントに OAuth 情報を紐付ける（マージ）

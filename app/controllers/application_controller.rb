@@ -24,14 +24,16 @@
 #   Active Record のクエリメソッド（where, find, find_by など）は
 #   内部でプレースホルダー（? や :name）を使ってSQLを組み立てるため、
 #   ユーザー入力が SQL として実行されることはない。
-#   このアプリでは生SQL（execute や find_by_sql）を使っていないため安全。
+#   生 SQL（connection.execute）や SQL の断片を使う場所（退会処理・管理画面の集計など）でも、
+#   sanitize_sql_array や ? のプレースホルダーで値を埋め込み、ユーザー入力を SQL に直接つなげない。
 #
 # 【3. XSS対策（クロスサイトスクリプティング）】
 #   Rails の ERB テンプレートは <%= %> で出力する文字列を
 #   自動的に HTML エスケープする。
 #   例: <script>alert('XSS')</script> → &lt;script&gt;...&lt;/script&gt;
 #   raw() や html_safe を意図的に使わない限り、XSSは発生しない。
-#   また config/environments/production.rb で X-XSS-Protection ヘッダーも設定済み。
+#   なお X-XSS-Protection ヘッダーは、古いブラウザの機能が逆に悪用されるおそれがあるため、
+#   production.rb で "0"（無効）にしている。代わりに Content Security Policy でも防いでいる。
 #
 # 【4. Strong Parameters】
 #   各コントローラーで params.require().permit() を使い、
@@ -83,6 +85,11 @@ class ApplicationController < ActionController::Base
   #   OAuthログイン後に /terms_agreement を経由せず直接URLを叩いて
   #   ダッシュボード等にアクセスするのを防ぐため。法規上、同意なしの利用は認めてはいけない。
   before_action :redirect_to_terms_agreement_if_needed
+
+  # 管理画面追加: ログイン中のユーザーが画面を開いたら、最終利用日時を1日1回だけ記録する
+  #   中身は app/controllers/concerns/last_active_tracking.rb。
+  #   上の利用規約の確認より後に実行したいので、この位置で include している。
+  include LastActiveTracking
 
   # ============================================================
   # Issue #27: カスタムエラーハンドリングの設定
@@ -307,7 +314,38 @@ class ApplicationController < ActionController::Base
       return
     end
 
+    # ── 連打防止の時刻を記録する前に、元の値を覚えておく ─────────────
+    #
+    # 【なぜ元の値を覚えておくのか】
+    #   この before_action は、保存の「前」に動く。
+    #   入力が足りなくて保存できなかったときや、AI の月の上限で止まったときは、
+    #   AI に何も送っていないのに「1分待ってください」と止められてしまう。
+    #   そこで、AI に送らなかったときは release_ai_request_throttle! で元の値に戻せるようにする。
+    #
+    # 【なぜ「保存に成功してから記録する」にしないのか】
+    #   ほぼ同時に2回送信されたとき、先に記録しておかないと両方とも通ってしまい、
+    #   AI のジョブが2つ動くおそれがあるため。連打防止の役目はそのまま残す。
+    @ai_request_throttle_previous_at = setting.last_ai_requested_at
+    @ai_request_throttle_touched     = true
     setting.touch_ai_requested_at!
+  end
+
+  # ============================================================
+  # 連打防止の時刻を元に戻す（AI に送らなかったときに呼ぶ）
+  # ============================================================
+  #
+  # 【呼ぶ場所】
+  #   before_action :throttle_ai_request を使っているアクションの中で、
+  #   保存に失敗したときなど「AI のジョブを入れなかった」ときに呼ぶ。
+  #
+  # 【このリクエストで記録していないときは何もしない】
+  #   @ai_request_throttle_touched が true のときだけ戻す。
+  #   ほかのリクエストが記録した時刻を、うっかり消さないようにするため。
+  def release_ai_request_throttle!
+    return unless @ai_request_throttle_touched
+
+    current_user.user_setting&.restore_ai_requested_at!(@ai_request_throttle_previous_at)
+    @ai_request_throttle_touched = false
   end
 
   # ============================================================

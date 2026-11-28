@@ -10,6 +10,8 @@
 # Ignore all environment files (except templates).
 /.env*
 !/.env*.erb
+# .env.example は秘密の値を書かない「設定項目の説明書き」なので、Git で管理する
+!/.env.example
 
 # Ignore all logfiles and tempfiles.
 /log/*

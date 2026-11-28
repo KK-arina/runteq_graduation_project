@@ -81,9 +81,9 @@
               controller_name == 'dashboards':
                 Rails の controller_name ヘルパーで現在のコントローラー名を取得。
                 ダッシュボードページでは "dashboards" が返る。
-                条件が真のとき "page"、偽のとき false を返す。
-                false のときは aria-current 属性自体が HTML に出力されない
-                （「aria-current="false"」という不正な状態にならない）。
+                条件が真のとき "page"、偽のとき nil を返す。
+                nil のときは aria-current 属性自体が HTML に出力されない
+                （false を渡すと、Rails は属性を省かずに aria-current="false" を出力してしまうため、nil にしている）。
 
             focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded（Issue #33 追加）:
               キーボードで Tab を押してリンクにフォーカスが当たったとき、
@@ -98,19 +98,19 @@
               class: "text-gray-600 hover:text-gray-900 whitespace-nowrap
                       md:px-2 lg:px-3 py-2 md:text-xs lg:text-sm font-medium transition-colors
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
-              aria: { current: controller_name == 'dashboards' ? 'page' : false } %>
+              aria: { current: controller_name == 'dashboards' ? 'page' : nil } %>
 
           <%= link_to "習慣一覧", habits_path,
               class: "text-gray-600 hover:text-gray-900 whitespace-nowrap
                       md:px-2 lg:px-3 py-2 md:text-xs lg:text-sm font-medium transition-colors
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
-              aria: { current: controller_name == 'habits' ? 'page' : false } %>
+              aria: { current: controller_name == 'habits' ? 'page' : nil } %>
 
           <%= link_to "振り返り", weekly_reflections_path,
               class: "text-gray-600 hover:text-gray-900 whitespace-nowrap
                       md:px-2 lg:px-3 py-2 md:text-xs lg:text-sm font-medium transition-colors
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
-              aria: { current: controller_name == 'weekly_reflections' ? 'page' : false } %>
+              aria: { current: controller_name == 'weekly_reflections' ? 'page' : nil } %>
 
           <%#
             ── C-1 追加: タスク管理リンク（PC用）────────────────────────────
@@ -131,7 +131,7 @@
               class: "text-gray-600 hover:text-gray-900 whitespace-nowrap
                       md:px-2 lg:px-3 py-2 md:text-xs lg:text-sm font-medium transition-colors
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
-              aria: { current: controller_name == 'tasks' ? 'page' : false } %>
+              aria: { current: controller_name == 'tasks' ? 'page' : nil } %>
           <%# ──────────────────────────────────────────────────────────────── %>
 
           <%# ── D-1 追加: 目標管理リンク（PC用）────────────────────────────────────── %>
@@ -145,7 +145,7 @@
               class: "text-gray-600 hover:text-gray-900 whitespace-nowrap
                       md:px-2 lg:px-3 py-2 md:text-xs lg:text-sm font-medium transition-colors
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
-              aria: { current: controller_name == 'user_purposes' ? 'page' : false } %>
+              aria: { current: controller_name == 'user_purposes' ? 'page' : nil } %>
           <%# ──────────────────────────────────────────────────────────────────────── %>
 
           <%# ── H-4 追加: グラフ・進捗分析リンク（PC用）──────────────────────────────── %>
@@ -170,7 +170,7 @@
               class: "text-gray-600 hover:text-gray-900 whitespace-nowrap
                       md:px-2 lg:px-3 py-2 md:text-xs lg:text-sm font-medium transition-colors
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
-              aria: { current: controller_name == 'analytics' ? 'page' : false } %>
+              aria: { current: controller_name == 'analytics' ? 'page' : nil } %>
           <%# ──────────────────────────────────────────────────────────────────────── %>
 
           <%# ── F-6 追加: 設定ページリンク（PC用）── %>
@@ -178,7 +178,7 @@
               class: "text-gray-600 hover:text-gray-900 whitespace-nowrap
                       md:px-2 lg:px-3 py-2 md:text-xs lg:text-sm font-medium transition-colors
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
-              aria: { current: controller_name == 'settings' ? 'page' : false } %>
+              aria: { current: controller_name == 'settings' ? 'page' : nil } %>
 
           <%# レスポンシブ改善: ユーザー名表示は装飾（aria-hidden で読み上げ対象外・
               氏名はログアウトボタンの aria-label に含まれる）なので、
@@ -320,21 +320,21 @@
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
-              aria: { current: controller_name == 'dashboards' ? 'page' : false } %>
+              aria: { current: controller_name == 'dashboards' ? 'page' : nil } %>
 
           <%= link_to "習慣一覧", habits_path,
               class: "block px-3 py-2 rounded-md text-sm font-medium
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
-              aria: { current: controller_name == 'habits' ? 'page' : false } %>
+              aria: { current: controller_name == 'habits' ? 'page' : nil } %>
 
           <%= link_to "振り返り", weekly_reflections_path,
               class: "block px-3 py-2 rounded-md text-sm font-medium
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
-              aria: { current: controller_name == 'weekly_reflections' ? 'page' : false } %>
+              aria: { current: controller_name == 'weekly_reflections' ? 'page' : nil } %>
 
           <%#
             ── C-1 追加: タスク管理リンク（モバイル用）──────────────────────
@@ -353,7 +353,7 @@
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
-              aria: { current: controller_name == 'tasks' ? 'page' : false } %>
+              aria: { current: controller_name == 'tasks' ? 'page' : nil } %>
           <%# ──────────────────────────────────────────────────────────────── %>
 
           <%# ── D-1 追加: 目標管理リンク（モバイル用）──────────────────────────────── %>
@@ -362,7 +362,7 @@
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
-              aria: { current: controller_name == 'user_purposes' ? 'page' : false } %>
+              aria: { current: controller_name == 'user_purposes' ? 'page' : nil } %>
           <%# ──────────────────────────────────────────────────────────────────────── %>
 
           <%# ── H-4 追加: グラフ・進捗分析リンク（モバイル用）────────────────────────── %>
@@ -380,7 +380,7 @@
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
-              aria: { current: controller_name == 'analytics' ? 'page' : false } %>
+              aria: { current: controller_name == 'analytics' ? 'page' : nil } %>
           <%# ──────────────────────────────────────────────────────────────────────── %>
 
           <%# ── F-6 追加: 設定ページリンク（モバイル用）── %>
@@ -389,7 +389,7 @@
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
-              aria: { current: controller_name == 'settings' ? 'page' : false } %>
+              aria: { current: controller_name == 'settings' ? 'page' : nil } %>
 
           <div class="border-t border-gray-200 mt-1 pt-1">
             <%# aria-hidden="true": ユーザー名はログアウトボタンのaria-labelで伝えるため非表示 %>

@@ -1,0 +1,139 @@
+<%# app/views/admin/users/index.html.erb %>
+<%#
+  管理画面のユーザー一覧（GET /admin/users）
+
+  【このページの構成】
+    ① 見出し・管理画面のトップへ戻るリンク・表示内容の説明
+    ② 絞り込みのタブ（すべて／未使用／休眠／継続中）
+    ③ ユーザーの表（1ページ50人）
+    ④ ページ送り
+
+  【表示するもの・しないもの】
+    名前・メールアドレスの一部（masked_email）・件数・日付・状態だけを表示する。
+    入力内容（振り返りのコメント・PMVV・メモ）は表示しない。
+    名前は <%= で出力するため、HTML エスケープされる（名前に HTML が入っていても実行されない）。
+
+  【aria-current="page"】
+    今選んでいる絞り込みのタブを、スクリーンリーダーに伝える。
+    選んでいないタブには nil を渡し、属性そのものを出力しない（false だと aria-current="false" が出力されるため）。
+%>
+<% content_for :title, t(".page_title") %>
+<%= render "admin/robots_meta" %>
+
+<% result = @result %>
+<% first_number = result.total_count.zero? ? 0 : ((result.page - 1) * result.per_page) + 1 %>
+<% last_number  = [ result.page * result.per_page, result.total_count ].min %>
+
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+
+  <%# ── ① 見出し ──────────────────────────────────────────────────── %>
+  <div>
+    <p class="mb-2">
+      <%= link_to t(".back_to_dashboard"), admin_root_path, class: "text-sm text-blue-600 hover:underline" %>
+    </p>
+    <h1 class="text-2xl font-bold text-gray-900"><%= t(".title") %></h1>
+    <p class="mt-2 text-xs text-gray-500"><%= t(".description") %></p>
+  </div>
+
+  <%# ── ② 絞り込みのタブ ──────────────────────────────────────────── %>
+  <nav aria-label="<%= t(".filters_label") %>">
+    <ul class="flex flex-wrap gap-2">
+      <% AdminUserListService::FILTERS.each do |filter| %>
+        <% days = filter == "dormant" ? AdminUserListService::DORMANT_DAYS : AdminUserListService::ACTIVE_DAYS %>
+        <% selected = result.filter == filter %>
+        <li>
+          <%= link_to t(".filters.#{filter}", days: days), admin_users_path(filter: filter),
+                class: "inline-block px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors
+                        #{selected ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'}",
+                aria: { current: (selected ? "page" : nil) },
+                data: { testid: "admin-users-filter-#{filter}" } %>
+        </li>
+      <% end %>
+    </ul>
+  </nav>
+
+  <%# 0人のときは「0人中 0〜0人目」と出さず、下の「該当するユーザーはいません。」だけを表示する %>
+  <% if result.total_count.positive? %>
+  <p class="text-sm text-gray-600" data-testid="admin-users-summary">
+    <%= t(".summary", total: result.total_count, from: first_number, to: last_number) %>
+  </p>
+  <% end %>
+
+  <%# ── ③ ユーザーの表 ──────────────────────────────────────────────── %>
+  <% if result.rows.empty? %>
+    <p class="text-sm text-gray-600" data-testid="admin-users-empty"><%= t(".empty") %></p>
+  <% else %>
+    <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
+      <table class="min-w-full text-sm whitespace-nowrap" data-testid="admin-users-table">
+        <thead class="bg-gray-50 text-gray-600">
+          <tr>
+            <% %w[id name email provider registered_at onboarding pmvv last_active_at habits records reflections status].each do |key| %>
+              <th scope="col" class="px-3 py-2 text-left font-medium"><%= t(".headers.#{key}") %></th>
+            <% end %>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <% result.rows.each do |row| %>
+            <% status = AdminUserListService.status_for(row) %>
+            <tr data-testid="admin-user-row-<%= row.id %>">
+              <td class="px-3 py-2 text-gray-500"><%= row.id %></td>
+              <th scope="row" class="px-3 py-2 text-left font-medium text-gray-900"><%= row.name %></th>
+              <td class="px-3 py-2 text-gray-700"><%= masked_email(row.email) || t(".values.no_email") %></td>
+              <td class="px-3 py-2 text-gray-700">
+                <%= t("admin.providers.#{row.provider}", default: t("admin.providers.other")) %>
+              </td>
+              <td class="px-3 py-2 text-gray-700"><%= row.created_at.strftime("%Y/%m/%d") %></td>
+              <td class="px-3 py-2 text-gray-700">
+                <%= row.first_login_at.present? ? t(".values.done") : t(".values.not_yet") %>
+              </td>
+              <td class="px-3 py-2 text-gray-700">
+                <%= row.pmvv_registered ? t(".values.done") : t(".values.not_yet") %>
+              </td>
+              <td class="px-3 py-2 text-gray-700">
+                <%= row.last_active_at&.strftime("%Y/%m/%d") || t(".values.never") %>
+              </td>
+              <td class="px-3 py-2 text-right text-gray-700"><%= row.habits_count %></td>
+              <td class="px-3 py-2 text-right text-gray-700"><%= row.records_count %></td>
+              <td class="px-3 py-2 text-right text-gray-700"><%= row.reflections_count %></td>
+              <td class="px-3 py-2">
+                <%#
+                  状態ごとに色を変える。色だけでなく文字（未使用・休眠など）でも示すので、
+                  色の見分けがつきにくい人にも伝わる。
+                %>
+                <span class="inline-block px-2 py-0.5 rounded-full text-xs font-bold
+                  <%= case status
+                      when :active  then 'bg-green-100 text-green-900'
+                      when :cooling then 'bg-yellow-100 text-yellow-900'
+                      when :dormant then 'bg-red-100 text-red-900'
+                      else               'bg-gray-100 text-gray-800'
+                      end %>"
+                      data-testid="admin-user-status">
+                  <%= t(".statuses.#{status}") %>
+                </span>
+              </td>
+            </tr>
+          <% end %>
+        </tbody>
+      </table>
+    </div>
+  <% end %>
+
+  <%# ── ④ ページ送り（2ページ以上あるときだけ） ──────────────────────── %>
+  <% if result.total_pages > 1 %>
+    <nav aria-label="<%= t(".pagination.label") %>" class="flex items-center justify-between text-sm">
+      <div>
+        <% if result.page > 1 %>
+          <%= link_to t(".pagination.previous"), admin_users_path(filter: result.filter, page: result.page - 1),
+                class: "text-blue-600 hover:underline" %>
+        <% end %>
+      </div>
+      <span class="text-gray-600"><%= t(".pagination.current", page: result.page, total: result.total_pages) %></span>
+      <div>
+        <% if result.page < result.total_pages %>
+          <%= link_to t(".pagination.next"), admin_users_path(filter: result.filter, page: result.page + 1),
+                class: "text-blue-600 hover:underline" %>
+        <% end %>
+      </div>
+    </nav>
+  <% end %>
+</div>

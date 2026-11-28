@@ -153,6 +153,25 @@ class OmniauthLoginFlowTest < ActionDispatch::IntegrationTest
     assert_equal "LINE User", user.name
   end
 
+  test "LINE: 同じメールアドレスのアカウントがあるときは統合せず、ログイン画面で案内する" do
+    existing = users(:one)
+    original_provider = existing.provider
+    stub_omniauth(:line_v2_1, info: { name: "ライン次郎", email: existing.email })
+
+    assert_no_difference "User.count" do
+      get "/auth/line_v2_1/callback"
+    end
+
+    assert_redirected_to login_path
+    assert_equal I18n.t("omniauth.line.email_already_registered"), flash[:alert]
+    # 既存のアカウントは LINE に書き換えられていない
+    assert_equal original_provider, existing.reload.provider
+
+    # ログインしていないので、ダッシュボードを開くとログイン画面へ戻される
+    get dashboard_path
+    assert_redirected_to %r{/login}
+  end
+
   # ============================================================
   # 失敗系
   # ============================================================

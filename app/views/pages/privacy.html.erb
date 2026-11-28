@@ -1,11 +1,12 @@
 <%# app/views/pages/privacy.html.erb %>
 <%# F-3: プライバシーポリシーページ（未ログインでも閲覧可能） %>
+<%# 2026-11-28 更新: 利用状況の集計（管理画面）・Sentry・LINE 通知・ログの扱い・退会について追記 %>
 <% content_for :title, "プライバシーポリシー | HabitFlow" %>
 
 <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
   <h1 class="text-3xl font-bold text-gray-900 mb-2">プライバシーポリシー</h1>
-  <p class="text-sm text-gray-500 mb-8">最終更新日: 2026年5月22日</p>
+  <p class="text-sm text-gray-500 mb-8">最終更新日: 2026年11月28日</p>
 
   <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8 space-y-8">
 
@@ -24,6 +25,7 @@
         <li>メールアドレス（メール登録の場合）</li>
         <li>OAuth プロバイダーから提供されるユーザーID・名前（Google/LINEログインの場合）</li>
         <li>習慣記録・タスク・振り返りコメント等の利用データ</li>
+        <li>サービスを最後に利用した日時</li>
         <li>アクセスログ（IPアドレス、ブラウザ情報等）</li>
       </ul>
     </section>
@@ -57,10 +59,12 @@
       <ul class="list-disc list-inside text-gray-700 space-y-1">
         <li>Google OAuth2（ログイン認証）</li>
         <li>LINE Login（ログイン認証）</li>
+        <li>LINE Messaging API（LINE 通知。通知の連携をした場合のみ）</li>
         <li>Google Gemini API / Groq API（AI習慣分析）</li>
         <li>Resend（メール送信）</li>
         <li>Neon（データベース）</li>
         <li>Render（ホスティング）</li>
+        <li>Sentry（エラー監視。エラーが起きたときに、発生した画面やエラーの内容などの技術的な情報が送信されます）</li>
       </ul>
     </section>
 
@@ -83,11 +87,29 @@
       </p>
     </section>
 
+    <%#
+      2026-11-28 追加: 運営者用の管理画面（/admin）での利用状況の集計についての記載。
+      外部のアクセス解析ツールは使わず、当サービスのデータベースの中だけで集計していること、
+      入力内容を表示しないことを明記する。
+    %>
+    <section>
+      <h2 class="text-xl font-bold text-gray-900 mb-3">4-3. 利用状況の集計について</h2>
+      <p class="text-gray-700 leading-relaxed">
+        当サービスの運営者は、サービスの改善のため、登録者数・利用している人数・
+        機能ごとの利用回数などを集計して確認します。
+        集計は当サービスのデータベースの中だけで行い、外部のアクセス解析ツールは使用しません。
+        集計の画面には、習慣の名前や振り返りの文章など、ユーザーが入力した内容は表示しません。
+        ユーザーごとの一覧では、メールアドレスは一部を伏せて表示します。
+      </p>
+    </section>
+
     <section>
       <h2 class="text-xl font-bold text-gray-900 mb-3">5. 情報の管理・保護</h2>
       <p class="text-gray-700 leading-relaxed">
         当サービスは、収集した個人情報の漏洩・滅失・毀損を防ぐため、
         適切なセキュリティ対策（通信の暗号化、アクセス制御等）を講じます。
+        サーバーの動作記録（ログ）には、パスワードや、ユーザーが入力した文章（振り返り・目標など）を
+        記録しないよう設定しています。
         ただし、インターネット上の完全な安全性を保証することはできません。
       </p>
     </section>
@@ -106,7 +128,8 @@
       <p class="text-gray-700 leading-relaxed">
         ユーザーは、自身の個人情報の開示・修正・削除を当サービスに請求することができます。
         当サービス内の設定ページから情報の確認・変更が可能です。
-        アカウントの削除についてはお問い合わせください。
+        また、設定ページから退会（アカウントの削除）の手続きができます。
+        退会すると、お名前・メールアドレスは元に戻せない形に置き換えられます。
       </p>
     </section>
 

@@ -4,10 +4,12 @@
 # ルーティング設定（G-6 更新: プロフィール編集・タイムゾーン・LINE連携解除を追加）
 # ==============================================================================
 Rails.application.routes.draw do
-  # ── Render ヘルスチェック用エンドポイント ──────────────────────────────
-  #   Render は /up などのパスにアクセスして稼働状態を確認する。
-  #   本来 200 を返すべきだが、このルートが無いと、末尾の catch-all
-  #   （match "*path" → errors#not_found）に拾われて 404 になる。
+  # ── 稼働確認用のエンドポイント（/up） ──────────────────────────────
+  #   Rails 標準のヘルスチェック。アプリが起動していれば 200 を返す。
+  #   今は Render の Health Check Path には設定しておらず（空欄）、
+  #   GitHub Actions の .github/workflows/wake_render.yml が、
+  #   スリープ中のサーバーを起こすために /up へアクセスしている。
+  #   このルートが無いと、末尾の catch-all（match "*path" → errors#not_found）に拾われて 404 になる。
   #   そのため必ず catch-all より前（ルート先頭）で定義する。
   get "up" => "rails/health#show", as: :rails_health_check
 
@@ -241,6 +243,32 @@ end
       end
       mount authenticated_good_job, at: "/good_job"
     end
+  end
+
+  # ============================================================
+  # 管理画面（管理者だけが見られる「ユーザー・利用状況の管理画面」）
+  # ============================================================
+  #
+  # 【namespace :admin を使う理由】
+  #   URL を /admin/...、コントローラーを app/controllers/admin/ にまとめ、
+  #   一般の画面と混ざらないようにする。ヘルパー名も admin_root_path のように admin_ が付く。
+  #
+  # 【root "dashboards#show"】
+  #   GET /admin を Admin::DashboardsController#show で表示する。
+  #
+  # 【管理者以外に 404 を返す仕組み】
+  #   ルートは誰にでも見えるが、Admin::BaseController が管理者以外には
+  #   存在しないページと同じ 404 を返すため、管理画面があること自体が分からない。
+  #
+  # 【catch-all（match "*path"）より前に書く理由】
+  #   catch-all は「どのルートにも当たらなかったもの」を拾うため、
+  #   それより後ろに書いたルートには一度も届かない。
+  namespace :admin do
+    root "dashboards#show"
+
+    # GET /admin/users → Admin::UsersController#index（ユーザー一覧・読み取り専用）
+    #   only: [ :index ] で一覧だけにする（編集・削除の画面は作らない）
+    resources :users, only: [ :index ]
   end
 
   match "*path", to: "errors#not_found", via: :all

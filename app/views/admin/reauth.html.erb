@@ -1,0 +1,40 @@
+<%# app/views/admin/reauth.html.erb %>
+<%#
+  管理画面の「もう一度ログインしてください」画面
+
+  【表示される場面】
+    管理者が、次のどちらかの状態で管理画面を開いたとき（Admin::BaseController）。
+    ・「ログインしたままにする」で、自動的にログインしている
+    ・ログイン画面からログインしてから12時間以上たっている
+
+  【ログアウトしてからログインし直す理由】
+    ログイン済みの人がログイン画面を開くと、ダッシュボードへ移動する作りのため、
+    いったんログアウトしてからログインし直してもらう。
+    Google でログインしている管理者もいるので、パスワードの入力ではなく
+    「ログインし直す」方式にしている（どのログイン方法でも同じ手順になる）。
+
+  【button_to を使う理由】
+    ログアウトは DELETE /logout（フォームの送信）で行う。
+    button_to は CSRF トークン入りのフォームを作るため、安全にログアウトできる。
+%>
+<% content_for :title, t("admin.reauth.page_title") %>
+<%= render "admin/robots_meta" %>
+
+<div class="max-w-xl mx-auto px-4 sm:px-6 py-12">
+  <div class="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+    <h1 class="text-xl font-bold text-gray-900 mb-4"><%= t("admin.reauth.title") %></h1>
+
+    <p class="text-sm text-gray-700 leading-relaxed mb-4">
+      <%= t("admin.reauth.description", hours: Admin::BaseController::REAUTH_INTERVAL.in_hours.to_i) %>
+    </p>
+
+    <p class="text-sm text-gray-600 leading-relaxed mb-6">
+      <%= t("admin.reauth.note") %>
+    </p>
+
+    <%= button_to t("admin.reauth.logout_button"), logout_path,
+          method: :delete,
+          class: "w-full px-4 py-3 rounded-lg bg-blue-600 text-white text-sm font-bold
+                  hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2" %>
+  </div>
+</div>

@@ -269,7 +269,9 @@ class LineNotificationService
                         {}
                       end
 
-      Rails.logger.info "[LineNotificationService] LINE送信成功: line_user_id=#{line_user_id}"
+      # line_user_id（LINE の利用者 ID）は人を特定できる値なので、ログには書かない。
+      # どのユーザーへの送信かは、呼び出し元の NotificationService が user_id で記録している。
+      Rails.logger.info "[LineNotificationService] LINE送信成功"
       { success: true, response_body: response_body }
 
     else
@@ -279,7 +281,9 @@ class LineNotificationService
       # 例: {"message":"The user ID is invalid.","details":[]}
       error_message = "HTTP #{http_status}: #{response.message} - #{response.body}"
 
-      Rails.logger.error "[LineNotificationService] LINE送信失敗: #{error_message}, line_user_id=#{line_user_id}"
+      # line_user_id（LINE の利用者 ID）は人を特定できる値なので、ログには書かない。
+      # どのユーザーへの送信かは、呼び出し元の NotificationService が user_id で記録している。
+      Rails.logger.error "[LineNotificationService] LINE送信失敗: #{error_message}"
       { success: false, error: error_message }
     end
   end

@@ -101,7 +101,7 @@ class UserTest < ActiveSupport::TestCase
 
   test "from_omniauth creates a new LINE user without email" do
     auth = {
-      "provider" => "line_v2_1",   # :line_v21 プロバイダなので "line_v21" が入る
+      "provider" => "line_v2_1",   # omniauth-line-v2_1 は provider に "line_v2_1" を返す
       "uid"      => "sub_#{SecureRandom.hex(8)}",
       "info"     => {
         "name"  => "LINE ユーザー太郎",
@@ -113,7 +113,7 @@ class UserTest < ActiveSupport::TestCase
       user = User.from_omniauth(auth)
 
       assert_equal auth["uid"], user.uid
-      assert_equal "line_v2_1",          user.provider  # "line_v21" で保存される
+      assert_equal "line_v2_1",          user.provider  # "line_v2_1" で保存される
       assert_equal "LINE ユーザー太郎", user.name
       assert_nil user.email
       assert user.persisted?
@@ -123,7 +123,7 @@ class UserTest < ActiveSupport::TestCase
   test "from_omniauth returns existing LINE user on second login" do
     uid = "sub_existing_#{SecureRandom.hex(8)}"
     auth = {
-      "provider" => "line_v2_1",   # 修正
+      "provider" => "line_v2_1",
       "uid"      => uid,
       "info"     => { "name" => "LINE ユーザー二郎" }
     }
@@ -139,7 +139,7 @@ class UserTest < ActiveSupport::TestCase
 
   test "from_omniauth uses LINE User as fallback name when LINE name is blank" do
     auth = {
-      "provider" => "line_v2_1",   # 修正
+      "provider" => "line_v2_1",
       "uid"      => "sub_noname_#{SecureRandom.hex(8)}",
       "info"     => { "name" => nil }
     }
@@ -151,7 +151,7 @@ class UserTest < ActiveSupport::TestCase
 
   test "LINE user is valid without password" do
     line_user = User.new(
-      provider: "line_v21",        # 修正
+      provider: "line_v2_1",
       uid:      "sub_valid_#{SecureRandom.hex(8)}",
       name:     "LINE テストユーザー",
       email:    nil,
@@ -160,6 +160,51 @@ class UserTest < ActiveSupport::TestCase
 
     assert line_user.valid?,
            "LINE ユーザーがパスワードなしで invalid になっています: #{line_user.errors.full_messages}"
+  end
+
+  # ============================================================
+  # メールアドレスが同じアカウントへの統合（Google だけ許す）
+  # ============================================================
+
+  test "from_omniauth は LINE では、同じメールアドレスのアカウントがあっても統合しない" do
+    existing = users(:one)
+    original_provider = existing.provider
+    original_uid      = existing.uid
+
+    auth = {
+      "provider" => "line_v2_1",
+      "uid"      => "sub_dup_#{SecureRandom.hex(8)}",
+      # 大文字で届いても同じアドレスとして扱われることも、あわせて確かめる
+      "info"     => { "name" => "LINE 三郎", "email" => existing.email.upcase }
+    }
+
+    assert_no_difference "User.count" do
+      assert_raises(User::EmailAlreadyRegisteredError) { User.from_omniauth(auth) }
+    end
+
+    # 既存のアカウントは書き換えられていない
+    existing.reload
+    # uid は nil のこともあるため、「nil は assert_nil で」という警告が出ないよう、配列にまとめて比べる
+    assert_equal [ original_provider, original_uid ], [ existing.provider, existing.uid ]
+  end
+
+  test "from_omniauth は Google では、同じメールアドレスのアカウントに統合する（今までどおり）" do
+    existing = users(:one)
+
+    auth = {
+      "provider" => "google_oauth2",
+      "uid"      => "g_merge_#{SecureRandom.hex(8)}",
+      "info"     => { "name" => "グーグル四郎", "email" => existing.email }
+    }
+
+    assert_no_difference "User.count" do
+      user = User.from_omniauth(auth)
+      assert_equal existing.id, user.id
+    end
+
+    existing.reload
+    assert_equal "google_oauth2", existing.provider
+    assert_equal auth["uid"], existing.uid
   end
 
   # ============================================================

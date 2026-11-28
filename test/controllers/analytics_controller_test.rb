@@ -351,4 +351,29 @@ class AnalyticsControllerTest < ActionDispatch::IntegrationTest
     # ダッシュボードへのリンクが存在すること
     assert_select "a[href='#{dashboard_path}']", text: "ダッシュボードへ →"
   end
+
+  # ============================================================
+  # 期間の切り替えボタンの aria-current（回帰テスト）
+  # ============================================================
+  #
+  # 【このテストの狙い】
+  #   Rails の aria: { current: false } は、属性を省くのではなく aria-current="false" を出力する。
+  #   選んでいない期間のボタンには nil を渡し、属性そのものを出力しないことを確かめる。
+  #   （以前は false を渡していて、コメントの説明と実際の出力が食い違っていた）
+  test "期間の切り替えボタンは、選んだボタンだけに aria-current=page が付く" do
+    @user.habits.create!(
+      name:             "テスト習慣",
+      measurement_type: :check_type,
+      weekly_target:    5
+    )
+
+    get analytics_path, params: { period: "12w" }
+
+    assert_response :success
+    # role="group"（期間の切り替え）の中で、aria-current が付くのは選んだ1つだけ
+    assert_select "[role='group'] a[aria-current='page']", count: 1
+    assert_select "[role='group'] a[aria-current]", count: 1
+    # ページ全体でも aria-current="false" は出力されない
+    assert_select "[aria-current='false']", count: 0
+  end
 end

@@ -51,9 +51,10 @@ class OmniauthCallbacksController < ApplicationController
       redirect_to determine_redirect_path_for_omniauth(@user),
                   notice: t("omniauth.google.success")
     else
+      # uid（Google・LINE の利用者 ID）は人を特定できる値なので、ログには書かない。
       Rails.logger.error "[OmniauthCallbacksController#google] " \
                          "ユーザーが persisted? でない: " \
-                         "provider=#{auth['provider']}, uid=#{auth['uid']}"
+                         "provider=#{auth['provider']}"
       redirect_to login_path, alert: t("omniauth.google.failure")
     end
 
@@ -132,11 +133,17 @@ class OmniauthCallbacksController < ApplicationController
       redirect_to determine_redirect_path_for_omniauth(@user),
                   notice: t("omniauth.line.success")
     else
+      # uid（Google・LINE の利用者 ID）は人を特定できる値なので、ログには書かない。
       Rails.logger.error "[OmniauthCallbacksController#line] " \
                          "ユーザーが persisted? でない: " \
-                         "provider=#{auth['provider']}, uid=#{auth['uid']}"
+                         "provider=#{auth['provider']}"
       redirect_to login_path, alert: t("omniauth.line.failure")
     end
+  rescue User::EmailAlreadyRegisteredError
+    # 同じメールアドレスのアカウントがすでにある（LINE では自動で統合しない）。
+    # どのアドレスかはログにも画面にも出さず、ログインの方法だけを案内する。
+    Rails.logger.info "[OmniauthCallbacksController#line] 同じメールアドレスのアカウントがあるため統合しませんでした"
+    redirect_to login_path, alert: t("omniauth.line.email_already_registered")
   rescue ActiveRecord::RecordInvalid => e
     Rails.logger.error "[OmniauthCallbacksController#line] ユーザー作成失敗: #{e.message}"
     redirect_to login_path, alert: t("omniauth.line.failure")
@@ -218,8 +225,6 @@ class OmniauthCallbacksController < ApplicationController
     # 既に同じ値が設定済みなら何もしない（不要な DB 更新を防ぐ）
     return if user.line_user_id == line_uid
 
-    Rails.logger.debug "[OmniauthCallbacksController] line_user_id は変更なし: user_id=#{user.id}" if user.line_user_id == line_uid
-
     # update_column を使う理由:
     #   update_columns（複数形）は updated_at を自動更新しないため明示が必要で危険。
     #   update_column（単数形）は指定の1カラムのみ更新し、
@@ -227,9 +232,10 @@ class OmniauthCallbacksController < ApplicationController
     #   line_user_id という単一カラムの保存のみが目的のため単数形が適切。
     user.update_column(:line_user_id, line_uid)
 
+    # line_user_id（LINE の利用者 ID）は人を特定できる値なので、ログには user_id だけを書く。
     Rails.logger.info(
       "[OmniauthCallbacksController] line_user_id を保存しました: " \
-      "user_id=#{user.id} line_user_id=#{line_uid}"
+      "user_id=#{user.id}"
     )
 
   rescue => e
@@ -246,17 +252,14 @@ class OmniauthCallbacksController < ApplicationController
   # 【優先度】
   #   1. terms_agreed_at が nil → /terms_agreement（法規上必須・最優先）
   #   2. first_login_at が nil  → オンボーディング
-  #   3. session[:return_to] が安全なパス → そのパスへ
-  #   4. デフォルト             → ダッシュボード
+  #   3. デフォルト             → ダッシュボード
+  #
+  # 【session[:return_to] の処理を削除した理由】
+  #   以前は「ログイン前に開こうとしたページ（session[:return_to]）」へ戻す処理があったが、
+  #   アプリのどこにも session[:return_to] に値を入れる処理がなく、使われていなかったため削除した。
   def determine_redirect_path_for_omniauth(user)
     return terms_agreement_path unless user.terms_agreed?
     return onboarding_step2_path if user.first_login_at.nil?
-
-    stored_path = session[:return_to]
-    if stored_path.present? && safe_redirect_path?(stored_path)
-      session.delete(:return_to)
-      return stored_path
-    end
 
     dashboard_path
   end
