@@ -4453,3 +4453,127 @@ Render のデプロイ中は、古いインスタンスと新しいインスタ�
 ✕ で閉じたことは `install_banner_controller.js` が localStorage（`habitflow:install-banner-dismissed:v1`）に記録する。サーバーにも DB（Neon）にもアクセスしない。`dismissible_controller.js` はサーバーへ保存する作りなので使っていない。<br>
 最初から `hidden` で出力し、JavaScript が「ブラウザで開いている」かつ「まだ閉じていない」と判定したときだけ表示する。ホーム画面から開いた人や、閉じた人の画面で一瞬見える（ちらつく）のを防ぐため。<br>
 テストの `log_in_as` はパスワード `"password"` でログインするため、`User.create!` で別のパスワードのユーザーを作るとログインできない。fixture の `users(:one)` を使う。
+
+<br>
+
+### 213. 管理画面（/admin）を開ける人を決める（ADMIN_EMAILS・404・12時間以内のログイン）
+
+<br>
+
+管理者は、DB の列ではなく環境変数 `ADMIN_EMAILS`（カンマ区切り）で決める（`app/models/concerns/admin_role.rb`）。コンソールを使えない Render の無料プランでも、画面から設定できるため。前後の空白と大文字・小文字は区別しない。空なら、だれも管理者にならない。<br>
+管理者になれるのは、退会しておらず、メールアドレスか Google でログインしたユーザーだけ。LINE ログインは、メールアドレスの持ち主の確認ができないため対象外にした。<br>
+管理者でない人と、ログインしていない人には、存在しない URL と同じ 404 を返す（`render_404`）。「管理画面がある」こと自体を知らせないため。利用規約の同意ページへの転送（`redirect_to_terms_agreement_if_needed`）も、管理画面では飛ばす。<br>
+「ログインしたままにする」の自動ログインだけでは開けない。パスワードなどでログインしたときだけ `session[:interactive_login_at]` を記録し（`RememberLogin#log_in`）、12時間を過ぎていたら 403 で「ログインし直してください」と案内する。端末を他人に触られたときの被害を小さくするため。<br>
+管理画面の応答には `Cache-Control: no-store` と `X-Robots-Tag: noindex, nofollow`（と `<meta name="robots">`）を付ける。`robots.txt` には書かない。書くと、URL をだれにでも教えてしまうため。
+
+<br>
+
+### 214. 最終利用日時（last_active_at）は1日1回だけ書き込む
+
+<br>
+
+ログイン中のユーザーがページを開くたびに `users.last_active_at` を記録する（`LastActiveTracking`）。ただし、`update_all` に「`last_active_at` が空か、今日より前」という条件を付け、1人1日1回しか書き込まない。無料の DB（Neon）への書き込みを増やさないため。`updated_at` も変えない。<br>
+管理者自身の操作、`/up`（`Rails::HealthController` は ApplicationController を通らない）、GoodJob のジョブは記録しない。<br>
+列を追加したマイグレーションでは、習慣の記録・振り返り・タスク・PMVV・ログイン保持のトークンの日時のうち、いちばん新しいもの（`GREATEST`）で、既存のユーザーの値を埋めた。
+
+<br>
+
+### 215. 集計の対象（countable_for_usage）から、退会済み・デモ用・管理者を外す
+
+<br>
+
+`User.countable_for_usage`（`app/models/concerns/usage_countable.rb`）を、全体の集計とユーザー一覧の両方の出発点にする。集計ごとに条件を書くと、どこかで外し忘れるため。<br>
+外すのは、退会済み、予約ドメイン（`example.com` など）のアドレスのデモ用アカウント、`ADMIN_EMAILS` のユーザーの3つ。<br>
+メールアドレスが NULL の LINE ユーザーが消えないよう、条件には `users.email IS NULL OR …` を付ける（NULL との比較は真でも偽でもなく、WHERE で外れるため）。`ADMIN_EMAILS` が空のときは、管理者の条件そのものを付けない。空の一覧の `NOT IN` は `NOT IN (NULL)` になり、全員が外れてしまうため。
+
+<br>
+
+### 216. 集計は COUNT だけ・10分キャッシュ、ユーザー一覧はキャッシュしない
+
+<br>
+
+全体の集計（`AdminUsageStatsService`）は、件数を数える SQL だけで作り、Solid Cache に10分間保存する（キー `admin:usage_stats:v1`）。週ごとの数字は `DATE_TRUNC('week', …)` で12週分をまとめて数える。<br>
+`Habit.active` には画面表示用の `order` が付いているため、`group`・`count` で使うときは `reorder(nil)` を付ける。<br>
+ユーザー一覧（`AdminUserListService`）は、習慣・記録・振り返りの件数を相関サブクエリで1回の SQL にまとめ、50件ずつ表示する。未使用（記録なし）・休眠（14日以上利用なし）・利用中（7日以内）で絞り込める。個人に結び付く情報なので、キャッシュには入れない。<br>
+画面には、習慣の名前や振り返りの文章などの入力内容を出さない。メールアドレスは `t***@gmail.com` のように一部を伏せる。危機ワードの検出件数は、管理画面には表示しない。<br>
+グラフの Chart.js は、ほかのページと同じく動的 import で、管理画面を開いたときだけ読み込む。
+
+<br>
+
+### 217. 開発中のつまずき（schema.rb の列の並び・generate のファイルの持ち主・マイグレーションの取り消し・bash の !）
+
+<br>
+
+- Rails 8.1.4.1 の `db:schema:dump` は、列を名前順に並べ替えず、DB の中の順番のまま書き出す。マイグレーションを流すと schema.rb の列の並びが大きく変わるため、並びだけを直すコミットを先に分けた。<br>
+- `docker compose exec web bin/rails generate …` で作ったファイルは root の持ち主になり、WSL 側から書き込めなかった。ファイルは WSL 側で `cat >` で作る。<br>
+- primary と cable の2つの DB を使っているため、`db:rollback` は DB の名前を付けないと動かない（`db:rollback:primary`）。<br>
+- bash は `!` を「前のコマンドの呼び出し」として扱うため、`!` を含む grep やヒアドキュメントが壊れた。作業の前に `set +H` を実行する。
+
+<br>
+
+### 218. aria-current="false" が出ていた（Rails の aria: ハッシュ）
+
+<br>
+
+`link_to … aria: { current: (selected ? "page" : false) }` と書くと、Rails は `false` を文字列にして `aria-current="false"` を出力する。属性を出さないには `nil` を渡す。管理画面のタブで気づき、ヘッダー（14か所）とグラフ・進捗分析ページも直した。
+
+<br>
+
+### 219. 保存に失敗すると、AI の連打防止で1分間送り直せなかった
+
+<br>
+
+連打防止（`throttle_ai_request`）は before_action で、保存の「前」に `last_ai_requested_at` を記録していた。入力が足りずに保存できなかったときや、AI の月の上限で止まったときにも時刻が残り、入力を直して1分以内に送り直すと「少し待ってください」と止められていた。本番のログで、振り返りを完了できずに離れた利用者がいたことから気づいた。<br>
+記録する前の値をインスタンス変数に覚えておき、AI のジョブを入れなかったとき（保存の失敗・AI の上限・すでに完了）は `release_ai_request_throttle!` で元に戻す（振り返り・PMVV の登録と更新）。<br>
+「保存に成功してから記録する」にしなかったのは、ほぼ同時の2回の送信で、両方とも通ってしまうのを防ぐため。
+
+<br>
+
+### 220. 利用者が入力した文章を、本番のログに残さない
+
+<br>
+
+`POST /weekly_reflections` の `Parameters:` の行に、振り返りの入力内容がそのまま出ていた。`filter_parameters` に、振り返り・PMVV・習慣の名前・タスクの題名・メモ・休息モードの理由・名前の項目を加えた。<br>
+`:value` と書くと部分一致で `numeric_value` まで、`:purpose` と書くと親の `user_purpose` まで隠れるため、`/\Avalue\z/` のような完全一致で書く。Rails はこの設定をモデルの `inspect` にも使うため、コンソールでは `name` なども `[FILTERED]` と表示される。<br>
+`Parameters:` 以外にも、コードの中で文章を書き出している所があった。AI 提案の確定で習慣の名前を書いていた所は、提案の番号と `habit_id` にした。AI の返答の先頭 500 文字は、文字数だけにした。`JSON::ParserError` のメッセージには読み取れなかった文章の一部が入るため、`e.class` だけにした。Google・LINE の利用者 ID（`uid`・`line_user_id`）も、ログには書かず `user_id` にした。
+
+<br>
+
+### 221. LINE でログインしたとき、同じメールアドレスのアカウントへ自動で統合しない
+
+<br>
+
+`User.from_omniauth` は、同じメールアドレスのアカウントがあると、OAuth の情報を紐付けて統合していた。統合してよいのは、メールアドレスの持ち主の確認が済んでいる Google だけにした（`EMAIL_MERGEABLE_PROVIDERS`。omniauth-google-oauth2 0.7.0 以降は確認済みのアドレスだけを返す）。<br>
+LINE などでは `User::EmailAlreadyRegisteredError` を出し、ログイン画面で「メールアドレスか Google でログインしてください」と案内する。どのアドレスかは、画面にもログにも出さない。<br>
+今の LINE ログインは `profile openid` だけを求めていてメールアドレスを受け取らないため、将来受け取るようにしたときの備え。
+
+<br>
+
+### 222. 予約ドメインの判定で、Ruby と SQL の「ドメインの取り出し方」をそろえる
+
+<br>
+
+メールを止める仕組み（Ruby）と、管理画面の集計（SQL）で、ドメインの取り出し方が違っていた。<br>
+Ruby の `split("@", 2).last` は、`@` がないと値全体を返すため、`localhost` が予約ドメイン扱いになっていた。SQL の `SPLIT_PART(email, '@', 2)` は「1つ目と2つ目の `@` の間」を返すため、`a@example.com@gmail.com` が予約ドメイン扱いになっていた。<br>
+どちらも「最初の `@` より後ろ。`@` がなければ空文字」にそろえた（Ruby は `partition("@")`、SQL は `COALESCE(SUBSTRING(email FROM '@(.*)$'), '')`）。テストは、SQL の式を別に書いて比べるのをやめ、実際の `countable_for_usage` で確かめる形にした。
+
+<br>
+
+### 223. 振り返りの完了時の N+1（除外日・「すでにあるか」の確認）
+
+<br>
+
+`WeeklyReflectionHabitSummary.create_all_for_reflection!` で、チェック型の習慣ごとに `effective_weekly_target`（中で `habit_excluded_days.size`）が除外日を読み込んでいた。「AI なしで完了」で Bullet が検出した。`includes(:habit_excluded_days)` を付けた。<br>
+習慣・タスクのサマリーで、「すでにあるか」を1件ごとに `exists?` で調べていたのも、最初に1回だけ `pluck(:habit_id).to_set` して調べるようにした。<br>
+テストでは `ActiveSupport::Notifications.subscribed` で SQL を数える。uniqueness の入力チェックも保存1件ごとに同じ形の `SELECT 1 AS one …` を出すため、「`SELECT 1` の回数が作った件数と同じ」ことを確かめる（最初は0回と比べて、修正後もテストが失敗した）。
+
+<br>
+
+### 224. render.yaml・.env.example・SEED_IN_PRODUCTION を実際の構成に合わせる
+
+<br>
+
+`render.yaml` には、Docker のサービスでは使えない `startCommand` と、作成後は変えられない `region: singapore` が書いてあり、Blueprint の同期が失敗していた。Render の画面の設定（Oregon・Docker Command は空欄で Dockerfile の CMD・Auto-Deploy は On Commit・環境変数19個）に合わせて書き直した。Blueprint の Auto Sync は No にしてあり、Manual Sync の前には差分を確かめる。<br>
+`.env.example` は、`.gitignore` の `/.env*` に含まれていて、一度もコミットされていなかった（README では案内していた）。`!/.env.example` を足して管理するようにし、本物の値がないことを確かめてからコミットした。<br>
+`SEED_IN_PRODUCTION=true` のままだと、起動のたびに `db:seed`（習慣テンプレートを冪等に読み込むだけで、データは消さない）が走っていた。ふだんは `false` にし、テンプレートを変えたときだけ `true` → デプロイ → 反映を確認 → `false` に戻す。<br>
+プライバシーポリシーに、利用状況の集計（外部の解析ツールは使わない・入力内容は表示しない）、Sentry、LINE 通知、ログの扱い、設定ページからの退会を追記した。

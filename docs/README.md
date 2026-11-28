@@ -102,3 +102,4 @@
 | 2026-11-14 | ホーム画面に追加（PWA）・古い画面からのログアウトの修正・omniauth の脆弱性対応を features / technical-notes（191〜198）/ lessons-learned に追記 |
 | 2026-11-15 | Lighthouse の指摘への対応（ライブラリの読み込みを必要なページだけに・コントローラーの二重読み込みの解消・文中リンクの下線）を features / technical-notes（199〜201）に追記 |
 | 2026-11-15 | DB（Neon）を Render と同じオレゴンへ移行・Sentry のソースマップの配置を technical-notes（202〜203）/ lessons-learned に追記 |
+| 2026-11-28 | 管理画面（ユーザー・利用状況）と、作業中に見つけた不具合の修正（AI の連打防止・ログの個人情報・LINE ログインの統合・予約ドメインの判定・N+1・設定ファイルの説明）を features / technical-notes（213〜224）/ lessons-learned に追記 |
