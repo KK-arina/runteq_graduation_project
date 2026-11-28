@@ -247,17 +247,14 @@ class OmniauthCallbacksController < ApplicationController
   # 【優先度】
   #   1. terms_agreed_at が nil → /terms_agreement（法規上必須・最優先）
   #   2. first_login_at が nil  → オンボーディング
-  #   3. session[:return_to] が安全なパス → そのパスへ
-  #   4. デフォルト             → ダッシュボード
+  #   3. デフォルト             → ダッシュボード
+  #
+  # 【session[:return_to] の処理を削除した理由】
+  #   以前は「ログイン前に開こうとしたページ（session[:return_to]）」へ戻す処理があったが、
+  #   アプリのどこにも session[:return_to] に値を入れる処理がなく、使われていなかったため削除した。
   def determine_redirect_path_for_omniauth(user)
     return terms_agreement_path unless user.terms_agreed?
     return onboarding_step2_path if user.first_login_at.nil?
-
-    stored_path = session[:return_to]
-    if stored_path.present? && safe_redirect_path?(stored_path)
-      session.delete(:return_to)
-      return stored_path
-    end
 
     dashboard_path
   end
