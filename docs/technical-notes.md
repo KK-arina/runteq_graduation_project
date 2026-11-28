@@ -4577,3 +4577,13 @@ Ruby の `split("@", 2).last` は、`@` がないと値全体を返すため、`
 `.env.example` は、`.gitignore` の `/.env*` に含まれていて、一度もコミットされていなかった（README では案内していた）。`!/.env.example` を足して管理するようにし、本物の値がないことを確かめてからコミットした。<br>
 `SEED_IN_PRODUCTION=true` のままだと、起動のたびに `db:seed`（習慣テンプレートを冪等に読み込むだけで、データは消さない）が走っていた。ふだんは `false` にし、テンプレートを変えたときだけ `true` → デプロイ → 反映を確認 → `false` に戻す。<br>
 プライバシーポリシーに、利用状況の集計（外部の解析ツールは使わない・入力内容は表示しない）、Sentry、LINE 通知、ログの扱い、設定ページからの退会を追記した。
+
+<br>
+
+### 225. 名前空間のあるコントローラーでは、controller_name ではなく controller_path で判定する（管理画面へのリンク）
+
+<br>
+
+ヘッダーに、管理者（`current_user.admin?`）にだけ「管理画面」のリンクを表示した。ほかの利用者には表示しないので、管理画面があることは今までどおり知られない。`admin?` は環境変数と比べるだけなので、DB への問い合わせは増えない。<br>
+リンクを足すときに、ヘッダーの「ダッシュボード」と下部のナビの「ホーム」が、管理画面でも「今のページ」（`aria-current="page"`・青い文字）になっていることに気づいた。`controller_name` は名前空間を外した名前を返すため、`Admin::DashboardsController` でも `"dashboards"` になる。<br>
+`controller_path`（`"dashboards"` と `"admin/dashboards"` を区別できる）で判定するように直し、管理画面のリンクは `controller_path.start_with?("admin/")` で判定する。テストは `test/integration/admin_nav_link_test.rb`。
