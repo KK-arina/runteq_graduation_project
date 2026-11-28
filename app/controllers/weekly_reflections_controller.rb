@@ -107,6 +107,9 @@ class WeeklyReflectionsController < ApplicationController
                         WeeklyReflection.find_or_build_for_current_week(current_user)
 
     if @weekly_reflection.persisted? && @weekly_reflection.completed?
+      # 振り返りはもう完了しているので、AI には何も送らない。
+      # before_action で記録した連打防止の時刻を元に戻す。
+      release_ai_request_throttle!
       redirect_to weekly_reflections_path, notice: "振り返りは既に完了しています。"
       return
     end
@@ -123,6 +126,9 @@ class WeeklyReflectionsController < ApplicationController
     #   flash.now で「このリクエスト内だけ有効」なフラグを立てる。
     #   flash を使うと次のリクエストでもフラグが残りモーダルが二重起動する。
     if ai_limit_exceeded?
+      # AI の月の上限に達しているので、AI には何も送らない。
+      # 連打防止の時刻を元に戻し、入力を見直してすぐ送り直せるようにする。
+      release_ai_request_throttle!
       flash.now[:ai_limit] = true
       setup_new_form_variables
       render :new, status: :unprocessable_entity
@@ -165,6 +171,9 @@ class WeeklyReflectionsController < ApplicationController
                     notice: "今週の振り返りを保存しました！お疲れ様でした🎉"
       end
     else
+      # 保存に失敗したので、AI には何も送っていない。
+      # 連打防止の時刻を元に戻し、入力を直してすぐ送り直せるようにする。
+      release_ai_request_throttle!
       Rails.logger.error "WeeklyReflectionCompleteService failed: #{result[:error]}"
       setup_new_form_variables
       flash.now[:alert] = "保存に失敗しました。入力内容を確認してください。"

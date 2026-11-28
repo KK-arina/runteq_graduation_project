@@ -66,6 +66,9 @@ class UserPurposesController < ApplicationController
       redirect_to user_purpose_path,
                   notice: "目標を保存しました。AIによる分析を開始しています..."
     else
+      # 保存に失敗したので、AI には何も送っていない。
+      # 連打防止の時刻を元に戻し、入力を直してすぐ送り直せるようにする。
+      release_ai_request_throttle!
       render :new, status: :unprocessable_entity
     end
   end
@@ -115,6 +118,9 @@ class UserPurposesController < ApplicationController
       redirect_to user_purpose_path,
                   notice: "目標を更新しました。AIによる再分析を開始しています..."
     else
+      # 保存に失敗したので、AI には何も送っていない。
+      # 連打防止の時刻を元に戻し、入力を直してすぐ送り直せるようにする。
+      release_ai_request_throttle!
       render :edit, status: :unprocessable_entity
     end
   end

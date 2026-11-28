@@ -132,6 +132,20 @@ class UserSetting < ApplicationRecord
     update_columns(last_ai_requested_at: Time.current)
   end
 
+  # restore_ai_requested_at!
+  # ----------------------------------------------------------
+  # 【役割】
+  #   連打防止の時刻を、渡された値（記録する前の値）に戻す。
+  #   AI に何も送らずに終わったリクエスト（保存の失敗など）で使う。
+  #   nil を渡すと「一度もリクエストしていない」状態に戻る。
+  #
+  # 【update_columns を使う理由】
+  #   touch_ai_requested_at! と同じ。1列だけを SQL 1本で書き換える。
+  # ----------------------------------------------------------
+  def restore_ai_requested_at!(previous_at)
+    update_columns(last_ai_requested_at: previous_at)
+  end
+
   # ============================================================
   # H-4 追加: グラフ・進捗分析ページの最終閲覧日時を記録するメソッド
   # ============================================================

@@ -312,7 +312,38 @@ class ApplicationController < ActionController::Base
       return
     end
 
+    # ── 連打防止の時刻を記録する前に、元の値を覚えておく ─────────────
+    #
+    # 【なぜ元の値を覚えておくのか】
+    #   この before_action は、保存の「前」に動く。
+    #   入力が足りなくて保存できなかったときや、AI の月の上限で止まったときは、
+    #   AI に何も送っていないのに「1分待ってください」と止められてしまう。
+    #   そこで、AI に送らなかったときは release_ai_request_throttle! で元の値に戻せるようにする。
+    #
+    # 【なぜ「保存に成功してから記録する」にしないのか】
+    #   ほぼ同時に2回送信されたとき、先に記録しておかないと両方とも通ってしまい、
+    #   AI のジョブが2つ動くおそれがあるため。連打防止の役目はそのまま残す。
+    @ai_request_throttle_previous_at = setting.last_ai_requested_at
+    @ai_request_throttle_touched     = true
     setting.touch_ai_requested_at!
+  end
+
+  # ============================================================
+  # 連打防止の時刻を元に戻す（AI に送らなかったときに呼ぶ）
+  # ============================================================
+  #
+  # 【呼ぶ場所】
+  #   before_action :throttle_ai_request を使っているアクションの中で、
+  #   保存に失敗したときなど「AI のジョブを入れなかった」ときに呼ぶ。
+  #
+  # 【このリクエストで記録していないときは何もしない】
+  #   @ai_request_throttle_touched が true のときだけ戻す。
+  #   ほかのリクエストが記録した時刻を、うっかり消さないようにするため。
+  def release_ai_request_throttle!
+    return unless @ai_request_throttle_touched
+
+    current_user.user_setting&.restore_ai_requested_at!(@ai_request_throttle_previous_at)
+    @ai_request_throttle_touched = false
   end
 
   # ============================================================
