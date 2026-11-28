@@ -384,7 +384,9 @@ class WeeklyReflectionsController < ApplicationController
         #   部分一致（LIKE検索）だと意図しない習慣を修正してしまうリスクがある。
         habit = current_user.habits.active.find_by(name: habit_name)
         if habit.nil?
-          Rails.logger.warn "[WeeklyReflectionsController#confirm_proposals] habit_modify: 習慣が見つかりません: #{habit_name}"
+          # 習慣・タスクの名前は利用者が入力したものなので、ログには書かない。
+          # どの提案だったかが分かるよう、提案の番号（idx）だけを残す。
+          Rails.logger.warn "[WeeklyReflectionsController#confirm_proposals] habit_modify: 習慣が見つかりません（提案の番号: #{idx}）"
           next
         end
 
@@ -404,7 +406,8 @@ class WeeklyReflectionsController < ApplicationController
 
         habit.update!(update_attrs)
         modified_habit_count += 1
-        Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] habit_modify 適用: #{habit_name} → #{update_attrs.inspect}"
+        # 名前は利用者が入力したものなので、ログには書かず、id だけを残す。
+        Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] habit_modify 適用: habit_id=#{habit.id} → #{update_attrs.inspect}"
       end
 
       # ── G-9 追加: 既存習慣の削除（habit_delete）──────────────────────
@@ -429,13 +432,16 @@ class WeeklyReflectionsController < ApplicationController
 
         habit = current_user.habits.active.find_by(name: habit_name)
         if habit.nil?
-          Rails.logger.warn "[WeeklyReflectionsController#confirm_proposals] habit_delete: 習慣が見つかりません: #{habit_name}"
+          # 習慣・タスクの名前は利用者が入力したものなので、ログには書かない。
+          # どの提案だったかが分かるよう、提案の番号（idx）だけを残す。
+          Rails.logger.warn "[WeeklyReflectionsController#confirm_proposals] habit_delete: 習慣が見つかりません（提案の番号: #{idx}）"
           next
         end
 
         habit.soft_delete
         deleted_habit_count += 1
-        Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] habit_delete 適用: #{habit_name}"
+        # 名前は利用者が入力したものなので、ログには書かず、id だけを残す。
+        Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] habit_delete 適用: habit_id=#{habit.id}"
       end
 
       # ── G-9 追加: 既存タスクの修正（task_modify）────────────────────
@@ -454,7 +460,9 @@ class WeeklyReflectionsController < ApplicationController
 
         task = current_user.tasks.active.not_archived.find_by(title: task_title)
         if task.nil?
-          Rails.logger.warn "[WeeklyReflectionsController#confirm_proposals] task_modify: タスクが見つかりません: #{task_title}"
+          # 習慣・タスクの名前は利用者が入力したものなので、ログには書かない。
+          # どの提案だったかが分かるよう、提案の番号（idx）だけを残す。
+          Rails.logger.warn "[WeeklyReflectionsController#confirm_proposals] task_modify: タスクが見つかりません（提案の番号: #{idx}）"
           next
         end
 
@@ -477,7 +485,8 @@ class WeeklyReflectionsController < ApplicationController
 
         task.update!(update_attrs)
         modified_task_count += 1
-        Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] task_modify 適用: #{task_title} → #{update_attrs.inspect}"
+        # 名前は利用者が入力したものなので、ログには書かず、id だけを残す。
+        Rails.logger.info "[WeeklyReflectionsController#confirm_proposals] task_modify 適用: task_id=#{task.id} → #{update_attrs.inspect}"
       end
 
       # goal_review は DB 変更なし: ここでは何もしない

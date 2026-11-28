@@ -477,7 +477,9 @@ class WeeklyReflectionAnalysisJob < ApplicationJob
 
     parsed
   rescue JSON::ParserError => e
-    Rails.logger.error "[WeeklyReflectionAnalysisJob] JSON パース失敗: #{e.message}"
+    # JSON::ParserError のメッセージには、読み取れなかった文章の一部が入るため、
+    # ログにはエラーの種類（e.class）だけを書く。
+    Rails.logger.error "[WeeklyReflectionAnalysisJob] JSON パース失敗: #{e.class}"
     nil
   end
 
