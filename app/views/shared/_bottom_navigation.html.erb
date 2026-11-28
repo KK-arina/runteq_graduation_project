@@ -83,11 +83,15 @@
 
     <%# ── タブ 1: ホーム ────────────────────────────────────── %>
     <%#
-      アクティブ判定: controller_name == 'dashboards'
+      アクティブ判定: controller_path == 'dashboards'
       routes.rb で root → pages#index だが、ログイン後は DashboardsController
-      にリダイレクトされる。ダッシュボード画面では dashboards が controller_name になる。
+      にリダイレクトされる。ダッシュボード画面では controller_path が "dashboards" になる。
+      controller_name ではなく controller_path を使う理由:
+        管理画面のトップ（Admin::DashboardsController）でも controller_name は "dashboards" になり、
+        管理画面を開いているのに「ホーム」が選ばれた表示になってしまうため。
+        controller_path は "admin/dashboards" のように名前空間まで含むので区別できる。
     %>
-    <% is_home_active = (controller_name == 'dashboards') %>
+    <% is_home_active = (controller_path == 'dashboards') %>
 
     <%= link_to root_path,
           class: "flex-1 flex flex-col items-center justify-center

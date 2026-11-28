@@ -78,9 +78,11 @@
               スクリーンリーダーが「現在のページ、ダッシュボード」と読み上げるため、
               ユーザーは「今どのページにいるか」を音声で確認できる。
 
-              controller_name == 'dashboards':
-                Rails の controller_name ヘルパーで現在のコントローラー名を取得。
-                ダッシュボードページでは "dashboards" が返る。
+              controller_path == 'dashboards':
+                Rails の controller_path ヘルパーで、名前空間まで含めたコントローラー名を取得する。
+                ダッシュボードでは "dashboards"、管理画面のトップでは "admin/dashboards" が返る。
+                （controller_name はどちらも "dashboards" を返し、管理画面でもダッシュボードが
+                  「今のページ」になってしまうため、controller_path で判定する）
                 条件が真のとき "page"、偽のとき nil を返す。
                 nil のときは aria-current 属性自体が HTML に出力されない
                 （false を渡すと、Rails は属性を省かずに aria-current="false" を出力してしまうため、nil にしている）。
@@ -98,7 +100,7 @@
               class: "text-gray-600 hover:text-gray-900 whitespace-nowrap
                       md:px-2 lg:px-3 py-2 md:text-xs lg:text-sm font-medium transition-colors
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
-              aria: { current: controller_name == 'dashboards' ? 'page' : nil } %>
+              aria: { current: controller_path == 'dashboards' ? 'page' : nil } %>
 
           <%= link_to "習慣一覧", habits_path,
               class: "text-gray-600 hover:text-gray-900 whitespace-nowrap
@@ -179,6 +181,29 @@
                       md:px-2 lg:px-3 py-2 md:text-xs lg:text-sm font-medium transition-colors
                       focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
               aria: { current: controller_name == 'settings' ? 'page' : nil } %>
+
+          <%#
+            ── 管理画面リンク（PC用・管理者だけに表示）────────────────────────────
+            【なぜ管理者だけに表示するのか】
+              管理画面（/admin）は、管理者以外には 404 を返し、存在自体を知らせない作り。
+              リンクも管理者にだけ表示し、ほかの利用者には今までどおり見えないようにする。
+              current_user.admin? は環境変数 ADMIN_EMAILS と比べるだけなので、DB への問い合わせは増えない。
+
+            【aria-current の判定に controller_path を使う理由】
+              管理画面のコントローラーは Admin::DashboardsController・Admin::UsersController。
+              controller_path は "admin/dashboards" のように名前空間まで含むので、
+              start_with?("admin/") で、管理画面のどのページでも「今のページ」と判定できる。
+
+            【12時間以内にログインし直していない場合】
+              押すと「ログインし直してください」の画面（403）になる。安全のための動きで、不具合ではない。
+          %>
+          <% if current_user.admin? %>
+            <%= link_to "管理画面", admin_root_path,
+                class: "text-gray-600 hover:text-gray-900 whitespace-nowrap
+                        md:px-2 lg:px-3 py-2 md:text-xs lg:text-sm font-medium transition-colors
+                        focus:outline-none focus:ring-2 focus:ring-blue-500 focus:rounded",
+                aria: { current: controller_path.start_with?("admin/") ? "page" : nil } %>
+          <% end %>
 
           <%# レスポンシブ改善: ユーザー名表示は装飾（aria-hidden で読み上げ対象外・
               氏名はログアウトボタンの aria-label に含まれる）なので、
@@ -320,7 +345,7 @@
                       text-gray-600 hover:text-gray-900 hover:bg-gray-100
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
-              aria: { current: controller_name == 'dashboards' ? 'page' : nil } %>
+              aria: { current: controller_path == 'dashboards' ? 'page' : nil } %>
 
           <%= link_to "習慣一覧", habits_path,
               class: "block px-3 py-2 rounded-md text-sm font-medium
@@ -390,6 +415,16 @@
                       transition-colors
                       focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
               aria: { current: controller_name == 'settings' ? 'page' : nil } %>
+
+          <%# ── 管理画面リンク（モバイル用・管理者だけに表示）。理由は PC 用のコメントを参照 ── %>
+          <% if current_user.admin? %>
+            <%= link_to "管理画面", admin_root_path,
+                class: "block px-3 py-2 rounded-md text-sm font-medium
+                        text-gray-600 hover:text-gray-900 hover:bg-gray-100
+                        transition-colors
+                        focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500",
+                aria: { current: controller_path.start_with?("admin/") ? "page" : nil } %>
+          <% end %>
 
           <div class="border-t border-gray-200 mt-1 pt-1">
             <%# aria-hidden="true": ユーザー名はログアウトボタンのaria-labelで伝えるため非表示 %>
